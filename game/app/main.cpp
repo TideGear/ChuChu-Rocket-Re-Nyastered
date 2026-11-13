@@ -13,6 +13,11 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <filesystem>
+#include <algorithm>
+extern "C" {
+#include "stb_vorbis.c"
+}
 using namespace ccr;
 
 static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
@@ -40,7 +45,9 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    SDL_AudioDeviceID adev = 0; Uint8* mus[2] = {nullptr, nullptr}; Uint32 mlen[2] = {0, 0}; SDL_AudioSpec mspec{}; int curTrack = -1; size_t musPos = 0;
+    // Audio: one callback-driven mixer (looped music stream + one-shot SFX voices), device format 44.1 kHz stereo s16.
+    SDL_AudioDeviceID adev = 0; std::vector<int16_t> mus[2]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
+    std::vector<std::vector<int16_t>> sfx; struct Voice { const std::vector<int16_t>* d; size_t pos; }; std::vector<Voice> voices;
 
     bool loadSheet(const std::string& base, Sheet& s) {
         FILE* f = fopen((base + ".tex.bin").c_str(), "rb"); if (!f) return false;
@@ -71,17 +78,37 @@ struct App {
         std::string ret = root + "/ret_all/";
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
-        for (int i = 0; i < 2; i++) { std::string wp = root + "/dreamcast/audio/track" + (i ? "10" : "09") + ".wav"; SDL_AudioSpec sp; if (SDL_LoadWAV(wp.c_str(), &sp, &mus[i], &mlen[i])) mspec = sp; else mus[i] = nullptr; }
-        if (mus[0] && !headless) { SDL_AudioSpec want = mspec, have; adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0); if (adev) SDL_PauseAudioDevice(adev, 0); }
+        loadAudio();
         return true;
     }
-    void pumpMusic(int track) {                          // Dreamcast CD audio (best source, docs/audio.md): songs 5/6 for battle, looped; the disc has a 2 s lead-in
-        if (!adev || !mus[track]) return;
-        if (curTrack != track) { SDL_ClearQueuedAudio(adev); curTrack = track; musPos = (size_t)(2.0 * mspec.freq) * 4; }
-        while (SDL_GetQueuedAudioSize(adev) < (Uint32)(mspec.freq * 4 / 2)) {
-            Uint32 chunk = (Uint32)(mspec.freq * 4 / 10); if (musPos + chunk > mlen[track]) musPos = (size_t)(2.0 * mspec.freq) * 4;
-            SDL_QueueAudio(adev, mus[track] + musPos, chunk); musPos += chunk; }
+    static void audioCb(void* ud, Uint8* stream, int len) {
+        App* a = (App*)ud; int16_t* out = (int16_t*)stream; int n = len / 4; std::fill(out, out + n * 2, (int16_t)0);
+        if (a->musOn && a->curTrack >= 0 && !a->mus[a->curTrack].empty()) {
+            const auto& m = a->mus[a->curTrack]; size_t loopStart = (size_t)(2.0 * 44100) * 2;                // the disc has a 2 s lead-in; loops restart after it
+            for (int i = 0; i < n * 2; i++) { if (a->musPos >= m.size()) a->musPos = loopStart; out[i] = (int16_t)(m[a->musPos++] * 0.6f); }
+        }
+        for (auto& v : a->voices) for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (*v.d)[v.pos++]; out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
+        a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [](const Voice& v) { return v.pos >= v.d->size(); }), a->voices.end());
     }
+    static void toStereo44k(const short* pcm, int frames, int ch, int rate, std::vector<int16_t>& out) {
+        double step = (double)rate / 44100.0; int outFrames = (int)(frames / step); out.resize((size_t)outFrames * 2);
+        for (int i = 0; i < outFrames; i++) { int si = std::min(frames - 1, (int)(i * step)); out[2 * i] = pcm[si * ch]; out[2 * i + 1] = pcm[si * ch + (ch > 1 ? 1 : 0)]; }
+    }
+    void loadAudio() {
+        namespace fs = std::filesystem;
+        for (int i = 0; i < 2; i++) { std::string wp = root + "/dreamcast/audio/track" + (i ? "10" : "09") + ".wav"; SDL_AudioSpec sp; Uint8* buf; Uint32 len;
+            if (SDL_LoadWAV(wp.c_str(), &sp, &buf, &len)) { if (sp.format == AUDIO_S16LSB && sp.channels == 2 && sp.freq == 44100) mus[i].assign((int16_t*)buf, (int16_t*)(buf + len)); SDL_FreeWAV(buf); } }
+        std::string sfxDir; std::error_code ec;
+        for (auto& e : fs::directory_iterator(root + "/ios", ec)) if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) sfxDir = (e.path() / "audio_sfx").string();
+        sfx.resize(29);
+        for (int i = 0; i < 29 && !sfxDir.empty(); i++) { char nm[16]; snprintf(nm, sizeof nm, "%03d.ogg", i); int ch, rate; short* pcm; int fr = stb_vorbis_decode_filename((sfxDir + "/" + nm).c_str(), &ch, &rate, &pcm);
+            if (fr > 0) { toStereo44k(pcm, fr, ch, rate, sfx[i]); free(pcm); } }
+        if (headless) return;
+        SDL_AudioSpec want{}; want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024; want.callback = audioCb; want.userdata = this; SDL_AudioSpec have;
+        adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0); if (adev) SDL_PauseAudioDevice(adev, 0);
+    }
+    void playSfx(int id) { if (!adev || id < 0 || id >= (int)sfx.size() || sfx[id].empty()) return; SDL_LockAudioDevice(adev); voices.push_back({&sfx[id], 0}); SDL_UnlockAudioDevice(adev); }
+    void pumpMusic(int track) { if (!adev || mus[track].empty()) return; SDL_LockAudioDevice(adev); if (curTrack != track) { curTrack = track; musPos = (size_t)(2.0 * 44100) * 2; } musOn = true; SDL_UnlockAudioDevice(adev); }
     // --- drawing helpers ---
     void number(int v, int x, int y, int hgt) {
         std::string s = std::to_string(v); int cx = x;
@@ -123,10 +150,10 @@ struct App {
     }
 };
 
-struct Mode { virtual ~Mode() {} virtual void event(App&, const SDL_Event&) {} virtual void tick(App&) {} virtual void draw(App&, float) {} virtual int music() { return -1; } virtual const char* next() { return nullptr; } };
+struct Screen { virtual ~Screen() {} virtual void event(App&, const SDL_Event&) {} virtual void tick(App&) {} virtual void draw(App&, float) {} virtual int music() { return -1; } virtual const char* next() { return nullptr; } };
 
 // ---------------------------------------------------------------- menu
-struct MenuMode : Mode {
+struct MenuMode : Screen {
     int sel = 0; const char* chosen = nullptr; static constexpr int N = 3; const char* items[N] = {"PUZZLE", "BATTLE", "QUIT"};
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
@@ -144,7 +171,7 @@ struct MenuMode : Mode {
 };
 
 // ---------------------------------------------------------------- puzzle
-struct PuzzleMode : Mode {
+struct PuzzleMode : Screen {
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false;
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, 0)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
@@ -190,7 +217,7 @@ struct PuzzleMode : Mode {
 };
 
 // ---------------------------------------------------------------- battle
-struct BattleMode : Mode {
+struct BattleMode : Screen {
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
     bool load(const std::string& root, int stage, uint32_t sd) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
@@ -230,7 +257,7 @@ int main(int argc, char** argv) {
     App app; app.root = argv[1]; if (!app.init()) return 2;
     std::string start = argc > 2 ? argv[2] : "menu"; int stageNo = argc > 3 ? atoi(argv[3]) : 0; uint32_t seed = argc > 4 ? (uint32_t)atoi(argv[4]) : 1;
     int lv[4] = {-1, 3, 3, 3}; if (argc > 5) { int k = 1; for (const char* p = argv[5]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
-    std::unique_ptr<Mode> mode;
+    std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
         if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); if (!m->load(app.root, stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" || name == "battle") { auto m = std::make_unique<BattleMode>(); memcpy(m->lv, lv, sizeof lv); if (!m->load(app.root, stageNo, seed)) { printf("cannot load battle stages\n"); return false; } mode = std::move(m); }
