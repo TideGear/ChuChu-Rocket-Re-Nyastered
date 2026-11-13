@@ -22,3 +22,9 @@ This matches the Dreamcast manual as quoted in the research document: unlockable
 
 ## iOS 1.0.2, HD 1.0, 1.1.2 (`VMU::isCostumeAvailable(int)`, same code in all three)
 Costume 0 always; costume 1 = save word at +0x7c (the cleared mask of puzzle group 3, `(3 + 0x1c) * 4 = 0x7c`) has all 25 bits set; costume 2 = save word at +8 (Challenge cleared mask) has all 25 bits set; any other index unavailable. This is the same rule as Android 1.15 (`Data::isCostumeAvailable`), so **costume unlock conditions are identical on iOS and Android**. Remaining to check: Dreamcast and GBA.
+
+## Dreamcast (`1ST_READ.BIN`, found by the 25-bit mask literal 0x01FFFFFF)
+- `0x8C02B518`: save word at 0x8C22D824 `& 0x1FFFFFF == 0x1FFFFFF` -> all 25 Stage Challenge stages cleared (same test as mobile `isChallengeClearedAll`).
+- `0x8C02B508`: the same save word tested against **0xFFFFFF (24 bits)** -> a Dreamcast-only check that 24 challenge stages are cleared (use not yet identified: possibly gating the last challenge stage or a character-related unlock).
+- `0x8C02C808`: `puzzleClearEnum(group)`: word `0x8C22D8A4 + 4*group` `& 0x1FFFFFF == 0x1FFFFFF` -> all 25 stages of that puzzle group cleared (same test as mobile).
+So the Dreamcast character-replacement conditions (Chao after all 25 challenges, Pians after all 25 Mania puzzles per the manual) use the same 25-bit cleared-mask tests as mobile. Still to do: callers of these three functions (which costume/feature each gates, and the 24-bit check), then GBA.
