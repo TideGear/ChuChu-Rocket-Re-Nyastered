@@ -55,10 +55,19 @@ int main(int argc, char** argv) {
     int stageNo = argc > 2 ? atoi(argv[2]) % (int)stages.st.size() : 0; uint32_t seed = argc > 3 ? (uint32_t)atoi(argv[3]) : 1;
     int lv[4] = {-1, 3, 3, 3};
     if (argc > 4) { int k = 1; for (const char* p = argv[4]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) { printf("SDL: %s\n", SDL_GetError()); return 2; }
+    if (getenv("CCR_SHOT") || getenv("CCR_HEADLESS")) {                     // automated runs must never take the user's screen or audio
+        SDL_setenv("SDL_VIDEODRIVER", "dummy", 1); SDL_setenv("SDL_AUDIODRIVER", "dummy", 1); SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+    }
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { printf("SDL: %s\n", SDL_GetError()); return 2; }
     const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
-    SDL_Window* win = SDL_CreateWindow("ChuChu Rocket! Re-Nyastered", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W, H, SDL_WINDOW_RESIZABLE);
-    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    // Resolution/frame-rate independence: logic is a fixed 60 Hz tick, drawing is interpolated, and everything is drawn in a fixed logical space
+    // scaled to the window (any size up to and beyond 4K; env CCR_SIZE=3840x2160, CCR_FULLSCREEN=1, CCR_VSYNC=0 for uncapped frame rate, F11 / V at runtime).
+    int winW = W, winH = H; if (const char* sz = getenv("CCR_SIZE")) { int a = 0, b = 0; if (sscanf(sz, "%dx%d", &a, &b) == 2 && a > 0 && b > 0) { winW = a; winH = b; } }
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, getenv("CCR_FILTER") ? getenv("CCR_FILTER") : "linear");
+    Uint32 wflags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (getenv("CCR_FULLSCREEN") ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+    SDL_Window* win = SDL_CreateWindow("ChuChu Rocket! Re-Nyastered", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winW, winH, wflags);
+    bool vsync = !(getenv("CCR_VSYNC") && atoi(getenv("CCR_VSYNC")) == 0);
+    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, (getenv("CCR_SHOT") || getenv("CCR_HEADLESS")) ? SDL_RENDERER_SOFTWARE : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
     SDL_RenderSetLogicalSize(ren, W, H);
     std::string ret = root + "/ret_all/";
     Sheet atlas, cat, mouse, gold, digits, crowns, rockets[4];
@@ -66,6 +75,18 @@ int main(int argc, char** argv) {
            && loadSheet(ren, ret + "r0729", digits) && loadSheet(ren, ret + "r0726", crowns);
     if (!ok) { printf("missing sprite sheets in %s (run tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return 2; }
 
+    // Music: Dreamcast CD track (best source, see docs/audio.md) streamed from a WAV, looped. Battle uses songs 5 (long time left) and 6 (late), = tracks 09 and 10.
+    SDL_AudioDeviceID adev = 0; Uint8* mus[2] = {nullptr, nullptr}; Uint32 mlen[2] = {0, 0}; SDL_AudioSpec mspec{};
+    for (int i = 0; i < 2; i++) { std::string wp = root + "/dreamcast/audio/track" + (i ? "10" : "09") + ".wav"; SDL_AudioSpec sp; if (!SDL_LoadWAV(wp.c_str(), &sp, &mus[i], &mlen[i])) { mus[i] = nullptr; } else mspec = sp; }
+    int curTrack = -1; size_t musPos = 0;
+    if (mus[0] && !getenv("CCR_SHOT")) { SDL_AudioSpec want = mspec, have; adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0); if (adev) SDL_PauseAudioDevice(adev, 0); }
+    auto pumpMusic = [&](int track) {
+        if (!adev || !mus[track]) return;
+        if (curTrack != track) { SDL_ClearQueuedAudio(adev); curTrack = track; musPos = (size_t)(2.0 * mspec.freq) * 4; }   // skip the disc's 2 s lead-in
+        while (SDL_GetQueuedAudioSize(adev) < (Uint32)(mspec.freq * 4 / 2)) {                                              // keep ~0.5 s queued
+            Uint32 chunk = (Uint32)(mspec.freq * 4 / 10); if (musPos + chunk > mlen[track]) { musPos = (size_t)(2.0 * mspec.freq) * 4; }
+            SDL_QueueAudio(adev, mus[track] + musPos, chunk); musPos += chunk; }
+    };
     BattleGame game; game.rouletteManager = true; game.baseScale = 1.0f;
     for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
     struct Snap { float x, z; }; std::vector<Snap> prev;
@@ -119,7 +140,9 @@ int main(int argc, char** argv) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) run = false;
-            else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_ESCAPE) run = false; else if (k == SDLK_SPACE) paused = !paused; else if (k == SDLK_r) restart();
+            else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_ESCAPE) run = false; else if (k == SDLK_F11) { Uint32 f = SDL_GetWindowFlags(win); SDL_SetWindowFullscreen(win, (f & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP); }
+                else if (k == SDLK_v) { vsync = !vsync; SDL_RenderSetVSync(ren, vsync); }
+                else if (k == SDLK_SPACE) paused = !paused; else if (k == SDLK_r) restart();
                 else if (k == SDLK_RIGHT) { stageNo = (stageNo + 1) % (int)stages.st.size(); restart(); } else if (k == SDLK_LEFT) { stageNo = (stageNo + (int)stages.st.size() - 1) % (int)stages.st.size(); restart(); } }
             else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 float lx, ly; SDL_RenderWindowToLogical(ren, e.button.x, e.button.y, &lx, &ly); int cx = (int)(lx / CELL), cy = (int)(ly / CELL);
@@ -128,6 +151,7 @@ int main(int argc, char** argv) {
         }
         Uint64 now = SDL_GetPerformanceCounter(); acc += (double)(now - last) / (double)SDL_GetPerformanceFrequency(); last = now; if (acc > 0.25) acc = 0.25;
         while (!paused && acc >= dt) { for (size_t k = 0; k < game.sim.ents.size() && k < prev.size(); k++) prev[k] = {game.sim.ents[k].x, game.sim.ents[k].z}; game.tick(); acc -= dt; }
+        pumpMusic(game.frame > game.roundFrames - 60 * 30 ? 1 : 0);
         draw(paused ? 1.0f : (float)(acc / dt)); SDL_RenderPresent(ren);
     }
     SDL_Quit(); return 0;

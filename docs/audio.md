@@ -16,3 +16,8 @@ M00->04, M01->05, M02->06, M03->07, M04->08, M05->09, M06->10, M07->11, M08->12,
 The Dreamcast CD audio is the **highest-quality music source** (lossless stereo; 4x loops give correct loop material). Mobile files are a lower-fidelity
 re-encode of the same music. Loop points (where each piece loops) still have to be found, from the Dreamcast sound driver or from the mobile files' ends.
 SFX and voices (iOS/Android 52 effects, mono ~70 kbps; Dreamcast `DP2SOUND.MLT`, `VOICE.AFS`) are not compared yet.
+
+## Dreamcast sound containers (2026-11-12)
+- `DPETC/VOICE.AFS`: AFS archive, 383 entries of 6,264 bytes (22,050 Hz mono ADX, 0.5 s). **All 383 decode to silence**: they are empty placeholders on this (US) disc, not voice lines (`tools/afs_extract.py`, `tools/adx.py`; ADX decoder verified on structure only because no audible data exists). Voices therefore come from elsewhere (the SMLT banks or the executable) or do not exist on the DC build; mobile voice lines have not been compared yet.
+- `DPETC/DP2SOUND.MLT`, `ENGLISH/CHU2_SE.MLT` (per language): `SMLT` banks = 0x20-byte header + 8 section entries (tag, offset, size ...): SOSB, SMPB (sample bank, the AICA waveform data, ~1 MB), SMDB, SMSB, SFPB, SFOB, SFPW / SPSR. `tools/mlt_extract.py` splits them. AICA ADPCM decode and the sample/sequence tables are not decoded yet.
+- `DPETC/MANATEE.DRV` (`SDRV`, 36 KB): the sound driver binary that runs on the AICA's ARM7 (next to decode for SFX timing/looping).
