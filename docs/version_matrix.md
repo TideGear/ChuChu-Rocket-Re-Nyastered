@@ -8,7 +8,7 @@ Legend: **EXACT** = original code of that build executed in an emulator and comp
 | Puzzle movement/arrows/rockets (save timelines) | EXACT, all 2,548 stages (port vs original) | TODO (same ISA, layout addresses identical: instruction diff pending) | EXACT, all 2,548 stages | EXACT, all 2,548 stages | EXACT, all 2,548 stages | TODO | EXACT on stage 1 (30 exits, 820 frames; docs/gba_notes.md) | TODO |
 | Battle generator + spawn logs | EXACT (15 cases) | n/a | EXACT (spawn log identical on the case compared) | same | same | TODO | TODO | TODO |
 | Battle scoring (`SC_AddScore`, `SC_CatHasCome`) | EXACT (1,500 + 3,000 ops) | TODO | EXACT 3,000 ops | EXACT 3,000 ops | EXACT 3,000 ops | TODO | TODO | TODO |
-| Roulette selection weights | EXACT selector (3,000 calls) | table byte-identical | table byte-identical (12 rows) | table byte-identical | table byte-identical | TODO | TODO | TODO |
+| Roulette selection weights | EXACT selector (3,000 calls) | table byte-identical | table byte-identical (12 rows) | table byte-identical | table byte-identical | TODO | TODO | EXACT selector (3,000 calls, SH-4 interpreter; `tools/oracle/dc_roulette.py`) |
 | Whole-battle score timelines + entity trajectories | EXACT 26/26 battles | TODO | covered by CPU placements below | covered | covered | TODO | TODO | TODO |
 | CPU players (arrow placements, 50 battles, 2,000-3,000 frames) | EXACT 50/50 | EXACT 10/10 | EXACT 50/50 | EXACT 50/50 | EXACT 50/50 | TODO | TODO | TODO |
 | Roulette event handlers (Cat Mania etc.) | partial (see rules_battle.md) | TODO | exercised through CPU runs (Cat Mania rolls identical) | same | same | TODO | TODO | TODO |
