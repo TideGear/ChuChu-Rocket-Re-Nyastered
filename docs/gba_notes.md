@@ -1,0 +1,10 @@
+# GBA version: emulation harness and first results (2026-11-13)
+
+Tools: `tools/oracle/gba_oracle.py` (mini GBA on Unicorn ARM7: memory map incl. IWRAM mirror, IO register file with write-1-to-clear IF, immediate and VBlank-timed DMA, BIOS SWI HLE (Halt/IntrWait/VBlankIntrWait, Div, CpuSet/FastSet, LZ77, RLE, ArcTan, Sqrt), Macronix-ID 64 KB Flash command state machine, keypad, VBlank IRQ), `gba_render.py` (debug renderer: mode 0 text BGs + sprites), `gba_session.py` (cached menu snapshots + key scripts).
+The user's ROM boots to the language screen, Sonic Team splash, title (with the title battle demo), Mode Select (Help, 4P Battle, Team Battle, Stage Challenge, Puzzle 1P, Let's create a stage / character, Exchange data, Options) and the puzzle stage select / planning screens. Save type FLASH_V121 (64 KB).
+Key map used: A=1 B=2 Select=4 Start=8 Right=16 Left=32 Up=64 Down=128 R=256 L=512 (R starts the run in the puzzle planning screen: "R Button: Start / Dash"). The puzzle cursor is a pointer sprite moving 2 px per frame; the selection box sprite snaps to the 16-px cell grid (board origin x=40, y=2).
+
+Findings
+- Logic rate is 60 Hz; a mouse moves **1.6 px per frame = 1.5 world units per tick** (cell 16 px = 15 units): identical speed to Android/iOS. Sprite position = p0 - floor(1.6 k) (sub-pixel accumulation), measured on one mouse over 60 frames.
+- **Puzzle stage 1 ("Where to go?") with one arrow placed at cell (6,4) pointing up: the GBA run removes 30 mice at frames 62, 72, ..., 822 (30 events across 820 frames); the C++ simulation with the same arrow predicts 61, 71, ..., 821 - identical sequence, constant +1 frame (the sprite disappears one frame after the logic removes the mouse).** This exercises serpentine walls, edge wrap, arrow turns and rocket entry.
+- Not yet done: automating arrow placement for more stages (needs the panel order per stage), cat/hole cases, battle mode (GBA has 4P/team battle with CPUs and a roulette: "Night Time!" event seen in the title demo), speeds in battle options, fixed-point details. The harness runs the real game so these are now measurable.

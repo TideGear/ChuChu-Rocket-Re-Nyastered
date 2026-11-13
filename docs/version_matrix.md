@@ -5,7 +5,7 @@ Legend: **EXACT** = original code of that build executed in an emulator and comp
 
 | Subsystem | Android 1.15 | Android 1.14 | iOS 1.1.2 | iOS 1.0.2 | iOS HD 1.0 | iOS 1.1 / ORBiT | GBA | Dreamcast |
 |---|---|---|---|---|---|---|---|---|
-| Puzzle movement/arrows/rockets (save timelines) | EXACT, all 2,548 stages (port vs original) | TODO (same ISA, layout addresses identical: instruction diff pending) | EXACT on 100 stages; full 2,548 running | EXACT on 100 stages; full run pending | EXACT on 100 stages; full run pending | TODO | TODO | TODO |
+| Puzzle movement/arrows/rockets (save timelines) | EXACT, all 2,548 stages (port vs original) | TODO (same ISA, layout addresses identical: instruction diff pending) | EXACT on 100 stages; full 2,548 running | EXACT on 100 stages; full run pending | EXACT on 100 stages; full run pending | TODO | EXACT on stage 1 (30 exits, 820 frames; docs/gba_notes.md) | TODO |
 | Battle generator + spawn logs | EXACT (15 cases) | n/a | EXACT (spawn log identical on the case compared) | same | same | TODO | TODO | TODO |
 | Battle scoring (`SC_AddScore`, `SC_CatHasCome`) | EXACT (1,500 + 3,000 ops) | TODO | EXACT 3,000 ops | EXACT 3,000 ops | EXACT 3,000 ops | TODO | TODO | TODO |
 | Roulette selection weights | EXACT selector (3,000 calls) | table byte-identical | table byte-identical (12 rows) | table byte-identical | table byte-identical | TODO | TODO | TODO |
