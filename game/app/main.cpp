@@ -254,10 +254,24 @@ struct BattleMode : Screen {
 };
 
 int main(int argc, char** argv) {
-    if (argc < 2) { printf("usage: ccr <cache assets dir> [menu|puzzle|battle] [stage] [seed] [cpu levels]\n"); return 2; }
-    App app; app.root = argv[1]; if (!app.init()) return 2;
-    std::string start = argc > 2 ? argv[2] : "menu"; int stageNo = argc > 3 ? atoi(argv[3]) : 0; uint32_t seed = argc > 4 ? (uint32_t)atoi(argv[4]) : 1;
-    int lv[4] = {-1, 3, 3, 3}; if (argc > 5) { int k = 1; for (const char* p = argv[5]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
+    // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ReNyastered/assets).
+    std::string root; int shift = 0;
+    auto hasAssets = [](const std::string& d) { FILE* f = fopen((d + "/ret_all/r0930.tex.bin").c_str(), "rb"); if (f) { fclose(f); return true; } return false; };
+    if (argc >= 2 && std::string(argv[1]) != "menu" && std::string(argv[1]) != "puzzle" && std::string(argv[1]) != "battle") { root = argv[1]; shift = 1; }
+    else {
+        std::vector<std::string> cand; if (const char* e = getenv("CCR_ASSETS")) cand.push_back(e);
+        char* bp = SDL_GetBasePath(); std::string base = bp ? bp : ""; if (bp) SDL_free(bp);
+        cand.push_back(base + "assets"); cand.push_back(base + "../../local/cache/assets"); cand.push_back(base + "../../../local/cache/assets"); cand.push_back("local/cache/assets");
+        if (const char* ap = getenv("APPDATA")) cand.push_back(std::string(ap) + "/ReNyastered/assets");
+        for (auto& c : cand) if (hasAssets(c)) { root = c; break; }
+        if (root.empty()) {
+            const char* msg = "Game assets not found.\n\nRun setup.cmd (it extracts them from your own copies of the game), start ccr with the asset folder as its first argument, or set CCR_ASSETS.";
+            printf("%s\n", msg); if (!getenv("CCR_SHOT") && !getenv("CCR_HEADLESS") && !getenv("CCR_BENCH") && SDL_Init(SDL_INIT_VIDEO) == 0) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ChuChu Rocket! Re-Nyastered", msg, nullptr); SDL_Quit(); } return 2;
+        }
+    }
+    App app; app.root = root; if (!app.init()) return 2;
+    std::string start = argc > 1 + shift ? argv[1 + shift] : "menu"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
+    int lv[4] = {-1, 3, 3, 3}; if (argc > 4 + shift) { int k = 1; for (const char* p = argv[4 + shift]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
     std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
         if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); if (!m->load(app.root, stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
