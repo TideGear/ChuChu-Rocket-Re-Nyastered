@@ -57,3 +57,8 @@ add_executable(noarrow_dump tests/noarrow_dump.cpp)
 if(MSVC)
   target_compile_options(noarrow_dump PRIVATE /W3 /fp:precise)
 endif()
+
+add_executable(determinism_test tests/determinism_test.cpp)
+if(MSVC)
+  target_compile_options(determinism_test PRIVATE /W3 /fp:precise)
+endif()

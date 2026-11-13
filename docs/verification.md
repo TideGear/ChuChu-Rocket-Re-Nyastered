@@ -55,3 +55,6 @@ Saved frames have exactly the output pixel size (checked from the BMP sizes). Lo
 | 3840x2160 | 0.17 ms | 1% |
 | 7680x4320 | 0.53 ms | 3% |
 This is the current 2D scene only (tiles, sprites, HUD). The Dreamcast 3D models are not drawn by the app yet, so their cost is not included; it has to be measured again when they are added (target: 4K at 60 fps with at least 2x headroom on the 3D pass).
+
+## Determinism and replay (2026-11-13)
+`game/tests/determinism_test.cpp` (`determinism_test.exe <battle_stages.bin>`): each of the 25 Dreamcast battle stages is played for a full 3-minute round with roulette, three level-3 CPU opponents and scripted human arrows while the input log is recorded; the log is replayed on a fresh game, and a third run does unrelated work between ticks (what a renderer does). A 64-bit hash of all entity positions and scores after every tick is compared: 25 stages x 3 runs, 180,000 replayed ticks, **0 divergences**. Together with the render-rate table above (60 ticks/s at every display rate) this covers the replay / lockstep requirement for the simulation; wire protocol and netplay are not built yet.
