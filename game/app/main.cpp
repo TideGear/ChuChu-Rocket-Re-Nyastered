@@ -12,6 +12,10 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <functional>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include <vector>
 #include <filesystem>
 #include <algorithm>
@@ -339,7 +343,7 @@ int main(int argc, char** argv) {
         (void)sec; SDL_Quit(); return 0;
     }
     Uint64 last = SDL_GetPerformanceCounter();
-    while (!app.quit) {
+    std::function<void()> frame = [&]() {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) app.quit = true;
@@ -351,6 +355,11 @@ int main(int argc, char** argv) {
         while (acc >= dt) { mode->tick(app); acc -= dt; }
         if (mode->music() >= 0) app.pumpMusic(mode->music());
         mode->draw(app, (float)(acc / dt)); SDL_RenderPresent(app.ren);
-    }
+    };
+#ifdef __EMSCRIPTEN__
+    emscripten_set_main_loop_arg([](void* f) { (*(std::function<void()>*)f)(); }, &frame, 0, 1);   // browser drives the frames (requestAnimationFrame); never returns
+#else
+    while (!app.quit) frame();
+#endif
     SDL_Quit(); return 0;
 }
