@@ -36,3 +36,6 @@ Needed for goal item 7 (no placeholders): every menu screen (title, mode select,
 
 ## Game-file requirements (design decision 2026-11-12)
 Rules/logic are in our code; game files supply only assets. Any one complete version (iOS 1.1.2, Android 1.14/1.15, or the Dreamcast disc) will be enough to play; each additional version adds its unique content (GBA user puzzles, Dreamcast CD music/3D/voices, DLC) and the best source per asset class is used with fallback. To verify: whether any single version contains every UI screen/font needed for all modes (to be measured during the menu work; minimum set documented in README).
+
+## Playable slice (2026-11-12): `ccr.exe` (game/app/main.cpp)
+Battle mode vs CPU players on the 25 Dreamcast battle stages with the verified 60 Hz BattleGame, interpolated drawing, extracted iOS art (tile atlas, cat/mouse turntable sprites, digit font), mouse arrow placement for player 1 and the verified CPU AI for the others. Missing: title/menus, roulette overlay and event visuals, round timer and results screen, sound, 4-player input, puzzle/challenge modes in the same app, original UI layouts. Run: `tools/export_sprites.py <ccrret dir> <cache>/ret_all all`, then `build\game\ccr.exe <cache assets dir> [stage] [seed] [cpu levels]`.
