@@ -65,3 +65,8 @@ add_executable(determinism_test tests/determinism_test.cpp)
 if(MSVC)
   target_compile_options(determinism_test PRIVATE /W3 /fp:precise)
 endif()
+
+add_executable(netplay_test tests/netplay_test.cpp)
+if(MSVC)
+  target_compile_options(netplay_test PRIVATE /W3 /fp:precise)
+endif()
