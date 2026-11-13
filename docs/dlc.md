@@ -4,13 +4,11 @@ Files in the user's `Dreamcast\DLC` folder: `Cartoony`, `UFOCow`, `DEChar` (char
 
 ## .VMS layout (all five)
 - 0x00: 16-byte ASCII description `CHU_CHU__C00` (characters) / `CHU_CHU__D01` (puzzles); 0x10: 32-byte Shift-JIS long description (Japanese titles; `UFOCow` has the English `CHUCHU!/CHARA`); 0x30: 16-byte application id; icon frame count / animation speed follow, the 32-byte 16-colour icon palette is at 0x60 and the 32x32 4-bit icon (512 bytes) starts at 0x80.
-- Character packs: 17,408 bytes (34 blocks of 512): 0x280 .. end = 16,896 bytes of payload. Not yet decoded: read as plain ARGB4444 at widths 32..128 it does not form an image (it looks tiled/twiddled or a custom sprite table; runs such as `ccfc ccfc ...` and `88f8 88f8 ...` suggest 16-bit pixels). Next step: follow the Dreamcast loader in `1ST_READ.BIN` (VMU file read path) with the SH-4 disassembler to learn the payload layout.
+- Character packs: 17,408 bytes. The icon is 32x32 (0x80..0x27F); from 0x280 the payload is **8 ordinary Dreamcast texture files (GBIX + PVRT, ARGB4444 twiddled, 32x32, 2,080 bytes each = 16,640 bytes)**. They are the four facing directions of the mouse-side character and of the cat-side character: `Cartoony` = cartoon mouse and cat, `UFOCow` = cow (mouse) and UFO (cat), `DEChar` (Dreamcast Express) = the train-style pair. `tools/vms_skin.py <pack.VMS> <out dir>` extracts and decodes them (verified visually on all three packs). The global texture indices (`0x6f22..0x6f68` for Cartoony/DEChar, `0x73d2..0x73d9` for UFOCow) are the ids of the game's own character textures that the pack replaces.
 - Puzzle packs: 38,400 bytes = 512-byte header + 25 puzzle slots (24 full 1,536-byte slots plus a shortened 25th) as in [stages.md](stages.md); `DEPuzzle` and `PuzzleP` are readable and their boards are in the stage registry.
 
 ## Still to do
-VMU loading in the game (read `.VMS` with its `.VMI`), skin payload decoder, the pack found in Oct 2024, English puzzle names.
+VMU loading in the game (read `.VMS` with its `.VMI`), applying a skin in play (map GBIX ids to the game sprites), the pack found in Oct 2024, English puzzle names.
 
-## Skin payload attempts (2026-11-13)
-- Linear ARGB4444 at widths 32..128 (from 0x200 and 0x280): banded noise, no picture.
-- Twiddled (Morton) 64x64 ARGB4444 / RGB565 / ARGB1555: shows grey, blocky shapes with a few coloured pixels at tile corners, so the payload looks image-like but tiled or palette-based (first bytes of the data start after the 32x32 icon at 0x80..0x27F).
-- The VMU file code in `1ST_READ.BIN` handles the name prefixes `CHU_CHU__RCT/E/D/C00/D00/NET` (strings at 0x8C0B4CF5..0x8C0B4D31; users: 0x8C020A40..0x8C0219B4) through a generic read helper at 0x8C0F1968; the consumer of the loaded character buffer still has to be found (follow the buffer pointer of the read call at 0x8C021708).
+## How the skin format was found
+Plain and twiddled interpretations of the whole payload gave noise because the payload is a sequence of texture *files*; the bytes at 0x280 read `GBIX` and 0x290 `PVRT` with header fields pixel format 2 (ARGB4444), data format 1 (twiddled), 32x32. The VMU file code in `1ST_READ.BIN` handles the name prefixes `CHU_CHU__RCT/E/D/C00/D00/NET` (strings at 0x8C0B4CF5..0x8C0B4D31; users: 0x8C020A40..0x8C0219B4) through a generic read helper at 0x8C0F1968.
