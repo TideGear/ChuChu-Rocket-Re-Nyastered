@@ -9,6 +9,7 @@
 #include "cpu.hpp"
 #include <algorithm>
 #include <memory>
+#include <functional>
 #include <cstdio>
 namespace ccr {
 
@@ -30,6 +31,8 @@ public:
     void setCpu(int p, int level) { cpuLevel[p] = level; }
     bool rouletteManager = true;                 // false: emulated-original harness never starts the roulette manager (table of zeros)
     int gtOff = 0; int fixedGameTime = -1, fixedBcd = -1;   // test harness: the emulated original never advances TI_GetGameTime / the BCD timer (both 0)
+    std::function<void(int)> sfx;                // sound hook: ChuSECall ids (0x13 refused, 1 arrow placed, 6 mouse home, 7 cat in rocket, 10 roulette)
+    int localPlayer = 0;
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
@@ -51,18 +54,20 @@ public:
     // Player arrow placement (Android FUN_0002859c, local path): own arrow on the cell -> only the direction changes; any other object bit
     // (0xF00: rocket, hole, arrow of another player) refuses; otherwise the slot at the player's ring index is freed and reused (3 slots, TTL 600).
     bool placeArrow(int player, int x, int y, int dir) {
-        if (cursorLock > 0 || over) return false;
+        if (cursorLock > 0 || over) { if (sfx && player == localPlayer) sfx(0x13); return false; }
         uint32_t f = sim.coll[y][x];
-        if ((f & kArrow) && !rotateOwn) return false;   // flag byte at Android 0x285db is 0 in the emulated battle setup: any arrow cell is refused (unverified for real play)
+        if ((f & kArrow) && !rotateOwn) { if (sfx && player == localPlayer) sfx(0x13); return false; }   // flag byte at Android 0x285db is 0 in the emulated battle setup: any arrow cell is refused (unverified for real play)
         if (f & kArrow) {
-            for (int k = 0; k < kArrowSlots; k++) { int i = slot_[player][k]; if (i >= 0 && sim.arrows[i].live && sim.arrows[i].x == x && sim.arrows[i].y == y) { sim.arrows[i].dir = dir; sim.refreshCell(x, y); return true; } }
+            for (int k = 0; k < kArrowSlots; k++) { int i = slot_[player][k]; if (i >= 0 && sim.arrows[i].live && sim.arrows[i].x == x && sim.arrows[i].y == y) { sim.arrows[i].dir = dir; sim.refreshCell(x, y); if (sfx && player == localPlayer) sfx(1); return true; } }
+            if (sfx && player == localPlayer) sfx(0x13);
             return false;
         }
-        if (f & (kRocket | kHole | kGenerator)) return false;
+        if (f & (kRocket | kHole | kGenerator)) { if (sfx && player == localPlayer) sfx(0x13); return false; }
         int k = ring_[player]; int old = slot_[player][k];
         if (old >= 0 && sim.arrows[old].live) { sim.arrows[old].live = false; sim.refreshCell(sim.arrows[old].x, sim.arrows[old].y); }
         sim.arrows.push_back({x, y, dir, 0, true, player, kArrowTtl}); sim.refreshCell(x, y);
         slot_[player][k] = (int)sim.arrows.size() - 1; ring_[player] = (k + 1) % kArrowSlots;
+        if (sfx && player == localPlayer) sfx(1);
         return true;
     }
     void tick() {
@@ -91,13 +96,13 @@ private:
         switch (e.kind) {
         case Event::MouseRocket: {
             static const int value[3] = {1, 50, 1};
-            score.add(e.player, value[e.type]); updateRanks(); gen->mice--; if (e.type == 1) gen->cnt1--;
+            score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); gen->mice--; if (e.type == 1) gen->cnt1--;
             if (e.type == 2) { gen->cnt2--; if (rouletteEnabled) pendingRoll_ = e.player; }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
             break; }
         case Event::MouseEaten: case Event::MouseHole:
             gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
         case Event::CatRocket:
-            if (e.player >= 0) { score.catHasCome(e.player); updateRanks(); }            // a cat in a rocket respawns at a generator: it stays 'out'
+            if (e.player >= 0) { score.catHasCome(e.player); updateRanks(); if (sfx) sfx(7); }            // a cat in a rocket respawns at a generator: it stays 'out'
             // (hole: no score change; the cat respawns at a generator too, so it stays 'out')
             break;                                   // GE_CatIsLost
         }
@@ -119,6 +124,7 @@ private:
         unsigned bcd = (unsigned)(((rem / 60) << 8) | (((rem % 60) / 10) << 4) | (rem % 10));   // minutes:seconds in BCD (TI_GetBCDTime layout still to be confirmed)
         int out = roulette->roll(rankOf(lastRoller_), fixedBcd >= 0 ? (unsigned)fixedBcd : (bcd << 8), fixedGameTime >= 0 ? fixedGameTime : frame + gtOff, -1); roulette->record(out);
         if (debug) printf("ROLL f%d player %d outcome %d\n", frame, p, out);
+        if (sfx) sfx(10);
         lastRoller_ = p; sim.releaseSlot(roll_.slot); roll_.slot = sim.allocSlot(-2); roll_.active = true; roll_.elapsed = -1; roll_.outcome = out; lastRoll.push_back(out);
     }
     float feverDuration() const { return 600.0f; }
