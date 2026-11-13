@@ -19,3 +19,7 @@ Notes
 - iOS and Android builds share one C++ code base compiled for two ABIs; the harnesses (`tools/oracle/`) run each build's own code under Unicorn. Differences found so far are cosmetic: function names (`MC_*` in old iOS builds, `Core::*` later), the idle CPU target marker (0xFF iOS vs 0x10 Android), one extra argument of `GA_SetStageNum`, puzzle arrow placement through `AR_PutArrowPzSp` (iOS) instead of `AR_PutArrowPz` (Android).
 - iOS HD 1.0 is non-PIC (absolute literals) and its sin/cos tables are static arrays rather than pointer slots; the harness handles both.
 - Everything above is for the English-language, US-region files provided; other regions of the Dreamcast disc (language folders) differ only in text/voice assets so far.
+
+## Dreamcast emulation options (2026-11-13)
+- The user's RetroArch install has `flycast_libretro.dll` and the Dreamcast BIOS; `tools/oracle/libretro_host.py` can load it headlessly via ctypes, but the Flycast core requires a hardware renderer (OpenGL/Vulkan/D3D11: `required_hw_api` in its info file) and crashes in `retro_load_game` without one (BIOS copied to local/dcsys, never to the repo, and saves redirected away from the user's RetroArch folders). A hidden GL context would be needed.
+- Chosen route instead: a small SH-4 interpreter for the oracle (no graphics, no audio, exact function-level control), plus locating the Dreamcast equivalents of the Android functions by their float constants.
