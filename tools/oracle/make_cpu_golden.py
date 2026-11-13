@@ -14,7 +14,7 @@ pa = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
 cases = [(4, 77, [0, 1, 2, 3]), (0, 5, [0, 0, 0, 0]), (7, 9, [1, 1, 1, 1]), (12, 31, [2, 2, 2, 2]), (20, 123, [3, 3, 3, 3]),
          (3, 55, [0, 1, 2, 3]), (10, 8, [4, 4, 4, 4]), (24, 66, [3, 2, 1, 0]), (15, 1, [0, -1, 2, -1]), (22, 999, [1, 3, 0, 2])]
 frames = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
-which = int(sys.argv[2]); out = open('C:/Dev/ChuChu Rocket/local/testdata/cpu_golden_%d.txt' % which, 'w')
+which = int(sys.argv[2]); out = open('C:/Dev/ChuChu Rocket/local/testdata/cpu_golden%s_%d.txt' % (__import__('os').environ.get('CCR_GOLD_SUFFIX', ''), which), 'w')
 for idx, seed, levels in [cases[which]]:
     tiles, walls = ascii_stage(d[idx * 477:idx * 477 + 475]); B.spawns.clear(); puts.clear(); setup_battle(tiles, walls, seed)
     gcall(0x3d2bc)
