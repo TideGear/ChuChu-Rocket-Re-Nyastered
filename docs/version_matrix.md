@@ -5,7 +5,7 @@ Legend: **EXACT** = original code of that build executed in an emulator and comp
 
 | Subsystem | Android 1.15 | Android 1.14 | iOS 1.1.2 | iOS 1.0.2 | iOS HD 1.0 | iOS 1.1 / ORBiT | GBA | Dreamcast |
 |---|---|---|---|---|---|---|---|---|
-| Puzzle movement/arrows/rockets (save timelines) | EXACT, all 2,548 stages (port vs original) | TODO (same ISA, layout addresses identical: instruction diff pending) | EXACT, all 2,548 stages | EXACT, all 2,548 stages | EXACT, all 2,548 stages | TODO | EXACT on stage 1 (30 exits, 820 frames; docs/gba_notes.md) | TODO |
+| Puzzle movement/arrows/rockets (save timelines) | EXACT, all 2,548 stages (port vs original) | EXACT, all 2,548 stages (1.14's own libccrjni.so, 3 chunks of 850/850/848, 0 differences) | EXACT, all 2,548 stages | EXACT, all 2,548 stages | EXACT, all 2,548 stages | TODO | EXACT on stage 1 (30 exits, 820 frames; docs/gba_notes.md) | TODO |
 | Battle generator + spawn logs | EXACT (15 cases) | n/a | EXACT (spawn log identical on the case compared) | same | same | TODO | TODO | TODO |
 | Battle scoring (`SC_AddScore`, `SC_CatHasCome`) | EXACT (1,500 + 3,000 ops) | EXACT 3,000 ops (1.14's own libccrjni.so, `score_diff.py`) | EXACT 3,000 ops | EXACT 3,000 ops | EXACT 3,000 ops | TODO | TODO | EXACT 4,000 ops (SH-4 interpreter, `tools/oracle/dc_score.py`; SC_AddScore chunk 0x8C01E6A0, SC_CatHasCome 0x8C01E712) |
 | Roulette selection weights | EXACT selector (3,000 calls) | EXACT selector (4,000 calls, 1.14's own code, `roulette_diff.py`) | table byte-identical (12 rows) | table byte-identical | table byte-identical | TODO | TODO | EXACT selector (3,000 calls, SH-4 interpreter; `tools/oracle/dc_roulette.py`) |
