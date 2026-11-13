@@ -9,3 +9,8 @@ Files in the user's `Dreamcast\DLC` folder: `Cartoony`, `UFOCow`, `DEChar` (char
 
 ## Still to do
 VMU loading in the game (read `.VMS` with its `.VMI`), skin payload decoder, the pack found in Oct 2024, English puzzle names.
+
+## Skin payload attempts (2026-11-13)
+- Linear ARGB4444 at widths 32..128 (from 0x200 and 0x280): banded noise, no picture.
+- Twiddled (Morton) 64x64 ARGB4444 / RGB565 / ARGB1555: shows grey, blocky shapes with a few coloured pixels at tile corners, so the payload looks image-like but tiled or palette-based (first bytes of the data start after the 32x32 icon at 0x80..0x27F).
+- The VMU file code in `1ST_READ.BIN` handles the name prefixes `CHU_CHU__RCT/E/D/C00/D00/NET` (strings at 0x8C0B4CF5..0x8C0B4D31; users: 0x8C020A40..0x8C0219B4) through a generic read helper at 0x8C0F1968; the consumer of the loaded character buffer still has to be found (follow the buffer pointer of the read call at 0x8C021708).
