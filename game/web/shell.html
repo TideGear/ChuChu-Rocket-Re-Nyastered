@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ChuChu Rocket! Re-Nyastered</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+<meta name="theme-color" content="#101020">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  html, body { margin: 0; height: 100%; background: #101020; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  canvas { width: min(100vw, 120vh); height: min(100vh, 83.3333vw); display: block; image-rendering: auto; outline: none; }   /* explicit size: the SDL window follows it (768x640 = 6:5) */
+  #msg { position: fixed; left: 0; right: 0; top: 40%; text-align: center; color: #cfd2ff; font: 16px system-ui, sans-serif; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
+<div id="msg">Loading…</div>
+<script>
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    print: function (t) { console.log(t); },
+    printErr: function (t) { console.error(t); },
+    setStatus: function (t) { document.getElementById('msg').textContent = t; },
+    postRun: [function () { document.getElementById('msg').style.display = 'none'; }]
+  };
+  // the first tap/click/key unlocks browser audio
+  ['pointerdown', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function once() { try { if (Module.SDL2 && Module.SDL2.audioContext && Module.SDL2.audioContext.state === 'suspended') Module.SDL2.audioContext.resume(); } catch (e) {} }, { once: false }); });
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>
