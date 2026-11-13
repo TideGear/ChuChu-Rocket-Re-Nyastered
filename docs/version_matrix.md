@@ -23,3 +23,7 @@ Notes
 ## Dreamcast emulation options (2026-11-13)
 - The user's RetroArch install has `flycast_libretro.dll` and the Dreamcast BIOS; `tools/oracle/libretro_host.py` can load it headlessly via ctypes, but the Flycast core requires a hardware renderer (OpenGL/Vulkan/D3D11: `required_hw_api` in its info file) and crashes in `retro_load_game` without one (BIOS copied to local/dcsys, never to the repo, and saves redirected away from the user's RetroArch folders). A hidden GL context would be needed.
 - Chosen route instead: a small SH-4 interpreter for the oracle (no graphics, no audio, exact function-level control), plus locating the Dreamcast equivalents of the Android functions by their float constants.
+
+## Dreamcast code location notes (2026-11-13)
+- `tools/oracle/sh4.py` (interpreter) and `tools/oracle/sh4dis.py` (disassembler) work on `1ST_READ.BIN` (base 0x8C010000). REA cannot open SH-4.
+- Float-constant hits for 195/150/-7.5/187.5/142.5 (0x8C016768..) are a UI/cursor bounds helper, and 15.0 near 0x8C013F80 is a quad/sprite builder: neither is gameplay. Stage files referenced: `pzstage100.dat`, `btstage25.dat`, `chstage25.dat` (strings at 0x8C075CD4..). Next: follow xrefs from those strings to the stage loader, then to the grid/movement code.
