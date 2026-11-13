@@ -12,7 +12,7 @@ Legend: **EXACT** = original code of that build executed in an emulator and comp
 | Whole-battle score timelines + entity trajectories | EXACT 26/26 battles | TODO | covered by CPU placements below | covered | covered | TODO | TODO | TODO |
 | CPU players (arrow placements, 50 battles, 2,000-3,000 frames) | EXACT 50/50 | EXACT 10/10 | EXACT 50/50 | EXACT 50/50 | EXACT 50/50 | TODO | TODO | TODO |
 | Roulette event handlers (Cat Mania etc.) | partial (see rules_battle.md) | TODO | exercised through CPU runs (Cat Mania rolls identical) | same | same | TODO | TODO | TODO |
-| Speeds (cat 1.0, mouse 1.5 puzzle; battle option table) | EXACT | - | EXACT (GA_GetCatSpeed/MouseSpeed 0.25/0.375 with unset option, same as Android) | same | same | TODO | TODO | TODO |
+| Speeds (cat 1.0, mouse 1.5 puzzle; battle option table) | EXACT | - | EXACT (GA_GetCatSpeed/MouseSpeed 0.25/0.375 with unset option, same as Android) | same | same | TODO | TODO | EXACT getters (cat = base x scale, mouse = 1.5 x that; scales 0.25/0.75/1.0/1.25/**4.0**; `GA_GetCatSpeed` 0x8C016BB0, `GA_GetMouseSpeed` 0x8C016B90, run in the SH-4 interpreter) |
 | Frame rate / logic rate | 60 Hz tick (stepped per frame) | - | 60 Hz in the harness; device display interval to confirm | - | - | - | TODO | TODO |
 
 Notes
