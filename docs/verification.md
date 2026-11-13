@@ -33,3 +33,16 @@ is compared with it.
   (details in docs/rules_battle.md).
 - Scoreboard (SC_AddScore / SC_CatHasCome): 3000 random operations vs the original, 0 divergences on the score, team and cat-counter fields; C++ golden test `score_test` replays 1500 operations: 0 divergences.
 - Roulette selector: 4000 random calls (rank, time bucket, previous outcomes, exclusion) vs the original, 0 mismatches; C++ golden test `roulette_test` replays 3000: all identical. The 128-entry threshold table equals the first 128 `njRandom` draws after seeding.
+
+## Resolution and refresh-rate check (2026-11-13, headless)
+`ccr` with `CCR_BENCH=<frames> CCR_HZ=<simulated display rate> CCR_SIZE=WxH` renders offscreen with SDL's software renderer (dummy video/audio drivers; the user's monitor is 60 Hz only, so higher rates are always simulated). The simulation ticks at a fixed 60 Hz and the picture is drawn with interpolation at every presented frame.
+| Output size | Simulated display rate | Sim ticks per second | Draw time (software renderer, battle scene) |
+|---|---|---|---|
+| 3840x2160 | 30 Hz | 60.0 | 16.8 ms/frame |
+| 3840x2160 | 60 Hz | 60.0 | 16.9 ms/frame |
+| 3840x2160 | 144 Hz | 58.8 (49 ticks in 0.833 s: accumulator rounding over a short run) | 16.6 ms/frame |
+| 3840x2160 | 240 Hz | 60.0 | 16.1 ms/frame |
+| 1280x720 | 60 Hz | 60.0 | 0.75 ms/frame |
+| 2560x1440 | 60 Hz | 60.0 | 7.35 ms/frame |
+| 7680x4320 | 60 Hz | 60.0 | 72.9 ms/frame (needs the GPU renderer) |
+Saved frames have exactly the output pixel size (checked from the BMP sizes). Logic speed is independent of display rate; even the CPU renderer reaches about 60 fps at 4K, the GPU renderer has far more headroom. Not yet measured: the GPU (accelerated) path, since that needs a visible window.
