@@ -39,3 +39,5 @@ Rules/logic are in our code; game files supply only assets. Any one complete ver
 
 ## Playable slice (2026-11-12): `ccr.exe` (game/app/main.cpp)
 Battle mode vs CPU players on the 25 Dreamcast battle stages with the verified 60 Hz BattleGame, interpolated drawing, extracted iOS art (tile atlas, cat/mouse turntable sprites, digit font), mouse arrow placement for player 1 and the verified CPU AI for the others. Missing: title/menus, roulette overlay and event visuals, round timer and results screen, sound, 4-player input, puzzle/challenge modes in the same app, original UI layouts. Run: `tools/export_sprites.py <ccrret dir> <cache>/ret_all all`, then `build\game\ccr.exe <cache assets dir> [stage] [seed] [cpu levels]`.
+
+Update 2026-11-12 23:20: `ccr.exe` now has Menu / Puzzle / Battle modes (game/app/main.cpp). Puzzle: 100 main stages from the GBA stage set, arrow stock = reference-solution counts, plan then SPACE to run, CLEAR/MISS; battle as before. Text uses the extracted glyph sheet (ccrret rec 23, frame = ASCII code). Menu art/layout is still a plain placeholder: real title/menu screens are TODO.
