@@ -68,7 +68,7 @@ struct App {
         headless = getenv("CCR_SHOT") || getenv("CCR_HEADLESS") || getenv("CCR_BENCH");
         bool gpu = getenv("CCR_GPU") != nullptr;   // CCR_GPU=1 with CCR_BENCH: accelerated renderer on a HIDDEN window (nothing is shown, no audio)
         if (headless) { if (!gpu) SDL_setenv("SDL_VIDEODRIVER", "dummy", 1); SDL_setenv("SDL_AUDIODRIVER", "dummy", 1); if (!gpu) SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software"); }   // never take the user's screen/audio
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { printf("SDL: %s\n", SDL_GetError()); return false; }
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) { printf("SDL: %s\n", SDL_GetError()); return false; }
         int winW = W, winH = H; if (const char* sz = getenv("CCR_SIZE")) { int a = 0, b = 0; if (sscanf(sz, "%dx%d", &a, &b) == 2 && a > 0 && b > 0) { winW = a; winH = b; } }
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, getenv("CCR_FILTER") ? getenv("CCR_FILTER") : "linear");
         Uint32 wf = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (getenv("CCR_FULLSCREEN") ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) | (headless ? SDL_WINDOW_HIDDEN : 0);
@@ -220,16 +220,36 @@ struct PuzzleMode : Screen {
 // ---------------------------------------------------------------- battle
 struct BattleMode : Screen {
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
+    // 4-player local input: mouse = player 1; keyboard sets WASD+Q (P1), IJKL+U (P2), keypad 8456+0 (P3); gamepads in connection order (D-pad moves the cursor, DC buttons Y/A/X/B place up/down/left/right)
+    int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
+    void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4) return; if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
+    void moveCur(int p, int dx, int dy) { curX[p] = std::max(0, std::min(11, curX[p] + dx)); curY[p] = std::max(0, std::min(8, curY[p] + dy)); }
+    bool keyPlayer(SDL_Keycode k) {
+        static const SDL_Keycode map[3][5] = {{SDLK_w, SDLK_s, SDLK_a, SDLK_d, SDLK_q}, {SDLK_i, SDLK_k, SDLK_j, SDLK_l, SDLK_u}, {SDLK_KP_8, SDLK_KP_5, SDLK_KP_4, SDLK_KP_6, SDLK_KP_0}};
+        for (int p = 0; p < 3; p++) { if (lv[p] >= 0) continue;
+            if (k == map[p][0]) { moveCur(p, 0, -1); return true; } if (k == map[p][1]) { moveCur(p, 0, 1); return true; } if (k == map[p][2]) { moveCur(p, -1, 0); return true; } if (k == map[p][3]) { moveCur(p, 1, 0); return true; }
+            if (k == map[p][4]) { place(p, curX[p], curY[p], -1); return true; } }
+        return false;
+    }
+    void padButton(int p, int button) {
+        if (p < 0 || p > 3 || lv[p] >= 0) return;
+        switch (button) { case SDL_CONTROLLER_BUTTON_DPAD_UP: moveCur(p, 0, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: moveCur(p, 0, 1); break; case SDL_CONTROLLER_BUTTON_DPAD_LEFT: moveCur(p, -1, 0); break; case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: moveCur(p, 1, 0); break;
+            case SDL_CONTROLLER_BUTTON_Y: place(p, curX[p], curY[p], 2); break; case SDL_CONTROLLER_BUTTON_A: place(p, curX[p], curY[p], 0); break; case SDL_CONTROLLER_BUTTON_X: place(p, curX[p], curY[p], 1); break; case SDL_CONTROLLER_BUTTON_B: place(p, curX[p], curY[p], 3); break; default: break; }
+    }
     bool load(const std::string& root, int stage, uint32_t sd) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
         game.rouletteManager = true; game.rotateOwn = true; game.baseScale = 1.0f; int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes;   // 1-3 minute rounds (NGI_SetGameTimer)
+        if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
         restart(); return true;
     }
     void restart() { game.start(stages.list[cur].st, seed); prev.clear(); }
     int music() override { return game.frame > game.roundFrames - 60 * 30 ? 1 : 0; }
     void event(App& a, const SDL_Event& e) override {
-        if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
+        if (e.type == SDL_CONTROLLERDEVICEADDED) { for (int p = 0; p < 4; p++) if (!pads[p]) { pads[p] = SDL_GameControllerOpen(e.cdevice.which); break; } }
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN) { for (int p = 0; p < 4; p++) if (pads[p] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[p])) == e.cbutton.which) padButton(p, e.cbutton.button); }
+        else if (e.type == SDL_KEYDOWN && keyPlayer(e.key.keysym.sym)) {}
+        else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_SPACE) paused = !paused; else if (k == SDLK_r) restart(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHT) { cur = (cur + 1) % (int)stages.list.size(); restart(); } else if (k == SDLK_LEFT) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); restart(); } }
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -244,6 +264,7 @@ struct BattleMode : Screen {
         a.board(stages.list[cur].st);
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, pcol[ar.owner & 3]);
         a.entities(game.sim, prev, paused ? 1.0f : alpha);
+        for (int p = 1; p < 4; p++) if (lv[p] < 0) { SDL_Rect c{curX[p] * CELL + 2, curY[p] * CELL + 2, CELL - 4, CELL - 4}; SDL_SetRenderDrawColor(a.ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderDrawRect(a.ren, &c); }
         for (int p = 0; p < 4; p++) { SDL_Rect b{p * (W / 4) + 6, 9 * CELL + 6, W / 4 - 12, 52}; SDL_SetRenderDrawColor(a.ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderFillRect(a.ren, &b);
             a.number(game.score.player[p], b.x + 12, b.y + 8, 36);
             if (game.over) { int rk = game.rankOf(p); const SDL_Rect& fr = a.crowns.fr[rk < 4 ? rk : 3]; int ch = 44, cw = fr.w * ch / fr.h; SDL_Rect d{b.x + b.w - cw - 8, b.y + 4, cw, ch}; SDL_RenderCopy(a.ren, a.crowns.tex, &fr, &d); } }
