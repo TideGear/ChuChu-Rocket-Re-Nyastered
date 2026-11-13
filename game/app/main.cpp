@@ -151,11 +151,13 @@ struct App {
     }
 };
 
+static App* gApp = nullptr;   // for sound hooks
 struct Screen { virtual ~Screen() {} virtual void event(App&, const SDL_Event&) {} virtual void tick(App&) {} virtual void draw(App&, float) {} virtual int music() { return -1; } virtual const char* next() { return nullptr; } };
 
 // ---------------------------------------------------------------- menu
 struct MenuMode : Screen {
     int sel = 0; const char* chosen = nullptr; static constexpr int N = 3; const char* items[N] = {"PUZZLE", "BATTLE", "QUIT"};
+    int music() override { return 0; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_DOWN) sel = (sel + 1) % N; else if (k == SDLK_UP) sel = (sel + N - 1) % N; else if (k == SDLK_RETURN || k == SDLK_SPACE) choose(a); }
@@ -175,6 +177,7 @@ struct MenuMode : Screen {
 struct PuzzleMode : Screen {
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false;
+    int music() override { return 0; }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, 0)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
     void reset() {
         sim.load(stages.list[cur].st); prev.clear(); running = false; state = 0; totalMice = 0;
@@ -241,6 +244,7 @@ struct BattleMode : Screen {
         game.rouletteManager = true; game.rotateOwn = true; game.baseScale = 1.0f; int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes;   // 1-3 minute rounds (NGI_SetGameTimer)
         if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
+        game.sfx = [](int id) { if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall ids -> sound files of the same number (mapping not yet verified)
         restart(); return true;
     }
     void restart() { game.start(stages.list[cur].st, seed); prev.clear(); }
@@ -290,7 +294,7 @@ int main(int argc, char** argv) {
             printf("%s\n", msg); if (!getenv("CCR_SHOT") && !getenv("CCR_HEADLESS") && !getenv("CCR_BENCH") && SDL_Init(SDL_INIT_VIDEO) == 0) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ChuChu Rocket! Re-Nyastered", msg, nullptr); SDL_Quit(); } return 2;
         }
     }
-    App app; app.root = root; if (!app.init()) return 2;
+    App app; app.root = root; if (!app.init()) return 2; gApp = &app;
     std::string start = argc > 1 + shift ? argv[1 + shift] : "menu"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
     int lv[4] = {-1, 3, 3, 3}; if (argc > 4 + shift) { int k = 1; for (const char* p = argv[4 + shift]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
     std::unique_ptr<Screen> mode;
