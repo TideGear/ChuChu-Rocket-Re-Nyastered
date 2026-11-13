@@ -8,7 +8,7 @@ def load_funcs(path):
         p = l.split('\t')
         if len(p) >= 3: FUNCS.setdefault(p[2].strip(), int(p[0], 16))
 ROOT = r'C:\Dev\ChuChu Rocket'
-BUILD = {'v112': ('CCR_ios_v112', 'ios_v112'), 'hd10': ('CCR_ios_hd10', 'ios_hd10'), '102': ('CCR_ios_102', 'ios_102')}
+BUILD = {'v112': ('CCR_ios_v112', 'ios_v112'), 'hd10': ('CCR_ios_hd10', 'ios_hd10'), '102': ('CCR_ios_102', 'ios_102'), 'v11': ('CCR_ios_v11os30', 'ios_v11os30'), 'orbit': ('CCR_ios_orbit', 'ios_orbit')}
 BUILD_NAME = ['v112']
 def make(build='v112'):
     BUILD_NAME[0] = build; thin, dec = BUILD[build]

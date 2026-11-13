@@ -15,3 +15,12 @@ For each asset class: the source chosen, the evidence, and what is still unmeasu
 
 ## Feature provenance (rules)
 Rules come from the original code of each version and are listed per subsystem in [version_matrix.md](version_matrix.md): Android 1.15 and iOS 1.1.2 / 1.0.2 / HD run tick for tick against the port (puzzle, battle, scoring, roulette selector, CPU players); the Dreamcast build is being covered function by function in the SH-4 interpreter (speed table, speed getters, roulette selector and scoring so far; one measured difference: the Dreamcast battle speed table ends in 4.0 where mobile has 2.0).
+
+## Integrity of the mobile builds (2026-11-13)
+The Dreamcast and GBA files are clean dumps; the iOS .ipa and Android .apk files come from distribution sites and may have been cracked, re-signed or had content added. Checks so far (no evidence of tampering with game logic, sound or presentation):
+- Extra files only: `Payload/CCR.app/ORBiT` in both ORBiT builds, `Lz0PDA.nfo` in the iOS 1.1.2 build, `iTunesMetadata.plist` in most; the 1.14 APK is re-signed with a third-party key (`META-INF/SOAKEY_K.*`), 1.15 has `CERT.*`.
+- String scan of all decompiled iOS builds and the Android library for crack/group markers: nothing beyond ordinary text.
+- Code identity: the `__TEXT,__text` section of **HD 1.0 ORBiT is byte-identical to HD 1.0** (same SHA-256); iPhone 1.0 ORBiT, 1.0.2, 1.1 and 1.1.2 differ from each other as different releases.
+- Audio files (music and effects) are byte-identical in every iOS build and the Android builds, which also matches the Dreamcast CD audio mapping ([audio.md](audio.md)).
+- Game-logic code of Android 1.14/1.15 and iOS 1.0.2/HD/1.1.2 reproduces the same results as one another and as the port on all 2,548 puzzle stages and the battle/CPU/scoring tests; the Dreamcast functions checked so far (speed, roulette selector, scoring) agree with them in structure, and the one measured difference (battle speed table ending in 4.0) is a Dreamcast difference, not a cracking artefact.
+Policy: where a mobile asset or text differs from the clean Dreamcast/GBA data, the clean source wins unless the mobile one is a documented original change; any mismatch is reported in the version matrix.
