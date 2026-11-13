@@ -25,8 +25,14 @@ Method: each checkable claim compared with the extracted files, the decompiles (
 | Android has no working human multiplayer | The network-battle classes exist but no transport ships ([modes.md](modes.md)). Local split-screen classes (`SplitFourBattle...`) exist in all builds; whether they are reachable on Android phones was not tested. |
 | Dreamcast online used a modem server on UDP 9789 and is revived by private servers | Dreamcast Live connection guide (external, read 2026-11-13). |
 
-## Not testable from the game files
-Release dates and prices, delisting dates, review quotes, Wikipedia-derived facts, DS *Project Rub* NiGHTS hat, Dreamarena subscriber numbers, Retina update date, Dreamcast control mappings and Keyboard keys (manual-derived), GBA control schemes (could be checked by running the ROM harness), the "145 puzzles at launch" figure (marketing text; our oldest iOS build already has 324).
+## Not testable from the game files (outside the software, or builds we do not have)
+Release dates and prices, delisting dates, review quotes, Wikipedia-derived facts, Dreamarena subscriber numbers, server statistics (4,000+ user stages), the DS *Project Rub* NiGHTS hat (a different cartridge), Retina update date, the "145 puzzles at launch" figure (marketing text; our oldest iOS build already has 324) and the Game Center chronology (no launch build).
+
+## Testable, still pending (to be settled with the existing tools)
+- GBA roulette count (13 claimed): find the GBA roulette table/handlers in the ROM (event names are not stored as text).
+- GBA control schemes (3 claimed): press keys in each scheme in the GBA harness.
+- Dreamcast button/keyboard mappings and the Chao / Pian unlockable skins with their unlock conditions: in the Dreamcast executable (input code, save flags).
+- Android local multiplayer: whether the split-screen battle classes are reachable from the Android menus.
 
 ## New facts from the files that the document lacks
 - Dreamcast build differs from mobile in the battle speed-option table: last entry 4.0 (mobile 2.0).
