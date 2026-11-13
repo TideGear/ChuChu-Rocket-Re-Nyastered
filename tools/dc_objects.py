@@ -51,7 +51,7 @@ def main(path, out):
         return (x, y, z)
     index = []
     for r in roots:
-        verts = []; faces = []
+        verts = []; faces = []; uvs = []
         def walk(o, parent):
             while o is not None:
                 x = objs[o]; fl = x['flags']
@@ -65,16 +65,28 @@ def main(path, out):
                     for k in keys: verts.append(xf(vl[k][0]))
                     for s, rev, tex, mat in pl:
                         for i in range(len(s) - 2):
-                            a, b, c = s[i][0], s[i + 1][0], s[i + 2][0]
-                            if (i & 1) ^ rev: b, c = c, b
-                            if a in remap and b in remap and c in remap and len({a, b, c}) == 3: faces.append((remap[a], remap[b], remap[c]))
+                            t3 = [s[i], s[i + 1], s[i + 2]]
+                            if (i & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
+                            a, b, c = t3[0][0], t3[1][0], t3[2][0]
+                            if a in remap and b in remap and c in remap and len({a, b, c}) == 3:
+                                faces.append((remap[a], remap[b], remap[c]))
+                                uvs.append(((t3[0][1], t3[0][2]), (t3[1][1], t3[1][2]), (t3[2][1], t3[2][2]), (tex if tex is not None else 0) & 0x1fff))
                 if x['child'] is not None: walk(x['child'], xf)
                 o = x['sib']; 
         walk(r, lambda v: v)
         if len(faces) < 4: continue
         with open(os.path.join(out, 'obj_%06x.obj' % r), 'w') as f:
-            for v in verts: f.write('v %f %f %f\n' % v)
-            for t in faces: f.write('f %d %d %d\n' % t)
+            f.write('mtllib obj_%06x.mtl' % r + chr(10))
+            for v in verts: f.write('v %f %f %f' % v + chr(10))
+            for u3 in uvs:
+                for (u, v) in u3[:3]: f.write('vt %f %f' % (u, 1.0 - v) + chr(10))
+            cur = None
+            for n, t in enumerate(faces):
+                tex = uvs[n][3]
+                if tex != cur: f.write('usemtl tex%d' % tex + chr(10)); cur = tex
+                f.write('f %d/%d %d/%d %d/%d' % (t[0], 3 * n + 1, t[1], 3 * n + 2, t[2], 3 * n + 3) + chr(10))
+        with open(os.path.join(out, 'obj_%06x.mtl' % r), 'w') as f:
+            for tex in sorted({u[3] for u in uvs}): f.write('newmtl tex%d' % tex + chr(10) + 'map_Kd tex%d.png' % tex + chr(10))
         index.append({'offset': r, 'vertices': len(verts), 'triangles': len(faces)})
     json.dump(index, open(os.path.join(out, 'index.json'), 'w'), indent=1)
     print(len(objs), 'objects', len(roots), 'roots', len(index), 'assembled')

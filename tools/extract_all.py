@@ -117,6 +117,12 @@ def do_dreamcast(src, work, assets, entry):
     if not os.path.isdir(png):
         run_tool('pvr2png.py', files, png)
     entry['png'] = len(glob.glob(os.path.join(png, '*.png')))
+    prs_out = os.path.join(assets, 'dreamcast', 'prs')                  # every ENGLISH/*.PRS = PRS-compressed PVM texture archive (UI screens, model textures)
+    if not os.path.isdir(prs_out):
+        import prs as _prs
+        for f in sorted(glob.glob(os.path.join(files, 'ENGLISH', '*.PRS'))): _prs.main(f, prs_out)
+        run_tool('pvr2png.py', prs_out, os.path.join(assets, 'dreamcast', 'prs_png'))
+    entry['prs_textures'] = len(glob.glob(os.path.join(prs_out, '*.pvr')))
     models = os.path.join(assets, 'dreamcast', 'models')
     if not os.path.isdir(models):
         import dc_models
