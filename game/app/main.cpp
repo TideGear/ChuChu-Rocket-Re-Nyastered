@@ -70,9 +70,9 @@ int main(int argc, char** argv) {
     SDL_Renderer* ren = SDL_CreateRenderer(win, -1, (getenv("CCR_SHOT") || getenv("CCR_HEADLESS")) ? SDL_RENDERER_SOFTWARE : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
     SDL_RenderSetLogicalSize(ren, W, H);
     std::string ret = root + "/ret_all/";
-    Sheet atlas, cat, mouse, gold, digits, crowns, rockets[4];
+    Sheet atlas, cat, mouse, gold, digits, crowns, timefont;
     bool ok = loadSheet(ren, ret + "r0930", atlas) && loadSheet(ren, ret + "r0447", cat) && loadSheet(ren, ret + "r0503", mouse) && loadSheet(ren, ret + "r0484", gold)
-           && loadSheet(ren, ret + "r0729", digits) && loadSheet(ren, ret + "r0726", crowns);
+           && loadSheet(ren, ret + "r0729", digits) && loadSheet(ren, ret + "r0726", crowns) && loadSheet(ren, ret + "r0749", timefont);
     if (!ok) { printf("missing sprite sheets in %s (run tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return 2; }
 
     // Music: Dreamcast CD track (best source, see docs/audio.md) streamed from a WAV, looped. Battle uses songs 5 (long time left) and 6 (late), = tracks 09 and 10.
@@ -88,6 +88,7 @@ int main(int argc, char** argv) {
             SDL_QueueAudio(adev, mus[track] + musPos, chunk); musPos += chunk; }
     };
     BattleGame game; game.rouletteManager = true; game.baseScale = 1.0f;
+    { int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes; }   // Android NGI_SetGameTimer: 1-3 minute rounds (setting-dependent)
     for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
     struct Snap { float x, z; }; std::vector<Snap> prev;
     auto restart = [&]() { game.start(stages.st[stageNo], seed); prev.clear(); };
@@ -126,7 +127,11 @@ int main(int argc, char** argv) {
         }
         // HUD: scores per player (digit font) and remaining time
         for (int p = 0; p < 4; p++) { SDL_Rect b{p * (W / 4) + 6, 9 * CELL + 6, W / 4 - 12, 52}; SDL_SetRenderDrawColor(ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderFillRect(ren, &b);
-            drawNumber(game.score.player[p], b.x + 12, b.y + 8, 36); }
+            drawNumber(game.score.player[p], b.x + 12, b.y + 8, 36);
+            if (game.over) { int rk = game.rankOf(p); const SDL_Rect& fr = crowns.fr[rk < 4 ? rk : 3]; int ch = 44, cw = fr.w * ch / fr.h; SDL_Rect d{b.x + b.w - cw - 8, b.y + 4, cw, ch}; SDL_RenderCopy(ren, crowns.tex, &fr, &d); } }
+        { int rem = game.over ? 0 : (game.roundFrames - game.frame) / 60; int m = rem / 60, sec = rem % 60; int x = W / 2 - 60, y = 6; const int hgt = 28;
+          auto glyph = [&](int idx) { const SDL_Rect& fr = timefont.fr[idx]; int w = fr.w * hgt / fr.h; SDL_Rect d{x, y, w, hgt}; SDL_RenderCopy(ren, timefont.tex, &fr, &d); x += w + 1; };
+          glyph(m % 10); glyph(10); glyph(sec / 10); glyph(sec % 10); }
     };
     const double dt = 1.0 / 60.0; double acc = 0;
     if (const char* shot = getenv("CCR_SHOT")) {

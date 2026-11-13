@@ -20,6 +20,7 @@ public:
     float baseScale = 1.0f;                      // GA_OnGameFlag speed-option multiplier (0.25 with the option unset)
     float charaSpeed = 1.0f;                     // GA_SetCharaSpeed (events scale cat and mouse together); base speeds 1.0 / 1.5
     int event = -1, eventLeft = 0; bool over = false;
+    int rankOf(int p) const { return rank_[p]; }
     bool rotateOwn = false;                      // true: re-placing on your own arrow rotates it (the flagged branch of FUN_0002859c)
     bool rouletteEnabled = true;                 // test harness: the emulated original rolls only under conditions not yet understood (see docs)
     bool genFirst = true;                        // generator task runs before the entity tasks (measured: 26/26 battles identical)
@@ -103,7 +104,7 @@ private:
     }
     int rank_[4] = {0, 0, 0, 0};                 // score array [4..7]: written only when a score changes (FUN_0003d168): dense ranking, ties share a rank
     void updateRanks() { for (int p = 0; p < 4; p++) { int r = 0; for (int q = 0; q < 4; q++) if (score.player[q] > score.player[p]) { bool counted = false; for (int k = 0; k < q; k++) if (score.player[k] == score.player[q]) counted = true; if (!counted) r++; } rank_[p] = r; } }
-    int rankOf(int p) const { return rank_[p]; }
+
     // --- Roulette (Android FUN_0003c3b8 RL_RollRoulette4 / FUN_0003c56c / event tasks), measured with tools/oracle/rl_probe.py ---
     // A type-2 mouse entering a rocket rolls only if no roulette task is running; the outcome is selected with the rank of the player who rolled LAST time
     // (initially player 0; the original stores the new player after selecting). The event starts 121 frames after the roll (1 + 30 fly-in + 90).
