@@ -1,0 +1,6 @@
+# Character animation notes (living document, 2026-11-13)
+
+## Mobile sprite sheets (`ret_all/r0447` = cat, `r0503` = mouse, `r0484` = gold mouse; frames in `.frames.bin`: count + 9 floats each)
+- The cat sheet has **32 frames that form a pre-rendered turntable**: the same cat rotating through 32 angles (frame 0 facing the camera, 8 frames per quarter turn; verified by contact sheet `local/shots/cat_frames.png`). They are rotation steps, **not a walk cycle**. The app currently shows only frames heading*8 (4 headings), so characters look static while moving.
+- The Android code (`FUN_00028ffc`, same code base as iOS) advances the walk phase by 0.45 per tick (wrap at 20.0) and smooths the turn angle with 16-bit `diffAngle`/`adjustAngle`; the turntable index follows that smoothed angle, so turns animate through the intermediate frames.
+- Next: read the exact angle smoothing and the walk-phase use (the bobbing/leg motion may be a separate sheet or a transform), implement turning through the 32 frames driven by the original angle logic, then the other states (rocket entry, hole fall, eaten, spawn) from their sheets; Dreamcast 3D keyframes/morph animation is covered in dreamcast_models.md.
