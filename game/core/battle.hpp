@@ -38,12 +38,13 @@ public:
         for (auto& r : slot_) for (int& v : r) v = -1; for (int& v : ring_) v = 0;
         gen.reset(new Generator(cells, seed)); sim.rnd = [this]() { return gen->rng().next(); }; if (rouletteManager) roulette.reset(new Roulette(gen->rng())); else roulette.reset(new Roulette());   // RL_StartRoulette4Manager draws 128 numbers from the shared stream spawned_ = 0; lastRoll.clear();
         frame = 0; over = false; event = -1; eventLeft = 0; charaSpeed = 1.0f; applySpeed();
-        score = Scoreboard(); for (int& r : rank_) r = 0; roll_ = Roll(); evs_.clear(); pendingCats_.clear(); lastRoller_ = 0; pendingRoll_ = -1; cpuPuts.clear(); cpuLcg.state = (uint32_t)cpuEnv.globalTime;
+        score = Scoreboard(); for (int& r : rank_) r = 0; roll_ = Roll(); evs_.clear(); lastRoller_ = 0; pendingRoll_ = -1; cpuPuts.clear(); cpuLcg.state = (uint32_t)cpuEnv.globalTime;
         cpuEnv.sim = &sim; cpuEnv.gameType = 0;
         for (int p = 0; p < 4; p++) { cpuEnv.rocketX[p] = sim.rocketPos[p][0]; cpuEnv.rocketY[p] = sim.rocketPos[p][1]; }
         cpuEnv.rank = [this](int p) { return rankOf(p); };
         cpuEnv.cursorFree = [this](int) { return cursorLock <= 0; };
         cpuEnv.putArrow = [this](int pl, int x, int y, int d) { cpuPuts.push_back({frame, pl, x, y, d}); placeArrow(pl, x, y, d); };
+        { int nb = 4; for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) nb++; sim.occupyBase(nb); }   // manager tasks (arrows, roulette monitor, rockets, generator) + one task per CPU
         for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].start(cpuEnv, p, cpuLevel[p]);
     }
     // Player arrow placement (Android FUN_0002859c, local path): own arrow on the cell -> only the direction changes; any other object bit
@@ -69,23 +70,20 @@ public:
         if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr); }
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
-        if (genFirst) gen->frame(frame);
+        if (genFirst) { gen->frame(frame); spawnPending(true); }
         if (cpuFirst) runCpu();
         sim.events.clear(); sim.tick();
         for (const Event& e : sim.events) handle(e);
         if (!cpuFirst) runCpu();
         updateEvent();                                                     // roulette/event tasks run after the mouse and cat tasks
         sim.buildHeat();                                                   // SmpColAnalyze: heat map seen by the CPU players next frame
-        if (!genFirst) gen->frame(frame);                                                 // entities spawned this frame first move next frame (measured against the original)
-        for (size_t i = spawned_; i < gen->spawns.size(); i++) { const Spawn& s = gen->spawns[i]; sim.spawn(!s.cat, s.mouseType, s.x, s.y, s.dir); }
-        spawned_ = gen->spawns.size();
-        for (auto& c : pendingCats_) sim.spawn(false, 0, c.x, c.y, c.dir);
-        pendingCats_.clear();
+        if (!genFirst) { gen->frame(frame); spawnPending(false); }                                                 // entities spawned this frame first move next frame (measured against the original)
         if (frame >= roundFrames) { over = true; gen->flags = 0xF; }
     }
 private:
     size_t spawned_ = 0; int slot_[4][3] = {{-1,-1,-1},{-1,-1,-1},{-1,-1,-1},{-1,-1,-1}}; int ring_[4] = {0,0,0,0};
     void applySpeed() { sim.catSpeed = baseScale * charaSpeed; sim.mouseSpeed = 1.5f * baseScale * charaSpeed; }
+    void spawnPending(bool fresh) { for (size_t i = spawned_; i < gen->spawns.size(); i++) { const Spawn& s = gen->spawns[i]; sim.spawn(!s.cat, s.mouseType, s.x, s.y, s.dir, fresh); } spawned_ = gen->spawns.size(); }
     void runCpu() { if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
     void handle(const Event& e) {
         if (debug) printf("f%d event kind %d player %d type %d\n", frame, (int)e.kind, e.player, e.type);
@@ -109,10 +107,10 @@ private:
     // --- Roulette (Android FUN_0003c3b8 RL_RollRoulette4 / FUN_0003c56c / event tasks), measured with tools/oracle/rl_probe.py ---
     // A type-2 mouse entering a rocket rolls only if no roulette task is running; the outcome is selected with the rank of the player who rolled LAST time
     // (initially player 0; the original stores the new player after selecting). The event starts 121 frames after the roll (1 + 30 fly-in + 90).
-    struct Roll { bool active = false; int elapsed = 0, outcome = 0; } roll_;
+    struct Roll { bool active = false; int elapsed = 0, outcome = 0, slot = -1; } roll_;
     struct PCat { int x, y, dir; }; std::vector<PCat> pendingCats_;
     int lastRoller_ = 0, pendingRoll_ = -1;
-    struct Ev { int kind, state, count, limit; int rollerPlayer; };
+    struct Ev { int kind, state, count, limit; int rollerPlayer; int slot; };
     std::vector<Ev> evs_;
     void startRoulette(int p) {
         if (roll_.active) return;
@@ -120,14 +118,16 @@ private:
         unsigned bcd = (unsigned)(((rem / 60) << 8) | (((rem % 60) / 10) << 4) | (rem % 10));   // minutes:seconds in BCD (TI_GetBCDTime layout still to be confirmed)
         int out = roulette->roll(rankOf(lastRoller_), fixedBcd >= 0 ? (unsigned)fixedBcd : (bcd << 8), fixedGameTime >= 0 ? fixedGameTime : frame + gtOff, -1); roulette->record(out);
         if (debug) printf("ROLL f%d player %d outcome %d\n", frame, p, out);
-        lastRoller_ = p; roll_.active = true; roll_.elapsed = -1; roll_.outcome = out; lastRoll.push_back(out);
+        lastRoller_ = p; sim.releaseSlot(roll_.slot); roll_.slot = sim.allocSlot(-2); roll_.active = true; roll_.elapsed = -1; roll_.outcome = out; lastRoll.push_back(out);
     }
     float feverDuration() const { return 600.0f; }
     void startEvent(int out) {                                            // dispatch: the event task is created; its first exec (state 0) is next frame
         int lim = 0;
         switch (out) { case 0: lim = (int)(600.0f * 2.0f); break; case 1: lim = 599; break; case 2: case 3: lim = 479; break; case 4: lim = 179; break;
                        case 5: lim = 59; break; case 6: lim = 0; break; default: lim = 239; }
-        evs_.push_back({out, 0, 0, lim, lastRoller_}); event = out;
+        int es = sim.allocSlot(-2);                                       // the event task is created first, then the roulette task deletes itself (0x3c6e0..0x3c6f2)
+        sim.releaseSlot(roll_.slot); roll_.slot = -1;
+        evs_.push_back({out, 0, 0, lim, lastRoller_, es}); event = out;
     }
     void stepRoulette() {
         for (size_t i = 0; i < evs_.size();) {
@@ -160,7 +160,7 @@ private:
                 case 5: case 6: gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;
                 default: gen->flags = 0; gen->params().pSpawn = 0.0125f; break;
                 }
-                applySpeed(); evs_.erase(evs_.begin() + i); if (evs_.empty()) event = -1; continue;
+                applySpeed(); sim.releaseSlot(e.slot); evs_.erase(evs_.begin() + i); if (evs_.empty()) event = -1; continue;
             }
             i++;
         }
@@ -168,14 +168,14 @@ private:
     void removeGroup(int mask, bool unregister = false) {                                          // 0x3db58: delete tasks by group (1 = mice, 2 = cats); mice decrement the generator counters
         for (auto& e : sim.ents) {
             if (!e.alive || e.done) continue;
-            if (e.mouse && (mask & 1)) { e.alive = false; e.groupDeleted = true; gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; }
-            else if (!e.mouse && (mask & 2)) e.alive = false;
+            if (e.mouse && (mask & 1)) { e.alive = false; sim.releaseSlot(e.slot); gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; }
+            else if (!e.mouse && (mask & 2)) { e.alive = false; sim.releaseSlot(e.slot); }
             if (unregister && !e.alive) e.reg = false;       // measured: tasks deleted by an event's destructor no longer feed the heat map that frame
         }
     }
     void spawnCatFever() {                                                // GE_SetCatFever: four cats, generator slots in rotation
         size_t n = sim.gens.size(); if (n == 0) return;
-        size_t idx = 0; for (int k = 0; k < 4; k++) { const auto& g = sim.gens[idx % n]; pendingCats_.push_back({g.x, g.y, g.dir}); idx++; }
+        size_t idx = 0; for (int k = 0; k < 4; k++) { const auto& g = sim.gens[idx % n]; sim.spawn(false, 0, g.x, g.y, g.dir); idx++; }
     }
     void updateEvent() { stepRoulette(); if (roll_.active && ++roll_.elapsed == 121) { roll_.active = false; startEvent(roll_.outcome); } }
 };

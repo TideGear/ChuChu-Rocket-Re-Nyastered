@@ -19,3 +19,11 @@ iOS has named symbols (`CT_CompThink0Exec`, `CT_CFRec` = the depth-8 walk, `CT_C
 - **iOS HD 1.0 differs structurally**: `CT_CompThink0Exec` 518 instructions (vs 526), `CT_CFRec` 109 (vs 116), `CT_CheckFukuro` 34 (vs 41), with different immediates (0x4, 0x304). Needs a dynamic comparison (emulate the iOS code like the Android oracle) to see whether behaviour differs.
 - Dreamcast (SH-4) and GBA (ARM7) CPU code: not yet located/compared.
 - Behavioural equality across versions is NOT established by this static pass; it needs differential runs of each version's code (iOS oracle, GBA via emulation, Dreamcast via an SH-4 interpreter).
+
+## Task pool (SmpTsk) facts that affect the heat map (measured 2026-11-12)
+- `SmpTskEntry` (Android 0x3daa8): takes the FIRST free slot of a 1024 x 0x58 pool, zero-fills it, and appends the task at the TAIL of the execution list, so tasks run in creation order, not slot order.
+- `SmpTskDelete` (0x3db0c) only unlinks and clears the exe pointer (destructor runs if flagged); the slot memory is left as is.
+- Collision entries (`SmpColColliEntry`) store the task POINTER. `SmpColAnalyze` reads the type and grid cell from that pointer at the end of the frame, so an entry whose task was deleted and whose slot was reused later in the same frame (e.g. fever cats put right after Cat Mania clears the board) reads the NEW task's fields.
+
+## Result (2026-11-12 22:40)
+50 of 50 recorded Android 1.15 battles identical (10 hand-picked + 40 random stage/seed/level mixes, 2,000-3,000 frames each) after modelling the task pool: first-free slot allocation, collision entries that keep task pointers, deferred deletion (eaten mouse: effect task of 48 execs if fewer than 12 alive, mouse freed next tick; rocket mouse freed next tick), event and roulette tasks occupying slots, group deletes freeing slots immediately. Regenerate goldens with tools/oracle/make_cpu_golden*.py; run `cpu_test.exe` (env GOLDEN=file).

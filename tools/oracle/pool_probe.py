@@ -15,9 +15,9 @@ def dump(tag):
     for i in range(1024):
         s = pool + i * 0x58; b = o.read(s, 0x58)
         fn = struct.unpack_from('<I', b, 0x40)[0]
-        if fn: rows.append((i, b[2], (fn - BASE + G) & ~1, struct.unpack_from('<f', b, 0x14)[0], struct.unpack_from('<f', b, 0x1c)[0]))
+        if fn: rows.append((i, b[2], (fn - BASE + G) & ~1, struct.unpack_from('<f', b, 0x14)[0], struct.unpack_from('<f', b, 0x1c)[0], struct.unpack_from('<i', b, 8)[0]))
     print(tag, len(rows)); 
-    for r in rows: print('  slot %3d grp %d fn %#x pos (%.2f,%.2f)' % r)
+    for r in rows: print('  slot %3d grp %d fn %#x pos (%.2f,%.2f) +8=%d' % r)
 for f in range(1, max(frames) + 1):
     B.frame_no[0] = f
     step('SmpColLoopInit', 0x2993c); step('SmpTskExeServer', 0x3da60); step('SmpColAnalyze', 0x29b1c)

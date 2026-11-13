@@ -36,7 +36,9 @@ struct Entity {
     bool mouse = true, alive = true, done = false, hit = false;   // hit: contact flag set by the collision pass, consumed at the start of the next tick
     float x = 0, z = 0;
     bool rocketIn = false; float rocketCounter = 1.0f;   // battle cat inside a rocket (30-tick animation, then respawn at a random generator)
-    bool reg = false, groupDeleted = false;   // groupDeleted: removed by an event (0x3db58); its heat entry then reads type 0 (measured)
+    bool reg = false;
+    bool fresh = false;         // spawned before this tick's entity pass: first moves next tick, no contact this tick
+    int slot = -1;              // task-pool slot (the collision entry stores the task pointer: a reused slot is read through the new occupant)
               // registered a collision entry this tick (SmpColColliEntry): only these feed the AI heat map
     int type = 0;               // battle mouse type: 0 normal, 1 golden (50 points), 2 roulette
     int heading = 0;            // Dir
@@ -61,6 +63,34 @@ public:
     struct Gen { int x, y, dir; };
     std::vector<Gen> gens;
     std::vector<Event> events;
+    // Task pool model (SmpTsk, 1024 slots): content[s] = entity index, -2 = a non-entity task (zero fields), -1 = never used.
+    int content[1024]; bool freeSlot_[1024];
+    void resetPool() { for (int i = 0; i < 1024; i++) { content[i] = -1; freeSlot_[i] = true; } }
+    int allocSlot(int code) {                              // SmpTskEntry: first free slot (dead entities' slots count as free)
+        for (int i = 0; i < 1024; i++) {
+            if (freeSlot_[i]) { freeSlot_[i] = false; content[i] = code; return i; }
+        }
+        return -1;
+    }
+    void releaseSlot(int s) { if (s >= 0) freeSlot_[s] = true; }
+    // Deferred task deletion (original: eaten mouse -> state 0x354f8 runs next tick, creates a 48-tick effect task (if < 12 alive) then deletes the mouse;
+    // mouse in rocket -> 0x35488 runs next tick and deletes). Slots matter because collision entries keep task pointers.
+    struct PendingFree { int ent, when; bool effect; };
+    std::vector<PendingFree> pendingFree; std::vector<std::pair<int,int>> effects;     // effects: (slot, execs so far)
+    bool poolModel = false;                                                              // battle mode only
+    void scheduleFree(size_t ent, int when, bool effect) { if (poolModel) pendingFree.push_back({(int)ent, when, effect}); }
+    void poolTick() {
+        for (auto& e : effects) e.second++;
+        for (size_t i = 0; i < effects.size();) { if (effects[i].second >= 48) { releaseSlot(effects[i].first); effects.erase(effects.begin() + i); } else i++; }
+        for (size_t i = 0; i < pendingFree.size();) {
+            PendingFree& p = pendingFree[i];
+            if (p.when <= now) {
+                if (p.effect && effects.size() < 12) { int sl = allocSlot(-2); if (sl >= 0) effects.push_back({sl, 0}); }
+                releaseSlot(ents[p.ent].slot); pendingFree.erase(pendingFree.begin() + i);
+            } else i++;
+        }
+    }
+    void occupyBase(int n) { for (int i = 0; i < n; i++) allocSlot(-2); }
     int16_t heat[kRows * kCols] = {};             // SmpColAnalyze danger/value map used by the CPU players (cat -100 spread, mouse value)
     std::function<float()> rnd;                   // njRandom (battle): cat respawn picks generator floor(n*0.99*r)
     uint8_t rocketOwner[kRows][kCols] = {};
@@ -71,7 +101,7 @@ public:
     int saved = 0, killed = 0, killedByCat = 0, killedByHole = 0, catsInRocket = 0, arrowsBroken = 0;
 
     void load(const Stage& s) {
-        ents.clear(); arrows.clear(); gens.clear(); events.clear(); saveTicks.clear(); now = 0; saved = killed = killedByCat = killedByHole = catsInRocket = arrowsBroken = 0;
+        ents.clear(); resetPool(); pendingFree.clear(); effects.clear(); poolModel = battle; arrows.clear(); gens.clear(); events.clear(); saveTicks.clear(); now = 0; saved = killed = killedByCat = killedByHole = catsInRocket = arrowsBroken = 0;
         for (int r = 0; r < kRows; r++)
             for (int c = 0; c < kCols; c++) {
                 uint32_t f = 0;
@@ -95,8 +125,9 @@ public:
                 }
             }
     }
-    void spawn(bool mouse, int type, int gx, int gy, int heading) {      // MO_PutMouse / CA_PutCat in battle mode
-        Entity e; e.mouse = mouse; e.type = type; e.heading = heading & 3; e.gx = gx; e.gy = gy;
+    void spawn(bool mouse, int type, int gx, int gy, int heading, bool fresh = false) {      // MO_PutMouse / CA_PutCat in battle mode
+        Entity e; e.mouse = mouse; e.type = type; e.heading = heading & 3; e.gx = gx; e.gy = gy; e.fresh = fresh;
+        e.slot = allocSlot((int)ents.size());
         e.x = (gx + 0.5f) * kCell; e.z = (gy + 0.5f) * kCell; ents.push_back(e);
     }
     void refreshCell(int x, int y) { refresh(x, y); }
@@ -112,14 +143,16 @@ public:
     void tick() {
         now++;
         for (auto& e : ents) e.reg = false;
+        if (poolModel) poolTick();
         for (auto& m : ents) if (m.mouse && m.alive && !m.done && m.hit) {      // mouse tick: if (flags & 1) -> eaten state, no movement
-            m.alive = false; m.hit = false; killed++; killedByCat++;
+            m.alive = false; m.hit = false; killed++; killedByCat++; scheduleFree(&m - ents.data(), now + 1, true);
             if (battle) events.push_back({Event::MouseEaten, 0, m.type});
             if (trace) printf("t=%d mouse eaten at (%.1f,%.1f) cell (%d,%d)\n", now, m.x, m.z, m.gx, m.gy);
         }
-        if (order == 0) { for (auto& e : ents) if (e.alive && !e.done) { if (e.rocketIn) rocketInTick(e); else step(e); } }
+        if (order == 0) { for (auto& e : ents) if (e.alive && !e.done && !e.fresh) { if (e.rocketIn) rocketInTick(e); else step(e); } }
         else { for (int pass = 0; pass < 2; pass++) for (auto& e : ents) if (e.alive && !e.done && (e.mouse == ((pass == 0) == (order == 2)))) step(e); }
         resolveCats();
+        for (auto& e : ents) e.fresh = false;
     }
     Result run(int maxTicks) {
         int t = 0;
@@ -139,11 +172,13 @@ public:
         static const int mouseValue[4] = {1, 50, 25, 85};
         for (auto& e : ents) {
             if (!e.reg) continue;                    // entries registered this frame count even if the task is deleted later in the frame
-            if (e.gx < 0 || e.gx >= kCols || e.gy < 0 || e.gy >= kRows) continue;
-            int v = e.mouse ? mouseValue[e.groupDeleted ? 0 : (e.type & 3)] : -100;
-            if (e.mouse && v == 1) { heat[e.gy * kCols + e.gx] += 1; continue; }
+            int gx = e.gx, gy = e.gy, ty = e.type;                       // fields are read from whatever task occupies the slot now
+            if (e.slot >= 0) { int c = content[e.slot]; if (c >= 0) { gx = ents[c].gx; gy = ents[c].gy; ty = ents[c].type; } else { gx = 0; gy = 0; ty = 0; } }
+            int v = e.mouse ? mouseValue[ty & 3] : -100;
+            if (gx < 0 || gx >= kCols || gy < 0 || gy >= kRows) continue;
+            if (e.mouse && v == 1) { heat[gy * kCols + gx] += 1; continue; }
             uint8_t visited[kRows * kCols] = {};
-            spread(e.gx, e.gy, v, 8, visited);
+            spread(gx, gy, v, 8, visited);
         }
     }
 private:
@@ -199,7 +234,8 @@ private:
             uint32_t f = coll[e.gy][e.gx];
             if (battle && (f & kRocket)) {
                 events.push_back({e.mouse ? Event::MouseRocket : Event::CatRocket, rocketOwner[e.gy][e.gx], e.type});
-                if (e.mouse || !rnd) e.done = true; else e.rocketIn = true;       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
+                if (e.mouse || !rnd) e.done = true; else e.rocketIn = true;
+                if (e.mouse) scheduleFree(&e - ents.data(), now + 1, false);       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
                 return;
             }
             if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
@@ -242,8 +278,8 @@ public:
                 float ax = c.x - m.x, az = c.z - m.z; if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true; } }
     }
     void resolveCats() {                               // SmpColAnalyze: cat and mouse closer than 5.0 (registered end-of-tick positions)
-        for (auto& c : ents) if (!c.mouse && c.alive && !c.done && !c.rocketIn)
-            for (auto& m : ents) if (m.mouse && m.alive && !m.done) {
+        for (auto& c : ents) if (!c.mouse && c.alive && !c.done && !c.rocketIn && !c.fresh)
+            for (auto& m : ents) if (m.mouse && m.alive && !m.done && !m.fresh) {
                 float ax = c.x - m.x, az = c.z - m.z;
                 if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true;
             }
