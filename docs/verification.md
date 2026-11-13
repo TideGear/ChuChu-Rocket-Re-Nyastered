@@ -46,3 +46,12 @@ is compared with it.
 | 2560x1440 | 60 Hz | 60.0 | 7.35 ms/frame |
 | 7680x4320 | 60 Hz | 60.0 | 72.9 ms/frame (needs the GPU renderer) |
 Saved frames have exactly the output pixel size (checked from the BMP sizes). Logic speed is independent of display rate; even the CPU renderer reaches about 60 fps at 4K, the GPU renderer has far more headroom. Not yet measured: the GPU (accelerated) path, since that needs a visible window.
+
+### GPU path (2026-11-13, hidden window, nothing displayed)
+`CCR_GPU=1` with `CCR_BENCH` uses the accelerated renderer on a hidden window (a 1x1 pixel read each frame forces the GPU to finish, so the time includes the GPU work). Same battle scene, 300 frames, vsync off:
+| Output size | Draw time | Share of the 16.7 ms frame budget |
+|---|---|---|
+| 1920x1080 | 0.08 ms | 0.5% |
+| 3840x2160 | 0.17 ms | 1% |
+| 7680x4320 | 0.53 ms | 3% |
+This is the current 2D scene only (tiles, sprites, HUD). The Dreamcast 3D models are not drawn by the app yet, so their cost is not included; it has to be measured again when they are added (target: 4K at 60 fps with at least 2x headroom on the 3D pass).
