@@ -149,12 +149,10 @@ class SH4:
     def div1(self, n, m):
         r = self.r; old_q = (self.sr >> 8) & 1; M = (self.sr >> 9) & 1; T = self.T
         q = (r[n] >> 31) & 1; r[n] = ((r[n] << 1) | T) & 0xffffffff; tmp0 = r[n]
-        if old_q == M:
-            r[n] = (r[n] - r[m]) & 0xffffffff; tmp1 = 1 if r[n] > tmp0 else 0
-            q = (q ^ M ^ tmp1) & 1 if False else (q ^ tmp1 ^ M) & 1
-        else:
-            r[n] = (r[n] + r[m]) & 0xffffffff; tmp1 = 1 if r[n] < tmp0 else 0
-            q = (q ^ tmp1 ^ M ^ 1) & 1
+        sub = (old_q == M)
+        if sub: r[n] = (r[n] - r[m]) & 0xffffffff; tmp1 = 1 if r[n] > tmp0 else 0
+        else: r[n] = (r[n] + r[m]) & 0xffffffff; tmp1 = 1 if r[n] < tmp0 else 0
+        q = ((1 - tmp1) if q else tmp1) if M == 0 else (tmp1 if q else (1 - tmp1))
         self.sr = (self.sr & ~0x100) | (q << 8); self.setT(1 if q == M else 0)
     def op4(self, op, pc, n, m):
         r = self.r; lo = op & 0xff
