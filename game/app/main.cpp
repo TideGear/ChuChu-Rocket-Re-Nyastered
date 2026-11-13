@@ -138,6 +138,19 @@ struct App {
         SDL_Vertex v[3] = {{{cx + ux * 24 * sc, cy + uy * 24 * sc}, col, {0, 0}}, {{cx - ux * 12 * sc + px * 20 * sc, cy - uy * 12 * sc + py * 20 * sc}, col, {0, 0}}, {{cx - ux * 12 * sc - px * 20 * sc, cy - uy * 12 * sc - py * 20 * sc}, col, {0, 0}}};
         SDL_RenderGeometry(ren, nullptr, v, 3, nullptr, 0);
     }
+    // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
+    // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
+    std::vector<int> angs;
+    void stepAngles(const Sim& sim) {
+        while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
+        for (size_t i = 0; i < sim.ents.size(); i++) {
+            const Entity& e = sim.ents[i]; int cur = angs[i] & 0xffff, tgt = (e.heading << 14) & 0xffff; int step = (int)((e.mouse ? sim.mouseSpeed : sim.catSpeed) * 32768.0f / 12.0f);
+            int sub = (int16_t)(uint16_t)(tgt - cur); int diff = sub < 0 ? -sub : sub;               // diffAngle
+            if (diff < 0x7f01) { int d = tgt - cur; if (d > step || d < -step) cur = (cur + (d < 0 ? -step : step)) & 0xffff; else cur = tgt; }   // adjustAngle (numeric, not wrapped: as in the original)
+            else cur = (cur + step) & 0xffff;
+            angs[i] = cur;
+        }
+    }
     void entities(const Sim& sim, std::vector<std::pair<float, float>>& prev, float alpha) {
         while (prev.size() < sim.ents.size()) prev.push_back({sim.ents[prev.size()].x, sim.ents[prev.size()].z});
         for (size_t i = 0; i < sim.ents.size(); i++) {
@@ -145,7 +158,7 @@ struct App {
             float x = prev[i].first + (en.x - prev[i].first) * alpha, z = prev[i].second + (en.z - prev[i].second) * alpha;
             if (std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
             Sheet& sh = !en.mouse ? cat : (en.type == 1 ? gold : mouse);
-            const SDL_Rect& fr = sh.fr[(en.heading * 8) & 31]; float sc = CELL * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
+            const SDL_Rect& fr = sh.fr[((i < angs.size() ? angs[i] : en.heading << 14) >> 11) & 31]; float sc = CELL * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
             SDL_Rect dst{(int)(x * (CELL / 15.0f)) - dw / 2, (int)(z * (CELL / 15.0f)) - dh * 2 / 3, dw, dh}; SDL_RenderCopy(ren, sh.tex, &fr, &dst);
         }
     }
@@ -180,7 +193,7 @@ struct PuzzleMode : Screen {
     int music() override { return 0; }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, 0)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
     void reset() {
-        sim.load(stages.list[cur].st); prev.clear(); running = false; state = 0; totalMice = 0;
+        sim.load(stages.list[cur].st); prev.clear(); if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = 0;
         for (auto& s : stages.list[cur].sol) stock[s[2] & 3]++;       // arrow stock from the reference solution (stage struct counts not exported yet)
@@ -200,10 +213,10 @@ struct PuzzleMode : Screen {
             for (int d = 0; d < 4; d++) if (used(d) < stock[d]) { sim.placeArrow(cx, cy, d); return; }
         }
     }
-    void tick(App&) override {
+    void tick(App& a) override {
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
         if (!running) return;
-        sim.tick();
+        sim.tick(); a.stepAngles(sim);
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
         if (sim.killed > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; }
     }
@@ -247,7 +260,7 @@ struct BattleMode : Screen {
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
         restart(); return true;
     }
-    void restart() { game.start(stages.list[cur].st, seed); prev.clear(); }
+    void restart() { game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
     int music() override { return game.frame > game.roundFrames - 60 * 30 ? 1 : 0; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_CONTROLLERDEVICEADDED) { for (int p = 0; p < 4; p++) if (!pads[p]) { pads[p] = SDL_GameControllerOpen(e.cdevice.which); break; } }
@@ -261,7 +274,7 @@ struct BattleMode : Screen {
             if (cx >= 0 && cx < 12 && cy >= 0 && cy < 9) { int d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == 0) d = (ar.dir + 1) & 3; game.placeArrow(0, cx, cy, d); }
         }
     }
-    void tick(App&) override { if (paused) return; for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; game.tick(); }
+    void tick(App& a) override { if (paused) return; for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; game.tick(); a.stepAngles(game.sim); }
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
