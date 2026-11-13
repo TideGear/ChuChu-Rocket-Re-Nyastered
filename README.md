@@ -26,3 +26,4 @@ Not done yet: the playable game (renderer, UI, audio, menus, netplay) and the An
 - `game/` C++ code (portable simulation core + tests)
 - `tools/` extractors, stage registry, development-time verification oracle (`tools/oracle/`, uses your own copy of the Android library in an emulator; nothing from it is distributed)
 - `docs/` rules specification, verification results, version comparisons, stage registry
+- `docs/provenance.md` which version each asset class and rule comes from, with the measurements behind each choice
