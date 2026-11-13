@@ -19,3 +19,6 @@ This matches the Dreamcast manual as quoted in the research document: unlockable
 - iOS (1.0.2 / HD / 1.1.2), Dreamcast (save flags in `1ST_READ.BIN`, character-replacement unlocks, DLC characters) and GBA (Character Edit, the `Project Rub` NiGHTS-hat bonus claimed by the research document, battle unlocks) unlock logic.
 - Cheat codes, if any (none found in the Android strings so far).
 - Implement in the game: per-version conditions as options plus an unlock-all switch.
+
+## iOS 1.0.2, HD 1.0, 1.1.2 (`VMU::isCostumeAvailable(int)`, same code in all three)
+Costume 0 always; costume 1 = save word at +0x7c (the cleared mask of puzzle group 3, `(3 + 0x1c) * 4 = 0x7c`) has all 25 bits set; costume 2 = save word at +8 (Challenge cleared mask) has all 25 bits set; any other index unavailable. This is the same rule as Android 1.15 (`Data::isCostumeAvailable`), so **costume unlock conditions are identical on iOS and Android**. Remaining to check: Dreamcast and GBA.
