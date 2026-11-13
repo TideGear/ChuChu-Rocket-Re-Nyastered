@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(ReNyastered CXX)
 set(CMAKE_CXX_STANDARD 17)
+if(NOT MSVC)
+  add_compile_options(-ffp-contract=off)   # keep the original float rounding (no fused multiply-add) on ARM/clang/gcc
+endif()
 add_executable(solve_test tests/solve_test.cpp)
 if(MSVC)
   target_compile_options(solve_test PRIVATE /W3 /fp:precise)
