@@ -1,0 +1,60 @@
+// Whole-battle differential: replays local/testdata/battle_golden.txt (original, emulated, scripted arrows) and compares the score timeline
+// (frame of every score change) up to the first roulette trigger.
+#include "../core/battle.hpp"
+#include <cstdio>
+#include <map>
+#include <cstdlib>
+using namespace ccr;
+struct P { int f, pl, x, y, d; };
+int main(int argc, char** argv) {
+    FILE* sf = fopen("../local/cache/assets/battle_stages.bin", "rb"); FILE* g = fopen(argc > 1 ? argv[1] : "../local/testdata/battle_golden.txt", "r");
+    if (!sf || !g) { printf("missing files\n"); return 2; }
+    uint32_t n; fread(&n, 4, 1, sf); std::vector<Stage> stages;
+    for (uint32_t i = 0; i < n; i++) { uint8_t h[4], w[237], t[32]; Stage st; fread(h, 1, 4, sf); fread(st.tiles, 1, 108, sf); fread(w, 1, 237, sf); fread(t, 1, 32, sf);
+        for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) st.hw[r * 12 + c] = w[25 * r + c];
+        for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) st.vw[r * 13 + c] = w[25 * r + 12 + c]; stages.push_back(st); }
+    char line[256]; int cases = 0, ok = 0;
+    while (fgets(line, sizeof line, g)) {
+        int idx, seed, frames, nsc, nrl, nsp, npl; if (sscanf(line, "CASE %d %d %d %d %d %d %d", &idx, &seed, &frames, &nsc, &nrl, &nsp, &npl) != 7) continue;
+        std::map<int, P> pl; std::vector<std::vector<int>> sc; std::vector<int> rl; std::vector<std::vector<int>> sp;
+        std::vector<P> pv;
+        for (int i = 0; i < npl + nsc + nrl + nsp; i++) {
+            if (!fgets(line, sizeof line, g)) break;
+            int a[5];
+            if (line[0] == 'A' && sscanf(line, "A %d %d %d %d %d", &a[0], &a[1], &a[2], &a[3], &a[4]) == 5) pl[a[0]] = {a[0], a[1], a[2], a[3], a[4]};
+            else if (line[0] == 'S' && line[1] == 'C') { int f, s0, s1, s2, s3; sscanf(line, "SC %d %d %d %d %d", &f, &s0, &s1, &s2, &s3); sc.push_back({f, s0, s1, s2, s3}); }
+            else if (line[0] == 'S' && line[1] == ' ') { int f, x, y, d, t; char k[8]; sscanf(line, "S %d %7s %d %d %d %d", &f, k, &x, &y, &d, &t); sp.push_back({f, k[0] == 'c', x, y, d, t}); }
+            else if (line[0] == 'R') { int f; sscanf(line, "RL %d", &f); rl.push_back(f); }
+        }
+        int last = rl.empty() ? frames : rl[0] - 1;
+        FILE* dump = (getenv("DUMP") && getenv("DBG") && atoi(getenv("DBG")) == idx) ? fopen(getenv("DUMP"), "w") : nullptr;
+        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = 0.25f; b.rouletteEnabled = false; b.rouletteManager = false;  b.debug = getenv("DBG") && atoi(getenv("DBG")) == idx; b.start(stages[idx], (uint32_t)seed);
+        std::vector<std::vector<int>> got; int prev[4] = {0, 0, 0, 0};
+        for (int f = 1; f <= last; f++) {
+            auto it = pl.find(f); if (it != pl.end()) { bool okp = b.placeArrow(it->second.pl, it->second.x, it->second.y, it->second.d); if (b.debug) printf("PLACE f%d p%d (%d,%d) d%d -> %d coll=%x\n", f, it->second.pl, it->second.x, it->second.y, it->second.d, (int)okp, b.sim.coll[it->second.y][it->second.x]); }
+            std::vector<std::pair<float,float>> before; if (dump) for (auto& e : b.sim.ents) before.push_back({e.x, e.z});
+            b.tick();
+            if (b.debug && f >= 1410 && f <= 1449) printf("C f%d coll(3,1)=%x\n", f, b.sim.coll[1][3]);
+            if (dump) for (size_t k = 0; k < b.sim.ents.size(); k++) { auto& e = b.sim.ents[k]; if (k < before.size() && e.alive && !e.done && !e.rocketIn && (e.x != before[k].first || e.z != before[k].second)) fprintf(dump, "%d %zu %.3f %.3f\n", f, k, e.x, e.z); }
+            if (b.debug && f == 682) for (size_t k = 0; k < b.sim.ents.size(); k++) { auto& e = b.sim.ents[k]; if (e.alive && !e.done) printf("ENT %zu m%d %.2f %.2f\n", k, (int)e.mouse, e.x, e.z); }
+            if (b.debug && f % 10 == 0 && f < 700 && b.sim.ents.size() > 5) printf("M5 f%d %.2f %.2f\n", f, b.sim.ents[5].x, b.sim.ents[5].z);
+            if (b.debug) for (auto& e : b.sim.ents) if (!e.mouse && (f % 20 == 0)) printf("CAT f%d %.2f %.2f\n", f, e.x, e.z);
+            bool ch = false; for (int k = 0; k < 4; k++) if (b.score.player[k] != prev[k]) ch = true;
+            if (ch) { got.push_back({f, b.score.player[0], b.score.player[1], b.score.player[2], b.score.player[3]}); for (int k = 0; k < 4; k++) prev[k] = b.score.player[k]; }
+        }
+        { size_t m = 0; bool bad2 = false; for (; m < sp.size() && m < b.gen->spawns.size(); m++) { auto& a = b.gen->spawns[m]; if (sp[m][0] > last) break;
+              if (!(a.frame == sp[m][0] && (int)a.cat == sp[m][1] && a.x == sp[m][2] && a.y == sp[m][3] && a.dir == sp[m][4] && a.mouseType == sp[m][5])) { bad2 = true; break; } }
+          if (bad2) printf("  stage %d: first spawn divergence #%zu: got f%d cat%d type%d, want f%d cat%d type%d\n", idx, m, b.gen->spawns[m].frame, (int)b.gen->spawns[m].cat, b.gen->spawns[m].mouseType, sp[m][0], sp[m][1], sp[m][5]); if (bad2) printf("     got xy %d,%d d%d want xy %d,%d d%d\n", b.gen->spawns[m].x, b.gen->spawns[m].y, b.gen->spawns[m].dir, sp[m][2], sp[m][3], sp[m][4]); }
+        if (dump) fclose(dump);
+        std::vector<std::vector<int>> want; for (auto& s : sc) if (s[0] <= last) want.push_back(s);
+        // golden's first row is the initial state (zeros or first frame); drop all-zero rows
+        auto strip = [](std::vector<std::vector<int>> v) { std::vector<std::vector<int>> o; for (auto& r : v) if (r[1] || r[2] || r[3] || r[4]) o.push_back(r); return o; };
+        want = strip(want); got = strip(got);
+        cases++; size_t bad = 0; bool same = want.size() == got.size();
+        for (size_t i = 0; i < want.size() && i < got.size(); i++) if (want[i] != got[i]) { same = false; bad = i; break; }
+        if (same) ok++; else printf("MISMATCH stage %d seed %d (<=%d): got %zu want %zu changes, first diff #%zu: got %d [%d %d %d %d] want %d [%d %d %d %d]\n", idx, seed, last, got.size(), want.size(), bad,
+            bad < got.size() ? got[bad][0] : -1, bad < got.size() ? got[bad][1] : 0, bad < got.size() ? got[bad][2] : 0, bad < got.size() ? got[bad][3] : 0, bad < got.size() ? got[bad][4] : 0,
+            bad < want.size() ? want[bad][0] : -1, bad < want.size() ? want[bad][1] : 0, bad < want.size() ? want[bad][2] : 0, bad < want.size() ? want[bad][3] : 0, bad < want.size() ? want[bad][4] : 0);
+    }
+    printf("battle full cases: %d, identical: %d\n", cases, ok); return ok == cases ? 0 : 1;
+}

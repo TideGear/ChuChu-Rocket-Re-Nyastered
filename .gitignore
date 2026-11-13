@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# COPYRIGHTED GAME MATERIAL - NEVER COMMIT
+# This repository is source code only. Game data (art, music, stages, executables, ROMs, disc images)
+# is extracted at setup time from copies the user owns, into %APPDATA%\ReNyastered (or ./local/).
+# ---------------------------------------------------------------------------
+/Original Game Files/
+/analysis/
+/local/
+/private/
+/gen/
+
+# The user's own copies of the game, however they were dropped in the tree.
+*.ipa
+*.apk
+*.xapk
+*.obb
+*.gba
+*.gdi
+*.cdi
+*.cue
+*.bin
+*.iso
+*.zip
+*.7z
+*.VMS
+*.VMI
+*.vms
+*.vmi
+
+# Extracted / derived assets
+*.pvr
+*.prs
+*.ogg
+*.png
+!/docs/**/*.png
+*.snap
+*.trace
+*.disasm
+*.asm
+
+# Build output
+/build/
+/build-*/
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.exp
+*.lib
+__pycache__/
+*.pyc
+
+# Derived from the game files (stage titles etc.): regenerate with tools/stage_registry.py
+/docs/stage_registry.json

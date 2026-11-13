@@ -1,0 +1,253 @@
+// ChuChu Rocket! Re-Nyastered - simulation core (puzzle rules).
+// Rules reverse-engineered from the original mobile builds; see docs/rules_*.md.
+// Units: world units (1 cell = 15.0), one tick = one original logic step (60 Hz). float32 like the original.
+#pragma once
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <vector>
+#include <functional>
+#include <cstdio>
+#include <cstring>
+
+namespace ccr {
+
+constexpr int kCols = 12, kRows = 9;
+constexpr float kCell = 15.0f;
+constexpr uint32_t kRocketStepBits = 0xbd088889u;   // -1/30 as stored in the original (Android 0x293c0)
+enum Dir : int { South = 0, West = 1, North = 2, East = 3 };   // heading+1 = turn right (clockwise)
+
+// Collision word bits (original FI_GetFieldCollision layout).
+constexpr uint32_t kWallS = 0x10000, kWallW = 0x20000, kWallN = 0x40000, kWallE = 0x80000, kWallAny = 0xf0000;
+constexpr uint32_t kRocket = 0x100, kHole = 0x400, kArrow = 0x800, kGenerator = 0x200;   // generator cells carry 0x200 | heading (measured)
+constexpr uint32_t kWallOfDir[4] = {kWallS, kWallW, kWallN, kWallE};
+
+enum Tile : uint8_t { T_Floor = 0, T_Rocket = 1, T_MouseS = 9, T_CatS = 13, T_Hole = 17 };
+
+struct Stage {
+    uint8_t tiles[kCols * kRows];
+    uint8_t hw[10 * kCols];     // horizontal wall edge above row r (r=0..9), column c
+    uint8_t vw[kRows * 13];     // vertical wall edge left of column c (c=0..12), row r
+};
+
+struct Arrow { int x, y, dir, hits; bool live; int owner = 0, ttl = -1; };   // ttl: frames left (battle), -1 = no expiry
+
+struct Entity {
+    bool mouse = true, alive = true, done = false, hit = false;   // hit: contact flag set by the collision pass, consumed at the start of the next tick
+    float x = 0, z = 0;
+    bool rocketIn = false; float rocketCounter = 1.0f;   // battle cat inside a rocket (30-tick animation, then respawn at a random generator)
+    bool reg = false, groupDeleted = false;   // groupDeleted: removed by an event (0x3db58); its heat entry then reads type 0 (measured)
+              // registered a collision entry this tick (SmpColColliEntry): only these feed the AI heat map
+    int type = 0;               // battle mouse type: 0 normal, 1 golden (50 points), 2 roulette
+    int heading = 0;            // Dir
+    int gx = 0, gy = 0;         // clamped grid cell
+};
+
+// Events produced in battle mode (consumed by BattleGame).
+struct Event { enum Kind { MouseRocket, CatRocket, MouseEaten, MouseHole } kind; int player; int type; };
+
+struct Result { int mice = 0, saved = 0, killed = 0, cats = 0; bool stuck = false; int ticks = 0; int byCat = 0, byHole = 0, catRocket = 0, broken = 0; };
+
+class Sim {
+public:
+    float mouseSpeed = 1.5f, catSpeed = 1.0f;
+    std::vector<int> saveTicks;                   // tick of every save (for differential tests)
+    int breakAt = 2;                              // experiment: strikes that destroy an arrow
+    bool trace = false; int now = 0;
+    int order = 0;                                // experiment: 0 spawn order, 1 cats first, 2 mice first
+    int catRot = 0;                               // experiment: rotate cat start headings
+    float eatRadius = 7.5f;                       // cat-mouse contact distance (original compares against 5.0 in SmpColAnalyze)     // GA_GetMouseSpeed / GA_GetCatSpeed defaults
+    bool battle = false;                          // battle stage coding: tiles 1..4 rockets (owner = code-1), 5..8 generators
+    struct Gen { int x, y, dir; };
+    std::vector<Gen> gens;
+    std::vector<Event> events;
+    int16_t heat[kRows * kCols] = {};             // SmpColAnalyze danger/value map used by the CPU players (cat -100 spread, mouse value)
+    std::function<float()> rnd;                   // njRandom (battle): cat respawn picks generator floor(n*0.99*r)
+    uint8_t rocketOwner[kRows][kCols] = {};
+    int rocketPos[4][2] = {};                     // battle: rocket cell of each player (RO_GetRocketFieldGrid)
+    std::vector<Entity> ents;
+    std::vector<Arrow> arrows;
+    uint32_t coll[kRows][kCols];
+    int saved = 0, killed = 0, killedByCat = 0, killedByHole = 0, catsInRocket = 0, arrowsBroken = 0;
+
+    void load(const Stage& s) {
+        ents.clear(); arrows.clear(); gens.clear(); events.clear(); saveTicks.clear(); now = 0; saved = killed = killedByCat = killedByHole = catsInRocket = arrowsBroken = 0;
+        for (int r = 0; r < kRows; r++)
+            for (int c = 0; c < kCols; c++) {
+                uint32_t f = 0;
+                if (s.hw[r * kCols + c]) f |= kWallN;
+                if (s.hw[(r + 1) * kCols + c]) f |= kWallS;
+                if (s.vw[r * 13 + c]) f |= kWallW;
+                if (s.vw[r * 13 + c + 1]) f |= kWallE;
+                uint8_t t = s.tiles[r * kCols + c];
+                if (battle) {
+                    rocketOwner[r][c] = 0;
+                    if (t >= 1 && t <= 4) { f |= kRocket; rocketOwner[r][c] = (uint8_t)(t - 1); rocketPos[t - 1][0] = c; rocketPos[t - 1][1] = r; t = 0; }
+                    else if (t >= 5 && t <= 8) { gens.push_back({c, r, t - 5}); t = 0; f |= kGenerator | (uint32_t)(gens.back().dir & 3); }
+                }
+                if (t == T_Rocket) f |= kRocket;
+                if (t == T_Hole) f |= kHole;
+                coll[r][c] = f;
+                if ((t >= T_MouseS && t < T_MouseS + 4) || (t >= T_CatS && t < T_CatS + 4)) {
+                    Entity e; e.mouse = t < T_CatS; e.heading = (t - (e.mouse ? T_MouseS : T_CatS)); if (!e.mouse) e.heading = (e.heading + catRot) & 3;
+                    e.gx = c; e.gy = r; e.x = (c + 0.5f) * kCell; e.z = (r + 0.5f) * kCell;
+                    ents.push_back(e);
+                }
+            }
+    }
+    void spawn(bool mouse, int type, int gx, int gy, int heading) {      // MO_PutMouse / CA_PutCat in battle mode
+        Entity e; e.mouse = mouse; e.type = type; e.heading = heading & 3; e.gx = gx; e.gy = gy;
+        e.x = (gx + 0.5f) * kCell; e.z = (gy + 0.5f) * kCell; ents.push_back(e);
+    }
+    void refreshCell(int x, int y) { refresh(x, y); }
+    bool placeArrow(int x, int y, int dir) {
+        if (coll[y][x] & (kRocket | kHole)) return false;
+        for (auto& a : arrows) if (a.live && a.x == x && a.y == y) { a.dir = dir; refresh(x, y); return true; }
+        arrows.push_back({x, y, dir, 0, true}); refresh(x, y); return true;
+    }
+    void removeArrow(int x, int y) {                  // puzzle "tap the same arrow again" removal
+        for (auto& a : arrows) if (a.live && a.x == x && a.y == y) a.live = false;
+        refresh(x, y);
+    }
+    void tick() {
+        now++;
+        for (auto& e : ents) e.reg = false;
+        for (auto& m : ents) if (m.mouse && m.alive && !m.done && m.hit) {      // mouse tick: if (flags & 1) -> eaten state, no movement
+            m.alive = false; m.hit = false; killed++; killedByCat++;
+            if (battle) events.push_back({Event::MouseEaten, 0, m.type});
+            if (trace) printf("t=%d mouse eaten at (%.1f,%.1f) cell (%d,%d)\n", now, m.x, m.z, m.gx, m.gy);
+        }
+        if (order == 0) { for (auto& e : ents) if (e.alive && !e.done) { if (e.rocketIn) rocketInTick(e); else step(e); } }
+        else { for (int pass = 0; pass < 2; pass++) for (auto& e : ents) if (e.alive && !e.done && (e.mouse == ((pass == 0) == (order == 2)))) step(e); }
+        resolveCats();
+    }
+    Result run(int maxTicks) {
+        int t = 0;
+        for (; t < maxTicks; t++) {
+            tick();
+            bool any = false; for (auto& e : ents) if (e.mouse && e.alive && !e.done) any = true;
+            if (!any) break;
+        }
+        Result r; r.ticks = t; r.saved = saved; r.killed = killed; r.byCat = killedByCat; r.byHole = killedByHole; r.catRocket = catsInRocket; r.broken = arrowsBroken;
+        for (auto& e : ents) { if (e.mouse) r.mice++; else r.cats++; }
+        r.stuck = (saved + killed) < r.mice;
+        return r;
+    }
+    static bool unchangedByCorrect(uint32_t f, int d) { int h = d; correct(f, h); return h == d; }
+    void buildHeat() {                                    // second half of SmpColAnalyze (run after all tasks each frame)
+        for (auto& h : heat) h = 0;
+        static const int mouseValue[4] = {1, 50, 25, 85};
+        for (auto& e : ents) {
+            if (!e.reg) continue;                    // entries registered this frame count even if the task is deleted later in the frame
+            if (e.gx < 0 || e.gx >= kCols || e.gy < 0 || e.gy >= kRows) continue;
+            int v = e.mouse ? mouseValue[e.groupDeleted ? 0 : (e.type & 3)] : -100;
+            if (e.mouse && v == 1) { heat[e.gy * kCols + e.gx] += 1; continue; }
+            uint8_t visited[kRows * kCols] = {};
+            spread(e.gx, e.gy, v, 8, visited);
+        }
+    }
+private:
+    void spread(int x, int y, int v, int depth, uint8_t* visited) {     // FUN_000299ac
+        heat[y * kCols + x] += (int16_t)v; visited[y * kCols + x] = 1;
+        if (depth != 1 && (unsigned)(v + 1) > 2u) {
+            static const int dx[4] = {0, -1, 0, 1}, dy[4] = {1, 0, -1, 0};
+            for (int d = 0; d < 4; d++) {
+                uint32_t f = fieldCollision(x, y);
+                if (!unchangedByCorrect(f, d)) continue;
+                int nx = x + dx[d], ny = y + dy[d];
+                if (nx < 0) nx += kCols; else if (nx >= kCols) nx -= kCols;
+                if (ny < 0) ny += kRows; else if (ny >= kRows) ny -= kRows;
+                if (!visited[ny * kCols + nx]) spread(nx, ny, v / 2, depth - 1, visited);
+            }
+        }
+    }
+public:
+    uint32_t fieldCollision(int x, int y) const { return (x < 0 || x >= kCols || y < 0 || y >= kRows) ? 0u : coll[y][x]; }   // FI_GetFieldCollision
+private:
+    void refresh(int x, int y) {
+        uint32_t& f = coll[y][x]; f &= ~(kArrow | 3u);
+        for (auto& a : arrows) if (a.live && a.x == x && a.y == y) f |= kArrow | (uint32_t)a.dir;
+    }
+    static void gridOf(float x, float z, int& gx, int& gy) {
+        gx = (int)(x * 0.06666667f); gy = (int)(z * 0.06666667f);
+        if (x < 0) gx = 0; if (gx < 0) gx = 0; if (gx > kCols - 1) gx = kCols - 1;
+        if (z < 0) gy = 0; if (gy < 0) gy = 0; if (gy > kRows - 1) gy = kRows - 1;
+    }
+    static void warp(Entity& e) {                     // FI_CheckWarp
+        if (e.x < -7.5f) e.x += 195.0f; else if (e.x > 187.5f) e.x -= 195.0f;
+        if (e.z < -7.5f) e.z += 150.0f; else if (e.z > 142.5f) e.z -= 150.0f;
+    }
+    // FI_CheckAndCorrectAngle: arrow sets heading; then first free of d, d+1 (right), d+3 (left), d+2 (back). Returns true on dead end.
+    static bool correct(uint32_t f, int& h) {
+        if (f & kArrow) h = (int)(f & 3);
+        if (!(f & kWallAny)) return false;
+        const int order[4] = {0, 1, 3, 2};
+        for (int k = 0; k < 4; k++) { int d = (h + order[k]) & 3; if (!(f & kWallOfDir[d])) { h = d; return false; } }
+        return true;
+    }
+    void strikeArrow(int x, int y) {                   // AR_CatHitArrow -> AR_StrikeArrow
+        for (auto& a : arrows) if (a.live && a.x == x && a.y == y) { if (trace) printf("t=%d cat strikes arrow (%d,%d) hit #%d\n", now, x, y, a.hits + 1); if (++a.hits >= breakAt) { a.live = false; arrowsBroken++; if (trace) printf("t=%d cat breaks arrow at (%d,%d)\n", now, x, y); refresh(x, y); } return; }
+    }
+    void step(Entity& e) {
+        const float speed = e.mouse ? mouseSpeed : catSpeed;
+        float thr = speed * (e.mouse ? 0.52f : 0.51f);
+        if (thr < 0.01f) thr = 0.01f;
+        static const float sinv[4] = {0, 1, 0, -1}, cosv[4] = {1, 0, -1, 0};   // sin/cos of heading*90 degrees
+        const float cx = (e.gx + 0.5f) * kCell, cz = (e.gy + 0.5f) * kCell;
+        const float ddx = e.x - cx, ddz = e.z - cz;
+        if (std::sqrt(ddx * ddx + ddz * ddz) < thr) {            // at a cell centre
+            uint32_t f = coll[e.gy][e.gx];
+            if (battle && (f & kRocket)) {
+                events.push_back({e.mouse ? Event::MouseRocket : Event::CatRocket, rocketOwner[e.gy][e.gx], e.type});
+                if (e.mouse || !rnd) e.done = true; else e.rocketIn = true;       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
+                return;
+            }
+            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
+            if (battle && (f & kHole)) { events.push_back(e.mouse ? Event{Event::MouseHole, 0, e.type} : Event{Event::CatRocket, -1, 0});
+                if (e.mouse || !rnd) e.alive = false; else e.rocketIn = true;      // a cat falling into a hole also ends in the rocket-in/respawn function
+                return; }   // cat lost in a hole: player -1, no score
+            if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); } e.alive = false; return; }
+            if (!e.mouse && (f & kArrow)) {                      // cat arriving head-on to an arrow strikes it
+                if (((e.heading + 2) & 3) == (int)(f & 3)) strikeArrow(e.gx, e.gy);   // note: the turn below still uses the flags read before the strike (as the original does)
+            }
+            const int before = e.heading;
+            if (correct(f, e.heading)) return;                   // dead end: no movement this tick
+            if (e.heading != before) { e.x = cx; e.z = cz; }     // turning snaps to the cell centre
+        }
+        e.x += -speed * sinv[e.heading];                         // original: x += -speed*sin(h), z += speed*cos(h)
+        e.z +=  speed * cosv[e.heading];
+        warp(e);
+        gridOf(e.x, e.z, e.gx, e.gy);
+        e.reg = true;
+    }
+    static float bitsToFloat(uint32_t b) { float f; static_assert(sizeof f == 4, ""); std::memcpy(&f, &b, 4); return f; }
+    void rocketInTick(Entity& e) {
+        const float kRocketStep = bitsToFloat(kRocketStepBits);                      // Android FUN_000292c0 (game types 0/1): counter -= 1/30 each tick, finished when <= 0
+        e.rocketCounter = e.rocketCounter + 1.0f * kRocketStep;
+        if (!(e.rocketCounter <= 0.0f)) return;
+        e.rocketCounter = 1.0f;
+        if (!gens.empty()) {
+            float r = rnd();
+            int i = (int)((float)gens.size() * 0.99f * r);
+            if (trace) printf("t=%d cat respawn draw r=%.6f gen %d\n", now, r, i);
+            e.gx = gens[i].x; e.gy = gens[i].y; e.heading = gens[i].dir & 3;
+            e.x = (e.gx + 0.5f) * kCell; e.z = (e.gy + 0.5f) * kCell;
+        }
+        e.rocketIn = false;
+    }
+public:
+    void resolveNewMice(size_t firstNew) {              // a mouse registers for collision when it is put; a cat only on its first tick (measured)
+        for (size_t i = firstNew; i < ents.size(); i++) { Entity& m = ents[i]; if (!m.mouse) continue;
+            for (size_t j = 0; j < firstNew; j++) { Entity& c = ents[j]; if (c.mouse || !c.alive || c.done || c.rocketIn) continue;
+                float ax = c.x - m.x, az = c.z - m.z; if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true; } }
+    }
+    void resolveCats() {                               // SmpColAnalyze: cat and mouse closer than 5.0 (registered end-of-tick positions)
+        for (auto& c : ents) if (!c.mouse && c.alive && !c.done && !c.rocketIn)
+            for (auto& m : ents) if (m.mouse && m.alive && !m.done) {
+                float ax = c.x - m.x, az = c.z - m.z;
+                if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true;
+            }
+    }
+};
+
+} // namespace ccr
