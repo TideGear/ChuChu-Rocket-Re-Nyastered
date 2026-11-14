@@ -27,7 +27,7 @@ DLC and skin loading in play, GBA and Dreamcast CPU-AI completion, real cross-ma
 ## Build and setup (Windows)
 1. Install the Visual Studio C++ Build Tools, CMake, Ninja and Python 3.12 (extraction only; Pillow and NumPy for the tools).
 2. Run `setup.cmd` and point it at the folder holding your game files. It finds and hash-verifies them, extracts assets to a local cache and builds. Any one complete version is enough to play; the others add unique content.
-3. `build.cmd` rebuilds the code. Run `build\game\ccr.exe`; it finds the cache by itself (or pass the asset folder, or set `CCR_ASSETS`). Useful switches: `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4`, `CCR_SIZE=3840x2160`, `CCR_FULLSCREEN=1`.
+3. `build.cmd` rebuilds the code. Run `build\game\ccr.exe`; it finds the cache by itself (or pass the asset folder, or set `CCR_ASSETS`). Useful switches: `CCR_CPU=gba` (battle with the GBA CPU players),`CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4`, `CCR_SIZE=3840x2160`, `CCR_FULLSCREEN=1`.
 4. Tests never open a window or play audio when run headless (`CCR_HEADLESS`, `CCR_SHOT`, `CCR_BENCH`); the C++ tests are CMake targets in `game/` (`determinism_test`, `battle_full_test`, `cpu_test`, `netplay_test`, ...).
 
 Other platforms: the core and tests cross-compile for Android arm64 (NDK) and build for WebAssembly (Emscripten; see [docs/roadmap.md](docs/roadmap.md)); neither has been run on a device yet.

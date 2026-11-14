@@ -5,10 +5,13 @@
 #include "sim.hpp"
 #include "generator.hpp"
 #include "score.hpp"
+#include "cpu_gba.hpp"
 #include "roulette.hpp"
 #include "cpu.hpp"
 #include <algorithm>
 #include <memory>
+#include <cstdlib>
+#include <cstdio>
 #include <functional>
 #include <cstdio>
 namespace ccr {
@@ -27,6 +30,7 @@ public:
     bool rouletteEnabled = true;                 // test harness: the emulated original rolls only under conditions not yet understood (see docs)
     bool genFirst = true;                        // generator task runs before the entity tasks (measured: 26/26 battles identical)
     // CPU players (Android CT_*): level 0..3 or 4 = chosen from time and player; -1 = human
+    bool gbaCpu = false; gba::Env gbaEnv; uint8_t gbaType[4] = {5, 5, 5, 5}; int humanCell[4][2] = {{2, 2}, {9, 2}, {2, 6}, {9, 6}};   // GBA CPU players (transcribed ROM routines, game/core/cpu_gba.hpp): personality type per player (5 = random), human cursor cells
     CpuEnv cpuEnv; CpuLcg cpuLcg; CpuPlayer cpu[4]; int cpuLevel[4] = {-1, -1, -1, -1}; bool cpuFirst = true, cpuReverse = false;
     struct Put { int frame, player, x, y, dir; }; std::vector<Put> cpuPuts;
     void setCpu(int p, int level) { cpuLevel[p] = level; }
@@ -53,6 +57,7 @@ public:
         cpuEnv.putArrow = [this](int pl, int x, int y, int d) { cpuPuts.push_back({frame, pl, x, y, d}); placeArrow(pl, x, y, d); };
         { int nb = 4; for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) nb++; sim.occupyBase(nb); }   // manager tasks (arrows, roulette monitor, rockets, generator) + one task per CPU
         for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].start(cpuEnv, p, cpuLevel[p]);
+        if (gbaCpu) gbaStart(seed);
     }
     // Player arrow placement (Android FUN_0002859c, local path): own arrow on the cell -> only the direction changes; any other object bit
     // (0xF00: rocket, hole, arrow of another player) refuses; otherwise the slot at the player's ring index is freed and reused (3 slots, TTL 600).
@@ -94,7 +99,35 @@ private:
     size_t spawned_ = 0; int slot_[4][3] = {{-1,-1,-1},{-1,-1,-1},{-1,-1,-1},{-1,-1,-1}}; int ring_[4] = {0,0,0,0};
     void applySpeed() { sim.catSpeed = baseScale * charaSpeed; sim.mouseSpeed = 1.5f * baseScale * charaSpeed; }
     void spawnPending(bool fresh) { for (size_t i = spawned_; i < gen->spawns.size(); i++) { const Spawn& s = gen->spawns[i]; sim.spawn(!s.cat, s.mouseType, s.x, s.y, s.dir, fresh); } spawned_ = gen->spawns.size(); }
-    void runCpu() { if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
+    void gbaStart(uint32_t seed) {
+        gba::Env& e = gbaEnv; e = gba::Env(); e.lcg = seed * 2654435761u + 1u; e.mode = 0;
+        for (int p = 0; p < 4; p++) { e.ptype[3 * p] = cpuLevel[p] >= 0 ? gbaType[p] : 0; int cx = cpuLevel[p] >= 0 ? sim.rocketPos[p][0] : humanCell[p][0], cy = cpuLevel[p] >= 0 ? sim.rocketPos[p][1] : humanCell[p][1];
+            e.spx[p] = (uint8_t)(cx * 16 + 8); e.spy[p] = (uint8_t)(cy * 16 + 8); e.h8[p] = (uint16_t)(2 * cx + 2); e.hc[p] = (uint16_t)(2 * cy + 2); e.curx[p] = (uint8_t)e.h8[p]; e.cury[p] = (uint8_t)e.hc[p]; }
+        for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) gba::initCpu(e, p);
+    }
+    void gbaSync() {   // fill the ROM's lattice, score/arrow tables and object lists from the simulation
+        gba::Env& e = gbaEnv; memset(e.field, 0, sizeof e.field); static const int dirCode[4] = {4, 8, 12, 0};
+        auto put = [&](int xp, int yp, int v) { e.field[xp + 27 * yp + 1] = (uint8_t)v; };
+        for (int y = 0; y < kRows; y++) for (int x = 0; x < kCols; x++) { uint32_t f = sim.coll[y][x];
+            if (f & kWallN) put(2 * x + 2, 2 * y + 1, 0x10); if (f & kWallS) put(2 * x + 2, 2 * y + 3, 0x10); if (f & kWallW) put(2 * x + 1, 2 * y + 2, 0x10); if (f & kWallE) put(2 * x + 3, 2 * y + 2, 0x10);
+            if (f & kRocket) put(2 * x + 2, 2 * y + 2, 0x20 | sim.rocketOwner[y][x]); else if (f & kHole) put(2 * x + 2, 2 * y + 2, 0x80); }
+        memset(e.arr, 0, sizeof e.arr);
+        for (int p = 0; p < 4; p++) { int sc = score.player[p]; e.arr[20 * p] = (uint8_t)(sc & 0xff); e.arr[20 * p + 1] = (uint8_t)(sc >> 8); }
+        int cnt[4] = {0, 0, 0, 0};
+        for (const Arrow& a : sim.arrows) if (a.live && a.owner >= 0 && a.owner < 4) { int p = a.owner, k = cnt[p]++; if (k < 3) { e.arr[20 * p + 7 + 4 * k] = (uint8_t)dirCode[a.dir & 3]; e.arr[20 * p + 8 + 4 * k] = (uint8_t)(2 * a.x + 2); e.arr[20 * p + 9 + 4 * k] = (uint8_t)(2 * a.y + 2); } put(2 * a.x + 2, 2 * a.y + 2, 0x60 | dirCode[a.dir & 3] | p); }
+        for (int p = 0; p < 4; p++) e.arr[20 * p + 6] = (uint8_t)std::min(cnt[p], 3);
+        e.nCats = e.nMice = 0;
+        for (const Entity& en : sim.ents) { if (!en.alive || en.done || en.rocketIn) continue; uint16_t px = (uint16_t)(0x28 + (int)(en.x * 16.0f / 15.0f)), py = (uint16_t)(2 + (int)(en.z * 16.0f / 15.0f));
+            if (en.mouse) { if (e.nMice < 32) e.mice[e.nMice++] = {px, py, (uint8_t)en.type}; } else if (e.nCats < 32) e.cats[e.nCats++] = {px, py, 0}; }
+        for (int p = 0; p < 4; p++) { if (cpuLevel[p] >= 0) { e.curx[p] = (uint8_t)e.h8[p]; e.cury[p] = (uint8_t)e.hc[p]; } else { e.curx[p] = (uint8_t)(2 * humanCell[p][0] + 2); e.cury[p] = (uint8_t)(2 * humanCell[p][1] + 2); } }
+    }
+    void gbaRun() {
+        gba::Env& e = gbaEnv; gbaSync(); gba::frameStep(e); e.nPlaced = 0;
+        for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) gba::cpuTask(e, p);
+        static const int toDir[16] = {3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0};   // ROM arrow direction code (0 east, 4 south, 8 west, 12 north: the wall classifier returns the direction away from the wall) -> port direction (0 south, 1 west, 2 north, 3 east)
+        for (int i = 0; i < e.nPlaced; i++) { const auto& pl = e.placed[i]; int d = toDir[pl.dir & 15]; placeArrow(pl.p, pl.x, pl.y, d); }
+    }
+    void runCpu() { if (gbaCpu) { gbaRun(); return; } if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
     void handle(const Event& e) {
         if (debug) printf("f%d event kind %d player %d type %d\n", frame, (int)e.kind, e.player, e.type);
         switch (e.kind) {

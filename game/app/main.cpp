@@ -389,7 +389,7 @@ struct BattleMode : Screen {
     }
     bool load(const std::string& root, int stage, uint32_t sd) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
-        game.rouletteManager = true; game.rotateOwn = true; game.baseScale = 1.0f; int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes;   // 1-3 minute rounds (NGI_SetGameTimer)
+        game.gbaCpu = getenv("CCR_CPU") && std::string(getenv("CCR_CPU")) == "gba"; game.rouletteManager = true; game.rotateOwn = true; game.baseScale = 1.0f; int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes;   // 1-3 minute rounds (NGI_SetGameTimer)
         if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
@@ -411,7 +411,7 @@ struct BattleMode : Screen {
             if (cx >= 0 && cx < 12 && cy >= 0 && cy < 9) { int d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == 0) d = (ar.dir + 1) & 3; game.placeArrow(0, cx, cy, d); }
         }
     }
-    void tick(App& a) override { if (paused) return; for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; game.tick(); a.stepAngles(game.sim); }
+    void tick(App& a) override { if (paused) return; for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } game.tick(); a.stepAngles(game.sim); }
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
