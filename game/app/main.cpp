@@ -50,6 +50,7 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
+    int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo; bool dlogoOk = false;
@@ -274,7 +275,7 @@ struct MenuMode : Screen {
             SDL_RenderSetLogicalSize(a.ren, a.padOk ? 1024 : 480, a.padOk ? 768 : 320); float lx, ly; SDL_RenderWindowToLogical(a.ren, mx, my, &lx, &ly); SDL_RenderSetLogicalSize(a.ren, W, H);
             for (int i = 0; i < N; i++) { int x, y, w, h; geom(a, i, x, y, w, h); if (lx >= x && lx < x + w && ly >= y && ly < y + h) { sel = i; if (e.type == SDL_MOUSEBUTTONDOWN) choose(a); } } }
     }
-    void choose(App& a) { if (sel == 1) chosen = "PUZZLE"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
+    void choose(App& a) { if (sel == 1) chosen = "STAGES"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
     const char* next() override { if (back) { back = false; return "TITLE"; } const char* c = chosen; chosen = nullptr; return c; }
     void draw(App& a, float) override {
         if (!a.menuOk) { SDL_SetRenderDrawColor(a.ren, 24, 24, 60, 255); SDL_RenderClear(a.ren); return; }
@@ -324,7 +325,7 @@ struct PuzzleMode : Screen {
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
         if (sim.killed > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; }
     }
-    const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
+    const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
         a.board(stages.list[cur].st);
@@ -334,6 +335,34 @@ struct PuzzleMode : Screen {
             a.arrowPx(x + 24, 9 * CELL + 32, d, {250, 220, 40, 255}, 0.7f); a.number(stock[d] - used(d), x + 52, 9 * CELL + 14, 36); }
         std::string t = state == 2 ? "CLEAR! SPACE=NEXT" : state == 3 ? "MISS" : state == 0 ? "SPACE=GO" : ""; if (!t.empty()) a.text(t, W - a.textWidth(t, 44) - 90, 9 * CELL + 10, 44);
         a.number(cur + 1, W - 80, 9 * CELL + 14, 36);
+    }
+};
+
+// ---------------------------------------------------------------- stage select (functional; the original's layout/art is not reproduced yet: docs/known_gaps.md)
+struct StageSelectMode : Screen {
+    Stages stages; int cur = 0, page = 0; bool go = false, back = false; static constexpr int COLS = 5, ROWS = 4, PER = COLS * ROWS;
+    int music() override { return 0; }
+    bool load(const std::string& root, int start) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, 0)) return false; cur = start % (int)stages.list.size(); page = cur / PER; return true; }
+    void event(App&, const SDL_Event& e) override {
+        if (e.type != SDL_KEYDOWN) return; int n = (int)stages.list.size(); SDL_Keycode k = e.key.keysym.sym;
+        if (k == SDLK_RIGHT) cur = (cur + 1) % n; else if (k == SDLK_LEFT) cur = (cur + n - 1) % n;
+        else if (k == SDLK_DOWN) cur = std::min(n - 1, cur + COLS); else if (k == SDLK_UP) cur = std::max(0, cur - COLS);
+        else if (k == SDLK_PAGEDOWN) cur = std::min(n - 1, cur + PER); else if (k == SDLK_PAGEUP) cur = std::max(0, cur - PER);
+        else if (k == SDLK_RETURN || k == SDLK_SPACE) go = true; else if (k == SDLK_ESCAPE) back = true;
+        page = cur / PER;
+    }
+    const char* next() override { if (back) { back = false; return "MENU"; } if (go) { go = false; if (gApp) gApp->nextStage = cur; return "PUZZLE"; } return nullptr; }
+    void draw(App& a, float) override {
+        SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
+        a.text("PUZZLE  STAGE SELECT", 24, 14, 34);
+        const int cw = 140, ch = 78, x0 = (W - COLS * cw) / 2, y0 = 80;
+        for (int i = 0; i < PER; i++) { int idx = page * PER + i; if (idx >= (int)stages.list.size()) break;
+            SDL_Rect r{x0 + (i % COLS) * cw + 4, y0 + (i / COLS) * ch + 4, cw - 8, ch - 8}; bool sel = idx == cur;
+            SDL_SetRenderDrawColor(a.ren, sel ? 250 : 40, sel ? 160 : 40, sel ? 30 : 90, 255); SDL_RenderFillRect(a.ren, &r);
+            a.number(idx + 1, r.x + 14, r.y + 14, 40); }
+        const auto& e = stages.list[cur]; std::string t = e.title; a.text(t, 24, y0 + ROWS * ch + 20, 30);
+        std::string hint = "ARROWS CHOOSE   ENTER PLAY   ESC BACK"; a.text(hint, 24, H - 50, 22);
+        std::string pg = std::to_string(page + 1) + "/" + std::to_string(((int)stages.list.size() + PER - 1) / PER); a.text(pg, W - a.textWidth(pg, 26) - 24, 14, 26);
     }
 };
 
@@ -419,7 +448,8 @@ int main(int argc, char** argv) {
     std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
         if ((name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
-        else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); if (!m->load(app.root, stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
+        else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
+        else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" || name == "battle") { auto m = std::make_unique<BattleMode>(); memcpy(m->lv, lv, sizeof lv); if (!m->load(app.root, stageNo, seed)) { printf("cannot load battle stages\n"); return false; } mode = std::move(m); }
         else mode = std::make_unique<MenuMode>();
         return true;

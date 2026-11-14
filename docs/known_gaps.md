@@ -30,3 +30,5 @@ Honest list of what the running game (`ccr.exe`, web build) does not yet do the 
 - Choosing Puzzle in the menu opens stage 1 immediately (no stage select, no progress). Clearing a stage did not lead on to the next: fixed in the code (SPACE after CLEAR now loads the next stage); the real behaviour (result screen, stage select, saved progress, unlock order) is still to be built.
 - The rocket animation (rocket opening, mice entering, lift-off) is not drawn.
 - The puzzle and battle HUD and the result messages are still placeholders (plain boxes and the glyph font).
+
+Update 2026-11-13 (after the playtest report): Puzzle now opens a stage-select screen (5 x 4 grid of the 100 main stages, stage title, arrows/Enter/Esc); Esc inside a puzzle returns to it with the stage kept, and a cleared stage offers the next one. The screen is functional, not the original's: the original layout and art (and the mobile/GBA stage groups, locked-stage logic, saved progress, results) are not reproduced yet, and only the 100 main stages are listed (the registry holds 2,669 boards).
