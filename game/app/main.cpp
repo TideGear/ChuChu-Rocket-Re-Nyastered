@@ -54,7 +54,7 @@ struct App {
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
-    Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo; bool dlogoOk = false;
+    Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
     const std::string& str(int id) { static const std::string none; auto it = strs.find(id); return it == strs.end() ? none : it->second; }
@@ -106,7 +106,7 @@ struct App {
         std::string ret = root + "/ret_all/";
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
-        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
+        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); dpressOk = loadSheet(ret2 + "dpress", dpress); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
         { static const char* cv[3] = {"r0420", "r0429", "r0438"}, *mv[3] = {"r0491", "r0495", "r0499"}, *gv[3] = {"r0472", "r0476", "r0480"}; walkOk = true;
           for (int k = 0; k < 3; k++) walkOk = loadSheet(ret + cv[k], catV[k]) && loadSheet(ret + mv[k], mouseV[k]) && loadSheet(ret + gv[k], goldV[k]) && walkOk; }
         loadFontMetrics();
@@ -252,7 +252,14 @@ struct TitleMode : Screen {
         SDL_RenderCopyEx(a.ren, rk.tex, &rf, &rd, ang + 180.0, nullptr, SDL_FLIP_NONE);
         if (a.dlogoOk) { int lw = pad ? 337 : 190, lx = pad ? 208 : 8, ly = pad ? 208 : 24; SDL_Rect ld{lx, ly, lw, lw * a.dlogo.h / a.dlogo.w}; SDL_RenderCopy(a.ren, a.dlogo.tex, nullptr, &ld); }   // best source: the Dreamcast logo
         else { const SDL_Rect& lf = a.tlogo.fr[0]; SDL_Rect ld{12, 28, lf.w, lf.h}; SDL_RenderCopy(a.ren, a.tlogo.tex, &lf, &ld); }
-        if (state == 0xC && blink <= 333333.0) { Sheet& pr = pad ? a.pprompt : a.tprompt; const SDL_Rect& pf = pr.fr[0]; SDL_Rect pd{px, py, pf.w, pf.h}; SDL_RenderCopy(a.ren, pr.tex, &pf, &pd); }
+        if (state == 0xC && blink <= 333333.0) { Sheet& pr = pad ? a.pprompt : a.tprompt; const SDL_Rect& pf = pr.fr[0];
+#if defined(__ANDROID__)
+            const bool dcPrompt = false;   // phones keep "TAP THE SCREEN!"
+#else
+            const bool dcPrompt = a.dpressOk;   // keyboard/pad platforms: the Dreamcast prompt "PRESS START BUTTON!" (ENGLISH/PRESSSTART), centred on the phone prompt's place
+#endif
+            if (dcPrompt) { SDL_Rect pd{px + pf.w / 2 - a.dpress.w / 2, py + pf.h / 2 - a.dpress.h / 2, a.dpress.w, a.dpress.h}; SDL_RenderCopy(a.ren, a.dpress.tex, nullptr, &pd); }
+            else { SDL_Rect pd{px, py, pf.w, pf.h}; SDL_RenderCopy(a.ren, pr.tex, &pf, &pd); } }
         if (state != 0xC) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)std::max(0.0, std::min(255.0, timer / 500000.0 * 255.0))); SDL_Rect all{0, 0, LW, LH}; SDL_RenderFillRect(a.ren, &all); }
         SDL_RenderSetLogicalSize(a.ren, W, H);
     }
