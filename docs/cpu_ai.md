@@ -34,3 +34,10 @@ Result: **iOS 1.1.2, iOS 1.0.2 and iOS HD 1.0 each reproduce all 50 recorded And
 Differences seen but behaviourally irrelevant: the idle-target marker is 0xFF on iOS and 0x10 on Android; function names differ per build (`MC_*` vs `Core::*`, `GA_SetStageNumber` in HD).
 
 **Android 1.14** (same ISA and dynsym addresses as 1.15 but different data layout; sin/cos table slots resolved from `njSin`/`njCos`): the 10 hand-picked CPU battles produce byte-identical placement logs to Android 1.15.
+
+## Dreamcast CPU player (SH-4, `1ST_READ.BIN`, 2026-11-13)
+Found from the generator constants (1103515245 / 12345 at 0x8C0127A0..A8). Status per piece, with the evidence:
+- **Random generator** `0x8C012720` (state at 0x8C186B34): **EXACT** against the port's `CpuLcg` and the Android function: `state = state * 1103515245 + 12345`, result `float((state << 1) >> 17) / 32768`. Run in the SH-4 interpreter, 20 seeds x 3,000 draws = 60,000 draws, 0 differences (`tools/oracle/dc_cpu_lcg.py`).
+- **Level setup** (`CT_StartCompThink` equivalent, `0x8C0132F0..0x8C01339E`): levels 0..3 store the flag words **0x55, 0x56, 0x48, 0x2A** at task +8, and level 4 picks `(time + player) & 3`: identical to the port's `kLevelFlags` (static identity of constants and selection, not an execution).
+- **Task state machine** (`0x8C013260..0x8C0132D0`): same structure as `FUN_00029fa8`: state byte at +0, timer at +4 with the `> 0x29` (41) limit, the 16-bit counter at +0x30, cursor-move call (0x8C012758), `CU_PutArrow` (0x8C014E78); static match.
+- **Target selection** (defend / attack heat-map search / random target, around 0x8C012E00..0x8C0131xx) and the heat-map builder: located but **not yet run** against the port; so the Dreamcast CPU AI is **not** yet differential-tested end to end (matrix row stays partial).
