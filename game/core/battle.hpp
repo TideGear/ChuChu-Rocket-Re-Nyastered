@@ -18,6 +18,7 @@ namespace ccr {
 
 class BattleGame {
 public:
+    float puku[4] = {1.0f, 1.0f, 1.0f, 1.0f};   // rocket size: RO_RocketSetPukuPuku adds 0.2 (literal 0x3e4ccccd) per mouse entering, capped at 1.5 (0x3fc00000); drawn at value x 0.8 of the sprite. The start value 1.0 is the puzzle manager's init (RO_StartRocketPzManager); the battle manager's init was not read.
     static constexpr int kArrowTtl = 600, kArrowSlots = 3;
     Sim sim; std::unique_ptr<Generator> gen; Scoreboard score; std::unique_ptr<Roulette> roulette;   // table = first 128 draws of a fresh RNG with the battle seed (as verified in roulette_test)
     int frame = 0, clock = 0, roundFrames = 60 * 180;   // clock = frames the round countdown has run: it stops while the roulette wheel task is alive (FourBattleLoop phase 2 counts the timers only when RL_GetRoulette4Status() == 0)
@@ -44,6 +45,7 @@ public:
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
     void start(const Stage& st, uint32_t seed) {
+        for (float& q : puku) q = 1.0f;
         sim.battle = true; sim.trace = debug; sim.load(st);
         std::vector<GenCell> cells; for (auto& g : sim.gens) cells.push_back({g.x, g.y, g.dir});
         for (auto& r : slot_) for (int& v : r) v = -1; for (int& v : ring_) v = 0;
@@ -132,6 +134,7 @@ private:
         if (debug) printf("f%d event kind %d player %d type %d\n", frame, (int)e.kind, e.player, e.type);
         switch (e.kind) {
         case Event::MouseRocket: {
+            { float& q = puku[e.player & 3]; q += 0.2f; if (q > 1.5f) q = 1.5f; }
             static const int value[3] = {1, 50, 1};
             score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); gen->mice--; if (e.type == 1) gen->cnt1--;
             if (e.type == 2) { gen->cnt2--; if (rouletteEnabled) pendingRoll_ = e.player; }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
