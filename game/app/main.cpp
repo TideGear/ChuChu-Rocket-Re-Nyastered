@@ -474,9 +474,10 @@ struct BattleMode : Screen {
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
         a.entities(game.sim, prev, paused ? 1.0f : alpha);
         for (int p = 0; p < 4; p++) if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame, (game.sim.coll[curY[p]][curX[p]] & 0xF00) != 0);
-        for (int p = 0; p < 4; p++) { SDL_Rect b{p * (W / 4) + 6, 9 * CELL + 6, W / 4 - 12, 52}; SDL_SetRenderDrawColor(a.ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderFillRect(a.ren, &b);
-            a.number(game.score.player[p], b.x + 12, b.y + 8, 36);
-            if (game.over) { int rk = game.rankOf(p); const SDL_Rect& fr = a.crowns.fr[rk < 4 ? rk : 3]; int ch = 44, cw = fr.w * ch / fr.h; SDL_Rect d{b.x + b.w - cw - 8, b.y + 4, cw, ch}; SDL_RenderCopy(a.ren, a.crowns.tex, &fr, &d); } }
+        SDL_RenderSetViewport(a.ren, nullptr);   // score digits (FUN_00030e18, iPad layout struct: x = 250 + 192 p + 30 k, y = 691; sprite r0729 frames 0..9 centred on their anchor); the player panels behind them (image 0x6d) are NOT drawn yet: their position field was not matched
+        for (int p = 0; p < 4; p++) { int v = std::min(game.score.player[p], 999); int dg[3] = {v / 100 % 10, v / 10 % 10, v % 10};
+            for (int k = 0; k < 3; k++) a.blit(a.digits, dg[k] == 1 ? 1 : dg[k] == 0 ? 0 : dg[k], 250.0f + 192 * p + 30 * k, 691.0f); }
+        SDL_Rect vp2{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp2);
         int rem = game.over ? 0 : (game.roundFrames - game.clock) / 60; int m = rem / 60, sec = rem % 60; int x = W / 2 - 60; const int hgt = 28;
         auto glyph = [&](int idx) { const SDL_Rect& fr = a.timefont.fr[idx]; int w = fr.w * hgt / fr.h; SDL_Rect d{x, 6, w, hgt}; SDL_RenderCopy(a.ren, a.timefont.tex, &fr, &d); x += w + 1; };
         glyph(m % 10); glyph(10); glyph(sec / 10); glyph(sec % 10);
