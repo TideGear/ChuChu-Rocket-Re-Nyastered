@@ -13,6 +13,7 @@ log = []
 def cb(uc, a, s, u):
     p = uc.reg_read(UC_ARM_REG_R0); x, z = struct.unpack('<ff', o.read(p + 0x14, 4) + o.read(p + 0x1c, 4)); log.append((B.frame_no[0], x, z, p))
 o.uc.hook_add(UC_HOOK_CODE, cb, begin=BASE + 0x3501c - G, end=BASE + 0x3501c - G + 2)
+o.uc.hook_add(UC_HOOK_CODE, cb, begin=BASE + 0x352a0 - G, end=BASE + 0x352a0 - G + 2)   # MO_MouseJimeExe (Mouse Monopoly mouse task)
 spd = []
 chg = []
 def cb3(uc, a, s, u):
