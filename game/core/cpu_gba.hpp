@@ -12,6 +12,7 @@ struct Env {
     uint8_t phase = 0;                 // global phase counter
     uint8_t qn = 0; uint8_t q[3][4];   // candidate queue
     uint16_t stall[4] = {0, 0, 0, 0};  // record halfword +8: ticks without progress
+    uint8_t stallCnt[4] = {0, 0, 0, 0};   // record byte +0xA
     int8_t target[4] = {-1, -1, -1, -1}; // record byte +2: the opponent being harassed (-1 none)
     uint8_t arr[80] = {0};             // 0x03002C10: per player 20 bytes: score halfword, +6 arrow count, then 4-byte arrow entries from +7 (direction) / +8, +9 (cursor pixel position)
     uint8_t rec[4][4] = {{0}};         // record bytes +0xC..+0xF: the chosen target cell and direction
@@ -237,5 +238,23 @@ inline void specialRule(Env& e, int p) {
     int sel = (n * e.rnd()) >> 15; int cx = lx[sel], cy = ly[sel];
     int dir = (e.rnd() & 1) ? randomWalk(e, (int8_t)cx, (int8_t)cy) : wallClass(e, (int8_t)cx, (int8_t)cy);
     e.push(cx, cy, dir);
+}
+
+// 0x0800AC1C: one thinking step: choose the target, run the rules the personality allows, return whether an arrow was chosen
+inline bool think(Env& e, int p) {
+    targetRule(e, p); e.qn = 0; int fl = e.flags[p];
+    if ((fl & 0x40) && e.stall[p] > 0x257) {
+        specialRule(e, p);
+        if (e.qn <= 2 && (fl & 0xc)) areaRule(e, p);
+        e.stallCnt[p]++;
+        if (e.stallCnt[p] > 2) { e.stall[p] = 0; e.stallCnt[p] = 0; } else e.stall[p] = 0x21c;
+    } else {
+        if (e.qn <= 2) {
+            if (fl & 3) neighbourRule(e, p);
+            if (e.qn <= 2 && (fl & 0xc)) areaRule(e, p);
+        }
+    }
+    if (e.qn <= 2 && (fl & 0x30)) followRule(e, p);
+    return finishRule(e, p);
 }
 }

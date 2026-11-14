@@ -7,7 +7,7 @@ from gba_oracle import GBA
 from unicorn.arm_const import *
 from unicorn import UC_HOOK_CODE
 ROM = r'C:\Dev\ChuChu Rocket\analysis\gba\ccr.gba'
-FN = {'neighbour': 0x8009D60, 'area': 0x800A434, 'follow': 0x800A654, 'path': 0x800990C, 'dirdelta': 0x80098A0, 'special': 0x800A854, 'finish': 0x800AA1C, 'ready': 0x8009D44, 'longest': 0x8009B2C, 'wallclass': 0x8009C80, 'walk': 0x8009A20, 'target': 0x800AAF4}
+FN = {'neighbour': 0x8009D60, 'area': 0x800A434, 'follow': 0x800A654, 'path': 0x800990C, 'dirdelta': 0x80098A0, 'special': 0x800A854, 'finish': 0x800AA1C, 'think': 0x800AC1C, 'ready': 0x8009D44, 'longest': 0x8009B2C, 'wallclass': 0x8009C80, 'walk': 0x8009A20, 'target': 0x800AAF4}
 LCG = 0x30001f8
 REC, PHASE, QCNT, QBUF, HEAT, FIELD, CURS, MODE = 0x3000220, 0x3000274, 0x3000260, 0x3000268, 0x3000278, 0x30029a0, 0x3002c68, 0x3002990
 FAKE = 0x3000700
@@ -39,10 +39,10 @@ def main():
         for k in range(4): uc.mem_write(0x3002c90 + 3 * k, bytes([rnd.choice([0, 0, 1, 2, 3, 4, 5, 6])])); uc.mem_write(0x3000508 + k, bytes([k])); uc.mem_write(0x300050c + k, bytes([k]))
         order = list(range(4)); rnd.shuffle(order)
         for k in range(4): uc.mem_write(0x300050c + k, bytes([order[k]])); uc.mem_write(0x3000508 + order[k], bytes([k]))
-        uc.mem_write(REC + 16 * p + 0xc, bytes(4))
+        uc.mem_write(REC + 16 * p + 0xc, bytes(4)); st8 = rnd.choice([0, 100, 0x257, 0x258, 0x300, 1000]); stc = rnd.randrange(4); uc.mem_write(REC + 16 * p + 8, struct.pack('<H', st8)); uc.mem_write(REC + 16 * p + 0xa, bytes([stc]))
         sv = [rnd.randrange(-50, 50), rnd.randrange(-50, 50)]; sc = [rnd.randrange(12), rnd.randrange(9), rnd.randrange(12), rnd.randrange(9)]
         uc.mem_write(0x3000500, struct.pack('<hh', *sv)); uc.mem_write(0x3000504, bytes(sc))
-        if rule == 'target': uc.mem_write(MODE, bytes([rnd.choice([0, 0, 0, 1, 6, 2])]))
+        if rule in ('target', 'think'): uc.mem_write(MODE, bytes([rnd.choice([0, 0, 0, 1, 6, 2])]))
         qn0 = 0
         if rule == 'finish':
             qn0 = rnd.randrange(4); uc.mem_write(QCNT, bytes([qn0]))
@@ -62,6 +62,6 @@ def main():
         uc.emu_start(fn | 1, ret, count=2000000); uc.hook_del(hk)
         if os.environ.get('GBAPUSH'): print(len(lines) + 1, [(hex(a), list(b)) for a, b in pushes])
         cnt = uc.mem_read(QCNT, 1)[0]; q = bytes(uc.mem_read(QBUF, 4 * 3)); r0 = uc.reg_read(UC_ARM_REG_R0) & 0xffffffff; lcg1 = struct.unpack('<I', bytes(uc.mem_read(LCG, 4)))[0]
-        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(REC + 16 * p + 0xc, 4)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(ARR, 80)) + ' | %d %d %d %d %d %d %d %d' % ((qn0, uc.mem_read(MODE, 1)[0]) + tuple(sv) + tuple(sc)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000508, 8)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3002c90, 12)) + ' | ' + ' '.join(str(b) for b in q) + ' | %d' % uc.mem_read(REC + 16 * p + 2, 1)[0])
+        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(REC + 16 * p + 0xc, 4)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(ARR, 80)) + ' | %d %d %d %d %d %d %d %d' % ((qn0, uc.mem_read(MODE, 1)[0]) + tuple(sv) + tuple(sc)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000508, 8)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3002c90, 12)) + ' | ' + ' '.join(str(b) for b in q) + ' | %d %d %d' % (uc.mem_read(REC + 16 * p + 2, 1)[0], struct.unpack('<H', bytes(uc.mem_read(REC + 16 * p + 8, 2)))[0], uc.mem_read(REC + 16 * p + 0xa, 1)[0]) + ' | %d %d' % (st8, stc) + ' | ' + ' '.join(str(b) for b in uc.mem_read(CURS, 8)))
     open(out, 'w').write('\n'.join(lines) + '\n'); print('wrote', len(lines), 'cases for', rule)
 main()
