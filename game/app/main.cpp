@@ -31,7 +31,7 @@ static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
 static const int GW = 1024, GH = 768, OX = 184, OY = 32;
 static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {250, 170, 30, 255}, {240, 60, 60, 255}, {40, 190, 70, 255}};   // player order of the original art (arrow sheet r0645, cursor sheet r0732, rocket sheets r0651/r0663/r0675/r0687): blue, orange, red, green
 
-struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; };   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
+struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; };   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
 
 struct Stages { struct E { Stage st; std::vector<std::array<uint8_t, 3>> sol; char title[33]; int src, idx; }; std::vector<E> list; };
 static bool loadStages(const char* path, Stages& out, int onlySrc) {
@@ -79,6 +79,13 @@ struct App {
     struct Song { std::vector<int16_t> pcm; size_t loopStart = 0, loopEnd = 0; bool loop = true, tried = false; }; Song songs[15]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
     std::vector<std::vector<int16_t>> sfx; struct Voice { const std::vector<int16_t>* d; size_t pos; }; std::vector<Voice> voices;
 
+    // HD 1.0 frame table (int16 w at record offset 16): draw size of each frame on the original iPad
+    void loadFit(const std::string& path, Sheet& s) {
+        FILE* f = fopen(path.c_str(), "rb"); if (!f) return; uint32_t n = 0; if (fread(&n, 4, 1, f) != 1) { fclose(f); return; }
+        std::vector<uint8_t> b(36 * n); size_t got = fread(b.data(), 1, b.size(), f); fclose(f); if (got != b.size()) return;
+        s.fit.assign(s.fr.size(), 1.0f);
+        for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
+    }
     bool loadSheet(const std::string& base, Sheet& s) {
         FILE* f = fopen((base + ".tex.bin").c_str(), "rb"); if (!f) return false;
         uint32_t wh[2]; if (fread(wh, 4, 2, f) != 2) { fclose(f); return false; }
@@ -111,7 +118,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]);
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); }
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
         { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); dpressOk = loadSheet(ret2 + "dpress", dpress); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
@@ -182,6 +189,7 @@ struct App {
     // Original sprite blit: every frame record carries its anchor offset (the frame is centred on its anchor: -w/2, -h/2); sprites are drawn at native pixels (logical 768x576 field = 64 px cells, as the iPad layout).
     void blit(Sheet& sh, int frame, float ax, float ay, float scale = 1.0f, double angle = 0.0, int cropTL = 0) {
         if (frame < 0 || frame >= (int)sh.fr.size()) return;
+        if (frame < (int)sh.fit.size()) scale *= sh.fit[frame];   // geometry of the original iPad build
         SDL_Rect fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
         SDL_Rect dst{(int)std::lround(ax + of.x * scale), (int)std::lround(ay + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)};
         if (cropTL) { fr.x += 1; fr.y += 1; fr.w -= 1; fr.h -= 2; dst.x += 1; dst.y += 1; dst.w -= 1; dst.h -= 2; }   // buildPlayfield copies a tile without its first column and first and last row
