@@ -298,14 +298,15 @@ struct MenuMode : Screen {
     }
 };
 
-// Touch/mouse arrow gesture of the mobile versions (Android Input::setArrowOrigin / getArrowType, read 2026-11-13): press on a cell sets the origin, release decides the arrow from the drag vector:
-// if the drag is longer than a threshold, |dx| > |dy| -> east (release right of the origin) or west, otherwise south (release below) or north; no drag = no arrow (puzzle: the tap deletes an arrow already on the cell).
-// The threshold value (AppData +0x28) was not read: the port uses 0.35 cell (inferred).
+// Touch/mouse arrow gesture of the mobile versions (Android Input::setArrowOrigin / getArrowType, read 2026-11-13/14): press on a cell sets the origin, release decides the arrow from the drag vector:
+// if the squared drag distance (touch pixels) exceeds 0.25 x the float at screen-struct +0x28 (a view scale, whose value was not read; >= 1 on any device, so the threshold is about one pixel),
+// |dx| > |dy| -> east (release right of the origin) or west, otherwise south (release below) or north; no movement = no arrow (puzzle: the tap deletes an arrow already on the cell).
+// The port measures the distance in window pixels and uses the scale 1.0 (unverified).
 struct DragGesture {
-    bool on = false; int cx = -1, cy = -1; float x0 = 0, y0 = 0;
-    bool begin(App& a, const SDL_Event& e) { float lx, ly; SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int c = (int)(lx / CELL), r = (int)(ly / CELL); on = c >= 0 && c < 12 && r >= 0 && r < 9 && lx >= 0 && ly >= 0; cx = c; cy = r; x0 = lx; y0 = ly; return on; }
+    bool on = false; int cx = -1, cy = -1; float x0 = 0, y0 = 0; int wx0 = 0, wy0 = 0;
+    bool begin(App& a, const SDL_Event& e) { float lx, ly; SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int c = (int)(lx / CELL), r = (int)(ly / CELL); on = c >= 0 && c < 12 && r >= 0 && r < 9 && lx >= 0 && ly >= 0; cx = c; cy = r; x0 = lx; y0 = ly; wx0 = e.button.x; wy0 = e.button.y; return on; }
     // returns the direction (0 south, 1 west, 2 north, 3 east) or -1 for a tap
-    int end(App& a, const SDL_Event& e) { on = false; float lx, ly; SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); float dx = lx - x0, dy = ly - y0, th = CELL * 0.35f; if (dx * dx + dy * dy <= th * th) return -1; if (std::fabs(dy) < std::fabs(dx)) return dx > 0 ? 3 : 1; return dy > 0 ? 0 : 2; }
+    int end(App& a, const SDL_Event& e) { on = false; float lx, ly; SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); float dx = lx - x0, dy = ly - y0; float wdx = (float)(e.button.x - wx0), wdy = (float)(e.button.y - wy0); if (wdx * wdx + wdy * wdy <= 0.25f) return -1; if (std::fabs(dy) < std::fabs(dx)) return dx > 0 ? 3 : 1; return dy > 0 ? 0 : 2; }
 };
 
 // ---------------------------------------------------------------- puzzle
