@@ -20,3 +20,8 @@ Honest list of what the running game (`ccr.exe`, web build) does not yet do the 
 
 ## Platforms
 - Windows: runs. Web: builds and renders the (placeholder) menu in headless Chrome; no asset import, touch, or iOS Safari test. Android arm64: the core cross-compiles, no app and nothing run on a device.
+
+## Battle screen audit (2026-11-13, from a headless frame)
+- The timer ("2: 45") is drawn over the first row of the board and the four score bars are plain coloured boxes with digits: placeholder HUD. In the original the HUD is not one screen function: it is a set of render-node callbacks added by tasks (`DrawTimeWatch`, `drawClockSplit`, `CU_PlayerTagDraw2D`, `RoundCountDraw2D`, `BattleCountDraw2D`, the scoreboard tasks) that call `Render::drawImage(imageId, frame, x, y, ...)` with ids from a global image table (e.g. 0x6d, 0x68, 0x75, 0x9e in the pause screen). To rebuild it faithfully: extract that image-id table (id -> sprite sheet and frame), then read each callback's positions per device class. The iPad pack already contains the art at the best size (player name plates, score bars, digits, crowns, "Draw!", "Winner!", "321", "Pause" panels).
+- Cats are drawn about one and a half cells tall and some are shown rotated sideways at turn time; the turn frames follow the original's angle logic, but the sprite scale/anchor against the cell grid has not been compared with the original.
+- No cursor/tag for the human players' own cursors other than a thin square for players 2-4; the original draws coloured player tags (`CU_PlayerTagDraw2D`) and a ghost cursor (`CU_ZanzoCursorDraw2D`).
