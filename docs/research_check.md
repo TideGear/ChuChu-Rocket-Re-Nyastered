@@ -29,7 +29,7 @@ Method: each checkable claim compared with the extracted files, the decompiles (
 Release dates and prices, delisting dates, review quotes, Wikipedia-derived facts, Dreamarena subscriber numbers, server statistics (4,000+ user stages), the DS *Project Rub* NiGHTS hat (a different cartridge), Retina update date, the "145 puzzles at launch" figure (marketing text; our oldest iOS build already has 324) and the Game Center chronology (no launch build).
 
 ## Testable, still pending (to be settled with the existing tools)
-- GBA roulette count (13 claimed): find the GBA roulette table/handlers in the ROM (event names are not stored as text).
+- GBA roulette count (13 claimed): **first measurement: the ROM's event dispatcher has 12 distinct outcome handlers (jump table indices 0..11)**, not 13 ([rules_events.md](rules_events.md)); still to confirm which index is which event and whether a 13th exists elsewhere.
 - GBA control schemes (3 claimed): press keys in each scheme in the GBA harness.
 - Dreamcast button/keyboard mappings and the Chao / Pian unlockable skins with their unlock conditions: in the Dreamcast executable (input code, save flags).
 - Android local multiplayer: whether the split-screen battle classes are reachable from the Android menus.
