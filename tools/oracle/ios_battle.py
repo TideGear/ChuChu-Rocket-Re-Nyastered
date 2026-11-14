@@ -14,6 +14,9 @@ def make(build='v112'):
     BUILD_NAME[0] = build; thin, dec = BUILD[build]
     FUNCS.clear(); load_funcs(r'%s\analysis\decomp\%s\%s.functions.txt' % (ROOT, dec, thin))
     o = IOSOracle(r'%s\analysis\thin\%s' % (ROOT, thin))
+    for n in list(FUNCS):                                               # older builds list the same functions without the leading underscore
+        if not n.startswith('_') and '_' + n not in FUNCS: FUNCS['_' + n] = FUNCS[n]
+    if 'CT_Random' not in FUNCS and '__ZL9CT_Randomv' in FUNCS: FUNCS['CT_Random'] = FUNCS['__ZL9CT_Randomv']
     for alias, names in (('changeGlobalMode', ('MC_ChangeGlobalMode',)), ('GA_SetStageNum', ('GA_SetStageNumber',)), ('FI_GetFIPSptr', ('FI_GetFIPSp',))):     # names differ between builds
         if alias not in FUNCS:
             for n in names:
