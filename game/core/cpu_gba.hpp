@@ -11,6 +11,8 @@ struct Env {
     uint8_t flags[4];                  // personality bit mask per player
     uint8_t phase = 0;                 // global phase counter
     uint8_t qn = 0; uint8_t q[3][4];   // candidate queue
+    uint16_t stall[4] = {0, 0, 0, 0};  // record halfword +8: ticks without progress
+    int8_t target[4] = {-1, -1, -1, -1}; // record byte +2: the opponent being harassed (-1 none)
     uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
     int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
     int cellX(int p) const { return (uint8_t)((curx[p] - 2) >> 1); }
@@ -123,5 +125,26 @@ inline void areaRule(Env& e, int p) {
         }
     }
     if (best > init) e.push(bx, by, bd);
+}
+
+// 0x0800A654: follow the target opponent (flags & 0x30); looks at cells within distance 4 of the target's cursor
+inline void followRule(Env& e, int p) {
+    if ((e.phase & 3) != p) return;
+    int t = e.target[p]; if (t == -1) return;
+    int thr0 = (int16_t)(0xffc4 + ((e.flags[p] & 0x20) ? 0x35 : 0)); int best = thr0;
+    int tcx = (int8_t)(((e.curx[t] - 2) << 23) >> 24), tcy = (int8_t)(((e.cury[t] - 2) >> 1) & 0xff);
+    int bx = 0, by = 0, bd = 0;
+    for (int dy = -4; dy <= 4; dy++) for (int dx = -4; dx <= 4; dx++) {
+        int d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy); if (d > 4) continue;
+        int x = (tcx + dx) & 0xff, y = (tcy + dy) & 0xff;
+        if (x > 11 || (int8_t)y < 0 || (int8_t)y > 8) continue;
+        if (!e.empty(x, y)) continue;
+        int hv = e.h(x, (int8_t)y); if (best <= hv) continue;
+        int sh = d - 1; if (sh < 0) sh = 0; int sc = (int16_t)hv >> sh; if (best <= sc) continue;
+        int dir = dirFromDelta(e, dx, dy);
+        if (!pathOk(e, t, x, (int8_t)y, dir)) continue;
+        bx = x; by = y; bd = dirFromDelta(e, dx, dy); best = sc;
+    }
+    if (best < thr0) { e.push(bx, by, bd); e.stall[p] = 480; }
 }
 }
