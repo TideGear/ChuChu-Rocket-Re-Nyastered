@@ -20,6 +20,7 @@ def cb3(uc, a, s, u):
 o.uc.hook_add(UC_HOOK_CODE, cb3, begin=BASE + 0x2e034 - G, end=BASE + 0x2e034 - G + 2)
 def cb2(uc, a, s, u): spd.append((B.frame_no[0], struct.unpack('<f', struct.pack('<I', uc.reg_read(UC_ARM_REG_R0)))[0], sum(1 for l in log if l[0] == B.frame_no[0]))); 
 o.uc.hook_add(UC_HOOK_CODE, cb2, begin=BASE + 0x2ee5c - G, end=BASE + 0x2ee5c - G + 2)
+outs = []
 pa = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
 tiles, walls = ascii_stage(d[idx * 477:idx * 477 + 475])
 B.spawns.clear(); setup_battle(tiles, walls, seed)
@@ -37,12 +38,14 @@ for f in range(1, frames + 1):
     if f in pend:
         _, pl, x, y, dd = pend[f]; o.write(pt, struct.pack('<hh', x, y)); gcall(0x286ac, pl, pt, dd)
     step('SmpColLoopInit', 0x2993c); step('SmpTskExeServer', 0x3da60); step('SmpColAnalyze', 0x29b1c)
+    oc = o.u32(BASE + 0x184c94 - G)
+    if not outs or outs[-1][1] != oc: outs.append((f, oc))
 with open(OUT, 'w') as fo:
     cur = -1
     for f, x, z, p in log:
         if f != cur: fo.write('F %d\n' % f); cur = f
         fo.write('M %.6f %.6f %d' % (x, z, p) + chr(10))
-print('FI_ChangeFieldCollisionID calls (frame, x, y, id):', chg); print('mouse entries', len(log)); print('GA_SetCharaSpeed calls (frame, value, mouse entries already run this frame):', spd)
+print('FI_ChangeFieldCollisionID calls (frame, x, y, id):', chg); print('roulette outcome global changes (frame, value):', outs); print('mouse entries', len(log)); print('GA_SetCharaSpeed calls (frame, value, mouse entries already run this frame):', spd)
 per = {}
 for f, x, z, p in log: per[f] = per.get(f, 0) + 1
 print('entries per frame at those frames:', [(f, per.get(f)) for f, v, n in spd])
