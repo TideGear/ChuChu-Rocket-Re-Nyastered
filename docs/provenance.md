@@ -39,3 +39,6 @@ Conclusion so far: the phone sprites I used for the title and menu are the **sma
 
 ### Title logo: Dreamcast chosen (2026-11-13)
 Measured: the Dreamcast logo (`TITLE_newtitle0`, ChuChu Rocket! speech-bubble logo with the mouse) is **510 x 244 pixels** of content; the phone logo is frame 0 of the Android atlas at **158 x 106**, and the iPad HD pack has no standalone title logo. The title screen now draws the Dreamcast logo (`tools/export_dc_ui.py`), scaled into the phone logo's place; the phone logo remains as a fallback when the Dreamcast files are missing. The title background stays the phone image until the iPad layout is implemented (the 1024 x 768 tile-map background is exported, see ui_art.md).
+
+## Per-piece mobile texture sizes (2026-11-13)
+[asset_quality.md](asset_quality.md), produced by `tools/measure_assets.py`, lists every mobile texture record with its size in each Android/iOS build: iPad HD (`ccrpad`) is the largest source for 125 of the 136 records it has, Android 1.14/1.15 for 82, the 1.1/1.1.2 character packs hold 109 and 100 records no other source has; 194 of 428 records present in more than one folder are the same size everywhere. The Dreamcast and GBA pieces are not yet in the table.
