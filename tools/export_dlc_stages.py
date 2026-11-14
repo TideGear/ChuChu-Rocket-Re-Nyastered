@@ -4,7 +4,8 @@ import os, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stage_registry as R
 import export_dc_solutions as E
-def main(out):
+def main(out, dlc_dir=None):
+    if dlc_dir: R.DLC_DIR = dlc_dir
     recs = []
     for src, name in ((2, 'PuzzleP'), (3, 'DEPuzzle')):
         for k, s in enumerate(R.dlc_slots(name)):
