@@ -346,4 +346,15 @@ inline void frameStep(Env& e) {
     for (int i = 0; i < e.nMice; i++) { int cx = (int)(((int)(int16_t)e.mice[i].px - 0x28) >> 4) & 0xff, cy = (int)(((int)(int16_t)e.mice[i].py - 2) >> 4) & 0xff; if (cx <= 11 && cy <= 8) e.seed[cy * 12 + cx] = (int16_t)(e.seed[cy * 12 + cx] + w[e.mice[i].type & 3]); }
     heatStep(e); sortScores(e); e.phase++;
 }
+
+// 0x080096F8 (+ personality 0x080096A8): reset a CPU player: default record, personality flags, current cell as target, heat tables and scan registers cleared
+inline void initCpu(Env& e, int p) {
+    e.state[p] = 0; e.counter[p] = 0; e.prevScore[p] = 0; e.stall[p] = 0; e.stallCnt[p] = 0; e.target[p] = 0;
+    int type = e.ptype[3 * p]; if (type == 5) type = (e.rnd() & 3) + 1;
+    static const uint8_t tab[8] = {0x00, 0x55, 0x66, 0x48, 0x6a, 0x00, 0x00, 0x00};
+    int fl = tab[type & 7]; if (e.mode == 6) fl &= 0xbf; e.flags[p] = (uint8_t)fl;
+    e.rec[p][0] = (uint8_t)((e.h8[p] - 2) >> 1); e.rec[p][1] = (uint8_t)((e.hc[p] - 2) >> 1); e.rec[p][2] = 0; e.rec[p][3] = 0;
+    e.phase = 0; memset(e.heat, 0, sizeof e.heat); memset(e.tabA, 0, sizeof e.tabA); memset(e.tabB, 0, sizeof e.tabB);
+    e.scanv[0] = e.scanv[1] = 0; e.scanc[0][0] = e.scanc[0][1] = e.scanc[1][0] = e.scanc[1][1] = 0;
+}
 }
