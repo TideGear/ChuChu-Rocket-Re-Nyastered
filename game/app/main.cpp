@@ -341,7 +341,7 @@ struct BattleMode : Screen {
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
     // 4-player local input: mouse = player 1; keyboard sets WASD+Q (P1), IJKL+U (P2), keypad 8456+0 (P3); gamepads in connection order (D-pad moves the cursor, DC buttons Y/A/X/B place up/down/left/right)
     int lastCatSfx = -100; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
-    void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4) return; if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
+    void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
     void moveCur(int p, int dx, int dy) { curX[p] = std::max(0, std::min(11, curX[p] + dx)); curY[p] = std::max(0, std::min(8, curY[p] + dy)); }
     bool keyPlayer(SDL_Keycode k) {
         static const SDL_Keycode map[3][5] = {{SDLK_w, SDLK_s, SDLK_a, SDLK_d, SDLK_q}, {SDLK_i, SDLK_k, SDLK_j, SDLK_l, SDLK_u}, {SDLK_KP_8, SDLK_KP_5, SDLK_KP_4, SDLK_KP_6, SDLK_KP_0}};
