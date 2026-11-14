@@ -51,7 +51,8 @@ struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     // Audio: one callback-driven mixer (looped music stream + one-shot SFX voices), device format 44.1 kHz stereo s16.
-    SDL_AudioDeviceID adev = 0; std::vector<int16_t> mus[2]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
+    SDL_AudioDeviceID adev = 0; // Music: the 15 songs of the original (song n = mobile file Mnn = Dreamcast CD track n+4). Loaded on demand; loops from the end of the disc's 2 s lead-in over the length of the mobile file (the disc stores four repetitions of some songs).
+    struct Song { std::vector<int16_t> pcm; size_t loopStart = 0, loopEnd = 0; bool loop = true, tried = false; }; Song songs[15]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
     std::vector<std::vector<int16_t>> sfx; struct Voice { const std::vector<int16_t>* d; size_t pos; }; std::vector<Voice> voices;
 
     bool loadSheet(const std::string& base, Sheet& s) {
@@ -92,9 +93,9 @@ struct App {
     }
     static void audioCb(void* ud, Uint8* stream, int len) {
         App* a = (App*)ud; int16_t* out = (int16_t*)stream; int n = len / 4; std::fill(out, out + n * 2, (int16_t)0);
-        if (a->musOn && a->curTrack >= 0 && !a->mus[a->curTrack].empty()) {
-            const auto& m = a->mus[a->curTrack]; size_t loopStart = (size_t)(2.0 * 44100) * 2;                // the disc has a 2 s lead-in; loops restart after it
-            for (int i = 0; i < n * 2; i++) { if (a->musPos >= m.size()) a->musPos = loopStart; out[i] = (int16_t)(m[a->musPos++] * 0.6f); }
+        if (a->musOn && a->curTrack >= 0 && !a->songs[a->curTrack].pcm.empty()) {
+            Song& sg = a->songs[a->curTrack]; const auto& m = sg.pcm;
+            for (int i = 0; i < n * 2; i++) { if (a->musPos >= sg.loopEnd) { if (!sg.loop) { a->musOn = false; break; } a->musPos = sg.loopStart; } out[i] = (int16_t)(m[a->musPos++] * 0.6f); }
         }
         for (auto& v : a->voices) for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (*v.d)[v.pos++]; out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
         a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [](const Voice& v) { return v.pos >= v.d->size(); }), a->voices.end());
@@ -105,19 +106,33 @@ struct App {
     }
     void loadAudio() {
         namespace fs = std::filesystem;
-        for (int i = 0; i < 2; i++) { std::string wp = root + "/dreamcast/audio/track" + (i ? "10" : "09") + ".wav"; SDL_AudioSpec sp; Uint8* buf; Uint32 len;
-            if (SDL_LoadWAV(wp.c_str(), &sp, &buf, &len)) { if (sp.format == AUDIO_S16LSB && sp.channels == 2 && sp.freq == 44100) mus[i].assign((int16_t*)buf, (int16_t*)(buf + len)); SDL_FreeWAV(buf); } }
         std::string sfxDir; std::error_code ec;
         for (auto& e : fs::directory_iterator(root + "/ios", ec)) if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) sfxDir = (e.path() / "audio_sfx").string();
         sfx.resize(29);
         for (int i = 0; i < 29 && !sfxDir.empty(); i++) { char nm[16]; snprintf(nm, sizeof nm, "%03d.ogg", i); int ch, rate; short* pcm; int fr = stb_vorbis_decode_filename((sfxDir + "/" + nm).c_str(), &ch, &rate, &pcm);
             if (fr > 0) { toStereo44k(pcm, fr, ch, rate, sfx[i]); free(pcm); } }
-        if (headless) return;
+        if (headless && !getenv("CCR_AUDIO_TEST")) return;   // CCR_AUDIO_TEST=1: open the (dummy) audio device in headless runs to exercise the music code
         SDL_AudioSpec want{}; want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024; want.callback = audioCb; want.userdata = this; SDL_AudioSpec have;
         adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0); if (adev) SDL_PauseAudioDevice(adev, 0);
     }
     void playSfx(int id) { if (!adev || id < 0 || id >= (int)sfx.size() || sfx[id].empty()) return; SDL_LockAudioDevice(adev); voices.push_back({&sfx[id], 0}); SDL_UnlockAudioDevice(adev); }
-    void pumpMusic(int track) { if (!adev || mus[track].empty()) return; SDL_LockAudioDevice(adev); if (curTrack != track) { curTrack = track; musPos = (size_t)(2.0 * 44100) * 2; } musOn = true; SDL_UnlockAudioDevice(adev); }
+    void loadSong(int n) {
+        Song& sg = songs[n]; if (sg.tried) return; sg.tried = true; namespace fs = std::filesystem; std::error_code ec;
+        char nm[16]; snprintf(nm, sizeof nm, "M%02d.ogg", n); std::vector<int16_t> mobile; int mobileFrames = 0;
+        for (auto& e : fs::directory_iterator(root + "/ios", ec)) { std::string pth = (e.path() / "audio_song" / nm).string(); if (!fs::exists(pth)) continue;
+            int ch, rate; short* pcm; int fr = stb_vorbis_decode_filename(pth.c_str(), &ch, &rate, &pcm); if (fr > 0) { toStereo44k(pcm, fr, ch, rate, mobile); free(pcm); mobileFrames = fr; break; } }
+        char wp[512]; snprintf(wp, sizeof wp, "%s/dreamcast/audio/track%02d.wav", root.c_str(), n + 4); SDL_AudioSpec sp; Uint8* buf; Uint32 len;
+        if (n != 14 && SDL_LoadWAV(wp, &sp, &buf, &len)) {                       // best source: the lossless Dreamcast CD track
+            if (sp.format == AUDIO_S16LSB && sp.channels == 2 && sp.freq == 44100) { sg.pcm.assign((int16_t*)buf, (int16_t*)(buf + len)); sg.loopStart = (size_t)(2.0 * 44100) * 2;
+                sg.loopEnd = mobileFrames > 0 ? std::min(sg.pcm.size(), sg.loopStart + (size_t)mobileFrames * 2) : sg.pcm.size(); }
+            SDL_FreeWAV(buf); }
+        if (sg.pcm.empty() && !mobile.empty()) { sg.pcm = mobile; sg.loopStart = 0; sg.loopEnd = sg.pcm.size(); }   // fallback: the mobile Ogg
+        if (n == 14 && !mobile.empty()) { sg.pcm = mobile; sg.loopStart = 0; sg.loopEnd = sg.pcm.size(); sg.loop = false; }   // song 14 is a 5 s jingle
+    }
+    // AppData::playSong(song): switch to a song (restarts only when it is a different one)
+    void playSong(int n) { if (!adev || n < 0 || n > 14) return; if (n == curTrack && musOn) return; loadSong(n); if (songs[n].pcm.empty()) return;
+        SDL_LockAudioDevice(adev); curTrack = n; musPos = songs[n].loop ? songs[n].loopStart : 0; musOn = true; SDL_UnlockAudioDevice(adev); }
+    void pumpMusic(int song) { playSong(song); }
     // --- drawing helpers ---
     void number(int v, int x, int y, int hgt) {
         std::string s = std::to_string(v); int cx = x;
@@ -192,7 +207,7 @@ struct MenuMode : Screen {
 struct PuzzleMode : Screen {
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false;
-    int music() override { return 0; }
+    int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, 0)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
     void reset() {
         sim.load(stages.list[cur].st); prev.clear(); if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
@@ -263,7 +278,9 @@ struct BattleMode : Screen {
         restart(); return true;
     }
     void restart() { game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
-    int music() override { return game.frame > game.roundFrames - 60 * 30 ? 1 : 0; }
+    // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
+    // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
+    int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.frame > game.roundFrames - 60 * 30 ? 2 : 1; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_CONTROLLERDEVICEADDED) { for (int p = 0; p < 4; p++) if (!pads[p]) { pads[p] = SDL_GameControllerOpen(e.cdevice.which); break; } }
         else if (e.type == SDL_CONTROLLERBUTTONDOWN) { for (int p = 0; p < 4; p++) if (pads[p] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[p])) == e.cbutton.which) padButton(p, e.cbutton.button); }
@@ -324,7 +341,7 @@ int main(int argc, char** argv) {
     if (const char* shot = getenv("CCR_SHOT")) {
         int ticks = getenv("CCR_TICKS") ? atoi(getenv("CCR_TICKS")) : 600;
         if (const char* keys = getenv("CCR_KEYS")) for (const char* p = keys; *p; p++) { SDL_Event e{}; e.type = SDL_KEYDOWN; e.key.keysym.sym = (*p == ' ') ? SDLK_SPACE : (*p == 'D') ? SDLK_DOWN : (*p == 'E') ? SDLK_RETURN : *p; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); }
-        for (int i = 0; i < ticks; i++) mode->tick(app);
+        int lastSong = -2; for (int i = 0; i < ticks; i++) { mode->tick(app); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
         mode->draw(app, 1.0f); SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, W, H, 32, SDL_PIXELFORMAT_ARGB8888);
         SDL_RenderReadPixels(app.ren, nullptr, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch); SDL_SaveBMP(s, shot); SDL_FreeSurface(s); SDL_Quit(); return 0;
     }

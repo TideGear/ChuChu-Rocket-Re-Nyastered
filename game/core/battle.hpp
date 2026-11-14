@@ -33,6 +33,8 @@ public:
     int gtOff = 0; int fixedGameTime = -1, fixedBcd = -1;   // test harness: the emulated original never advances TI_GetGameTime / the BCD timer (both 0)
     std::function<void(int)> sfx;                // sound hook: ChuSECall ids (0x13 refused, 1 arrow placed, 6 mouse home, 7 cat in rocket, 10 roulette)
     int localPlayer = 0;
+    int activeEventKind() const { return evs_.empty() ? -1 : evs_.back().kind; }   // roulette outcome (0..7) of the running event, or -1 (the original picks the BGM from it: FUN_0003c56c)
+    bool rollPending() const { return roll_.active; }
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
