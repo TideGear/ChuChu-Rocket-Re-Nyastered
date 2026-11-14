@@ -20,6 +20,9 @@ struct Env {
     uint8_t rank[4] = {0, 1, 2, 3}, order[4] = {0, 1, 2, 3};   // 0x03000508 / 0x0300050C
     int16_t scanv[2] = {0, 0}; uint8_t scanc[2][2] = {{0, 0}, {0, 0}};   // 0x03000500 / 0x03000502 best-cell values, 0x03000504-07 their cells
     int16_t seed[108] = {0}, tabA[108] = {0}, tabB[108] = {0};   // 0x03002DE0 seed, 0x03000350 and 0x03000428 working tables (heat is the table at 0x03000278)
+    uint8_t spx[4] = {0}, spy[4] = {0}; uint16_t h8[4] = {0}, hc[4] = {0}, ha[4] = {0}, he[4] = {0}; uint8_t face[4] = {0}, c2cc4 = 0;   // CPU cursor sprite: pixel position (+0x1E/+0x1F), cell positions (+8/+0xC), screen position (+0xA/+0xE), facing (+0x18)
+    uint8_t state[4] = {0}; uint16_t counter[4] = {0}; int16_t prevScore[4] = {0};       // task state (+0), thinking counter (+4), last score (+6)
+    int nPlaced = 0; struct Placed { int p, x, y, dir; } placed[8];                       // arrows the CPUs placed this call
     uint8_t mode = 0;                  // 0x03002990 game mode
     uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
     int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
@@ -293,5 +296,35 @@ inline void heatStep(Env& e) {
         case 2: diffuse(e, e.tabB, e.tabA); break;
         default: diffuse(e, e.tabA, e.heat); scanHeat(e); break;
     }
+}
+
+// 0x08009748: has the cursor reached the target cell?
+inline bool atTarget(const Env& e, int p) { return (int)((e.h8[p] - 2) >> 1) == e.rec[p][0] && (int)((e.hc[p] - 2) >> 1) == e.rec[p][1]; }
+// 0x0800977C + 0x080097D0: move the cursor sprite 2 px per call toward the target cell centre and refresh the cell and screen positions
+inline void moveCursor(Env& e, int p) {
+    int tx = (uint8_t)(e.rec[p][0] * 16 + 8), ty = (uint8_t)(e.rec[p][1] * 16 + 8);
+    if (e.spx[p] < tx) e.spx[p] += 2; else if (e.spx[p] > tx) e.spx[p] -= 2;
+    if (e.spy[p] < ty) e.spy[p] += 2; else if (e.spy[p] > ty) e.spy[p] -= 2;
+    e.ha[p] = (uint16_t)(e.spx[p] + 0x29); e.he[p] = (uint16_t)(e.spy[p] + 3);
+    e.face[p] = (e.c2cc4 == 0xb || (int16_t)e.he[p] > 0x80) ? 4 : 8;
+    e.h8[p] = (uint16_t)(((e.spx[p] >> 3) & 0xfe) + 2); e.hc[p] = (uint16_t)(((e.spy[p] >> 3) & 0xfe) + 2);
+}
+// 0x08009810: at target -> 1; otherwise move and test again
+inline bool moveTo(Env& e, int p) { if (atTarget(e, p)) return true; moveCursor(e, p); return atTarget(e, p); }
+// 0x0800ACE8: the per-CPU task: think, travel, place
+inline void cpuTask(Env& e, int p) {
+    if (e.state[p] == 0) {
+        e.counter[p]++;
+        if (think(e, p)) { e.counter[p] = 0; e.state[p] = 1; }
+        else if (e.counter[p] > 10) { e.rec[p][0] = (uint8_t)((e.curx[p] - 2) >> 1); e.rec[p][1] = (uint8_t)((e.cury[p] - 2) >> 1); moveTo(e, p); }
+    } else if (e.state[p] == 1) {
+        if (moveTo(e, p)) {
+            if (e.empty(e.rec[p][0], e.rec[p][1]) && e.nPlaced < 8) e.placed[e.nPlaced++] = {p, e.rec[p][0], e.rec[p][1], e.rec[p][2]};   // 0x08009844 -> arrow primitive 0x08004EF0
+            e.state[p] = 0;
+        }
+    }
+    int sc = (int16_t)(e.arr[20 * p] | (e.arr[20 * p + 1] << 8));
+    if (sc < e.prevScore[p]) e.stall[p] = (uint16_t)(e.stall[p] + 0x78); else if (sc == e.prevScore[p]) e.stall[p] = (uint16_t)(e.stall[p] + 1); else e.stall[p] = 0;
+    e.prevScore[p] = (int16_t)sc;
 }
 }
