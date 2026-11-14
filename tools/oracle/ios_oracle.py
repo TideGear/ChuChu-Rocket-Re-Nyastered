@@ -3,6 +3,7 @@ usage: o = IOSOracle(path); o.call('_FI_CheckAndCorrectAngle', r0, r1...)"""
 import math, os, struct, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from macho import Macho
+from unicorn import UcError
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE, UC_HOOK_MEM_UNMAPPED
 from unicorn.arm_const import *
 
@@ -62,5 +63,7 @@ class IOSOracle:
         extra = args[4:]; sp -= 4 * len(extra)
         for i, v in enumerate(extra): uc.mem_write(sp + 4 * i, struct.pack('<I', v & 0xffffffff))
         uc.reg_write(UC_ARM_REG_SP, sp); uc.reg_write(UC_ARM_REG_LR, STUB + 0x7ff0 | 1)
-        uc.emu_start(a | 1, STUB + 0x7ff0, count=max_insn)
+        try: uc.emu_start(a | 1, STUB + 0x7ff0, count=max_insn)
+        except UcError as e:
+            print('emulation fault: %s pc=%#x  r0-r7 = %s' % (e, uc.reg_read(UC_ARM_REG_PC), ' '.join('%#x' % uc.reg_read(UC_ARM_REG_R0 + i) for i in range(8)))); raise
         return uc.reg_read(UC_ARM_REG_R0)

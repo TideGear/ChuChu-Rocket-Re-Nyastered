@@ -26,6 +26,8 @@ def make(build='v112'):
         md = capstone.Cs(capstone.CS_ARCH_ARM, capstone.CS_MODE_THUMB); seg = [x for x in o.m.segs if x[0] == '__TEXT'][0]; a = FUNCS['FI_GetFIPNow'] & ~1
         for i in md.disasm(o.m.d[seg[3] + a - seg[1]: seg[3] + a - seg[1] + 24], a):
             if i.mnemonic in ('b', 'b.w'): FUNCS['FI_GetFIPSptr'] = int(i.op_str.lstrip('#'), 16)
+    for n in ('__ZN4Core7vibrateEiii',):                                  # haptics: older builds write straight to a UIKit object that is not mapped; make it a no-op (return immediately)
+        if n in FUNCS: o.uc.mem_write(FUNCS[n] & ~1, b'pG')
     return o
 def ascii_stage(rec):
     L = [rec[r * 25:(r + 1) * 25] for r in range(19)]
