@@ -23,6 +23,7 @@ struct Env {
     uint8_t spx[4] = {0}, spy[4] = {0}; uint16_t h8[4] = {0}, hc[4] = {0}, ha[4] = {0}, he[4] = {0}; uint8_t face[4] = {0}, c2cc4 = 0;   // CPU cursor sprite: pixel position (+0x1E/+0x1F), cell positions (+8/+0xC), screen position (+0xA/+0xE), facing (+0x18)
     uint8_t state[4] = {0}; uint16_t counter[4] = {0}; int16_t prevScore[4] = {0};       // task state (+0), thinking counter (+4), last score (+6)
     int nPlaced = 0; struct Placed { int p, x, y, dir; } placed[8];                       // arrows the CPUs placed this call
+    struct Obj { uint16_t px, py; uint8_t type; }; Obj cats[32], mice[32]; int nCats = 0, nMice = 0;   // objects seen by the heat seeding (pixel positions +0xA/+0xE, type +0x1B)
     uint8_t mode = 0;                  // 0x03002990 game mode
     uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
     int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
@@ -326,5 +327,23 @@ inline void cpuTask(Env& e, int p) {
     int sc = (int16_t)(e.arr[20 * p] | (e.arr[20 * p + 1] << 8));
     if (sc < e.prevScore[p]) e.stall[p] = (uint16_t)(e.stall[p] + 0x78); else if (sc == e.prevScore[p]) e.stall[p] = (uint16_t)(e.stall[p] + 1); else e.stall[p] = 0;
     e.prevScore[p] = (int16_t)sc;
+}
+
+// 0x080095D8: rank the four players by score (descending bubble sort; the rank array is only rewritten on swaps, as in the ROM)
+inline void sortScores(Env& e) {
+    int16_t sc[4]; for (int i = 0; i < 4; i++) { sc[i] = (int16_t)(e.arr[20 * i] | (e.arr[20 * i + 1] << 8)); e.order[i] = (uint8_t)i; }
+    for (int top = 3; top > 0; top--) for (int j = 0; j < top; j++) {
+        int k = j + 1;
+        if (sc[j] < sc[k]) { int16_t t = sc[j]; sc[j] = sc[k]; sc[k] = t; uint8_t oj = e.order[j], ok = e.order[k]; e.order[k] = oj; e.rank[oj] = (uint8_t)k; e.order[j] = ok; e.rank[ok] = (uint8_t)j; }
+    }
+}
+// 0x08008FDC: per frame: seed the heat (cats -100, mice + weight by type) and run the global step (diffusion stage, score sort, phase counter)
+inline void frameStep(Env& e) {
+    if (e.mode > 1 && e.mode != 6) return;
+    memset(e.seed, 0, sizeof e.seed);
+    for (int i = 0; i < e.nCats; i++) { int cx = (int)(((int)(int16_t)e.cats[i].px - 0x28) >> 4) & 0xff, cy = (int)(((int)(int16_t)e.cats[i].py - 2) >> 4) & 0xff; if (cx <= 11 && cy <= 8) e.seed[cy * 12 + cx] = (int16_t)(e.seed[cy * 12 + cx] - 100); }
+    static const int16_t w[4] = {1, 50, 25, 25};
+    for (int i = 0; i < e.nMice; i++) { int cx = (int)(((int)(int16_t)e.mice[i].px - 0x28) >> 4) & 0xff, cy = (int)(((int)(int16_t)e.mice[i].py - 2) >> 4) & 0xff; if (cx <= 11 && cy <= 8) e.seed[cy * 12 + cx] = (int16_t)(e.seed[cy * 12 + cx] + w[e.mice[i].type & 3]); }
+    heatStep(e); sortScores(e); e.phase++;
 }
 }
