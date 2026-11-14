@@ -14,6 +14,7 @@
 #include <memory>
 #include <string>
 #include <functional>
+#include <map>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -50,7 +51,18 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet tbg, tprompt, trocket, tlogo; bool titleOk = false;   // Android title screen art (tools/export_android_ui.py)
+    Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn; bool titleOk = false, menuOk = false;
+    std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
+    const std::string& str(int id) { static const std::string none; auto it = strs.find(id); return it == strs.end() ? none : it->second; }
+    void loadStrings() {
+        const char* lg = getenv("CCR_LANG"); std::string lang = lg ? lg : "en"; FILE* f = fopen((root + "/strings/" + lang + ".tsv").c_str(), "rb"); if (!f) return;
+        std::string all; char buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) all.append(buf, n); fclose(f);
+        size_t pos = 0; while (pos < all.size()) { size_t e = all.find(0x0a, pos); if (e == std::string::npos) e = all.size(); std::string line = all.substr(pos, e - pos); pos = e + 1; size_t t = line.find(0x09); if (t == std::string::npos) continue;
+            std::string txt = line.substr(t + 1), out; for (size_t i = 0; i < txt.size(); i++) { unsigned char c = (unsigned char)txt[i];
+                if (c == 0x5c && i + 1 < txt.size() && txt[i + 1] == 'n') { out += (char)0x0a; i++; }
+                else if (c < 0x80) out += (char)c; else if ((c & 0xe0) == 0xc0 && i + 1 < txt.size()) { unsigned cp = ((c & 0x1f) << 6) | ((unsigned char)txt[i + 1] & 0x3f); i++; out += cp < 256 ? (char)cp : '?'; } else { while (i + 1 < txt.size() && ((unsigned char)txt[i + 1] & 0xc0) == 0x80) i++; out += '?'; } }
+            strs[atoi(line.substr(0, t).c_str())] = out; }
+    }   // Android title screen art (tools/export_android_ui.py)
     // Audio: one callback-driven mixer (looped music stream + one-shot SFX voices), device format 44.1 kHz stereo s16.
     SDL_AudioDeviceID adev = 0; // Music: the 15 songs of the original (song n = mobile file Mnn = Dreamcast CD track n+4). Loaded on demand; loops from the end of the disc's 2 s lead-in over the length of the mobile file (the disc stores four repetitions of some songs).
     struct Song { std::vector<int16_t> pcm; size_t loopStart = 0, loopEnd = 0; bool loop = true, tried = false; }; Song songs[15]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
@@ -89,7 +101,8 @@ struct App {
         std::string ret = root + "/ret_all/";
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
-        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); }
+        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0103", mbg) && loadSheet(ret2 + "a0113", mbtn); loadStrings(); }
+        loadFontMetrics();
         loadAudio();
         return true;
     }
@@ -140,9 +153,16 @@ struct App {
         std::string s = std::to_string(v); int cx = x;
         for (char c : s) { const SDL_Rect& fr = digits.fr[c - '0']; int w = fr.w * hgt / fr.h; SDL_Rect d{cx, y, w, hgt}; SDL_RenderCopy(ren, digits.tex, &fr, &d); cx += w + 2; }
     }
-    int textWidth(const std::string& s, int hgt) { int w = 0; for (unsigned char c : s) { const SDL_Rect& fr = font.fr[c]; w += fr.h ? fr.w * hgt / fr.h : hgt / 2; w += 1; } return w; }
-    void text(const std::string& s, int x, int y, int hgt) {              // glyph sheet r0023: frame = character code
-        for (unsigned char c : s) { const SDL_Rect& fr = font.fr[c]; if (!fr.h) { x += hgt / 2; continue; } int w = fr.w * hgt / fr.h; SDL_Rect d{x, y, w, hgt}; SDL_RenderCopy(ren, font.tex, &fr, &d); x += w + 1; }
+    // Glyph sheet r0023 (frame = character code). Per-glyph record (36 bytes): u0 v0 u1 v1 floats, then int16 w, h, 64, 64, xoff, yoff (drawn at pen + offset, line top at y): the pen advances by xoff + w.
+    // hgt is the cap height in pixels (cap glyphs are 39 sheet pixels tall).
+    struct GlyphMet { int w = 0, h = 0, xo = 0, yo = 0; }; GlyphMet gm[256];
+    void loadFontMetrics() { FILE* f = fopen((root + "/ret_all/r0023.frames.bin").c_str(), "rb"); if (!f) return; uint32_t n = 0; if (fread(&n, 4, 1, f) != 1) { fclose(f); return; }
+        for (uint32_t i = 0; i < n && i < 256; i++) { uint8_t rec[36]; if (fread(rec, 1, 36, f) != 36) break; int16_t v[10]; memcpy(v, rec + 16, 20); gm[i] = {v[0], v[1], v[4], v[5]}; } fclose(f); }
+    int textWidth(const std::string& s, int hgt) { float sc = hgt / 39.0f, w = 0; for (unsigned char c : s) w += gm[c].h ? (gm[c].xo + gm[c].w) * sc : 20 * sc; return (int)w; }
+    void text(const std::string& s, int x, int y, int hgt) {
+        float sc = hgt / 39.0f, pen = (float)x;
+        for (unsigned char c : s) { const SDL_Rect& fr = font.fr[c]; const GlyphMet& g = gm[c]; if (!fr.h) { pen += 20 * sc; continue; }
+            SDL_Rect d{(int)std::lround(pen + g.xo * sc), (int)std::lround(y + (g.yo - 12) * sc), (int)std::lround(g.w * sc), (int)std::lround(g.h * sc)}; SDL_RenderCopy(ren, font.tex, &fr, &d); pen += (g.xo + g.w) * sc; }
     }
     void board(const Stage& st) {
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
@@ -218,20 +238,28 @@ struct TitleMode : Screen {
 
 // ---------------------------------------------------------------- menu
 struct MenuMode : Screen {
-    int sel = 0; const char* chosen = nullptr; static constexpr int N = 3; const char* items[N] = {"PUZZLE", "BATTLE", "QUIT"};
+    // Original main menu, phone layout (docs/ui_art.md): five 200x38 bars (purple, orange when selected = frames 0/1 of the button atlas) at (35,50) (75,100) (115,150) (155,200) (195,250); labels are the
+    // localized strings 0152 The Basics, 0153 Puzzle, 0154 Stage Challenge, 0155 Battle, 0157 Options, drawn centred in the bar. Only Puzzle and Battle exist in this game so far.
+    int sel = 1; const char* chosen = nullptr; bool back = false; static constexpr int N = 5; static constexpr int sid[N] = {152, 153, 154, 155, 157}; static constexpr int bx[N] = {35, 75, 115, 155, 195}, by[N] = {50, 100, 150, 200, 250};
+    bool avail(int i) const { return i == 1 || i == 3; }
     int music() override { return 0; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
-            if (k == SDLK_DOWN) sel = (sel + 1) % N; else if (k == SDLK_UP) sel = (sel + N - 1) % N; else if (k == SDLK_RETURN || k == SDLK_SPACE) choose(a); }
-        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) { float lx, ly; SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
-            for (int i = 0; i < N; i++) if (ly > 250 + i * 90 && ly < 250 + i * 90 + 70) { sel = i; choose(a); } }
+            if (k == SDLK_DOWN) sel = (sel + 1) % N; else if (k == SDLK_UP) sel = (sel + N - 1) % N; else if (k == SDLK_RETURN || k == SDLK_SPACE) choose(a); else if (k == SDLK_ESCAPE) back = true; }
+        else if (e.type == SDL_MOUSEMOTION || (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT)) {
+            int mx = e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, my = e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y;
+            SDL_RenderSetLogicalSize(a.ren, 480, 320); float lx, ly; SDL_RenderWindowToLogical(a.ren, mx, my, &lx, &ly); SDL_RenderSetLogicalSize(a.ren, W, H);
+            for (int i = 0; i < N; i++) if (lx >= bx[i] && lx < bx[i] + 200 && ly >= by[i] && ly < by[i] + 38) { sel = i; if (e.type == SDL_MOUSEBUTTONDOWN) choose(a); } }
     }
-    void choose(App& a) { if (sel == 2) a.quit = true; else chosen = items[sel]; }
-    const char* next() override { const char* c = chosen; chosen = nullptr; return c; }
+    void choose(App& a) { if (sel == 1) chosen = "PUZZLE"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
+    const char* next() override { if (back) { back = false; return "TITLE"; } const char* c = chosen; chosen = nullptr; return c; }
     void draw(App& a, float) override {
-        SDL_SetRenderDrawColor(a.ren, 24, 24, 60, 255); SDL_RenderClear(a.ren);
-        std::string title = "CHUCHU ROCKET!"; a.text(title, (W - a.textWidth(title, 64)) / 2, 90, 64);
-        for (int i = 0; i < N; i++) { std::string s = items[i]; int h = i == sel ? 56 : 44; a.text(s, (W - a.textWidth(s, h)) / 2, 260 + i * 90, h); }
+        if (!a.menuOk) { SDL_SetRenderDrawColor(a.ren, 24, 24, 60, 255); SDL_RenderClear(a.ren); return; }
+        SDL_RenderSetLogicalSize(a.ren, 480, 320); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        SDL_Rect bs{0, 0, 480, 320}; SDL_RenderCopy(a.ren, a.mbg.tex, &bs, &bs);
+        for (int i = 0; i < N; i++) { const SDL_Rect& f = a.mbtn.fr[i == sel ? 1 : 0]; SDL_Rect d{bx[i], by[i], f.w, f.h}; SDL_RenderCopy(a.ren, a.mbtn.tex, &f, &d);
+            const std::string& t = a.str(sid[i]); int h = 22; int tw = a.textWidth(t, h); const int room = f.w - 40; if (tw > room) { h = h * room / tw; tw = a.textWidth(t, h); } a.text(t, bx[i] + (f.w - tw) / 2, by[i] + (f.h - h) / 2 - 1, h); }
+        SDL_RenderSetLogicalSize(a.ren, W, H);
     }
 };
 

@@ -20,16 +20,17 @@ def find(root, rec):
 def main(root, out):
     os.makedirs(out, exist_ok=True)
     whole = lambda w, h: [(0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0)]
-    for rec, name in ((90, 'a0090'), (97, 'a0097'), (100, 'a0100')):      # title background, "TAP THE SCREEN!" prompt, orbiting rocket
+    for rec, name in ((90, 'a0090'), (97, 'a0097'), (100, 'a0100'), (103, 'a0103')):      # title background, "TAP THE SCREEN!" prompt, orbiting rocket, menu background (unverified choice)
         p = find(root, rec)
         if p:
             im = Image.open(p); write_sheet(out, name, im, whole(*im.size)); print(name, os.path.basename(p))
-    p = find(root, 42)                                                     # logo atlas + frame table record 0049 (4 + 36 n bytes)
-    if p:
-        im = Image.open(p); data = open(os.path.join(root, 'libccrjni', 'main', '0049.bin'), 'rb').read(); n = struct.unpack_from('<I', data, 0)[0]
-        assert len(data) == 4 + 36 * n, 'unexpected frame table layout'
-        frames = [struct.unpack_from('<9f', data, 4 + 36 * i) for i in range(n)]
-        write_sheet(out, 'a0042', im, frames); print('a0042', os.path.basename(p), n, 'frames')
+    for rec, nxt, name in ((42, 49, 'a0042'), (113, 115, 'a0113')):          # atlases + the frame table record that follows them (4 + 36 n bytes): logo atlas, menu button bars
+        p = find(root, rec)
+        if p:
+            im = Image.open(p); data = open(os.path.join(root, 'libccrjni', 'main', '%04d.bin' % nxt), 'rb').read(); n = struct.unpack_from('<I', data, 0)[0]
+            assert len(data) == 4 + 36 * n, 'unexpected frame table layout'
+            frames = [struct.unpack_from('<9f', data, 4 + 36 * i) for i in range(n)]
+            write_sheet(out, name, im, frames); print(name, os.path.basename(p), n, 'frames')
 
 if __name__ == '__main__':
     main(sys.argv[1], sys.argv[2])

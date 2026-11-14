@@ -1,6 +1,6 @@
 """Export the localized UI strings of an extracted Android build (resource .bin files per language folder) to one JSON table {resource id: {lang: text}}.
 Text resources are null-terminated UTF-8 (en/fr/de/es/it); the Japanese resources are 16-bit little-endian glyph codes into the Japanese font sheet and are stored as {"glyphs": [codes]}.
-usage: export_strings.py <libccrjni dir (contains en/ fr/ de/ es/ it/ ja/)> <out.json>   (derived data, never committed)"""
+usage: export_strings.py <libccrjni dir (contains en/ fr/ de/ es/ it/ ja/)> <out.json> [tsv dir: also writes <lang>.tsv, one 'id<TAB>text' line per string, newlines as \n, for the game]   (derived data, never committed)"""
 import glob, json, os, sys
 
 NUL = bytes([0])
@@ -34,6 +34,13 @@ def main(root, out):
             if t:
                 table.setdefault(rid, {})[lang] = t
     json.dump(table, open(out, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    if len(sys.argv) > 3:
+        os.makedirs(sys.argv[3], exist_ok=True)
+        for lang in langs:
+            with open(os.path.join(sys.argv[3], lang + '.tsv'), 'w', encoding='utf-8', newline='\n') as f:
+                for rid, v in sorted(table.items()):
+                    if isinstance(v.get(lang), str):
+                        f.write(rid + '\t' + v[lang].replace('\n', '\\n') + '\n')
     both = sum(1 for v in table.values() if len(v) == len(langs))
     print('languages', langs, '| text resources', len(table), '| present in all languages', both, '->', out)
 
