@@ -19,6 +19,7 @@ struct Env {
     uint8_t ptype[12] = {0};           // 0x03002C90: CPU type per player (3 bytes each, 0 = human)
     uint8_t rank[4] = {0, 1, 2, 3}, order[4] = {0, 1, 2, 3};   // 0x03000508 / 0x0300050C
     int16_t scanv[2] = {0, 0}; uint8_t scanc[2][2] = {{0, 0}, {0, 0}};   // 0x03000500 / 0x03000502 best-cell values, 0x03000504-07 their cells
+    int16_t seed[108] = {0}, tabA[108] = {0}, tabB[108] = {0};   // 0x03002DE0 seed, 0x03000350 and 0x03000428 working tables (heat is the table at 0x03000278)
     uint8_t mode = 0;                  // 0x03002990 game mode
     uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
     int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
@@ -256,5 +257,41 @@ inline bool think(Env& e, int p) {
     }
     if (e.qn <= 2 && (fl & 0x30)) followRule(e, p);
     return finishRule(e, p);
+}
+
+// 0x080091C4: one diffusion pass over the quadrant selected by phase & 0xC: each cell = own value + (open, unblocked neighbours' values >> 3)
+inline void diffuse(Env& e, const int16_t* src, int16_t* dst) {
+    static const uint8_t rects[16] = {0, 6, 0, 4, 6, 12, 0, 4, 0, 6, 4, 9, 6, 12, 4, 9};
+    const uint8_t* r = rects + (e.phase & 0xc); int x0 = r[0], x1 = r[1], y0 = r[2], y1 = r[3];
+    for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) {
+        int xp = 2 * x + 2, yp = 2 * y + 2; uint16_t sum = (uint16_t)src[y * 12 + x];
+        int nx = x + 1 > 11 ? 0 : x + 1;
+        if (e.f(xp + 1 + 27 * yp) == 0 && (e.f((2 * nx + 2) + 27 * yp) & 0xa0) == 0) sum = (uint16_t)(sum + (src[y * 12 + nx] >> 3));
+        nx = x - 1 < 0 ? 11 : x - 1;
+        if (e.f(xp - 1 + 27 * yp) == 0 && (e.f((2 * nx + 2) + 27 * yp) & 0xa0) == 0) sum = (uint16_t)(sum + (src[y * 12 + nx] >> 3));
+        int ny = y + 1 > 8 ? 0 : y + 1;
+        if (e.f(xp + 27 * (yp + 1)) == 0 && (e.f(xp + 27 * (2 * ny + 2)) & 0xa0) == 0) sum = (uint16_t)(sum + (src[ny * 12 + x] >> 3));
+        ny = y - 1 < 0 ? 8 : y - 1;
+        if (e.f(xp + 27 * (yp - 1)) == 0 && (e.f(xp + 27 * (2 * ny + 2)) & 0xa0) == 0) sum = (uint16_t)(sum + (src[ny * 12 + x] >> 3));
+        dst[y * 12 + x] = (int16_t)sum;
+    }
+}
+// 0x080094A0: best (largest, smallest) heat among empty cells; scan runs y 8..0, x 11..0 and keeps the first of equal values
+inline void scanHeat(Env& e) {
+    e.scanv[0] = e.scanv[1] = 0; e.scanc[0][0] = e.scanc[0][1] = e.scanc[1][0] = e.scanc[1][1] = 0;
+    for (int y = 8; y >= 0; y--) for (int x = 11; x >= 0; x--) {
+        int hv = e.heat[y * 12 + x]; if (hv == 0 || !e.empty(x, y)) continue;
+        if (e.scanv[0] < hv) { e.scanv[0] = (int16_t)hv; e.scanc[0][0] = (uint8_t)x; e.scanc[0][1] = (uint8_t)y; }
+        else if (e.scanv[1] > hv) { e.scanv[1] = (int16_t)hv; e.scanc[1][0] = (uint8_t)x; e.scanc[1][1] = (uint8_t)y; }
+    }
+}
+// 0x08009568: the per-frame diffusion step (phase & 3 picks the stage)
+inline void heatStep(Env& e) {
+    switch (e.phase & 3) {
+        case 0: diffuse(e, e.seed, e.tabA); break;
+        case 1: diffuse(e, e.tabA, e.tabB); break;
+        case 2: diffuse(e, e.tabB, e.tabA); break;
+        default: diffuse(e, e.tabA, e.heat); scanHeat(e); break;
+    }
 }
 }

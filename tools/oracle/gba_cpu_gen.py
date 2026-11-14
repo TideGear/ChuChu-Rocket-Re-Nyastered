@@ -7,7 +7,7 @@ from gba_oracle import GBA
 from unicorn.arm_const import *
 from unicorn import UC_HOOK_CODE
 ROM = r'C:\Dev\ChuChu Rocket\analysis\gba\ccr.gba'
-FN = {'neighbour': 0x8009D60, 'area': 0x800A434, 'follow': 0x800A654, 'path': 0x800990C, 'dirdelta': 0x80098A0, 'special': 0x800A854, 'finish': 0x800AA1C, 'think': 0x800AC1C, 'ready': 0x8009D44, 'longest': 0x8009B2C, 'wallclass': 0x8009C80, 'walk': 0x8009A20, 'target': 0x800AAF4}
+FN = {'neighbour': 0x8009D60, 'area': 0x800A434, 'follow': 0x800A654, 'path': 0x800990C, 'dirdelta': 0x80098A0, 'special': 0x800A854, 'finish': 0x800AA1C, 'think': 0x800AC1C, 'heatstep': 0x8009568, 'ready': 0x8009D44, 'longest': 0x8009B2C, 'wallclass': 0x8009C80, 'walk': 0x8009A20, 'target': 0x800AAF4}
 LCG = 0x30001f8
 REC, PHASE, QCNT, QBUF, HEAT, FIELD, CURS, MODE = 0x3000220, 0x3000274, 0x3000260, 0x3000268, 0x3000278, 0x30029a0, 0x3002c68, 0x3002990
 FAKE = 0x3000700
@@ -49,6 +49,8 @@ def main():
             for j in range(qn0):
                 c = rnd.choice(ex) if ex and rnd.random() < 0.6 else (rnd.randrange(12), rnd.randrange(9), rnd.choice([0, 4, 8, 12]))
                 uc.mem_write(QBUF + 4 * j, bytes([c[0], c[1], c[2], 0]))
+        if rule == 'heatstep':
+            for base in (0x3002de0, 0x3000350, 0x3000428): uc.mem_write(base, struct.pack('<108h', *[rnd.choice([0, 0, rnd.randrange(-300, 600), -100, 50, 25]) for _ in range(108)]))
         lcg0 = rnd.randrange(1 << 32); uc.mem_write(LCG, struct.pack('<I', lcg0))
         args = [FAKE, 0, 0, 0]
         if rule == 'path': args = [p, rnd.randrange(-1, 13) & 0xff, rnd.randrange(-1, 10) & 0xff, rnd.choice([0, 4, 8, 12])]
@@ -57,11 +59,12 @@ def main():
         for i, a in enumerate(args): uc.reg_write(UC_ARM_REG_R0 + i, a & 0xffffffff)
         uc.reg_write(UC_ARM_REG_SP, 0x3007e00)
         ret = 0x2000100; uc.mem_write(ret, b'\xfe\xe7'); uc.reg_write(UC_ARM_REG_LR, ret | 1)
+        seed_in = bytes(uc.mem_read(0x3002de0, 216)); a_in = bytes(uc.mem_read(0x3000350, 216)); b_in = bytes(uc.mem_read(0x3000428, 216))
         pushes = []
         hk = uc.hook_add(UC_HOOK_CODE, lambda u, a, sz, d: pushes.append((u.reg_read(UC_ARM_REG_LR) & ~1, bytes(u.mem_read(u.reg_read(UC_ARM_REG_R0), 3)))), begin=0x8009870, end=0x8009871)
         uc.emu_start(fn | 1, ret, count=2000000); uc.hook_del(hk)
         if os.environ.get('GBAPUSH'): print(len(lines) + 1, [(hex(a), list(b)) for a, b in pushes])
         cnt = uc.mem_read(QCNT, 1)[0]; q = bytes(uc.mem_read(QBUF, 4 * 3)); r0 = uc.reg_read(UC_ARM_REG_R0) & 0xffffffff; lcg1 = struct.unpack('<I', bytes(uc.mem_read(LCG, 4)))[0]
-        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(REC + 16 * p + 0xc, 4)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(ARR, 80)) + ' | %d %d %d %d %d %d %d %d' % ((qn0, uc.mem_read(MODE, 1)[0]) + tuple(sv) + tuple(sc)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000508, 8)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3002c90, 12)) + ' | ' + ' '.join(str(b) for b in q) + ' | %d %d %d' % (uc.mem_read(REC + 16 * p + 2, 1)[0], struct.unpack('<H', bytes(uc.mem_read(REC + 16 * p + 8, 2)))[0], uc.mem_read(REC + 16 * p + 0xa, 1)[0]) + ' | %d %d' % (st8, stc) + ' | ' + ' '.join(str(b) for b in uc.mem_read(CURS, 8)))
+        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(REC + 16 * p + 0xc, 4)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(ARR, 80)) + ' | %d %d %d %d %d %d %d %d' % ((qn0, uc.mem_read(MODE, 1)[0]) + tuple(sv) + tuple(sc)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000508, 8)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3002c90, 12)) + ' | ' + ' '.join(str(b) for b in q) + ' | %d %d %d' % (uc.mem_read(REC + 16 * p + 2, 1)[0], struct.unpack('<H', bytes(uc.mem_read(REC + 16 * p + 8, 2)))[0], uc.mem_read(REC + 16 * p + 0xa, 1)[0]) + ' | %d %d' % (st8, stc) + ' | ' + ' '.join(str(b) for b in uc.mem_read(CURS, 8)) + ' | ' + ' '.join(map(str, struct.unpack('<108h', bytes(uc.mem_read(0x3000350, 216))) + struct.unpack('<108h', bytes(uc.mem_read(0x3000428, 216))) + struct.unpack('<108h', bytes(uc.mem_read(0x3000278, 216))))) + ' | ' + ' '.join(map(str, struct.unpack('<108h', seed_in))) + ' | ' + ' '.join(map(str, struct.unpack('<108h', bytes(uc.mem_read(0x3000350, 216)) if False else a_in))) + ' | ' + ' '.join(map(str, struct.unpack('<108h', b_in))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000500, 8)))
     open(out, 'w').write('\n'.join(lines) + '\n'); print('wrote', len(lines), 'cases for', rule)
 main()
