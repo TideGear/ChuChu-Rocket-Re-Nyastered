@@ -24,9 +24,28 @@ def main():
         uc.mem_write(CURS + 2 * p, bytes([px, py]))
         if tgt >= 0 and tgt != p: uc.mem_write(CURS + 2 * tgt, bytes([2 * tx + 2, 2 * ty + 2]))
         uc.mem_write(REC + 16 * p + 1, bytes([flags])); uc.mem_write(REC + 16 * p + 2, bytes([tgt & 0xff]))
-        phase = (phase & ~3) | p if (rule in ('area', 'follow') and rnd.random() < 0.9) else phase; uc.mem_write(PHASE, bytes([phase])); uc.mem_write(QCNT, bytes([0])); uc.mem_write(MODE, bytes([0]))
+        phase = (phase & ~3) | p if (rule in ('area', 'follow') and rnd.random() < 0.9) else phase; uc.mem_write(PHASE, bytes([phase])); uc.mem_write(MODE, bytes([0]))
         uc.mem_write(HEAT, struct.pack('<108h', *heat)); uc.mem_write(FIELD, field)
         uc.mem_write(FAKE, bytes([0, 0, 0, p, 0, 0, 0, 0]))
+        uc.mem_write(QCNT, bytes([0]))
+        ARR = 0x3002c10
+        ex = []
+        for k in range(4):
+            n = rnd.randrange(4); base = ARR + 20 * k; uc.mem_write(base, struct.pack('<h', rnd.randrange(-5, 400))); uc.mem_write(base + 6, bytes([n]))
+            for j in range(n):
+                ax, ay, ad = rnd.randrange(12), rnd.randrange(9), rnd.choice([0, 4, 8, 12])
+                uc.mem_write(base + 7 + 4 * j, bytes([ad])); uc.mem_write(base + 8 + 4 * j, bytes([2 * ax + 2 + rnd.randrange(2), 2 * ay + 2 + rnd.randrange(2)]))
+                ex.append((ax, ay, ad))
+        for k in range(4): uc.mem_write(0x3002c90 + 3 * k, bytes([rnd.choice([0, 0, 1, 2, 3, 4, 5, 6])])); uc.mem_write(0x3000508 + k, bytes([k])); uc.mem_write(0x300050c + k, bytes([k]))
+        order = list(range(4)); rnd.shuffle(order)
+        for k in range(4): uc.mem_write(0x300050c + k, bytes([order[k]])); uc.mem_write(0x3000508 + order[k], bytes([k]))
+        uc.mem_write(REC + 16 * p + 0xc, bytes(4))
+        qn0 = 0
+        if rule == 'finish':
+            qn0 = rnd.randrange(4); uc.mem_write(QCNT, bytes([qn0]))
+            for j in range(qn0):
+                c = rnd.choice(ex) if ex and rnd.random() < 0.6 else (rnd.randrange(12), rnd.randrange(9), rnd.choice([0, 4, 8, 12]))
+                uc.mem_write(QBUF + 4 * j, bytes([c[0], c[1], c[2], 0]))
         lcg0 = rnd.randrange(1 << 32); uc.mem_write(LCG, struct.pack('<I', lcg0))
         args = [FAKE, 0, 0, 0]
         if rule == 'path': args = [p, rnd.randrange(-1, 13) & 0xff, rnd.randrange(-1, 10) & 0xff, rnd.choice([0, 4, 8, 12])]
@@ -39,6 +58,6 @@ def main():
         uc.emu_start(fn | 1, ret, count=2000000); uc.hook_del(hk)
         if os.environ.get('GBAPUSH'): print(len(lines) + 1, [(hex(a), list(b)) for a, b in pushes])
         cnt = uc.mem_read(QCNT, 1)[0]; q = bytes(uc.mem_read(QBUF, 4 * 3)); r0 = uc.reg_read(UC_ARM_REG_R0) & 0xffffffff; lcg1 = struct.unpack('<I', bytes(uc.mem_read(LCG, 4)))[0]
-        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))))
+        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(REC + 16 * p + 0xc, 4)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(ARR, 80)) + ' | %d' % qn0 + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000508, 8)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3002c90, 12)) + ' | ' + ' '.join(str(b) for b in q))
     open(out, 'w').write('\n'.join(lines) + '\n'); print('wrote', len(lines), 'cases for', rule)
 main()

@@ -304,7 +304,8 @@ struct PuzzleMode : Screen {
     int used(int d) const { int n = 0; for (auto& a : sim.arrows) if (a.live && a.dir == d) n++; return n; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
-            if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state >= 2) reset(); }
+            if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); }   /* a cleared stage leads to the next one */
+                else if (state >= 3) reset(); }
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHT) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFT) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); } }
         else if (e.type == SDL_MOUSEBUTTONDOWN && state == 0) {
@@ -331,7 +332,7 @@ struct PuzzleMode : Screen {
         a.entities(sim, prev, running ? alpha : 1.0f);
         for (int d = 0; d < 4; d++) { int x = 12 + d * 100; SDL_Rect bx{x, 9 * CELL + 8, 90, 48}; SDL_SetRenderDrawColor(a.ren, 40, 40, 90, 255); SDL_RenderFillRect(a.ren, &bx);
             a.arrowPx(x + 24, 9 * CELL + 32, d, {250, 220, 40, 255}, 0.7f); a.number(stock[d] - used(d), x + 52, 9 * CELL + 14, 36); }
-        std::string t = state == 2 ? "CLEAR!" : state == 3 ? "MISS" : state == 0 ? "SPACE=GO" : ""; if (!t.empty()) a.text(t, W - a.textWidth(t, 44) - 90, 9 * CELL + 10, 44);
+        std::string t = state == 2 ? "CLEAR! SPACE=NEXT" : state == 3 ? "MISS" : state == 0 ? "SPACE=GO" : ""; if (!t.empty()) a.text(t, W - a.textWidth(t, 44) - 90, 9 * CELL + 10, 44);
         a.number(cur + 1, W - 80, 9 * CELL + 14, 36);
     }
 };
