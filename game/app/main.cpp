@@ -50,6 +50,7 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
+    int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
@@ -295,7 +296,7 @@ struct PuzzleMode : Screen {
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false;
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
-    bool load(const std::string& root, int stage) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, 0)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
+    bool load(const std::string& root, int stage) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, gApp ? gApp->stageSet : 0)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
     void reset() {
         sim.load(stages.list[cur].st); prev.clear(); if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
@@ -342,26 +343,27 @@ struct PuzzleMode : Screen {
 struct StageSelectMode : Screen {
     Stages stages; int cur = 0, page = 0; bool go = false, back = false; static constexpr int COLS = 5, ROWS = 4, PER = COLS * ROWS;
     int music() override { return 0; }
-    bool load(const std::string& root, int start) { if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, 0)) return false; cur = start % (int)stages.list.size(); page = cur / PER; return true; }
+    std::string rootDir; bool load(const std::string& root, int start) { rootDir = root; if (!loadStages((root + "/gba/gba_stages.bin").c_str(), stages, gApp ? gApp->stageSet : 0)) return false; cur = start % (int)stages.list.size(); page = cur / PER; return true; }
     void event(App&, const SDL_Event& e) override {
         if (e.type != SDL_KEYDOWN) return; int n = (int)stages.list.size(); SDL_Keycode k = e.key.keysym.sym;
         if (k == SDLK_RIGHT) cur = (cur + 1) % n; else if (k == SDLK_LEFT) cur = (cur + n - 1) % n;
         else if (k == SDLK_DOWN) cur = std::min(n - 1, cur + COLS); else if (k == SDLK_UP) cur = std::max(0, cur - COLS);
         else if (k == SDLK_PAGEDOWN) cur = std::min(n - 1, cur + PER); else if (k == SDLK_PAGEUP) cur = std::max(0, cur - PER);
+        else if (k == SDLK_TAB && gApp) { gApp->stageSet ^= 1; stages = Stages(); load(rootDir, 0); }
         else if (k == SDLK_RETURN || k == SDLK_SPACE) go = true; else if (k == SDLK_ESCAPE) back = true;
         page = cur / PER;
     }
     const char* next() override { if (back) { back = false; return "MENU"; } if (go) { go = false; if (gApp) gApp->nextStage = cur; return "PUZZLE"; } return nullptr; }
     void draw(App& a, float) override {
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
-        a.text("PUZZLE  STAGE SELECT", 24, 14, 34);
+        a.text(gApp && gApp->stageSet ? "PUZZLE  MORE STAGES" : "PUZZLE  STAGE SELECT", 24, 14, 34);
         const int cw = 140, ch = 78, x0 = (W - COLS * cw) / 2, y0 = 80;
         for (int i = 0; i < PER; i++) { int idx = page * PER + i; if (idx >= (int)stages.list.size()) break;
             SDL_Rect r{x0 + (i % COLS) * cw + 4, y0 + (i / COLS) * ch + 4, cw - 8, ch - 8}; bool sel = idx == cur;
             SDL_SetRenderDrawColor(a.ren, sel ? 250 : 40, sel ? 160 : 40, sel ? 30 : 90, 255); SDL_RenderFillRect(a.ren, &r);
             a.number(idx + 1, r.x + 14, r.y + 14, 40); }
         const auto& e = stages.list[cur]; std::string t = e.title; a.text(t, 24, y0 + ROWS * ch + 20, 30);
-        std::string hint = "ARROWS CHOOSE   ENTER PLAY   ESC BACK"; a.text(hint, 24, H - 50, 22);
+        std::string hint = "ARROWS CHOOSE  ENTER PLAY  TAB SET  ESC BACK"; a.text(hint, 24, H - 50, 22);
         std::string pg = std::to_string(page + 1) + "/" + std::to_string(((int)stages.list.size() + PER - 1) / PER); a.text(pg, W - a.textWidth(pg, 26) - 24, 14, 26);
     }
 };
