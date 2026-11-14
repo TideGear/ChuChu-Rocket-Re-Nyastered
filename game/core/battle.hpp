@@ -18,6 +18,7 @@ namespace ccr {
 
 class BattleGame {
 public:
+    bool teamMode = false;                          // Team Battle (GA game type 1): teams are the player parity (0 and 2 against 1 and 3); changes the roulette events' opponents and the rocket shuffle table
     float puku[4] = {1.0f, 1.0f, 1.0f, 1.0f};   // rocket size: RO_RocketSetPukuPuku adds 0.2 (literal 0x3e4ccccd) per mouse entering, capped at 1.5 (0x3fc00000); drawn at value x 0.8 of the sprite. The start value 1.0 is the puzzle manager's init (RO_StartRocketPzManager); the battle manager's init was not read.
     static constexpr int kArrowTtl = 600, kArrowSlots = 3;
     Sim sim; std::unique_ptr<Generator> gen; Scoreboard score; std::unique_ptr<Roulette> roulette;   // table = first 128 draws of a fresh RNG with the battle seed (as verified in roulette_test)
@@ -171,10 +172,21 @@ private:
     void startEvent(int out) {                                            // dispatch: the event task is created; its first exec (state 0) is next frame
         int lim = 0;
         switch (out) { case 0: lim = (int)(600.0f * 2.0f); break; case 1: lim = 599; break; case 2: case 3: lim = 479; break; case 4: lim = 179; break;
-                       case 5: lim = 59; break; case 6: lim = 0; break; default: lim = 239; }
+                       case 5: case 6: lim = 59; break; default: lim = 239; }   // RL_Eve_Hikkoshi and RL_Eve_NekoPresent end when their counter exceeds 0x3b; RL_Eve_Hitorijime when it exceeds 0xef
         int es = sim.allocSlot(-2);                                       // the event task is created first, then the roulette task deletes itself (0x3c6e0..0x3c6f2)
         sim.releaseSlot(roll_.slot); roll_.slot = -1;
         evs_.push_back({out, 0, 0, lim, lastRoller_, es}); event = out;
+    }
+    bool nekoCheck(int roller, int p) const { return roller != p && (!teamMode || ((roller ^ p) & 1)); }   // RL_ENP_CheckNekoire (iOS 0x1d02c) = FUN_0003c9cc (Android)
+    // RO_ShuffleRockets (iOS 0x158a0, Android 0x3b490), local battle path: a permutation chosen by the game time (TI_GetGameTime = frame count): free-for-all table[(t & 0x3f) mod 9], team table[(t & 0xf) mod 5];
+    // rocket i moves to the cell of old rocket perm[i] (FI_ChangeFieldCollisionID(cell, i)) and the position table is permuted the same way. The net-battle path (global mode 0x10, owner list ranking) is not ported.
+    void shuffleRockets() {
+        static const uint8_t ffa[9][4] = {{1,0,3,2},{3,0,1,2},{2,0,3,1},{1,3,0,2},{2,3,0,1},{3,2,0,1},{1,2,3,0},{2,3,1,0},{3,2,1,0}};
+        static const uint8_t team[5][4] = {{1,0,3,2},{2,0,3,1},{1,3,0,2},{3,2,0,1},{2,3,1,0}};
+        int gt = fixedGameTime >= 0 ? fixedGameTime : frame + gtOff;
+        const uint8_t* perm = teamMode ? team[(gt & 0xf) % 5] : ffa[(gt & 0x3f) % 9];
+        int old[4][2]; for (int i = 0; i < 4; i++) { old[i][0] = sim.rocketPos[i][0]; old[i][1] = sim.rocketPos[i][1]; }
+        for (int i = 0; i < 4; i++) { int x = old[perm[i]][0], y = old[perm[i]][1]; sim.rocketOwner[y][x] = (uint8_t)i; sim.rocketPos[i][0] = x; sim.rocketPos[i][1] = y; cpuEnv.rocketX[i] = x; cpuEnv.rocketY[i] = y; }
     }
     void stepRoulette() {
         for (size_t i = 0; i < evs_.size();) {
@@ -187,7 +199,7 @@ private:
                 case 2: charaSpeed = 2.0f; gen->flags = 4; break;                                   // Speed Up
                 case 3: charaSpeed = 0.3f; break;                                                   // Speed Down
                 case 4: for (auto& a : sim.arrows) if (a.live) { a.live = false; sim.refreshCell(a.x, a.y); } gen->flags = 0xF; break;   // Place Arrows Again
-                case 5: gen->flags = 0xF; cursorLock = 1 << 30; charaSpeed = 0.0f; break;           // Everybody Move (rocket shuffle NOT ported)
+                case 5: gen->flags = 0xF; cursorLock = 1 << 30; charaSpeed = 0.0f; shuffleRockets(); if (sfx) sfx(0xc); break;   // Everybody Move: RL_Eve_Hikkoshi: ChuSECall(0xc), prohibit 0xF, RO_ShuffleRockets, cursor lock, speed 0
                 case 6: gen->flags = 0xF; cursorLock = 1 << 30; charaSpeed = 0.0f; break;           // Cat Attack (cat presents NOT ported)
                 default: gen->flags = 4; gen->params().pSpawn = 0.125f; break;                     // Mouse Monopoly (mouse behaviour NOT ported)
                 }
@@ -204,7 +216,8 @@ private:
                 case 2: charaSpeed = 1.0f; gen->flags = 0; break;
                 case 3: charaSpeed = 1.0f; break;
                 case 4: gen->flags = 0; break;
-                case 5: case 6: gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;
+                case 6: if (sfx) sfx(7); for (int p = 0; p < 4; p++) if (nekoCheck(e.rollerPlayer, p) && (!teamMode || p < 2)) { score.catHasCome(p); } updateRanks(); gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;   // RL_Eve_NekoPresent at counter 0x3c: sound 7, SC_CatHasCome for every opponent's rocket (one per team in Team Battle), then RL_Eve_NekoPresentDest
+                case 5: gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;
                 default: gen->flags = 0; gen->params().pSpawn = 0.0125f; break;
                 }
                 applySpeed(); sim.releaseSlot(e.slot); evs_.erase(evs_.begin() + i); if (evs_.empty()) event = -1; continue;

@@ -175,13 +175,15 @@ struct App {
         for (unsigned char c : s) { const SDL_Rect& fr = font.fr[c]; const GlyphMet& g = gm[c]; if (!fr.h) { pen += 20 * sc; continue; }
             SDL_Rect d{(int)std::lround(pen + g.xo * sc), (int)std::lround(y + (g.yo - 12) * sc), (int)std::lround(g.w * sc), (int)std::lround(g.h * sc)}; SDL_RenderCopy(ren, font.tex, &fr, &d); pen += (g.xo + g.w) * sc; }
     }
-    void board(const Stage& st, const float* puku = nullptr) {
+    void board(const Stage& st, const float* puku = nullptr, const Sim* sim = nullptr) {
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
             SDL_Rect dst{c * CELL, r * CELL, CELL, CELL}; SDL_RenderCopy(ren, atlas.tex, &atlas.fr[8 + ((r + c) & 1)], &dst);
             uint8_t t = st.tiles[r * 12 + c];
-            if (t >= 1 && t <= 4) { static const int sph[4] = {20, 21, 22, 23}; SDL_Rect rd = dst; if (puku) { float k = puku[t - 1]; int w = (int)std::lround(CELL * k); rd = SDL_Rect{dst.x + CELL / 2 - w / 2, dst.y + CELL / 2 - w / 2, w, w}; } SDL_RenderCopy(ren, atlas.tex, &atlas.fr[sph[t - 1]], &rd); }
+            if (t >= 1 && t <= 4 && !sim) { static const int sph[4] = {20, 21, 22, 23}; SDL_Rect rd = dst; if (puku) { float k = puku[t - 1]; int w = (int)std::lround(CELL * k); rd = SDL_Rect{dst.x + CELL / 2 - w / 2, dst.y + CELL / 2 - w / 2, w, w}; } SDL_RenderCopy(ren, atlas.tex, &atlas.fr[sph[t - 1]], &rd); }
             if (t >= 5 && t <= 8) SDL_RenderCopy(ren, atlas.tex, &atlas.fr[7], &dst);
         }
+        if (sim) for (int p = 0; p < 4; p++) { static const int sph[4] = {20, 21, 22, 23}; SDL_Rect dst{sim->rocketPos[p][0] * CELL, sim->rocketPos[p][1] * CELL, CELL, CELL}; SDL_Rect rd = dst;   // rockets follow the simulation (Everybody Move moves them)
+            if (puku) { int w = (int)std::lround(CELL * puku[p]); rd = SDL_Rect{dst.x + CELL / 2 - w / 2, dst.y + CELL / 2 - w / 2, w, w}; } SDL_RenderCopy(ren, atlas.tex, &atlas.fr[sph[p]], &rd); }
         SDL_SetRenderDrawColor(ren, 20, 20, 90, 255);
         for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) if (st.hw[r * 12 + c]) { SDL_Rect q{c * CELL - 1, r * CELL - 3, CELL + 2, 6}; SDL_RenderFillRect(ren, &q); }
         for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) if (st.vw[r * 13 + c]) { SDL_Rect q{c * CELL - 3, r * CELL - 1, 6, CELL + 2}; SDL_RenderFillRect(ren, &q); }
@@ -438,7 +440,7 @@ struct BattleMode : Screen {
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
-        a.board(stages.list[cur].st, game.puku);
+        a.board(stages.list[cur].st, game.puku, &game.sim);
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, pcol[ar.owner & 3]);
         a.entities(game.sim, prev, paused ? 1.0f : alpha);
         for (int p = 0; p < 4; p++) if (lv[p] < 0) { SDL_Rect c{curX[p] * CELL + 2, curY[p] * CELL + 2, CELL - 4, CELL - 4}; SDL_SetRenderDrawColor(a.ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderDrawRect(a.ren, &c); }
