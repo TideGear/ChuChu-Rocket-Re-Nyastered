@@ -51,7 +51,7 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn; bool titleOk = false, menuOk = false;
+    Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco; bool titleOk = false, menuOk = false;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
     const std::string& str(int id) { static const std::string none; auto it = strs.find(id); return it == strs.end() ? none : it->second; }
     void loadStrings() {
@@ -101,7 +101,7 @@ struct App {
         std::string ret = root + "/ret_all/";
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
-        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0103", mbg) && loadSheet(ret2 + "a0113", mbtn); loadStrings(); }
+        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); loadStrings(); }
         loadFontMetrics();
         loadAudio();
         return true;
@@ -257,6 +257,7 @@ struct MenuMode : Screen {
         if (!a.menuOk) { SDL_SetRenderDrawColor(a.ren, 24, 24, 60, 255); SDL_RenderClear(a.ren); return; }
         SDL_RenderSetLogicalSize(a.ren, 480, 320); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         SDL_Rect bs{0, 0, 480, 320}; SDL_RenderCopy(a.ren, a.mbg.tex, &bs, &bs);
+        { SDL_Rect dd{11, 3, a.mdeco.w, a.mdeco.h}; SDL_RenderCopy(a.ren, a.mdeco.tex, nullptr, &dd); }   // two-cat decoration (texture id 0x10) at (11,3)
         for (int i = 0; i < N; i++) { const SDL_Rect& f = a.mbtn.fr[i == sel ? 1 : 0]; SDL_Rect d{bx[i], by[i], f.w, f.h}; SDL_RenderCopy(a.ren, a.mbtn.tex, &f, &d);
             const std::string& t = a.str(sid[i]); int h = 22; int tw = a.textWidth(t, h); const int room = f.w - 40; if (tw > room) { h = h * room / tw; tw = a.textWidth(t, h); } a.text(t, bx[i] + (f.w - tw) / 2, by[i] + (f.h - h) / 2 - 1, h); }
         SDL_RenderSetLogicalSize(a.ren, W, H);

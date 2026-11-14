@@ -20,7 +20,7 @@ def find(root, rec):
 def main(root, out):
     os.makedirs(out, exist_ok=True)
     whole = lambda w, h: [(0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0)]
-    for rec, name in ((90, 'a0090'), (97, 'a0097'), (100, 'a0100'), (103, 'a0103')):      # title background, "TAP THE SCREEN!" prompt, orbiting rocket, menu background (unverified choice)
+    for rec, name in ((90, 'a0090'), (97, 'a0097'), (100, 'a0100'), (134, 'a0134'), (110, 'a0110')):      # title background, "TAP THE SCREEN!" prompt, orbiting rocket, menu background (texture id 0x17 = file 023 = rec 0134), menu decoration (id 0x10 = rec 0110)
         p = find(root, rec)
         if p:
             im = Image.open(p); write_sheet(out, name, im, whole(*im.size)); print(name, os.path.basename(p))
