@@ -52,7 +52,7 @@ struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo; bool dlogoOk = false;
-    Sheet pbg, pprompt, procket, pdeco, pbtn; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
+    Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
     const std::string& str(int id) { static const std::string none; auto it = strs.find(id); return it == strs.end() ? none : it->second; }
     void loadStrings() {
@@ -102,7 +102,7 @@ struct App {
         std::string ret = root + "/ret_all/";
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
-        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn); loadStrings(); }
+        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
         loadFontMetrics();
         loadAudio();
         return true;
@@ -242,28 +242,33 @@ struct TitleMode : Screen {
 
 // ---------------------------------------------------------------- menu
 struct MenuMode : Screen {
-    // Original main menu, phone layout (docs/ui_art.md): five 200x38 bars (purple, orange when selected = frames 0/1 of the button atlas) at (35,50) (75,100) (115,150) (155,200) (195,250); labels are the
-    // localized strings 0152 The Basics, 0153 Puzzle, 0154 Stage Challenge, 0155 Battle, 0157 Options, drawn centred in the bar. Only Puzzle and Battle exist in this game so far.
-    int sel = 1; const char* chosen = nullptr; bool back = false; static constexpr int N = 5; static constexpr int sid[N] = {152, 153, 154, 155, 157}; static constexpr int bx[N] = {35, 75, 115, 155, 195}, by[N] = {50, 100, 150, 200, 250};
+    // Original main menu (docs/ui_art.md). iPad class (1024x768; art = iPad HD pack: yellow tile-map background 879, 340-wide bars, cat decoration at (208,50)): items at (184,173) (264,263) (344,353) (424,443) (504,533);
+    // phone class (480x320): 200x38 bars at (35,50) (75,100) (115,150) (155,200) (195,250). Bars are frames 0 (purple) / 1 (orange = selected); labels are the localized strings 0152 The Basics, 0153 Puzzle,
+    // 0154 Stage Challenge, 0155 Battle, 0157 Options, centred in the bar and shrunk to fit. Only Puzzle and Battle exist in this game so far.
+    int sel = 1; const char* chosen = nullptr; bool back = false; static constexpr int N = 5; static constexpr int sid[N] = {152, 153, 154, 155, 157};
+    static constexpr int pbx[N] = {35, 75, 115, 155, 195}, pby[N] = {50, 100, 150, 200, 250}, ibx[N] = {184, 264, 344, 424, 504}, iby[N] = {173, 263, 353, 443, 533};
     bool avail(int i) const { return i == 1 || i == 3; }
     int music() override { return 0; }
+    void geom(App& a, int i, int& x, int& y, int& w, int& h) { if (a.padOk) { const SDL_Rect& f = a.pbtn.fr[0]; x = ibx[i]; y = iby[i]; w = f.w; h = f.h; } else { const SDL_Rect& f = a.mbtn.fr[0]; x = pbx[i]; y = pby[i]; w = f.w; h = f.h; } }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_DOWN) sel = (sel + 1) % N; else if (k == SDLK_UP) sel = (sel + N - 1) % N; else if (k == SDLK_RETURN || k == SDLK_SPACE) choose(a); else if (k == SDLK_ESCAPE) back = true; }
         else if (e.type == SDL_MOUSEMOTION || (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT)) {
             int mx = e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, my = e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y;
-            SDL_RenderSetLogicalSize(a.ren, 480, 320); float lx, ly; SDL_RenderWindowToLogical(a.ren, mx, my, &lx, &ly); SDL_RenderSetLogicalSize(a.ren, W, H);
-            for (int i = 0; i < N; i++) if (lx >= bx[i] && lx < bx[i] + 200 && ly >= by[i] && ly < by[i] + 38) { sel = i; if (e.type == SDL_MOUSEBUTTONDOWN) choose(a); } }
+            SDL_RenderSetLogicalSize(a.ren, a.padOk ? 1024 : 480, a.padOk ? 768 : 320); float lx, ly; SDL_RenderWindowToLogical(a.ren, mx, my, &lx, &ly); SDL_RenderSetLogicalSize(a.ren, W, H);
+            for (int i = 0; i < N; i++) { int x, y, w, h; geom(a, i, x, y, w, h); if (lx >= x && lx < x + w && ly >= y && ly < y + h) { sel = i; if (e.type == SDL_MOUSEBUTTONDOWN) choose(a); } } }
     }
     void choose(App& a) { if (sel == 1) chosen = "PUZZLE"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
     const char* next() override { if (back) { back = false; return "TITLE"; } const char* c = chosen; chosen = nullptr; return c; }
     void draw(App& a, float) override {
         if (!a.menuOk) { SDL_SetRenderDrawColor(a.ren, 24, 24, 60, 255); SDL_RenderClear(a.ren); return; }
-        SDL_RenderSetLogicalSize(a.ren, 480, 320); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
-        SDL_Rect bs{0, 0, 480, 320}; SDL_RenderCopy(a.ren, a.mbg.tex, &bs, &bs);
-        { SDL_Rect dd{11, 3, a.mdeco.w, a.mdeco.h}; SDL_RenderCopy(a.ren, a.mdeco.tex, nullptr, &dd); }   // two-cat decoration (texture id 0x10) at (11,3)
-        for (int i = 0; i < N; i++) { const SDL_Rect& f = a.mbtn.fr[i == sel ? 1 : 0]; SDL_Rect d{bx[i], by[i], f.w, f.h}; SDL_RenderCopy(a.ren, a.mbtn.tex, &f, &d);
-            const std::string& t = a.str(sid[i]); int h = 22; int tw = a.textWidth(t, h); const int room = f.w - 40; if (tw > room) { h = h * room / tw; tw = a.textWidth(t, h); } a.text(t, bx[i] + (f.w - tw) / 2, by[i] + (f.h - h) / 2 - 1, h); }
+        const bool pad = a.padOk; const int LW = pad ? 1024 : 480, LH = pad ? 768 : 320;
+        SDL_RenderSetLogicalSize(a.ren, LW, LH); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        SDL_Rect bs{0, 0, LW, LH}; SDL_RenderCopy(a.ren, (pad ? a.pmbg : a.mbg).tex, nullptr, &bs);
+        { Sheet& dc = pad ? a.pdeco : a.mdeco; SDL_Rect dd{pad ? 208 : 11, pad ? 50 : 3, dc.w, dc.h}; SDL_RenderCopy(a.ren, dc.tex, nullptr, &dd); }   // two-cat decoration
+        Sheet& bt = pad ? a.pbtn : a.mbtn;
+        for (int i = 0; i < N; i++) { int x, y, w, h; geom(a, i, x, y, w, h); const SDL_Rect& f = bt.fr[i == sel ? 1 : 0]; SDL_Rect d{x, y, f.w, f.h}; SDL_RenderCopy(a.ren, bt.tex, &f, &d);
+            const std::string& t = a.str(sid[i]); int th = pad ? 38 : 22; int tw = a.textWidth(t, th); const int room = f.w - (pad ? 70 : 40); if (tw > room) { th = th * room / tw; tw = a.textWidth(t, th); } a.text(t, x + (f.w - tw) / 2, y + (f.h - th) / 2 - 1, th); }
         SDL_RenderSetLogicalSize(a.ren, W, H);
     }
 };
