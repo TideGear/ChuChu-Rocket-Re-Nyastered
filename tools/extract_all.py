@@ -66,6 +66,11 @@ def do_ios(ipa, work, assets, entry):
             r = extract_packs.extract(thin, app, pack, out)
             if r:
                 entry['packs'][pack] = {'records': r[0], 'failed': r[1], 'textures': export_pngs(out, os.path.join(assets, 'ios', safe, pack + '_png'))}
+                import extract_ios_locale                  # language packs: the HUD images with text are there (docs/ui_art.md, image id map)
+                for lg in ('en', 'fr', 'de', 'es', 'it', 'ja'):
+                    if os.path.exists(os.path.join(app, '%s_%s' % (pack, lg))):
+                        try: extract_ios_locale.main(thin, app, pack, lg, os.path.join(assets, 'ios', safe, '%s_%s' % (pack, lg)))
+                        except KeyError: pass
     for sub in ('song', 'sfx'):
         d = os.path.join(app, sub)
         if os.path.isdir(d):
