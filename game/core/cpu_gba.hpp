@@ -13,6 +13,10 @@ struct Env {
     uint8_t qn = 0; uint8_t q[3][4];   // candidate queue
     uint16_t stall[4] = {0, 0, 0, 0};  // record halfword +8: ticks without progress
     int8_t target[4] = {-1, -1, -1, -1}; // record byte +2: the opponent being harassed (-1 none)
+    uint8_t arr[80] = {0};             // 0x03002C10: per player 20 bytes: score halfword, +6 arrow count, then 4-byte arrow entries from +7 (direction) / +8, +9 (cursor pixel position)
+    uint8_t rec[4][4] = {{0}};         // record bytes +0xC..+0xF: the chosen target cell and direction
+    uint8_t ptype[12] = {0};           // 0x03002C90: CPU type per player (3 bytes each, 0 = human)
+    uint8_t rank[4] = {0, 1, 2, 3}, order[4] = {0, 1, 2, 3};   // 0x03000508 / 0x0300050C
     uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
     int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
     int cellX(int p) const { return (uint8_t)((curx[p] - 2) >> 1); }
@@ -146,5 +150,19 @@ inline void followRule(Env& e, int p) {
         bx = x; by = y; bd = dirFromDelta(e, dx, dy); best = sc;
     }
     if (best < thr0) { e.push(bx, by, bd); e.stall[p] = 480; }
+}
+
+// 0x0800AA1C: take the first queued candidate that does not duplicate one of the player's own live arrows (same cell and direction)
+inline bool finishRule(Env& e, int p) {
+    const uint8_t* a = e.arr + 20 * p; int n = a[6];
+    for (int i = 0; i < e.qn; i++) {
+        bool dup = false;
+        for (int k = 0; k < n && !dup; k++) {
+            int ex = (uint8_t)((a[8 + 4 * k] - 2) >> 1), ey = (uint8_t)((a[9 + 4 * k] - 2) >> 1);
+            if (e.q[i][0] == ex && e.q[i][1] == ey && e.q[i][2] == a[7 + 4 * k]) dup = true;
+        }
+        if (!dup) { memcpy(e.rec[p], e.q[i], 4); return true; }
+    }
+    return false;
 }
 }
