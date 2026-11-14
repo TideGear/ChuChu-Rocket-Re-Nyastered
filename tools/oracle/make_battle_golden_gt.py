@@ -8,7 +8,7 @@ import battle_probe as B
 from battle_probe import *
 from unicorn import UC_HOOK_CODE
 d = open(r'C:\Dev\ChuChu Rocket\analysis\extracted\dc_files\ENGLISH\BTSTAGE25.DAT', 'rb').read()
-GT = int(sys.argv[2]) if len(sys.argv) > 2 else 0; ONLY = [int(x) for x in sys.argv[3].split(',')] if len(sys.argv) > 3 and sys.argv[3] != 'all' else None; THR = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0; BCD = int(sys.argv[5], 0) if len(sys.argv) > 5 else 0; OUT = sys.argv[6] if len(sys.argv) > 6 else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'local', 'testdata', 'battle_golden_gt%d.txt' % GT)
+GT = int(sys.argv[2]) if len(sys.argv) > 2 else 0; ONLY = [int(x) for x in sys.argv[3].split(',')] if len(sys.argv) > 3 and sys.argv[3] != 'all' else None; THR = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0; BCD = int(sys.argv[5], 0) if len(sys.argv) > 5 else 0; SPEED = float(os.environ.get('CHARA_SPEED', '1.0')); OUT = sys.argv[6] if len(sys.argv) > 6 else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'local', 'testdata', 'battle_golden_gt%d.txt' % GT)
 out = open(OUT, 'w')
 rl = []
 def hook_rl(ga):
@@ -25,6 +25,7 @@ for idx, seed, use_arrows in cases:
     gens = len([1 for t in tiles if 5 <= t <= 8])
     B.spawns.clear(); rl.clear(); setup_battle(tiles, walls, seed)
     gcall(0x3d2bc)                                              # SC_InitScoreBoard
+    step('GA_SetCharaSpeed', 0x2ee5c, struct.unpack('<I', struct.pack('<f', SPEED))[0])   # CHARA_SPEED env: the speed the roulette events set (2.0 speed up, 0.3 slow down)
     for ga in (0x184c8c, 0x184ca0, 0x184ca8, 0x17518c): o.write(BASE + ga - G, struct.pack('<I', 0))   # roulette globals left over from the previous case (a roll still running at frame 3000 blocked every later case)
     o.write(BASE + 0x17b604 - G, struct.pack('<I', GT)); o.write(BASE + 0x17b600 - G, struct.pack('<I', BCD))   # TI_GetBCDTime
     o.write(BASE + 0x184cac - G, struct.pack('<f', THR) * 128)   # the roulette threshold table (RL_StartRoulette4Manager fills it with random numbers; the harness never starts it); TI_GetGameTime above: the emulated game never advances it

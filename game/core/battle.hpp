@@ -18,6 +18,7 @@ namespace ccr {
 
 class BattleGame {
 public:
+    void setCharaSpeed(float v);   // test harness (defined below)
     bool teamMode = false;                          // Team Battle (GA game type 1): teams are the player parity (0 and 2 against 1 and 3); changes the roulette events' opponents and the rocket shuffle table
     float puku[4] = {1.0f, 1.0f, 1.0f, 1.0f};   // rocket size: RO_RocketSetPukuPuku adds 0.2 (literal 0x3e4ccccd) per mouse entering, capped at 1.5 (0x3fc00000); drawn at value x 0.8 of the sprite. The start value 1.0 is the puzzle manager's init (RO_StartRocketPzManager); the battle manager's init was not read.
     static constexpr int kArrowTtl = 600, kArrowSlots = 3;
@@ -85,11 +86,12 @@ public:
         if (over) return;
         frame++;
         if (!roll_.active) { clock++; int left = roundFrames - clock; if (sfx && left >= 0 && left % 60 == 0 && left / 60 <= 5) sfx(0x13 - left / 60); }   // FourBattleLoop: ChuSECall(0x13 - seconds) as the BCD countdown (mm:ss:ff, ff = 60 Hz frames) reaches 5, 4, 3, 2, 1, 0 s
-        if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr); }
+        if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr, pendingRollSlot_); }
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
         if (genFirst) { gen->frame(frame); spawnPending(true); }
         if (cpuFirst) runCpu();
+        prepareSpeedChange();
         sim.events.clear(); sim.tick();
         for (const Event& e : sim.events) handle(e);
         if (!cpuFirst) runCpu();
@@ -100,6 +102,7 @@ public:
     }
 private:
     size_t spawned_ = 0; int slot_[4][3] = {{-1,-1,-1},{-1,-1,-1},{-1,-1,-1},{-1,-1,-1}}; int ring_[4] = {0,0,0,0};
+    
     void applySpeed() { sim.catSpeed = baseScale * charaSpeed; sim.mouseSpeed = 1.5f * baseScale * charaSpeed; }
     void spawnPending(bool fresh) { for (size_t i = spawned_; i < gen->spawns.size(); i++) { const Spawn& s = gen->spawns[i]; sim.spawn(!s.cat, s.mouseType, s.x, s.y, s.dir, fresh); } spawned_ = gen->spawns.size(); }
     void gbaStart(uint32_t seed) {
@@ -138,7 +141,7 @@ private:
             { float& q = puku[e.player & 3]; q += 0.2f; if (q > 1.5f) q = 1.5f; }
             static const int value[3] = {1, 50, 1};
             score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); gen->mice--; if (e.type == 1) gen->cnt1--;
-            if (e.type == 2) { gen->cnt2--; if (rouletteEnabled) pendingRoll_ = e.player; }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
+            if (e.type == 2) { gen->cnt2--; if (rouletteEnabled) { pendingRoll_ = e.player; pendingRollSlot_ = e.slot; } }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
             break; }
         case Event::MouseEaten: case Event::MouseHole: case Event::MouseGone:
             gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
@@ -159,8 +162,9 @@ private:
     int lastRoller_ = 0, pendingRoll_ = -1;
     struct Ev { int kind, state, count, limit; int rollerPlayer; int slot; };
     std::vector<Ev> evs_;
-    void startRoulette(int p) {
+    void startRoulette(int p, int rollSlot = -1) {
         if (roll_.active) return;
+        cancelEvents(rollSlot);   // a new roll deletes the running event task (measured: GA_SetCharaSpeed(1.0) at the roll frame in the original)
         int rem = std::max(0, (roundFrames - clock) / 60);
         unsigned bcd = (unsigned)(((rem / 60) << 8) | (((rem % 60) / 10) << 4) | (rem % 10));   // minutes:seconds in BCD (TI_GetBCDTime layout still to be confirmed)
         int out = roulette->roll(rankOf(lastRoller_), fixedBcd >= 0 ? (unsigned)fixedBcd : (bcd << 8), fixedGameTime >= 0 ? fixedGameTime : frame + gtOff, -1); roulette->record(out);
@@ -188,6 +192,36 @@ private:
         int old[4][2]; for (int i = 0; i < 4; i++) { old[i][0] = sim.rocketPos[i][0]; old[i][1] = sim.rocketPos[i][1]; }
         for (int i = 0; i < 4; i++) { int x = old[perm[i]][0], y = old[perm[i]][1]; sim.rocketOwner[y][x] = (uint8_t)i; sim.rocketPos[i][0] = x; sim.rocketPos[i][1] = y; cpuEnv.rocketX[i] = x; cpuEnv.rocketY[i] = y; }
     }
+    // Event tasks that call GA_SetCharaSpeed run inside the task pass at their pool slot: announce this frame's change to the simulation so entities with a later slot already use the new speed.
+    void prepareSpeedChange() {
+        for (const Ev& e : evs_) {
+            float v = -1.0f;
+            if (e.state == 0) v = -1.0f;   // the start (state 0) takes effect from the next frame (measured)
+            else if (e.count + 1 > e.limit && e.kind != 0 && e.kind != 1 && e.kind != 4 && e.kind != 7) v = 1.0f;
+            if (v >= 0.0f && e.slot >= 0) { sim.spdSlot = e.slot; sim.spdMouse = 1.5f * baseScale * v; sim.spdCat = baseScale * v; }
+        }
+    }
+    // The destructors of the event tasks (RL_Eve_*Dest): run when the task ends and also when a new roll deletes the running event (RL_RollRoulette4 deletes the task stored in its global).
+    void eventDest(int kind) {
+        switch (kind) {
+        case 0: removeGroup(2, true); gen->flags = 0; gen->catOut = false; break;
+        case 1: gen->flags = 0; gen->params().pSpawn = 0.0125f; gen->catOut = false; break;
+        case 2: charaSpeed = 1.0f; gen->flags = 0; break;
+        case 3: charaSpeed = 1.0f; break;
+        case 4: gen->flags = 0; break;
+        case 5: case 6: gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;
+        default: gen->flags = 0; gen->params().pSpawn = 0.0125f; sim.monopoly = -1; break;   // RL_Eve_HitorijimeDest: prohibit 0, GE_CancelChu2Fever, MO_StopHitorijime
+        }
+    }
+    int pendingRollSlot_ = -1;
+    void cancelEvents(int atSlot) {   // the roll runs in the RideOn task of the mouse that entered the rocket: the speed restore applies from that task's pool slot on
+        if (evs_.empty()) return;
+        float before = charaSpeed;
+        for (const Ev& e : evs_) { eventDest(e.kind); sim.releaseSlot(e.slot); }
+        evs_.clear(); event = -1;
+        if (charaSpeed != before) { sim.spdSlot = atSlot >= 0 ? atSlot : -1; sim.spdMouse = 1.5f * baseScale * charaSpeed; sim.spdCat = baseScale * charaSpeed; if (atSlot < 0) applySpeed(); }
+        else applySpeed();
+    }
     void stepRoulette() {
         for (size_t i = 0; i < evs_.size();) {
             Ev& e = evs_[i]; bool done = false;
@@ -210,16 +244,8 @@ private:
             if (e.kind == 2 && e.count == 300) gen->flags = 0;
             if (e.kind == 0) done = e.count >= e.limit; else done = e.count > e.limit;
             if (done) {
-                switch (e.kind) {
-                case 0: removeGroup(2, true); gen->flags = 0; gen->catOut = false; break;
-                case 1: gen->flags = 0; gen->params().pSpawn = 0.0125f; gen->catOut = false; break;
-                case 2: charaSpeed = 1.0f; gen->flags = 0; break;
-                case 3: charaSpeed = 1.0f; break;
-                case 4: gen->flags = 0; break;
-                case 6: if (sfx) sfx(7); for (int p = 0; p < 4; p++) if (nekoCheck(e.rollerPlayer, p) && (!teamMode || p < 2)) { score.catHasCome(p); } updateRanks(); gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;   // RL_Eve_NekoPresent at counter 0x3c: sound 7, SC_CatHasCome for every opponent's rocket (one per team in Team Battle), then RL_Eve_NekoPresentDest
-                case 5: gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;
-                default: gen->flags = 0; gen->params().pSpawn = 0.0125f; sim.monopoly = -1; break;   // RL_Eve_HitorijimeDest: prohibit 0, GE_CancelChu2Fever, MO_StopHitorijime
-                }
+                if (e.kind == 6) { if (sfx) sfx(7); for (int p = 0; p < 4; p++) if (nekoCheck(e.rollerPlayer, p) && (!teamMode || p < 2)) { score.catHasCome(p); } updateRanks(); }   // RL_Eve_NekoPresent at counter 0x3c: sound 7, SC_CatHasCome for every opponent's rocket (one per team in Team Battle), then its Dest
+                eventDest(e.kind);
                 applySpeed(); sim.releaseSlot(e.slot); evs_.erase(evs_.begin() + i); if (evs_.empty()) event = -1; continue;
             }
             i++;
@@ -239,4 +265,5 @@ private:
     }
     void updateEvent() { stepRoulette(); if (roll_.active && ++roll_.elapsed == 121) { roll_.active = false; startEvent(roll_.outcome); } }
 };
+inline void BattleGame::setCharaSpeed(float v) { charaSpeed = v; applySpeed(); }
 } // namespace ccr

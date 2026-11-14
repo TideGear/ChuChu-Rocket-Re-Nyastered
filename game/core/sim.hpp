@@ -3,6 +3,7 @@
 // Units: world units (1 cell = 15.0), one tick = one original logic step (60 Hz). float32 like the original.
 #pragma once
 #include "angle.hpp"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -48,7 +49,7 @@ struct Entity {
 };
 
 // Events produced in battle mode (consumed by BattleGame).
-struct Event { enum Kind { MouseRocket, CatRocket, MouseEaten, MouseHole, MouseGone } kind; int player; int type; };
+struct Event { enum Kind { MouseRocket, CatRocket, MouseEaten, MouseHole, MouseGone } kind; int player; int type; int slot = -1; };   // slot: pool slot of the task that raised it
 
 struct Result { int mice = 0, saved = 0, killed = 0, cats = 0; bool stuck = false; int ticks = 0; int byCat = 0, byHole = 0, catRocket = 0, broken = 0; };
 
@@ -98,6 +99,7 @@ public:
     std::function<float()> rnd;                   // njRandom (battle): cat respawn picks generator floor(n*0.99*r)
     uint8_t rocketOwner[kRows][kCols] = {};
     int rocketPos[4][2] = {};                     // battle: rocket cell of each player (RO_GetRocketFieldGrid)
+    int spdSlot = -1; float spdMouse = 0, spdCat = 0;   // pending mid-frame speed change (see tick)
     int monopoly = -1;                 // MO_StartHitorijime(player) / -1: the global read by MO_MouseExe's tail and MO_MouseJimeExe
     std::vector<Entity> ents;
     std::vector<Arrow> arrows;
@@ -153,7 +155,16 @@ public:
             if (battle) events.push_back({Event::MouseEaten, 0, m.type});
             if (trace) printf("t=%d mouse eaten at (%.1f,%.1f) cell (%d,%d)\n", now, m.x, m.z, m.gx, m.gy);
         }
-        if (order == 0) { for (auto& e : ents) if (e.alive && !e.done && !e.fresh) { if (e.rocketIn) rocketInTick(e); else step(e); } }
+        if (order == 0 && spdSlot >= 0) {   // a roulette event task changes the character speed this frame: tasks run in pool-slot order, so entities after the event's slot already see the new speed (SmpTskExeServer)
+            std::vector<size_t> idx(ents.size()); for (size_t i = 0; i < idx.size(); i++) idx[i] = i;
+            std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) { return ents[a].slot < ents[b].slot; });
+            bool applied = false;
+            for (size_t i : idx) { Entity& e = ents[i]; if (!applied && e.slot > spdSlot) { mouseSpeed = spdMouse; catSpeed = spdCat; applied = true; }
+                if (e.alive && !e.done && !e.fresh) { if (e.rocketIn) rocketInTick(e); else step(e); } }
+            if (!applied) { mouseSpeed = spdMouse; catSpeed = spdCat; }
+            spdSlot = -1;
+        }
+        else if (order == 0) { for (auto& e : ents) if (e.alive && !e.done && !e.fresh) { if (e.rocketIn) rocketInTick(e); else step(e); } }
         else { for (int pass = 0; pass < 2; pass++) for (auto& e : ents) if (e.alive && !e.done && (e.mouse == ((pass == 0) == (order == 2)))) step(e); }
         resolveCats();
         for (auto& e : ents) e.fresh = false;
@@ -235,7 +246,7 @@ private:
         else {
             tx = (rocketPos[monopoly][0] + 0.5f) * kCell; tz = (rocketPos[monopoly][1] + 0.5f) * kCell;
             float dx = e.x - tx, dz = e.z - tz; float d = std::sqrt(dx * dx + dz * dz);
-            if (d < 2.5f) { events.push_back({Event::MouseRocket, monopoly, e.type}); e.done = true; e.reg = false; scheduleFree(&e - ents.data(), now + 1, false); return; }   // arrives: same as entering the rocket (score, puku, sound 8 for gold)
+            if (d < 2.5f) { events.push_back({Event::MouseRocket, monopoly, e.type, e.slot}); e.done = true; e.reg = false; scheduleFree(&e - ents.data(), now + 1, false); return; }   // arrives: same as entering the rocket (score, puku, sound 8 for gold)
             float f = std::atan2(e.x - tx, tz - e.z); int tgt = (int)(long long)(((double)f * 65536.0) / 6.283184);
             e.angle = (int)adjustAngle(e.angle, tgt, 0x400);
         }
@@ -252,7 +263,7 @@ private:
         if (std::sqrt(ddx * ddx + ddz * ddz) < thr) {            // at a cell centre
             uint32_t f = coll[e.gy][e.gx];
             if (battle && (f & kRocket)) {
-                events.push_back({e.mouse ? Event::MouseRocket : Event::CatRocket, rocketOwner[e.gy][e.gx], e.type});
+                events.push_back({e.mouse ? Event::MouseRocket : Event::CatRocket, rocketOwner[e.gy][e.gx], e.type, e.slot});
                 if (e.mouse || !rnd) e.done = true; else e.rocketIn = true;
                 if (e.mouse) scheduleFree(&e - ents.data(), now + 1, false);       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
                 return;

@@ -28,11 +28,12 @@ int main(int argc, char** argv) {
         }
         int last = (rl.empty() || getenv("FULL")) ? frames : rl[0] - 1;   // FULL=1: compare the whole log with the roulette (and its events) running in the port too
         FILE* dump = (getenv("DUMP") && getenv("DBG") && atoi(getenv("DBG")) == idx) ? fopen(getenv("DUMP"), "w") : nullptr;
-        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = 0.25f; b.rouletteEnabled = getenv("FULL") != nullptr; b.rouletteManager = false; if (getenv("FULL")) { b.fixedGameTime = getenv("GT") ? atoi(getenv("GT")) : 0; b.fixedBcd = getenv("BCD") ? (int)strtol(getenv("BCD"), nullptr, 0) : 0; }  b.debug = getenv("DBG") && atoi(getenv("DBG")) == idx; b.start(stages[idx], (uint32_t)seed); if (getenv("THR")) b.roulette->fillTable((float)atof(getenv("THR")));
+        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = 0.25f; b.rouletteEnabled = getenv("FULL") != nullptr; b.rouletteManager = false; if (getenv("FULL")) { b.fixedGameTime = getenv("GT") ? atoi(getenv("GT")) : 0; b.fixedBcd = getenv("BCD") ? (int)strtol(getenv("BCD"), nullptr, 0) : 0; }  b.debug = getenv("DBG") && atoi(getenv("DBG")) == idx; b.start(stages[idx], (uint32_t)seed); if (getenv("THR")) b.roulette->fillTable((float)atof(getenv("THR"))); if (getenv("SPEED")) b.setCharaSpeed((float)atof(getenv("SPEED")));
         std::vector<std::vector<int>> got; int prev[4] = {0, 0, 0, 0};
         for (int f = 1; f <= last; f++) {
             auto it = pl.find(f); if (it != pl.end()) { bool okp = b.placeArrow(it->second.pl, it->second.x, it->second.y, it->second.d); if (b.debug) printf("PLACE f%d p%d (%d,%d) d%d -> %d coll=%x\n", f, it->second.pl, it->second.x, it->second.y, it->second.d, (int)okp, b.sim.coll[it->second.y][it->second.x]); }
             std::vector<std::pair<float,float>> before; if (dump) for (auto& e : b.sim.ents) before.push_back({e.x, e.z});
+            if (getenv("POSDUMP") && atoi(getenv("POSDUMP")) == idx && seed == (getenv("POSSEED") ? atoi(getenv("POSSEED")) : seed)) { static FILE* pf = fopen(getenv("POSFILE") ? getenv("POSFILE") : "posdump.txt", "w"); fprintf(pf, "F %d\n", f); for (auto& e : b.sim.ents) if (e.mouse && e.alive && !e.done && !e.fresh) fprintf(pf, "M %.6f %.6f\n", e.x, e.z); }
             b.tick();
             if (b.debug && f >= 1410 && f <= 1449) printf("C f%d coll(3,1)=%x\n", f, b.sim.coll[1][3]);
             if (dump) for (size_t k = 0; k < b.sim.ents.size(); k++) { auto& e = b.sim.ents[k]; if (k < before.size() && e.alive && !e.done && !e.rocketIn && (e.x != before[k].first || e.z != before[k].second)) fprintf(dump, "%d %zu %.3f %.3f\n", f, k, e.x, e.z); }
