@@ -98,3 +98,13 @@ endif()
 if(WIN32 AND NOT MSVC)
   target_link_libraries(udp_netplay_test PRIVATE ws2_32)
 endif()
+
+add_executable(angle_test tests/angle_test.cpp)
+if(MSVC)
+  target_compile_options(angle_test PRIVATE /W3 /fp:precise)
+endif()
+
+add_executable(turn_stats tests/turn_stats.cpp)
+if(MSVC)
+  target_compile_options(turn_stats PRIVATE /W3 /fp:precise)
+endif()

@@ -5,6 +5,7 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include "../core/battle.hpp"
+#include "../core/angle.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -148,15 +149,9 @@ struct App {
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
     std::vector<int> angs;
-    void stepAngles(const Sim& sim) {
+    void stepAngles(const Sim& sim) {                       // original turn logic (core/angle.hpp), once per simulation tick
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
-        for (size_t i = 0; i < sim.ents.size(); i++) {
-            const Entity& e = sim.ents[i]; int cur = angs[i] & 0xffff, tgt = (e.heading << 14) & 0xffff; int step = (int)((e.mouse ? sim.mouseSpeed : sim.catSpeed) * 32768.0f / 12.0f);
-            int sub = (int16_t)(uint16_t)(tgt - cur); int diff = sub < 0 ? -sub : sub;               // diffAngle
-            if (diff < 0x7f01) { int d = tgt - cur; if (d > step || d < -step) cur = (cur + (d < 0 ? -step : step)) & 0xffff; else cur = tgt; }   // adjustAngle (numeric, not wrapped: as in the original)
-            else cur = (cur + step) & 0xffff;
-            angs[i] = cur;
-        }
+        for (size_t i = 0; i < sim.ents.size(); i++) { const Entity& e = sim.ents[i]; angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed); }
     }
     void entities(const Sim& sim, std::vector<std::pair<float, float>>& prev, float alpha) {
         while (prev.size() < sim.ents.size()) prev.push_back({sim.ents[prev.size()].x, sim.ents[prev.size()].z});
