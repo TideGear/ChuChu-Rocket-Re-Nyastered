@@ -27,7 +27,7 @@ class CpuPlayer {
 public:
     static constexpr uint32_t kLevelFlags[4] = {0x55, 0x56, 0x48, 0x2a};
     int player = 0; uint32_t flags = 0;
-    int state = 0, timer = 0, cx = 0, cy = 0, tx = 0, ty = 0, dir = 0; uint16_t count = 0;
+    int state = 0, timer = 0, cx = 0, cy = 0, tx = 0, ty = 0, dir = 0; uint16_t count = 0; int branch = 0;   // branch: which decision found the target (1 defend, 2 attack enemy rocket, 3 attack own rocket, 4 random), for tests
     void start(CpuEnv& env, int p, int level) {      // CT_StartCompThink (level 4 = chosen from time and player)
         player = p; if (level == 4) level = (env.globalTime + p) & 3;
         flags = level < 4 ? kLevelFlags[level] : 0; cx = env.rocketX[p]; cy = env.rocketY[p]; state = 0; timer = 0; count = 0;
@@ -44,15 +44,15 @@ public:
             timer++; count++; return;
         }
         bool found = false;
-        if ((flags & 2) || ((flags & 1) && lcg.next() < 0.005f)) found = defendRocket(env);
+        if ((flags & 2) || ((flags & 1) && lcg.next() < 0.005f)) { found = defendRocket(env); if (found) branch = 1; }
         if (!found) {
             bool b = (flags & 0x20) || ((flags & 0x10) && lcg.next() < 0.01f);
-            if (b) found = attack(env, true);
+            if (b) { found = attack(env, true); if (found) branch = 2; }
             if (!found) {
                 bool c = (flags & 8) || ((flags & 4) && lcg.next() < 0.1f);
-                if (c) found = attack(env, false);
+                if (c) { found = attack(env, false); if (found) branch = 3; }
                 if (!found) {
-                    if ((flags & 0x40) && count > 200 && lcg.next() < 0.05f) { randomTarget(env, lcg); found = true; }
+                    if ((flags & 0x40) && count > 200 && lcg.next() < 0.05f) { randomTarget(env, lcg); found = true; branch = 4; }
                     else { dir = 0x10; timer++; count++; return; }
                 }
             }

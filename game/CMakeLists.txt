@@ -108,3 +108,8 @@ add_executable(turn_stats tests/turn_stats.cpp)
 if(MSVC)
   target_compile_options(turn_stats PRIVATE /W3 /fp:precise)
 endif()
+
+add_executable(cpu_dc_gen tests/cpu_dc_gen.cpp)
+if(MSVC)
+  target_compile_options(cpu_dc_gen PRIVATE /W3 /fp:precise)
+endif()
