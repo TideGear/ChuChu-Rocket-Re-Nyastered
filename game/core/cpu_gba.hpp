@@ -17,6 +17,8 @@ struct Env {
     uint8_t rec[4][4] = {{0}};         // record bytes +0xC..+0xF: the chosen target cell and direction
     uint8_t ptype[12] = {0};           // 0x03002C90: CPU type per player (3 bytes each, 0 = human)
     uint8_t rank[4] = {0, 1, 2, 3}, order[4] = {0, 1, 2, 3};   // 0x03000508 / 0x0300050C
+    uint8_t scanv[2][2] = {{0}}; uint8_t scanc[2][2] = {{0}};   // 0x03000500/02 best-cell values (halfwords), 0x03000504/06 cells
+    uint8_t mode = 0;                  // 0x03002990 game mode
     uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
     int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
     int cellX(int p) const { return (uint8_t)((curx[p] - 2) >> 1); }
@@ -164,5 +166,61 @@ inline bool finishRule(Env& e, int p) {
         if (!dup) { memcpy(e.rec[p], e.q[i], 4); return true; }
     }
     return false;
+}
+
+// 0x0800AAF4: choose the opponent to harass (record byte +2); 0xFF = none
+inline void targetRule(Env& e, int p) {
+    e.target[p] = -1;
+    if (e.mode == 1 || e.mode == 6) { e.target[p] = (int8_t)((p + 1) & 3); return; }
+    if (e.mode != 0) return;
+    auto score = [&](int k) { return (int16_t)(e.arr[20 * k] | (e.arr[20 * k + 1] << 8)); };
+    auto human = [&](int k) { return e.ptype[3 * k] == 0; };
+    int rk = e.rank[p];
+    int cand, lead;
+    if (rk == 0 || rk == 3) { int t = e.order[rk == 0 ? 1 : 0]; if (human(t) && score(t) > 0) e.target[p] = (int8_t)t; return; }
+    cand = e.order[rk == 1 ? 2 : 1]; lead = e.order[0];
+    if (human(lead) && score(lead) > 0) { e.target[p] = (int8_t)lead; return; }
+    if (human(cand) && score(cand) > 0) e.target[p] = (int8_t)cand;
+}
+
+static const int8_t kWalk[16] = {1, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0};   // 0x080A94FC and 0x080A950C: 4-byte entries (dx, dy, 0, 0)
+
+// 0x08009B2C: direction code with the longest free run (up to 4 cells), ties broken by a random bit
+inline int longestRun(Env& e, int x, int y) {
+    int best = 0, bestk = 0;
+    for (int k = 0; k < 4; k++) {
+        int dx = kWalk[4 * k], dy = kWalk[4 * k + 1]; int sx = x & 0xff, sy = y & 0xff; int run = 0;
+        while (true) {
+            int lx = 2 * (int8_t)sx + 2 + dx, ly = 2 * (int8_t)sy + 2 + dy;
+            if (e.f(lx + 27 * ly) != 0) break;
+            sx = (sx + dx) & 0xff; sy = (sy + dy) & 0xff; Env::wrap(sx, sy); sx &= 0xff; sy &= 0xff;
+            if (e.f((2 * (int8_t)sx + 2) + 27 * (2 * (int8_t)sy + 2)) & 0x80) break;
+            run++; if (run > 3) break;
+        }
+        if (best < run) { best = run; bestk = k; }
+        else if (best == run && (e.rnd() & 1) == 0) { best = run; bestk = k; }
+    }
+    return (bestk << 2) & 0xff;
+}
+// 0x08009C80: wall classifier: exactly one wall around the cell -> the direction code away from it, otherwise the longest run
+inline int wallClass(Env& e, int x, int y) {
+    int xp = (int8_t)((2 * (int8_t)x + 2) & 0xff), yp = (int8_t)((2 * (int8_t)y + 2) & 0xff); int cnt = 0, dir = 0;
+    if (e.f(xp - 1 + 27 * yp) != 0) cnt = 1;
+    if (e.f(xp + 1 + 27 * yp) != 0) { cnt++; dir = 8; }
+    if (e.f(xp + 27 * (yp - 1)) != 0) { cnt++; dir = 4; }
+    if (e.f(xp + 27 * (yp + 1)) != 0) { cnt++; dir = 12; }
+    if (cnt == 1) return dir;
+    return longestRun(e, x, y);
+}
+// 0x08009A20: from a random start direction, the first direction whose neighbour cell has no wall behind it and no wall flag (0x80)
+inline int randomWalk(Env& e, int x, int y) {
+    int start = e.rnd() & 3, d = start;
+    for (int i = 0; i < 4; i++, d = (d + 1) & 3) {
+        int dx = kWalk[4 * d], dy = kWalk[4 * d + 1]; int nx = ((int8_t)x + dx) & 0xff, ny = ((int8_t)y + dy) & 0xff; Env::wrap(nx, ny); nx &= 0xff; ny &= 0xff;
+        int xp = 2 * (int8_t)nx + 2, yp = 2 * (int8_t)ny + 2;
+        if (e.f((xp - dx) + 27 * (yp - dy)) != 0) continue;
+        if ((e.f(xp + 27 * yp) & 0x80) == 0) return d * 4;
+    }
+    return start * 4;
 }
 }
