@@ -9,7 +9,7 @@ from battle_probe import *
 from unicorn import UC_HOOK_CODE
 d = open(r'C:\Dev\ChuChu Rocket\analysis\extracted\dc_files\ENGLISH\BTSTAGE25.DAT', 'rb').read()
 GT = int(sys.argv[2]) if len(sys.argv) > 2 else 0; ONLY = [int(x) for x in sys.argv[3].split(',')] if len(sys.argv) > 3 and sys.argv[3] != 'all' else None; THR = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0; BCD = int(sys.argv[5], 0) if len(sys.argv) > 5 else 0; OUT = sys.argv[6] if len(sys.argv) > 6 else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'local', 'testdata', 'battle_golden_gt%d.txt' % GT)
-out = open(r'C:\Dev\ChuChu Rocket\local\testdata\battle_golden_gt%d.txt' % GT, 'w')
+out = open(OUT, 'w')
 rl = []
 def hook_rl(ga):
     def cb(uc, a, s, u): rl.append(B.frame_no[0])

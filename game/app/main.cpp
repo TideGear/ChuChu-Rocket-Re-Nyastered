@@ -27,7 +27,7 @@ extern "C" {
 using namespace ccr;
 
 static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
-static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {40, 190, 70, 255}, {240, 60, 60, 255}, {250, 170, 30, 255}};
+static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {250, 170, 30, 255}, {240, 60, 60, 255}, {40, 190, 70, 255}};   // player order of the original art (arrow sheet r0645, cursor sheet r0732, rocket sheets r0651/r0663/r0675/r0687): blue, orange, red, green
 
 struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; };   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
 
@@ -57,6 +57,7 @@ struct App {
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
+    Sheet arw, cur, rk[4]; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -108,6 +109,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
         { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); dpressOk = loadSheet(ret2 + "dpress", dpress); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
@@ -175,26 +177,47 @@ struct App {
         for (unsigned char c : s) { const SDL_Rect& fr = font.fr[c]; const GlyphMet& g = gm[c]; if (!fr.h) { pen += 20 * sc; continue; }
             SDL_Rect d{(int)std::lround(pen + g.xo * sc), (int)std::lround(y + (g.yo - 12) * sc), (int)std::lround(g.w * sc), (int)std::lround(g.h * sc)}; SDL_RenderCopy(ren, font.tex, &fr, &d); pen += (g.xo + g.w) * sc; }
     }
-    void board(const Stage& st, const float* puku = nullptr, const Sim* sim = nullptr) {
-        for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
-            SDL_Rect dst{c * CELL, r * CELL, CELL, CELL}; SDL_RenderCopy(ren, atlas.tex, &atlas.fr[8 + ((r + c) & 1)], &dst);
-            uint8_t t = st.tiles[r * 12 + c];
-            if (t >= 1 && t <= 4 && !sim) { static const int sph[4] = {20, 21, 22, 23}; SDL_Rect rd = dst; if (puku) { float k = puku[t - 1]; int w = (int)std::lround(CELL * k); rd = SDL_Rect{dst.x + CELL / 2 - w / 2, dst.y + CELL / 2 - w / 2, w, w}; } SDL_RenderCopy(ren, atlas.tex, &atlas.fr[sph[t - 1]], &rd); }
-            if (t >= 5 && t <= 8) SDL_RenderCopy(ren, atlas.tex, &atlas.fr[7], &dst);
-        }
-        if (sim) for (int p = 0; p < 4; p++) { static const int sph[4] = {20, 21, 22, 23}; SDL_Rect dst{sim->rocketPos[p][0] * CELL, sim->rocketPos[p][1] * CELL, CELL, CELL}; SDL_Rect rd = dst;   // rockets follow the simulation (Everybody Move moves them)
-            if (puku) { int w = (int)std::lround(CELL * puku[p]); rd = SDL_Rect{dst.x + CELL / 2 - w / 2, dst.y + CELL / 2 - w / 2, w, w}; } SDL_RenderCopy(ren, atlas.tex, &atlas.fr[sph[p]], &rd); }
-        SDL_SetRenderDrawColor(ren, 20, 20, 90, 255);
-        for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) if (st.hw[r * 12 + c]) { SDL_Rect q{c * CELL - 1, r * CELL - 3, CELL + 2, 6}; SDL_RenderFillRect(ren, &q); }
-        for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) if (st.vw[r * 13 + c]) { SDL_Rect q{c * CELL - 3, r * CELL - 1, 6, CELL + 2}; SDL_RenderFillRect(ren, &q); }
+    // Original sprite blit: every frame record carries its anchor offset (the frame is centred on its anchor: -w/2, -h/2); sprites are drawn at native pixels (logical 768x576 field = 64 px cells, as the iPad layout).
+    void blit(Sheet& sh, int frame, float ax, float ay, float scale = 1.0f, double angle = 0.0, int cropTL = 0) {
+        if (frame < 0 || frame >= (int)sh.fr.size()) return;
+        SDL_Rect fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
+        SDL_Rect dst{(int)std::lround(ax + of.x * scale), (int)std::lround(ay + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)};
+        if (cropTL) { fr.x += 1; fr.y += 1; fr.w -= 1; fr.h -= 2; dst.x += 1; dst.y += 1; dst.w -= 1; dst.h -= 2; }   // buildPlayfield copies a tile without its first column and first and last row
+        SDL_Point c{(int)std::lround(-of.x * scale), (int)std::lround(-of.y * scale)};
+        SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, angle, angle != 0.0 ? &c : nullptr, SDL_FLIP_NONE);
     }
-    void arrow(int x, int y, int dir, SDL_Color col) { arrowPx((x + 0.5f) * CELL, (y + 0.5f) * CELL, dir, col, 1.0f); }
-    void arrowPx(float cx, float cy, int dir, SDL_Color col, float sc) {
-        static const float dx[4] = {0, -1, 0, 1}, dy[4] = {1, 0, -1, 0};
-        float ux = dx[dir], uy = dy[dir];
-        float px = -dy[dir], py = dx[dir];
-        SDL_Vertex v[3] = {{{cx + ux * 24 * sc, cy + uy * 24 * sc}, col, {0, 0}}, {{cx - ux * 12 * sc + px * 20 * sc, cy - uy * 12 * sc + py * 20 * sc}, col, {0, 0}}, {{cx - ux * 12 * sc - px * 20 * sc, cy - uy * 12 * sc - py * 20 * sc}, col, {0, 0}}};
-        SDL_RenderGeometry(ren, nullptr, v, 3, nullptr, 0);
+    // Render::buildPlayfield (Android 0x37c50), read from the code: for every cell the floor tile atlas frame 8 + colour * 2 + ((col ^ row) & 1) (a pit, tile 0x11, replaces the floor with frame 7), a rocket cell gets its round base (frame 6), a
+    // generator cell the ring frame table[(col >> 2) + 3 * (row / 3)] (frames 26..34); then every wall edge as a bar of frame wallColor (horizontal, edge row 0..9) or wallColor + 3 (vertical, edge column 0..12), anchored at the edge centre.
+    // Colours by game type (Render::createPlayfieldPreview, 0x38458): free-for-all and team battle: floor {1,3,4,5}[stage & 3], wall 0; challenge: floor 1, wall 1; puzzle: floor (group & 3) + 2, wall 2.
+    void board(const Stage& st, int floorColor = 0, int wallColor = 0) {
+        static const int ring[9] = {0x1b, 0x1c, 0x1d, 0x22, 0x1a, 0x1e, 0x21, 0x20, 0x1f};
+        for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
+            float ax = c * CELL + CELL / 2.0f, ay = r * CELL + CELL / 2.0f; uint8_t t = st.tiles[r * 12 + c];
+            if (t == 0x11) { blit(atlas, 7, ax, ay); continue; }
+            blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
+            if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay);
+            else if (t >= 5 && t <= 8) blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay);
+        }
+        for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) if (st.hw[r * 12 + c]) blit(atlas, wallColor, c * CELL + CELL / 2.0f, (float)(r * CELL));
+        for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) if (st.vw[r * 13 + c]) blit(atlas, wallColor + 3, (float)(c * CELL), r * CELL + CELL / 2.0f);
+    }
+    // In-play rockets: frame 0 (closed sphere) of the owner's rocket sheet at the rocket cell, scale = size value x 0.8 (RO_RocketSetPukuPuku, FUN_0003be00).
+    void rockets(const Sim& sim, const float* puku) {
+        for (int p = 0; p < 4; p++) blit(rk[p], 0, sim.rocketPos[p][0] * CELL + CELL / 2.0f, sim.rocketPos[p][1] * CELL + CELL / 2.0f, (puku ? puku[p] : 1.0f) * 0.8f);
+    }
+    // Arrow sprite (image 0x5f, frame = owner; the art points up, rotated clockwise by the heading); a struck arrow is drawn at 0.7 (AR_ArrowDrawPriority).
+    void arrow(int x, int y, int dir, int owner, int hits = 0, int ttl = -1) {
+        if (ttl >= 0 && !(ttl > 60 || (ttl > 0 && (ttl & 1)))) return;   // in the last 60 ticks the arrow flickers (drawn only on odd ticks)
+        static const double rot[4] = {180.0, 270.0, 0.0, 90.0};   // south, west, north, east
+        blit(arw, owner & 3, (x + 0.5f) * CELL, (y + 0.5f) * CELL, hits ? 0.7f : 1.0f, rot[dir & 3]);
+    }
+    void arrowIcon(float cx, float cy, int dir, int owner, float sc) { static const double rot[4] = {180.0, 270.0, 0.0, 90.0}; blit(arw, owner & 3, cx, cy, sc, rot[dir & 3]); }
+    // Cursor (image 0x6b: frame = player; CU_CursorDrawPriority/DispCursorPriority): scale 1 + 0.1 sin(angle), angle = (player << 14) + 0x1000 per tick (CU_CursorCons, FUN_0002b344); over a cell with an object
+    // (collision bits 0xF00) the square bracket (frame 4) is drawn with scale 1 + 0.075 sin(2 angle) (CU_CursorDrawPrioritySquare).
+    void cursor(int cx, int cy, int player, int ticks, bool bracket) {
+        int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
+        blit(cur, player & 3, ax, ay, 1.0f + 0.1f * (float)std::sin(ang * 6.283185307 / 65536.0));
+        if (bracket) blit(cur, 4, ax, ay, 1.0f + 0.075f * (float)std::sin(2 * ang * 6.283185307 / 65536.0));
     }
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
@@ -345,7 +368,9 @@ struct PuzzleMode : Screen {
             else if (b == SDL_CONTROLLER_BUTTON_Y) putAt(curX, curY, 2); else if (b == SDL_CONTROLLER_BUTTON_A) putAt(curX, curY, 0); else if (b == SDL_CONTROLLER_BUTTON_X) putAt(curX, curY, 1); else if (b == SDL_CONTROLLER_BUTTON_B) putAt(curX, curY, 3);
             else if (b == SDL_CONTROLLER_BUTTON_START) { state = 1; running = true; } }
     }
+    int cticks = 0;
     void tick(App& a) override {
+        cticks++;
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
         if (!running) return;
         sim.tick(); a.stepAngles(sim);
@@ -355,12 +380,13 @@ struct PuzzleMode : Screen {
     const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
-        a.board(stages.list[cur].st);
-        for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, {250, 220, 40, 255});
+        { const int set = gApp ? gApp->stageSet : 0; a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2); }   // puzzle colours (createPlayfieldPreview): floor (level & 3) + 2, wall 2; the extra levels (type 200) floor 1, wall 1
+        a.rockets(sim, nullptr);
+        for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
         a.entities(sim, prev, running ? alpha : 1.0f);
-        if (state == 0) { SDL_Rect c{curX * CELL + 2, curY * CELL + 2, CELL - 4, CELL - 4}; SDL_SetRenderDrawColor(a.ren, 250, 220, 40, 255); SDL_RenderDrawRect(a.ren, &c); }
+        if (state == 0) a.cursor(curX, curY, 0, cticks, (sim.coll[curY][curX] & 0xF00) != 0);
         for (int d = 0; d < 4; d++) { int x = 12 + d * 100; SDL_Rect bx{x, 9 * CELL + 8, 90, 48}; SDL_SetRenderDrawColor(a.ren, 40, 40, 90, 255); SDL_RenderFillRect(a.ren, &bx);
-            a.arrowPx(x + 24, 9 * CELL + 32, d, {250, 220, 40, 255}, 0.7f); a.number(stock[d] - used(d), x + 52, 9 * CELL + 14, 36); }
+            a.arrowIcon(x + 24, 9 * CELL + 32, d, 0, 0.5f); a.number(stock[d] - used(d), x + 52, 9 * CELL + 14, 36); }
         std::string t = state == 2 ? "CLEAR! SPACE=NEXT" : state == 3 ? "MISS" : state == 0 ? "SPACE=GO" : ""; if (!t.empty()) a.text(t, W - a.textWidth(t, 44) - 90, 9 * CELL + 10, 44);
         a.number(cur + 1, W - 80, 9 * CELL + 14, 36);
     }
@@ -440,10 +466,11 @@ struct BattleMode : Screen {
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
-        a.board(stages.list[cur].st, game.puku, &game.sim);
-        for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, pcol[ar.owner & 3]);
+        { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
+        a.rockets(game.sim, game.puku);
+        for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
         a.entities(game.sim, prev, paused ? 1.0f : alpha);
-        for (int p = 0; p < 4; p++) if (lv[p] < 0) { SDL_Rect c{curX[p] * CELL + 2, curY[p] * CELL + 2, CELL - 4, CELL - 4}; SDL_SetRenderDrawColor(a.ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderDrawRect(a.ren, &c); }
+        for (int p = 0; p < 4; p++) if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame, (game.sim.coll[curY[p]][curX[p]] & 0xF00) != 0);
         for (int p = 0; p < 4; p++) { SDL_Rect b{p * (W / 4) + 6, 9 * CELL + 6, W / 4 - 12, 52}; SDL_SetRenderDrawColor(a.ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderFillRect(a.ren, &b);
             a.number(game.score.player[p], b.x + 12, b.y + 8, 36);
             if (game.over) { int rk = game.rankOf(p); const SDL_Rect& fr = a.crowns.fr[rk < 4 ? rk : 3]; int ch = 44, cw = fr.w * ch / fr.h; SDL_Rect d{b.x + b.w - cw - 8, b.y + 4, cw, ch}; SDL_RenderCopy(a.ren, a.crowns.tex, &fr, &d); } }
