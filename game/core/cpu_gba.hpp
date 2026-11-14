@@ -17,7 +17,7 @@ struct Env {
     uint8_t rec[4][4] = {{0}};         // record bytes +0xC..+0xF: the chosen target cell and direction
     uint8_t ptype[12] = {0};           // 0x03002C90: CPU type per player (3 bytes each, 0 = human)
     uint8_t rank[4] = {0, 1, 2, 3}, order[4] = {0, 1, 2, 3};   // 0x03000508 / 0x0300050C
-    uint8_t scanv[2][2] = {{0}}; uint8_t scanc[2][2] = {{0}};   // 0x03000500/02 best-cell values (halfwords), 0x03000504/06 cells
+    int16_t scanv[2] = {0, 0}; uint8_t scanc[2][2] = {{0, 0}, {0, 0}};   // 0x03000500 / 0x03000502 best-cell values, 0x03000504-07 their cells
     uint8_t mode = 0;                  // 0x03002990 game mode
     uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
     int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
@@ -222,5 +222,20 @@ inline int randomWalk(Env& e, int x, int y) {
         if ((e.f(xp + 27 * yp) & 0x80) == 0) return d * 4;
     }
     return start * 4;
+}
+
+// 0x0800A854: the "stuck" rule: a random cell with heat, plus the scan's best cells, one picked at random with a random arrow direction
+inline void specialRule(Env& e, int p) {
+    (void)p; uint8_t lx[16], ly[16]; int n = 0; int x = 0, y = 0;
+    for (int t = 0; t <= 7; t++) {
+        x = (e.rnd() * 3) >> 13; y = (e.rnd() * 9) >> 15;
+        if (e.h(x, y) != 0 && e.empty(x, y)) break;
+    }
+    lx[n] = (uint8_t)x; ly[n++] = (uint8_t)y;
+    if (e.scanv[0] > 0 && e.empty(e.scanc[0][0], e.scanc[0][1])) { lx[n] = e.scanc[0][0]; ly[n++] = e.scanc[0][1]; }
+    if (e.scanv[1] < 0 && e.empty(e.scanc[1][0], e.scanc[1][1])) { lx[n] = e.scanc[1][0]; ly[n++] = e.scanc[1][1]; }
+    int sel = (n * e.rnd()) >> 15; int cx = lx[sel], cy = ly[sel];
+    int dir = (e.rnd() & 1) ? randomWalk(e, (int8_t)cx, (int8_t)cy) : wallClass(e, (int8_t)cx, (int8_t)cy);
+    e.push(cx, cy, dir);
 }
 }

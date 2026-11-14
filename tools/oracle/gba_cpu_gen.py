@@ -40,6 +40,8 @@ def main():
         order = list(range(4)); rnd.shuffle(order)
         for k in range(4): uc.mem_write(0x300050c + k, bytes([order[k]])); uc.mem_write(0x3000508 + order[k], bytes([k]))
         uc.mem_write(REC + 16 * p + 0xc, bytes(4))
+        sv = [rnd.randrange(-50, 50), rnd.randrange(-50, 50)]; sc = [rnd.randrange(12), rnd.randrange(9), rnd.randrange(12), rnd.randrange(9)]
+        uc.mem_write(0x3000500, struct.pack('<hh', *sv)); uc.mem_write(0x3000504, bytes(sc))
         if rule == 'target': uc.mem_write(MODE, bytes([rnd.choice([0, 0, 0, 1, 6, 2])]))
         qn0 = 0
         if rule == 'finish':
@@ -60,6 +62,6 @@ def main():
         uc.emu_start(fn | 1, ret, count=2000000); uc.hook_del(hk)
         if os.environ.get('GBAPUSH'): print(len(lines) + 1, [(hex(a), list(b)) for a, b in pushes])
         cnt = uc.mem_read(QCNT, 1)[0]; q = bytes(uc.mem_read(QBUF, 4 * 3)); r0 = uc.reg_read(UC_ARM_REG_R0) & 0xffffffff; lcg1 = struct.unpack('<I', bytes(uc.mem_read(LCG, 4)))[0]
-        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(REC + 16 * p + 0xc, 4)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(ARR, 80)) + ' | %d %d' % (qn0, uc.mem_read(MODE, 1)[0]) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000508, 8)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3002c90, 12)) + ' | ' + ' '.join(str(b) for b in q) + ' | %d' % uc.mem_read(REC + 16 * p + 2, 1)[0])
+        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))) + ' | ' + ' '.join(str(b) for b in uc.mem_read(REC + 16 * p + 0xc, 4)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(ARR, 80)) + ' | %d %d %d %d %d %d %d %d' % ((qn0, uc.mem_read(MODE, 1)[0]) + tuple(sv) + tuple(sc)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3000508, 8)) + ' | ' + ' '.join(str(b) for b in uc.mem_read(0x3002c90, 12)) + ' | ' + ' '.join(str(b) for b in q) + ' | %d' % uc.mem_read(REC + 16 * p + 2, 1)[0])
     open(out, 'w').write('\n'.join(lines) + '\n'); print('wrote', len(lines), 'cases for', rule)
 main()
