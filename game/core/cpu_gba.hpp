@@ -3,8 +3,6 @@
 #include <cstdint>
 #include <cstring>
 #include <utility>
-#include <cstdio>
-#include <cstdlib>
 namespace gba {
 struct Env {
     uint8_t field[567 + 2];            // wall/occupancy lattice, 27 bytes per row (one border cell); index = (2x+2) + 27*(2y+2) for the cell (x, y)
@@ -39,13 +37,12 @@ inline void neighbourRule(Env& e, int p) {
     for (int sl = 0; sl < 4 && hv[sl] < thr; sl++) {
         int k = ord[sl]; int A = (cx + kOff[2 * k]) & 0xff, B = (cy + kOff[2 * k + 1]) & 0xff;
         int xp = (2 * A + 2) & 0xff, yp = (2 * B + 2) & 0xff;
-        auto at = [&](int j, int xo, int yo) { (void)j; return e.f((xp + xo) + 27 * (yp + yo)); };
-        static int o2 = getenv("O2") ? atoi(getenv("O2")) : 3, o3 = getenv("O3") ? atoi(getenv("O3")) : 0, o4 = getenv("O4") ? atoi(getenv("O4")) : 0, o5 = getenv("O5") ? atoi(getenv("O5")) : 0;
-        if (at(0, kOff[2 * (k + 2)], kOff[2 * (k + 2) + 1])) continue;
-        if (at(0, kOff[2 * (k + 1)], kOff[2 * (k + 1) + 1])) { e.push(A, B, kCand[k + o2]); continue; }
-        if (at(0, 0, kOff[2 * k + 1])) { e.push(A, B, kCand[k + o3]); continue; }
-        if (at(0, kOff[2 * k], kOff[2 * k + 1])) { e.push(A, B, kCand[k + o4]); continue; }
-        e.push(A, B, kCand[k + o5 + (((e.phase >> 2) + p) & 1)]);
+        auto at = [&](int d) { return e.f((xp + kOff[2 * d]) + 27 * (yp + kOff[2 * d + 1])); };   // lattice slot beside the neighbour cell in direction d
+        if (at(k + 2)) continue;                                  // wall between the cursor and this neighbour
+        if (at(k + 1)) { e.push(A, B, kCand[k + 3]); continue; }
+        if (at(k)) { e.push(A, B, kCand[k]); continue; }
+        if (at(k + 3)) { e.push(A, B, kCand[k + 3]); continue; }
+        e.push(A, B, kCand[k + (((e.phase >> 2) + p) & 1)]);
     }
     if (e.qn > 2) return;
     int q = (cx > 5 ? 3 : 0); if (cy <= 3) q = (cx > 5) ? 2 : 1;

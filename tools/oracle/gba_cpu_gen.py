@@ -5,6 +5,7 @@ import os, random, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gba_oracle import GBA
 from unicorn.arm_const import *
+from unicorn import UC_HOOK_CODE
 ROM = r'C:\Dev\ChuChu Rocket\analysis\gba\ccr.gba'
 FN = {'neighbour': 0x8009D60, 'area': 0x800A434, 'follow': 0x800A654}
 REC, PHASE, QCNT, QBUF, HEAT, FIELD, CURS, MODE = 0x3000220, 0x3000274, 0x3000260, 0x3000268, 0x3000278, 0x30029a0, 0x3002c68, 0x3002990
@@ -27,7 +28,10 @@ def main():
         uc.mem_write(FAKE, bytes([0, 0, 0, p, 0, 0, 0, 0]))
         uc.reg_write(UC_ARM_REG_R0, FAKE); uc.reg_write(UC_ARM_REG_SP, 0x3007e00)
         ret = 0x2000100; uc.mem_write(ret, b'\xfe\xe7'); uc.reg_write(UC_ARM_REG_LR, ret | 1)
-        uc.emu_start(fn | 1, ret, count=2000000)
+        pushes = []
+        hk = uc.hook_add(UC_HOOK_CODE, lambda u, a, sz, d: pushes.append((u.reg_read(UC_ARM_REG_LR) & ~1, bytes(u.mem_read(u.reg_read(UC_ARM_REG_R0), 3)))), begin=0x8009870, end=0x8009871)
+        uc.emu_start(fn | 1, ret, count=2000000); uc.hook_del(hk)
+        if os.environ.get('GBAPUSH'): print(len(lines) + 1, [(hex(a), list(b)) for a, b in pushes])
         cnt = uc.mem_read(QCNT, 1)[0]; q = bytes(uc.mem_read(QBUF, 4 * 3))
         lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)))
     open(out, 'w').write('\n'.join(lines) + '\n'); print('wrote', len(lines), 'cases for', rule)
