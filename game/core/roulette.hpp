@@ -22,6 +22,7 @@ public:
         }
         return idx;
     }
+    void fillTable(float v) { for (float& t : table_) t = v; }   // test harness: constant thresholds (the emulated original's table can be written directly)
     void record(int outcome) { lastB = lastA; lastA = outcome; }
 private:
     static constexpr float kWeights[12][8] = {

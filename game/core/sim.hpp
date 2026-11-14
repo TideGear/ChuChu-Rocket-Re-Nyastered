@@ -2,6 +2,7 @@
 // Rules reverse-engineered from the original mobile builds; see docs/rules_*.md.
 // Units: world units (1 cell = 15.0), one tick = one original logic step (60 Hz). float32 like the original.
 #pragma once
+#include "angle.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -43,10 +44,11 @@ struct Entity {
     int type = 0;               // battle mouse type: 0 normal, 1 golden (50 points), 2 roulette
     int heading = 0;            // Dir
     int gx = 0, gy = 0;         // clamped grid cell
+    bool jime = false; int angle = 0;   // Mouse Monopoly (MO_MouseJimeExe): the mouse flies toward the roller's rocket; angle = the task's +0x24 heading angle (16-bit circle)
 };
 
 // Events produced in battle mode (consumed by BattleGame).
-struct Event { enum Kind { MouseRocket, CatRocket, MouseEaten, MouseHole } kind; int player; int type; };
+struct Event { enum Kind { MouseRocket, CatRocket, MouseEaten, MouseHole, MouseGone } kind; int player; int type; };
 
 struct Result { int mice = 0, saved = 0, killed = 0, cats = 0; bool stuck = false; int ticks = 0; int byCat = 0, byHole = 0, catRocket = 0, broken = 0; };
 
@@ -96,6 +98,7 @@ public:
     std::function<float()> rnd;                   // njRandom (battle): cat respawn picks generator floor(n*0.99*r)
     uint8_t rocketOwner[kRows][kCols] = {};
     int rocketPos[4][2] = {};                     // battle: rocket cell of each player (RO_GetRocketFieldGrid)
+    int monopoly = -1;                 // MO_StartHitorijime(player) / -1: the global read by MO_MouseExe's tail and MO_MouseJimeExe
     std::vector<Entity> ents;
     std::vector<Arrow> arrows;
     uint32_t coll[kRows][kCols];
@@ -224,7 +227,22 @@ private:
     void strikeArrow(int x, int y) {                   // AR_CatHitArrow -> AR_StrikeArrow
         for (auto& a : arrows) if (a.live && a.x == x && a.y == y) { if (trace) printf("t=%d cat strikes arrow (%d,%d) hit #%d\n", now, x, y, a.hits + 1); if (++a.hits >= breakAt) { a.live = false; arrowsBroken++; if (trace) printf("t=%d cat breaks arrow at (%d,%d)\n", now, x, y); refresh(x, y); } return; }
     }
+    static float njSin(int a) { static float tab[65536]; static bool built = false; if (!built) { for (int i = 0; i < 65536; i++) tab[i] = (float)std::sin((double)(float)((double)i * 6.283184 * 1.52587890625e-05)); built = true; } return tab[a & 0xffff]; }   // njSin table = njSinOrg (sinf of i * 6.283184 / 65536); libm rounding on the original device not verified
+    static float njCos(int a) { return njSin(a + 0x4000); }   // cos table from njCosOrg: cosf of the same argument; cos(x) = sin(x + pi/2) to within the table's rounding (not verified bit for bit)
+    void jimeStep(Entity& e) {   // MO_MouseJimeExe (iOS 0x1497c)
+        float tx = 90.0f, tz = 67.5f;
+        if (monopoly < 0) { float dx = e.x - tx, dz = e.z - tz; if (180.0f < std::sqrt(dx * dx + dz * dz)) { e.alive = false; e.reg = false; events.push_back({Event::MouseGone, 0, e.type}); scheduleFree(&e - ents.data(), now + 1, false); return; } }
+        else {
+            tx = (rocketPos[monopoly][0] + 0.5f) * kCell; tz = (rocketPos[monopoly][1] + 0.5f) * kCell;
+            float dx = e.x - tx, dz = e.z - tz; float d = std::sqrt(dx * dx + dz * dz);
+            if (d < 2.5f) { events.push_back({Event::MouseRocket, monopoly, e.type}); e.done = true; e.reg = false; scheduleFree(&e - ents.data(), now + 1, false); return; }   // arrives: same as entering the rocket (score, puku, sound 8 for gold)
+            float f = std::atan2(e.x - tx, tz - e.z); int tgt = (int)(long long)(((double)f * 65536.0) / 6.283184);
+            e.angle = (int)adjustAngle(e.angle, tgt, 0x400);
+        }
+        e.x += njSin(e.angle) * -2.5f; e.z += njCos(e.angle) * 2.5f; gridOf(e.x, e.z, e.gx, e.gy); e.reg = false;
+    }
     void step(Entity& e) {
+        if (e.mouse && e.jime) { jimeStep(e); return; }
         const float speed = e.mouse ? mouseSpeed : catSpeed;
         float thr = speed * (e.mouse ? 0.52f : 0.51f);
         if (thr < 0.01f) thr = 0.01f;
@@ -256,6 +274,7 @@ private:
         warp(e);
         gridOf(e.x, e.z, e.gx, e.gy);
         e.reg = true;
+        if (e.mouse && battle && monopoly >= 0) { e.jime = true; e.angle = e.heading << 14; }   // MO_MouseExe tail: ChangeExeFunction(MO_MouseJimeExe) while Mouse Monopoly runs (the collision entry of this tick is still made)
     }
     static float bitsToFloat(uint32_t b) { float f; static_assert(sizeof f == 4, ""); std::memcpy(&f, &b, 4); return f; }
     void rocketInTick(Entity& e) {
@@ -276,11 +295,12 @@ public:
     void resolveNewMice(size_t firstNew) {              // a mouse registers for collision when it is put; a cat only on its first tick (measured)
         for (size_t i = firstNew; i < ents.size(); i++) { Entity& m = ents[i]; if (!m.mouse) continue;
             for (size_t j = 0; j < firstNew; j++) { Entity& c = ents[j]; if (c.mouse || !c.alive || c.done || c.rocketIn) continue;
+                if (m.jime) continue;
                 float ax = c.x - m.x, az = c.z - m.z; if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true; } }
     }
     void resolveCats() {                               // SmpColAnalyze: cat and mouse closer than 5.0 (registered end-of-tick positions)
         for (auto& c : ents) if (!c.mouse && c.alive && !c.done && !c.rocketIn && !c.fresh)
-            for (auto& m : ents) if (m.mouse && m.alive && !m.done && !m.fresh) {
+            for (auto& m : ents) if (m.mouse && m.alive && !m.done && !m.fresh && !m.jime) {
                 float ax = c.x - m.x, az = c.z - m.z;
                 if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true;
             }

@@ -140,7 +140,7 @@ private:
             score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); gen->mice--; if (e.type == 1) gen->cnt1--;
             if (e.type == 2) { gen->cnt2--; if (rouletteEnabled) pendingRoll_ = e.player; }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
             break; }
-        case Event::MouseEaten: case Event::MouseHole:
+        case Event::MouseEaten: case Event::MouseHole: case Event::MouseGone:
             gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
         case Event::CatRocket:
             if (e.player >= 0) { score.catHasCome(e.player); updateRanks(); if (sfx) sfx(7); }            // a cat in a rocket respawns at a generator: it stays 'out'
@@ -201,7 +201,7 @@ private:
                 case 4: for (auto& a : sim.arrows) if (a.live) { a.live = false; sim.refreshCell(a.x, a.y); } gen->flags = 0xF; break;   // Place Arrows Again
                 case 5: gen->flags = 0xF; cursorLock = 1 << 30; charaSpeed = 0.0f; shuffleRockets(); if (sfx) sfx(0xc); break;   // Everybody Move: RL_Eve_Hikkoshi: ChuSECall(0xc), prohibit 0xF, RO_ShuffleRockets, cursor lock, speed 0
                 case 6: gen->flags = 0xF; cursorLock = 1 << 30; charaSpeed = 0.0f; break;           // Cat Attack (cat presents NOT ported)
-                default: gen->flags = 4; gen->params().pSpawn = 0.125f; break;                     // Mouse Monopoly (mouse behaviour NOT ported)
+                default: gen->flags = 4; gen->params().pSpawn = 0.125f; sim.monopoly = e.rollerPlayer; break;   // Mouse Monopoly (RL_Eve_Hitorijime): MO_StartHitorijime(roller), prohibit 4, Chu2 fever; mice convert to MO_MouseJimeExe at the end of their next normal step
                 }
                 applySpeed(); i++; continue;
             }
@@ -218,7 +218,7 @@ private:
                 case 4: gen->flags = 0; break;
                 case 6: if (sfx) sfx(7); for (int p = 0; p < 4; p++) if (nekoCheck(e.rollerPlayer, p) && (!teamMode || p < 2)) { score.catHasCome(p); } updateRanks(); gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;   // RL_Eve_NekoPresent at counter 0x3c: sound 7, SC_CatHasCome for every opponent's rocket (one per team in Team Battle), then RL_Eve_NekoPresentDest
                 case 5: gen->flags = 0; cursorLock = 0; charaSpeed = 1.0f; break;
-                default: gen->flags = 0; gen->params().pSpawn = 0.0125f; break;
+                default: gen->flags = 0; gen->params().pSpawn = 0.0125f; sim.monopoly = -1; break;   // RL_Eve_HitorijimeDest: prohibit 0, GE_CancelChu2Fever, MO_StopHitorijime
                 }
                 applySpeed(); sim.releaseSlot(e.slot); evs_.erase(evs_.begin() + i); if (evs_.empty()) event = -1; continue;
             }

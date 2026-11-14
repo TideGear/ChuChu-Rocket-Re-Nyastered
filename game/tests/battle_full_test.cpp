@@ -26,9 +26,9 @@ int main(int argc, char** argv) {
             else if (line[0] == 'S' && line[1] == ' ') { int f, x, y, d, t; char k[8]; sscanf(line, "S %d %7s %d %d %d %d", &f, k, &x, &y, &d, &t); sp.push_back({f, k[0] == 'c', x, y, d, t}); }
             else if (line[0] == 'R') { int f; sscanf(line, "RL %d", &f); rl.push_back(f); }
         }
-        int last = rl.empty() ? frames : rl[0] - 1;
+        int last = (rl.empty() || getenv("FULL")) ? frames : rl[0] - 1;   // FULL=1: compare the whole log with the roulette (and its events) running in the port too
         FILE* dump = (getenv("DUMP") && getenv("DBG") && atoi(getenv("DBG")) == idx) ? fopen(getenv("DUMP"), "w") : nullptr;
-        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = 0.25f; b.rouletteEnabled = false; b.rouletteManager = false;  b.debug = getenv("DBG") && atoi(getenv("DBG")) == idx; b.start(stages[idx], (uint32_t)seed);
+        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = 0.25f; b.rouletteEnabled = getenv("FULL") != nullptr; b.rouletteManager = false; if (getenv("FULL")) { b.fixedGameTime = getenv("GT") ? atoi(getenv("GT")) : 0; b.fixedBcd = getenv("BCD") ? (int)strtol(getenv("BCD"), nullptr, 0) : 0; }  b.debug = getenv("DBG") && atoi(getenv("DBG")) == idx; b.start(stages[idx], (uint32_t)seed); if (getenv("THR")) b.roulette->fillTable((float)atof(getenv("THR")));
         std::vector<std::vector<int>> got; int prev[4] = {0, 0, 0, 0};
         for (int f = 1; f <= last; f++) {
             auto it = pl.find(f); if (it != pl.end()) { bool okp = b.placeArrow(it->second.pl, it->second.x, it->second.y, it->second.d); if (b.debug) printf("PLACE f%d p%d (%d,%d) d%d -> %d coll=%x\n", f, it->second.pl, it->second.x, it->second.y, it->second.d, (int)okp, b.sim.coll[it->second.y][it->second.x]); }
@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
         { size_t m = 0; bool bad2 = false; for (; m < sp.size() && m < b.gen->spawns.size(); m++) { auto& a = b.gen->spawns[m]; if (sp[m][0] > last) break;
               if (!(a.frame == sp[m][0] && (int)a.cat == sp[m][1] && a.x == sp[m][2] && a.y == sp[m][3] && a.dir == sp[m][4] && a.mouseType == sp[m][5])) { bad2 = true; break; } }
           if (bad2) printf("  stage %d: first spawn divergence #%zu: got f%d cat%d type%d, want f%d cat%d type%d\n", idx, m, b.gen->spawns[m].frame, (int)b.gen->spawns[m].cat, b.gen->spawns[m].mouseType, sp[m][0], sp[m][1], sp[m][5]); if (bad2) printf("     got xy %d,%d d%d want xy %d,%d d%d\n", b.gen->spawns[m].x, b.gen->spawns[m].y, b.gen->spawns[m].dir, sp[m][2], sp[m][3], sp[m][4]); }
+        if (getenv("FULL")) { printf("  case %d seed %d: original rolled at f%d;", idx, seed, rl.empty() ? -1 : rl[0]); printf(" port outcomes:"); for (int o : b.lastRoll) printf(" %d", o); printf("\n"); }
         if (dump) fclose(dump);
         std::vector<std::vector<int>> want; for (auto& s : sc) if (s[0] <= last) want.push_back(s);
         // golden's first row is the initial state (zeros or first frame); drop all-zero rows
