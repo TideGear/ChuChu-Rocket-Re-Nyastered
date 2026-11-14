@@ -7,7 +7,8 @@ from gba_oracle import GBA
 from unicorn.arm_const import *
 from unicorn import UC_HOOK_CODE
 ROM = r'C:\Dev\ChuChu Rocket\analysis\gba\ccr.gba'
-FN = {'neighbour': 0x8009D60, 'area': 0x800A434, 'follow': 0x800A654}
+FN = {'neighbour': 0x8009D60, 'area': 0x800A434, 'follow': 0x800A654, 'path': 0x800990C, 'dirdelta': 0x80098A0, 'special': 0x800A854, 'finish': 0x800AA1C, 'ready': 0x8009D44, 'target': 0x800AAF4}
+LCG = 0x30001f8
 REC, PHASE, QCNT, QBUF, HEAT, FIELD, CURS, MODE = 0x3000220, 0x3000274, 0x3000260, 0x3000268, 0x3000278, 0x30029a0, 0x3002c68, 0x3002990
 FAKE = 0x3000700
 def main():
@@ -23,16 +24,21 @@ def main():
         uc.mem_write(CURS + 2 * p, bytes([px, py]))
         if tgt >= 0 and tgt != p: uc.mem_write(CURS + 2 * tgt, bytes([2 * tx + 2, 2 * ty + 2]))
         uc.mem_write(REC + 16 * p + 1, bytes([flags])); uc.mem_write(REC + 16 * p + 2, bytes([tgt & 0xff]))
-        uc.mem_write(PHASE, bytes([phase])); uc.mem_write(QCNT, bytes([0])); uc.mem_write(MODE, bytes([0]))
+        phase = (phase & ~3) | p if (rule in ('area', 'follow') and rnd.random() < 0.9) else phase; uc.mem_write(PHASE, bytes([phase])); uc.mem_write(QCNT, bytes([0])); uc.mem_write(MODE, bytes([0]))
         uc.mem_write(HEAT, struct.pack('<108h', *heat)); uc.mem_write(FIELD, field)
         uc.mem_write(FAKE, bytes([0, 0, 0, p, 0, 0, 0, 0]))
-        uc.reg_write(UC_ARM_REG_R0, FAKE); uc.reg_write(UC_ARM_REG_SP, 0x3007e00)
+        lcg0 = rnd.randrange(1 << 32); uc.mem_write(LCG, struct.pack('<I', lcg0))
+        args = [FAKE, 0, 0, 0]
+        if rule == 'path': args = [p, rnd.randrange(-1, 13) & 0xff, rnd.randrange(-1, 10) & 0xff, rnd.choice([0, 4, 8, 12])]
+        if rule == 'dirdelta': args = [rnd.randrange(-6, 7) & 0xffffffff, rnd.randrange(-6, 7) & 0xffffffff, 0, 0]
+        for i, a in enumerate(args): uc.reg_write(UC_ARM_REG_R0 + i, a & 0xffffffff)
+        uc.reg_write(UC_ARM_REG_SP, 0x3007e00)
         ret = 0x2000100; uc.mem_write(ret, b'\xfe\xe7'); uc.reg_write(UC_ARM_REG_LR, ret | 1)
         pushes = []
         hk = uc.hook_add(UC_HOOK_CODE, lambda u, a, sz, d: pushes.append((u.reg_read(UC_ARM_REG_LR) & ~1, bytes(u.mem_read(u.reg_read(UC_ARM_REG_R0), 3)))), begin=0x8009870, end=0x8009871)
         uc.emu_start(fn | 1, ret, count=2000000); uc.hook_del(hk)
         if os.environ.get('GBAPUSH'): print(len(lines) + 1, [(hex(a), list(b)) for a, b in pushes])
-        cnt = uc.mem_read(QCNT, 1)[0]; q = bytes(uc.mem_read(QBUF, 4 * 3))
-        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)))
+        cnt = uc.mem_read(QCNT, 1)[0]; q = bytes(uc.mem_read(QBUF, 4 * 3)); r0 = uc.reg_read(UC_ARM_REG_R0) & 0xffffffff; lcg1 = struct.unpack('<I', bytes(uc.mem_read(LCG, 4)))[0]
+        lines.append('%d %d %d %d %d %d %d %d %d | %s | %s | %d %s' % (p, flags, phase, 0, px, py, tx, ty, tgt, ' '.join(map(str, heat)), field.hex(), cnt, ' '.join(str(b) for b in q)) + ' | %d %d %d %s' % (r0, lcg0, lcg1, ' '.join(map(str, args))))
     open(out, 'w').write('\n'.join(lines) + '\n'); print('wrote', len(lines), 'cases for', rule)
 main()

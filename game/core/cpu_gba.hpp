@@ -11,6 +11,10 @@ struct Env {
     uint8_t flags[4];                  // personality bit mask per player
     uint8_t phase = 0;                 // global phase counter
     uint8_t qn = 0; uint8_t q[3][4];   // candidate queue
+    uint32_t lcg = 0;                  // the ROM's random generator state (0x030001F8)
+    int rnd() { lcg = lcg * 1103515245u + 12345u; return (int)((lcg << 1) >> 17); }   // 0x080054F4: 15-bit result
+    int cellX(int p) const { return (uint8_t)((curx[p] - 2) >> 1); }
+    int cellY(int p) const { return (uint8_t)((cury[p] - 2) >> 1); }
     uint8_t f(int idx) const { return (idx < -1 || idx > 567) ? 0 : field[idx + 1]; }
     int16_t h(int x, int y) const { return heat[y * 12 + x]; }
     bool empty(int x, int y) const { int xi = ((x << 1) + 2) & 0xff, yi = ((y << 1) + 2) & 0xff; return (f(xi + 27 * yi) & 0xf0) == 0; }   // 0x08009464
@@ -71,5 +75,53 @@ inline void neighbourRule(Env& e, int p) {
     if (best < lim) {
         int x = cx + 2 * (int8_t)kStep[bestk][0], y = cy + 2 * (int8_t)kStep[bestk][1]; Env::wrap(x, y); e.push(x, y, kStepDir[bestk]);
     }
+}
+
+// 0x080098A0: arrow direction code (0, 4, 8, 12) pointing along the larger offset component; a diagonal draws one random bit
+inline int dirFromDelta(Env& e, int dx, int dy) {
+    static const uint8_t t[8] = {8, 12, 0, 4, 4, 8, 0, 12};
+    dx = (int8_t)dx; dy = (int8_t)dy;
+    if (dx == dy) return t[(dx >= 0 ? 0 : 2) + (e.rnd() & 1)];
+    if (dx == -dy) return t[(dx >= 0 ? 4 : 6) + (e.rnd() & 1)];
+    if (dx > dy) return dx < -dy ? 4 : 8;
+    return dx >= -dy ? 12 : 0;
+}
+// 0x0800990C: walk from (x, y) one cell on in the arrow direction until the cursor's row or column is reached (1) or a wall / blocked cell stops it (0)
+inline bool pathOk(Env& e, int p, int x, int y, int dir) {
+    static const int8_t t[8] = {1, 0, 0, 1, -1, 0, 0, -1};
+    int sl = e.cellX(p), sb = e.cellY(p); int tdx = t[(dir >> 1) & 7], tdy = t[((dir >> 1) & 7) + 1];
+    int sx = (x + tdx) & 0xff, sy = (y + tdy) & 0xff;
+    for (int guard = 0; guard < 64; guard++) {
+        Env::wrap(sx, sy); sx &= 0xff; sy &= 0xff;
+        int lx = (int8_t)((2 * sx + 2) & 0xff), ly = (int8_t)((2 * sy + 2) & 0xff);
+        if (e.f((lx - tdx) + 27 * (ly - tdy)) != 0) return false;
+        if ((tdx == 0 && sy == sb) || (tdy == 0 && sx == sl)) return true;
+        if ((e.f(lx + 27 * ly) & 0xa0) != 0) return false;
+        sx = (sx + tdx) & 0xff; sy = (sy + tdy) & 0xff;
+    }
+    return false;
+}
+// 0x0800A434: area search (only on the player's own turn)
+inline void areaRule(Env& e, int p) {
+    if ((e.phase & 3) != p) return;
+    int cx = e.cellX(p), cy = e.cellY(p); int init = (e.flags[p] & 8) ? 0 : 3; int best = init; int bx = 0, by = 0, bd = 0;
+    static const uint8_t decay[9] = {0, 0, 1, 2, 3, 4, 5, 5, 5};
+    for (int dy = -6; dy <= 6; dy++) {
+        int lim = 6 - (dy < 0 ? -dy : dy);
+        for (int dx = -lim; dx <= lim; dx++) {
+            int x = (cx + dx) & 0xff, y = (cy + dy) & 0xff;
+            if (dx == 0 || dy == 0) { Env::wrap(x, y); x &= 0xff; y &= 0xff; }
+            else if (x > 11 || (int8_t)y < 0 || (int8_t)y > 8) continue;
+            int hv = e.h(x, (int8_t)y);
+            if (!(hv > best)) continue;
+            if (!e.empty(x, y)) continue;
+            int d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy); int sc = (int16_t)hv >> decay[d];
+            if (!(sc > best)) continue;
+            int dir = dirFromDelta(e, dx, dy);
+            if (!pathOk(e, p, (int8_t)x, (int8_t)y, dir)) continue;
+            bx = x; by = y; bd = dir; best = sc;
+        }
+    }
+    if (best > init) e.push(bx, by, bd);
 }
 }
