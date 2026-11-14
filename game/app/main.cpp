@@ -50,6 +50,7 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
+    Sheet tbg, tprompt, trocket, tlogo; bool titleOk = false;   // Android title screen art (tools/export_android_ui.py)
     // Audio: one callback-driven mixer (looped music stream + one-shot SFX voices), device format 44.1 kHz stereo s16.
     SDL_AudioDeviceID adev = 0; // Music: the 15 songs of the original (song n = mobile file Mnn = Dreamcast CD track n+4). Loaded on demand; loops from the end of the disc's 2 s lead-in over the length of the mobile file (the disc stores four repetitions of some songs).
     struct Song { std::vector<int16_t> pcm; size_t loopStart = 0, loopEnd = 0; bool loop = true, tried = false; }; Song songs[15]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
@@ -88,6 +89,7 @@ struct App {
         std::string ret = root + "/ret_all/";
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
+        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); }
         loadAudio();
         return true;
     }
@@ -183,6 +185,36 @@ struct App {
 
 static App* gApp = nullptr;   // for sound hooks
 struct Screen { virtual ~Screen() {} virtual void event(App&, const SDL_Event&) {} virtual void tick(App&) {} virtual void draw(App&, float) {} virtual int music() { return -1; } virtual const char* next() { return nullptr; } };
+
+// ---------------------------------------------------------------- title (Android TitleScreen, phone layout 480x320)
+// State machine and constants read from the original (docs/ui_art.md): state 0xB fade-in 0.5 s (black rectangle, alpha = timer / 500000 * 255), 0xC wait (song 0 plays, the rocket orbits
+// centre (196,110) radius 130 at +1 degree per 60 Hz frame and turns with it, "TAP THE SCREEN!" at (132,251) is visible while the blink timer, +16384 us per frame and wrapping at 500000, is <= 333333),
+// 0xD fade-out 0.5 s after a tap, then the menu. The logo is frame 0 of the logo atlas, placed at (12,28); the background is drawn whole at (0,0).
+struct TitleMode : Screen {
+    int state = 0xB; double timer = 500000.0, blink = 0.0, angle = 0.0; bool leave = false;
+    int music() override { return state == 0xB ? -1 : 0; }
+    void event(App&, const SDL_Event& e) override {
+        if (state == 0xC && (e.type == SDL_KEYDOWN || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_CONTROLLERBUTTONDOWN || e.type == SDL_FINGERDOWN)) { state = 0xD; timer = 0; }
+    }
+    void tick(App&) override {
+        const double dt = 1000000.0 / 60.0;
+        if (state == 0xB) { timer -= dt; if (timer <= 0) { timer = 0; state = 0xC; blink = 0; } }
+        else if (state == 0xC) { angle += 1.0; blink += 16384.0; if (blink >= 500000.0) blink -= 500000.0; }
+        else if (state == 0xD) { timer += dt; if (timer >= 500000.0) { timer = 500000.0; leave = true; } }
+    }
+    const char* next() override { if (leave) { leave = false; return "MENU"; } return nullptr; }
+    void draw(App& a, float alpha) override {
+        SDL_RenderSetLogicalSize(a.ren, 480, 320); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        SDL_Rect bs{0, 0, 480, 320}; SDL_RenderCopy(a.ren, a.tbg.tex, &bs, &bs);
+        double ang = (angle + (state == 0xC ? alpha : 0.0)); const double rad = 0.0174533; const SDL_Rect& rf = a.trocket.fr[0];
+        SDL_Rect rd{(int)std::lround(196.0 + std::cos(ang * rad) * 130.0 - rf.w / 2.0), (int)std::lround(110.0 + std::sin(ang * rad) * 130.0 - rf.h / 2.0), rf.w, rf.h};
+        SDL_RenderCopyEx(a.ren, a.trocket.tex, &rf, &rd, ang + 180.0, nullptr, SDL_FLIP_NONE);
+        const SDL_Rect& lf = a.tlogo.fr[0]; SDL_Rect ld{12, 28, lf.w, lf.h}; SDL_RenderCopy(a.ren, a.tlogo.tex, &lf, &ld);
+        if (state == 0xC && blink <= 333333.0) { const SDL_Rect& pf = a.tprompt.fr[0]; SDL_Rect pd{132, 251, pf.w, pf.h}; SDL_RenderCopy(a.ren, a.tprompt.tex, &pf, &pd); }
+        if (state != 0xC) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)std::max(0.0, std::min(255.0, timer / 500000.0 * 255.0))); SDL_Rect all{0, 0, 480, 320}; SDL_RenderFillRect(a.ren, &all); }
+        SDL_RenderSetLogicalSize(a.ren, W, H);
+    }
+};
 
 // ---------------------------------------------------------------- menu
 struct MenuMode : Screen {
@@ -327,11 +359,12 @@ int main(int argc, char** argv) {
         }
     }
     App app; app.root = root; if (!app.init()) return 2; gApp = &app;
-    std::string start = argc > 1 + shift ? argv[1 + shift] : "menu"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
+    std::string start = argc > 1 + shift ? argv[1 + shift] : "title"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
     int lv[4] = {-1, 3, 3, 3}; if (argc > 4 + shift) { int k = 1; for (const char* p = argv[4 + shift]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
     std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
-        if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); if (!m->load(app.root, stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
+        if ((name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
+        else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); if (!m->load(app.root, stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" || name == "battle") { auto m = std::make_unique<BattleMode>(); memcpy(m->lv, lv, sizeof lv); if (!m->load(app.root, stageNo, seed)) { printf("cannot load battle stages\n"); return false; } mode = std::move(m); }
         else mode = std::make_unique<MenuMode>();
         return true;

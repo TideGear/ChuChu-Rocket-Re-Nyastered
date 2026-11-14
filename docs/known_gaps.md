@@ -3,7 +3,7 @@
 Honest list of what the running game (`ccr.exe`, web build) does not yet do the way the originals do. Each line names the original behaviour, where it is documented, and its state.
 
 ## Looks
-- **Menus/title/HUD are placeholders** (plain text on a flat colour, plain coloured score bars). The original art, layouts and transitions are inventoried in [ui_art.md](ui_art.md); layout constants for the title screen and the state machine are read, the rebuild is not done.
+- **Title screen is real** (original phone layout: background, logo, orbiting rocket, blinking prompt, fades, song 0; `TitleMode` in `game/app`; the prompt still reads "TAP THE SCREEN!" as on the phones, a keyboard/mouse/pad wording is not yet chosen). **Menu and HUD are placeholders** (plain text on a flat colour, plain coloured score bars). The original art, layouts and transitions are inventoried in [ui_art.md](ui_art.md); layout constants for the title screen and the state machine are read, the rebuild is not done.
 - **Roulette is not drawn.** The simulation runs it (wheel timing, events, music, sound), but the 3D wheel at the rocket and the event announcements are not shown ([rules_events.md](rules_events.md)).
 - **Character animation is turning only.** Turning follows the original (verified); walking, rocket entry, hole fall, being eaten, spawning, and win/lose poses are not animated ([animation.md](animation.md)).
 - **Characters/costumes:** only the default characters; no unlockable costumes, no DLC skins ([unlockables.md](unlockables.md), [dlc.md](dlc.md)).
