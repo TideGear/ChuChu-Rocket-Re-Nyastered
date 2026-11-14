@@ -17,7 +17,8 @@ class BattleGame {
 public:
     static constexpr int kArrowTtl = 600, kArrowSlots = 3;
     Sim sim; std::unique_ptr<Generator> gen; Scoreboard score; std::unique_ptr<Roulette> roulette;   // table = first 128 draws of a fresh RNG with the battle seed (as verified in roulette_test)
-    int frame = 0, roundFrames = 60 * 180;       // round length: setting-dependent in the original (not extracted yet)
+    int frame = 0, clock = 0, roundFrames = 60 * 180;   // clock = frames the round countdown has run: it stops while the roulette wheel task is alive (FourBattleLoop phase 2 counts the timers only when RL_GetRoulette4Status() == 0)
+          // round length: setting-dependent in the original (not extracted yet)
     float baseScale = 1.0f;                      // GA_OnGameFlag speed-option multiplier (0.25 with the option unset)
     float charaSpeed = 1.0f;                     // GA_SetCharaSpeed (events scale cat and mouse together); base speeds 1.0 / 1.5
     int event = -1, eventLeft = 0; bool over = false;
@@ -44,7 +45,7 @@ public:
         for (auto& r : slot_) for (int& v : r) v = -1; for (int& v : ring_) v = 0;
         gen.reset(new Generator(cells, seed)); sim.rnd = [this]() { return gen->rng().next(); }; if (rouletteManager) roulette.reset(new Roulette(gen->rng())); else roulette.reset(new Roulette());   // RL_StartRoulette4Manager draws 128 numbers from the shared stream spawned_ = 0; lastRoll.clear();
         frame = 0; over = false; event = -1; eventLeft = 0; charaSpeed = 1.0f; applySpeed();
-        score = Scoreboard(); for (int& r : rank_) r = 0; roll_ = Roll(); evs_.clear(); lastRoller_ = 0; pendingRoll_ = -1; cpuPuts.clear(); cpuLcg.state = (uint32_t)cpuEnv.globalTime;
+        clock = 0; score = Scoreboard(); for (int& r : rank_) r = 0; roll_ = Roll(); evs_.clear(); lastRoller_ = 0; pendingRoll_ = -1; cpuPuts.clear(); cpuLcg.state = (uint32_t)cpuEnv.globalTime;
         cpuEnv.sim = &sim; cpuEnv.gameType = 0;
         for (int p = 0; p < 4; p++) { cpuEnv.rocketX[p] = sim.rocketPos[p][0]; cpuEnv.rocketY[p] = sim.rocketPos[p][1]; }
         cpuEnv.rank = [this](int p) { return rankOf(p); };
@@ -75,6 +76,7 @@ public:
     void tick() {
         if (over) return;
         frame++;
+        if (!roll_.active) { clock++; int left = roundFrames - clock; if (sfx && left >= 0 && left % 60 == 0 && left / 60 <= 5) sfx(0x13 - left / 60); }   // FourBattleLoop: ChuSECall(0x13 - seconds) as the BCD countdown (mm:ss:ff, ff = 60 Hz frames) reaches 5, 4, 3, 2, 1, 0 s
         if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr); }
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
@@ -86,7 +88,7 @@ public:
         updateEvent();                                                     // roulette/event tasks run after the mouse and cat tasks
         sim.buildHeat();                                                   // SmpColAnalyze: heat map seen by the CPU players next frame
         if (!genFirst) { gen->frame(frame); spawnPending(false); }                                                 // entities spawned this frame first move next frame (measured against the original)
-        if (frame >= roundFrames) { over = true; gen->flags = 0xF; }
+        if (clock >= roundFrames) { over = true; gen->flags = 0xF; }
     }
 private:
     size_t spawned_ = 0; int slot_[4][3] = {{-1,-1,-1},{-1,-1,-1},{-1,-1,-1},{-1,-1,-1}}; int ring_[4] = {0,0,0,0};
@@ -122,7 +124,7 @@ private:
     std::vector<Ev> evs_;
     void startRoulette(int p) {
         if (roll_.active) return;
-        int rem = std::max(0, (roundFrames - frame) / 60);
+        int rem = std::max(0, (roundFrames - clock) / 60);
         unsigned bcd = (unsigned)(((rem / 60) << 8) | (((rem % 60) / 10) << 4) | (rem % 10));   // minutes:seconds in BCD (TI_GetBCDTime layout still to be confirmed)
         int out = roulette->roll(rankOf(lastRoller_), fixedBcd >= 0 ? (unsigned)fixedBcd : (bcd << 8), fixedGameTime >= 0 ? fixedGameTime : frame + gtOff, -1); roulette->record(out);
         if (debug) printf("ROLL f%d player %d outcome %d\n", frame, p, out);

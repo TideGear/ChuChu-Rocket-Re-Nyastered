@@ -366,7 +366,7 @@ struct BattleMode : Screen {
     void restart() { game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
-    int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.frame > game.roundFrames - 60 * 30 ? 2 : 1; }
+    int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_CONTROLLERDEVICEADDED) { for (int p = 0; p < 4; p++) if (!pads[p]) { pads[p] = SDL_GameControllerOpen(e.cdevice.which); break; } }
         else if (e.type == SDL_CONTROLLERBUTTONDOWN) { for (int p = 0; p < 4; p++) if (pads[p] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[p])) == e.cbutton.which) padButton(p, e.cbutton.button); }
@@ -390,7 +390,7 @@ struct BattleMode : Screen {
         for (int p = 0; p < 4; p++) { SDL_Rect b{p * (W / 4) + 6, 9 * CELL + 6, W / 4 - 12, 52}; SDL_SetRenderDrawColor(a.ren, pcol[p].r, pcol[p].g, pcol[p].b, 255); SDL_RenderFillRect(a.ren, &b);
             a.number(game.score.player[p], b.x + 12, b.y + 8, 36);
             if (game.over) { int rk = game.rankOf(p); const SDL_Rect& fr = a.crowns.fr[rk < 4 ? rk : 3]; int ch = 44, cw = fr.w * ch / fr.h; SDL_Rect d{b.x + b.w - cw - 8, b.y + 4, cw, ch}; SDL_RenderCopy(a.ren, a.crowns.tex, &fr, &d); } }
-        int rem = game.over ? 0 : (game.roundFrames - game.frame) / 60; int m = rem / 60, sec = rem % 60; int x = W / 2 - 60; const int hgt = 28;
+        int rem = game.over ? 0 : (game.roundFrames - game.clock) / 60; int m = rem / 60, sec = rem % 60; int x = W / 2 - 60; const int hgt = 28;
         auto glyph = [&](int idx) { const SDL_Rect& fr = a.timefont.fr[idx]; int w = fr.w * hgt / fr.h; SDL_Rect d{x, 6, w, hgt}; SDL_RenderCopy(a.ren, a.timefont.tex, &fr, &d); x += w + 1; };
         glyph(m % 10); glyph(10); glyph(sec / 10); glyph(sec % 10);
     }
