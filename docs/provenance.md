@@ -24,3 +24,15 @@ The Dreamcast and GBA files are clean dumps; the iOS .ipa and Android .apk files
 - Audio files (music and effects) are byte-identical in every iOS build and the Android builds, which also matches the Dreamcast CD audio mapping ([audio.md](audio.md)).
 - Game-logic code of Android 1.14/1.15 and iOS 1.0.2/HD/1.1.2 reproduces the same results as one another and as the port on all 2,548 puzzle stages and the battle/CPU/scoring tests; the Dreamcast functions checked so far (speed, roulette selector, scoring) agree with them in structure, and the one measured difference (battle speed table ending in 4.0) is a Dreamcast difference, not a cracking artefact.
 Policy: where a mobile asset or text differs from the clean Dreamcast/GBA data, the clean source wins unless the mobile one is a documented original change; any mismatch is reported in the version matrix.
+
+## Title / menu / HUD art: source comparison (2026-11-13)
+Measured on the extracted files (width x height of the same sprite in each set):
+| Piece | Android / iPhone (phone layout) | iPad HD (`ccrpad_png`, iOS HD 1.0 and 1.1.2) | Dreamcast |
+|---|---|---|---|
+| "TAP THE SCREEN!" prompt | 152 x 26 | **204 x 34** | "PRESS START BUTTON!" texture (different text) |
+| Title rocket | 76 x 109 | **100 x 145** | rocket models/sprites in `ROCKET`/`TITLE` |
+| Two-cat decoration | 84 x 61 | **112 x 81** | - |
+| Menu bar atlas | 200 x 134 | **340 x 248** (bars 340 wide) | `MENU_selectmoji*`/`modeback*` tiles |
+| Player bars, "Challenge", "CLEARED!", "FAILED!", "Winner!", "Draw!", "3 2 1", crowns, rockets, scoreboard pieces | smaller | **present at about 1.3x the phone size** | different art |
+| Title logo and full-screen backgrounds | 484 x 322 images (logo = frame of a 1000 x 166 atlas) | no finished image: the tablet screens draw backgrounds from a **tile map** (resource 0x124 and the tile atlas), not decoded yet | 512 x 512 tiles of a 640 x 480 screen (`TITLE_newtitle*`, `MENU_modeback*`) that must be assembled |
+Conclusion so far: the phone sprites I used for the title and menu are the **smallest** version of the art. The iPad HD sprites are about 1.3x larger and also hold the HUD/result art (the placeholder HUD should use them). Neither mobile set is large enough for 4K without scaling; the Dreamcast screens are 640 x 480 native with tiles up to 512 x 512, so the Dreamcast logo/background art is not clearly higher quality than the iPad's. A best-of-all-versions choice per piece (largest source, scaled with high-quality filtering) still has to be made: the sprites from iPad HD, the backgrounds from the iPad tile maps once decoded (otherwise the phone images or Dreamcast tiles).
