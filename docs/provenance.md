@@ -42,3 +42,10 @@ Measured: the Dreamcast logo (`TITLE_newtitle0`, ChuChu Rocket! speech-bubble lo
 
 ## Per-piece mobile texture sizes (2026-11-13)
 [asset_quality.md](asset_quality.md), produced by `tools/measure_assets.py`, lists every mobile texture record with its size in each Android/iOS build: iPad HD (`ccrpad`) is the largest source for 125 of the 136 records it has, Android 1.14/1.15 for 82, the 1.1/1.1.2 character packs hold 109 and 100 records no other source has; 194 of 428 records present in more than one folder are the same size everywhere. The Dreamcast and GBA pieces are not yet in the table.
+
+## Additions 2026-11-14
+- **Playfield art** (floor tiles, pits, generator rings, rocket bases, wall bars, arrows, cursors, closed rocket spheres, digits): iPad HD pack sheets `r0930`, `r0645`, `r0732`, `r0651/r0663/r0675/r0687`, `r0729`, chosen because the iPad pack is the largest source for these records ([asset_quality.md](asset_quality.md)); placement and colours from the Android/iOS draw code ([ui_art.md](ui_art.md)).
+- **Title prompt**: Dreamcast `ENGLISH/PRESSSTART` on keyboard/pad platforms, phone/iPad "TAP THE SCREEN!" on Android.
+- **Puzzle sets**: main 100 and extra stages from the GBA ROM and mobile packs; Dreamcast Express (`DEPuzzle`) with the arrow stock decoded from the Dreamcast slot format ([dlc.md](dlc.md)). PuzzleP is not offered (stock unverified).
+- **Dreamcast sound effects**: decoded (4-bit AICA ADPCM) but not used in play: the sample rate is unknown ([audio.md](audio.md)); the mobile effect files are used.
+- **GBA**: stages (2,566 boards) and the CPU player (transcribed from the ROM, diff-tested per routine) only; GBA art and sound are not used yet.
