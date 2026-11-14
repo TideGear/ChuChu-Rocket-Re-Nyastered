@@ -51,7 +51,7 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco; bool titleOk = false, menuOk = false;
+    Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo; bool dlogoOk = false; bool titleOk = false, menuOk = false;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
     const std::string& str(int id) { static const std::string none; auto it = strs.find(id); return it == strs.end() ? none : it->second; }
     void loadStrings() {
@@ -101,7 +101,7 @@ struct App {
         std::string ret = root + "/ret_all/";
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
-        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); loadStrings(); }
+        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); loadStrings(); }
         loadFontMetrics();
         loadAudio();
         return true;
@@ -229,7 +229,8 @@ struct TitleMode : Screen {
         double ang = (angle + (state == 0xC ? alpha : 0.0)); const double rad = 0.0174533; const SDL_Rect& rf = a.trocket.fr[0];
         SDL_Rect rd{(int)std::lround(196.0 + std::cos(ang * rad) * 130.0 - rf.w / 2.0), (int)std::lround(110.0 + std::sin(ang * rad) * 130.0 - rf.h / 2.0), rf.w, rf.h};
         SDL_RenderCopyEx(a.ren, a.trocket.tex, &rf, &rd, ang + 180.0, nullptr, SDL_FLIP_NONE);
-        const SDL_Rect& lf = a.tlogo.fr[0]; SDL_Rect ld{12, 28, lf.w, lf.h}; SDL_RenderCopy(a.ren, a.tlogo.tex, &lf, &ld);
+        if (a.dlogoOk) { SDL_Rect ld{8, 24, 190, 190 * a.dlogo.h / a.dlogo.w}; SDL_RenderCopy(a.ren, a.dlogo.tex, nullptr, &ld); }   // best source: the Dreamcast logo (about 510 px wide against 158 px on the phones), scaled into the phone logo's place
+        else { const SDL_Rect& lf = a.tlogo.fr[0]; SDL_Rect ld{12, 28, lf.w, lf.h}; SDL_RenderCopy(a.ren, a.tlogo.tex, &lf, &ld); }
         if (state == 0xC && blink <= 333333.0) { const SDL_Rect& pf = a.tprompt.fr[0]; SDL_Rect pd{132, 251, pf.w, pf.h}; SDL_RenderCopy(a.ren, a.tprompt.tex, &pf, &pd); }
         if (state != 0xC) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)std::max(0.0, std::min(255.0, timer / 500000.0 * 255.0))); SDL_Rect all{0, 0, 480, 320}; SDL_RenderFillRect(a.ren, &all); }
         SDL_RenderSetLogicalSize(a.ren, W, H);
