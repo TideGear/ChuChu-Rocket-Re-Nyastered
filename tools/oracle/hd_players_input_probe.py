@@ -26,5 +26,7 @@ def run(item, press=0, flags=None):
         for off, val in flags.items(): o.write(scr + off, bytes([val]) if off < 0xd00 else struct.pack('<I', val))
     o.call(0x31d24, scr, 0, 0, press)
     return list(log)
+o.uc.hook_add(UC_HOOK_CODE, lambda uc, a, s, u: item_stub(uc, a, s, u), begin=0xf2b0, end=0xf2b0 + 2)
 if __name__ == '__main__':
-    print(run(8))
+    for i in range(10):
+        print(i, run(i))
