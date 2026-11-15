@@ -4,6 +4,8 @@ import os, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hd_env
 env = hd_env.make(); o = env.o; scr = env.alloc(0xe00); o.write(scr + 0xa44, struct.pack('<i', 0))
+for _sp in range(11):   # the game's own texture-space objects (as the constructor makes them)
+    o.write(env.appdata + 0x3a0 + 4 * _sp, struct.pack('<I', o.call(0xb3f8, 0x400)))
 def render(sel=0, state=0):
     o.write(scr + 0xa44, struct.pack('<i', 0)); del env.log[:]
     try: o.call(0x33514, scr)
