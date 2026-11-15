@@ -47,8 +47,10 @@ def main():
 
         _, log = capture('split-refused', 140, CCR_CLICKS=configured + ';117:600,650;119:995,739')
         assert not log, log
-        _, log = capture('random-refused', 140, CCR_CLICKS=configured + ';117:455,410;119:995,739')
-        assert not log, log
+        for team, setup in ((0, menu + ';105:995,739'), (1, configured)):
+            _, log = capture(f'question-mark-{team}', 260,
+                             CCR_CLICKS=setup + ';117:455,410;119:995,739')
+            assert len(log) == 1 and log[0].split()[:3] == ['battle', '24', str(team)], log
         _, log = capture('back', 150, CCR_CLICKS=menu + ';100:995,739;102:25,740;104:25,740')
         assert not log, log
     print('Live Players and Settings frames match the verified pane draws, and the selected rules reach the match')

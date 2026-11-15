@@ -1183,8 +1183,8 @@ struct BattleSetupMode : Screen {
         using Action = SettingsPaneItems::LocalPadInput::Action;
         const auto result = settings.touch(static_cast<int>(x), static_cast<int>(y), 0);
         if (result.action == Action::Launch) {
-            // Split-screen rendering and the special random board launch are open.
-            if (settings.rules.split || settings.stage == 24) {
+            // Split-screen rendering is still open.
+            if (settings.rules.split) {
                 settings.launching = false;
                 app.playSfx(3);
                 return;
