@@ -21,6 +21,6 @@ def main(app, thin, pack, out, count=885):
         rows = []
         for r in range(965 - count, 1220 - count):
             f = os.path.join(lp, '%04d.bin' % r)
-            if os.path.exists(f): rows.append('%d%s%s' % (r + count, chr(9), open(f, 'rb').read().split(bytes(1))[0].decode('latin-1')))
+            if os.path.exists(f): rows.append('%d%s%s' % (r + count, chr(9), open(f, 'rb').read().split(bytes(1))[0].decode('latin-1').replace(chr(10), chr(11))))   # real newlines are stored as 0x0b (the table is line based)
         open(os.path.join(dst, 'hd_text.tsv'), 'wb').write((chr(10).join(rows) + chr(10)).encode('latin-1')); print(lg, len(rows), 'texts')
 if __name__ == '__main__': main(*sys.argv[1:5])

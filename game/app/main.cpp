@@ -249,7 +249,7 @@ struct App {
         std::string d = retDir + "loc_" + langDir(lang) + "/"; Sheet* sh[5] = {&hdPhud, &hdPause, &ssHdr, &mnDeco, &opHdr}; const char* nm[5] = {"hd_phud5c", "hd_pause79", "hd_ss_hdr", "hd_mn_deco", "hd_op_hdr"};
         for (int i = 0; i < 5; i++) { freeSheet(*sh[i]); loadSheet(d + nm[i], *sh[i]); }
         hdText.clear(); FILE* g = fopen((d + "hd_text.tsv").c_str(), "rb"); if (!g) return; std::string all; char bb[4096]; size_t n; while ((n = fread(bb, 1, sizeof bb, g)) > 0) all.append(bb, n); fclose(g);
-        size_t pos = 0; while (pos < all.size()) { size_t e = all.find((char)10, pos); if (e == std::string::npos) e = all.size(); std::string line = all.substr(pos, e - pos); pos = e + 1; size_t t = line.find((char)9); if (t != std::string::npos) hdText[atoi(line.c_str())] = line.substr(t + 1); } }
+        size_t pos = 0; while (pos < all.size()) { size_t e = all.find((char)10, pos); if (e == std::string::npos) e = all.size(); std::string line = all.substr(pos, e - pos); pos = e + 1; size_t t = line.find((char)9); if (t != std::string::npos) { std::string v = line.substr(t + 1); for (auto& ch : v) if (ch == 11) ch = 10; hdText[atoi(line.c_str())] = v; } } }
     void loadHdText(const std::string& ret) {
         FILE* f = fopen((ret + "hd_font0.widths.bin").c_str(), "rb"); if (f) { hdFontW.resize(256); if (fread(hdFontW.data(), 1, 256, f) != 256) hdFontW.clear(); fclose(f); }
         f = fopen((ret + "hd_font1.widths.bin").c_str(), "rb"); if (f) { hdFontW1.resize(256); if (fread(hdFontW1.data(), 1, 256, f) != 256) hdFontW1.clear(); fclose(f); }
@@ -407,6 +407,36 @@ struct TitleMode : Screen {
     }
 };
 
+// ---------------------------------------------------------------- Credits (HD 1.0 CreditsScreen: parse 0x40748, process 0x40c50, render 0x40d68, handleInput 0x40d34)
+struct CreditsMode : Screen {
+    struct E { float h, y; int type; std::string text; };
+    std::vector<E> ents; int phase = 0x17; double a14 = 0, a18 = 0, total = 0; bool leave = false;
+    static constexpr float S0 = 1.25f, S2 = 0.9f;   // pad scales (+0xa34 / +0xa38 set in init for the device class > 10)
+    static bool ok(App& a) { return a.hdFont1.tex && a.hdFont1.box.size() > 91 && a.hdString(0x17c); }
+    CreditsMode(App& a) {   // parse(): text key 0x17c; "$s" = orange heading, "$i" + 2 chars = image (not drawn), "$x" skipped, blank line = one font line
+        const std::string& s = *a.hdString(0x17c); const float lh = (float)a.hdFont1.box[91].y; float tot = 0.0f; int i = 0, len = (int)s.size();
+        while (i < len) { int style = 0;
+            for (;;) { if (i >= len) break; char c = s[i];
+                if (c == 10) { ents.push_back({lh, tot, 1, ""}); i++; tot += lh + 4.0f; break; }
+                if (c != '$') { int j = i; while (j < len && s[j] != 10) j++; float sc = style == 0 ? S0 : S2; ents.push_back({lh * sc, tot, style, s.substr(i, j - i)}); i = j + 1; tot += lh * sc + 4.0f; break; }
+                char n = i + 1 < len ? s[i + 1] : 0;
+                if (n == 'i') { ents.push_back({0.0f, tot, 3, ""}); i += 4; break; } else if (n == 's') { style = 2; i += 2; } else if (n == 'x') i += 2; else i += 1; } }
+        total = tot; }
+    int music() override { return -1; }
+    void event(App& a, const SDL_Event& e) override { if (phase == 0x18 && e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) { a.playSfx(2); a14 = 0; phase = 0x19; } }
+    void tick(App& a) override {
+        if (phase == 0x17) { a14 += 16384.0; if (a14 >= 500000.0) { a14 = 0; phase = 0x18; } }
+        else if (phase == 0x18) { a14 += 16384.0; a18 += 16384.0 * 8e-5f; if (a18 > total) { a14 = 0; a18 = 0; phase = 0x19; } }   // scroll speed 8e-5 per microsecond
+        else if (phase == 0x19) { a14 += 16384.0; if (a14 >= 1000000.0) { a14 = 1000000.0; leave = true; } } }
+    const char* next() override { if (!leave) return nullptr; leave = false; return "OPTIONS"; }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        for (auto& e : ents) { if (e.type != 0 && e.type != 2) continue; if (!(e.y < (float)a18 + 768.0f && (float)a18 < e.y + e.h)) continue;
+            if (e.type == 0) a.printString(e.text, 512.0f, (float)(int)(e.y - (float)a18), 255, 255, 255, 255, S0, 0, false, 1); else a.printString(e.text, 512.0f, (float)(int)(e.y - (float)a18), 0xe0, 0x90, 0x10, 255, S2, 0, false, 1); }
+        if (phase == 0x17 || phase == 0x19) { float f = phase == 0x17 ? (float)(a14 / 500000.0 * -255.0 + 255.0) : (float)(a14 / 1000000.0 * 255.0); SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)std::max(0.0f, std::min(255.0f, f))); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
+    }
+};
+
 // ---------------------------------------------------------------- Help & Options, main list (HD 1.0 HelpOptionsScreen: initMainMenuItems 0x23c1c, render 0x24bdc / renderGenericMenuItems 0x229a8, handleInput 0x246c8, process 0x245b4)
 struct OptionsMode : Screen {
     int phase = 0x11, sel = 0, chosen = -1, mascot = 0, sub = 0; double fade = 500000.0, t = 0; bool leave = false;   // sub: 0 main list, 2 language list (a28)
@@ -438,9 +468,10 @@ struct OptionsMode : Screen {
             if (a.langAvailable(hit)) a.setLanguage(hit); else a.playSfx(0x13);   // HD 1.0 has no Japanese pack
             return; }
         if (hit == back()) { a.playSfx(2); chosen = 7; fade = 0; phase = 0x13; return; }
+        if (hit == 5 && CreditsMode::ok(a)) { a.playSfx(2); chosen = 5; fade = 0; phase = 0x13; return; }   // Credits
         if (hit == 1) { a.playSfx(2); sub = 1; drag = -1; return; }   // Sounds
         if (hit == 2) { a.playSfx(2); sub = 2; sel = a.lang; return; }   // Language
-        a.playSfx(0x13); }   // How to Play, Costumes, Credits are not ported yet (docs/roadmap.md)
+        a.playSfx(0x13); }   // How to Play, Costumes are not ported yet (docs/roadmap.md)
     // renderSoundMenuItems 0x22dcc (checked against the original with tools/oracle/hd_options_probe.py, tools/options_diff.py); log != nullptr records the calls instead of drawing
     void drawSounds(App& a, int music, int sfx, int dragState, std::vector<std::string>* log) {
         auto rt = [&](Sheet& sh, int fr, float x, float y, int w, int h, int srcw) { if (log) { char t[120]; snprintf(t, sizeof t, "RT %.1f %.1f %d %d %.1f", x, y, w, h, fr == 1 && &sh == &a.opSld ? 0.5f : 0.0f); log->push_back(t); return; }
@@ -458,7 +489,7 @@ struct OptionsMode : Screen {
         if (phase == 0x11) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0x12; } }
         else if (phase == 0x12) { t += 16384.0; if (t >= 166666.671875) { t -= 166666.671875; mascot = (mascot + 1) % 12; } }
         else if (phase == 0x13) { fade += 16384.0; if (fade >= 500000.0) { fade = 500000.0; leave = true; } } }
-    const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
+    const char* next() override { if (!leave) return nullptr; leave = false; return chosen == 5 ? "CREDITS" : "MENU"; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         static const int tm[48] = {0,1,2,3,3,3,4,5,6,7,8,3,9,10,11,12,13,14,15,16,17,18,19,3,3,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,3,35,36,37,38,39,3,3};   // tilemap resource 0x125 (HD ccrpad rec 879)
@@ -829,6 +860,7 @@ int main(int argc, char** argv) {
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" || name == "battle") { auto m = std::make_unique<BattleMode>(); memcpy(m->lv, lv, sizeof lv); if (!m->load(app.root, stageNo, seed)) { printf("cannot load battle stages\n"); return false; } mode = std::move(m); }
+        else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
         else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
         else mode = std::make_unique<MenuMode>();
