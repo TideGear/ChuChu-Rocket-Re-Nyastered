@@ -64,7 +64,7 @@ struct App {
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -123,7 +123,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_ss_hdr", ssHdr); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_mn_deco", mnDeco); loadSheet(ret + "hd_bubtail", hdBubTail); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_ss_hdr", ssHdr); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_mn_deco", mnDeco); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_op_hdr", opHdr); loadSheet(ret + "hd_bubtail", hdBubTail); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -390,6 +390,40 @@ struct TitleMode : Screen {
     }
 };
 
+// ---------------------------------------------------------------- Help & Options, main list (HD 1.0 HelpOptionsScreen: initMainMenuItems 0x23c1c, render 0x24bdc / renderGenericMenuItems 0x229a8, handleInput 0x246c8, process 0x245b4)
+struct OptionsMode : Screen {
+    int phase = 0x11, sel = 0, chosen = -1, mascot = 0; double fade = 500000.0, t = 0; bool leave = false;
+    static constexpr int N = 7; static constexpr int key[N] = {0x15c, 0x15d, 0x15e, 0x15f, 0x160, 0x161, 0x1d8};   // How to Play, Sounds, Language, iPod Music, Costumes, Credits, Game Center
+    static constexpr int px[N] = {145, 225, 305, 385, 465, 545, 625}, py[N] = {173, 263, 353, 433, 523, 613, 630};   // table at 0xe786c
+    static bool ok(App& a) { return a.opBg.tex && a.opHdr.tex && a.mnBars.tex && a.mnMasc.tex && a.ssArrows.tex && a.hdFont1.tex; }
+    static bool shown(int i) { return i != 3 && i != 6; }   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
+    int music() override { return phase == 0x11 ? -1 : 5; }
+    int hitTest(App& a, float lx, float ly) { for (int i = 0; i < N; i++) if (shown(i)) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (px[i] <= lx && lx <= px[i] + w && py[i] <= ly && ly <= py[i] + h) return i; }
+        int bw = a.ssArrows.fr[0].w, bh = a.ssArrows.fr[0].h; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 7; return -1; }
+    void event(App& a, const SDL_Event& e) override {
+        if (phase != 0x12 || e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT) return;
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly); if (hit < 0) return;
+        int before = sel; if (hit < 7) sel = hit;
+        if (before == hit || hit == 7) { if (hit == 7) { a.playSfx(2); chosen = 7; fade = 0; phase = 0x13; } else a.playSfx(0x13); }   // How to Play, Sounds, Language, Costumes, Credits are not ported yet (docs/roadmap.md)
+        else a.playSfx(0); }
+    void tick(App& a) override {
+        if (phase == 0x11) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0x12; } }
+        else if (phase == 0x12) { t += 16384.0; if (t >= 166666.671875) { t -= 166666.671875; mascot = (mascot + 1) % 12; } }
+        else if (phase == 0x13) { fade += 16384.0; if (fade >= 500000.0) { fade = 500000.0; leave = true; } } }
+    const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        static const int tm[48] = {0,1,2,3,3,3,4,5,6,7,8,3,9,10,11,12,13,14,15,16,17,18,19,3,3,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,3,35,36,37,38,39,3,3};   // tilemap resource 0x125 (HD ccrpad rec 879)
+        for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
+        a.rtex(a.opHdr, 0, 208, 50, a.opHdr.fr[0].w, a.opHdr.fr[0].h);
+        for (int i = 0; i < N; i++) { if (!shown(i)) continue; int w = a.mnBars.fr[0].w, h = a.mnBars.fr[0].h; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
+            if (const std::string* s = a.hdString(key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
+            if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); } }
+        a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.fr[0].h), a.ssArrows.fr[0].w, a.ssArrows.fr[0].h);
+        if (phase != 0x12) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(fade / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
+    }
+};
+
 // ---------------------------------------------------------------- main menu, iPad layout (HD 1.0 MenuScreen: init 0xfcb0, handleInput 0xf584, process 0xf410, render 0xf640)
 struct HdMenuMode : Screen {
     int phase = 0xe, sel = 0, chosen = -1; double fade = 500000.0, t1 = 0, t2 = 0; int bubbleFrame = 0, mascot = 0, descKey = -1; bool leave = false;
@@ -408,13 +442,13 @@ struct HdMenuMode : Screen {
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_DOWN) { sel = (sel + 1) % N; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + N - 1) % N; a.playSfx(0); } else if (k == SDLK_RETURN || k == SDLK_SPACE) act(a, sel); } }
     void act(App& a, int i) {
         if (!tutorialCleared() && i >= 1 && i <= 3) { a.playSfx(3); return; }
-        if (i == 0 || i == 2 || i == 4) { a.playSfx(0x13); return; }   // The Basics, Stage Challenge and Help & Options are not ported yet (docs/roadmap.md)
+        if (i == 0 || i == 2 || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics and Stage Challenge are not ported yet (docs/roadmap.md)
         a.playSfx(2); chosen = i; fade = 0; phase = 0x10; }
     void tick(App& a) override {
         if (phase == 0xe) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0xf; } }
         else if (phase == 0xf) { t1 += 16384.0; if (t1 >= 500000.0) { t1 -= 500000.0; bubbleFrame = (bubbleFrame + 1) & 1; } t2 += 16384.0; if (t2 >= 166666.671875) { t2 -= 166666.671875; mascot = (mascot + 1) % 12; } }
         else if (phase == 0x10) { fade += 16384.0; if (fade >= 500000.0) { fade = 500000.0; leave = true; } } }
-    const char* next() override { if (!leave) return nullptr; leave = false; static const char* to[N] = {nullptr, "STAGES", nullptr, "BATTLE", nullptr}; return to[chosen]; }
+    const char* next() override { if (!leave) return nullptr; leave = false; static const char* to[N] = {nullptr, "STAGES", nullptr, "BATTLE", "OPTIONS"}; return to[chosen]; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         static const int tm[48] = {0,1,2,3,0,0,0,4,5,6,7,8,9,10,11,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,28,28,29,30,31,32,33,34,35,34,34,36,37,38,39};   // tilemap resource 0x124 (HD ccrpad rec 878)
@@ -745,6 +779,7 @@ int main(int argc, char** argv) {
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" || name == "battle") { auto m = std::make_unique<BattleMode>(); memcpy(m->lv, lv, sizeof lv); if (!m->load(app.root, stageNo, seed)) { printf("cannot load battle stages\n"); return false; } mode = std::move(m); }
+        else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
         else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
         else mode = std::make_unique<MenuMode>();
         return true;
