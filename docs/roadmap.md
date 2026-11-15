@@ -94,3 +94,4 @@ Open, with the sizes of the original code (all HD 1.0 addresses):
 
 ## Battle setup, players pane (started 2026-11-14)
 - `tools/oracle/hd_players_probe.py` runs `renderPlayersPane` (0x33514) under Unicorn with the generic screen environment. It draws the first items (the 4 large panels at x = 15 / 168 / 321 / 474, y = 50, 148 x 311, the 105 x 33 labels) and then faults on an unmapped read: the pane's menu lists are not initialised. Next step: run `initPlayersPaneMenuItems` (0x32194) and the pane's data setup first, then diff the render with the port.
+- Update: running `initPlayersPaneMenuItems` (0x32194) first lets `renderPlayersPane` complete (34 draw calls). Its first calls: the four 148 x 311 player panels at x = 15 / 168 / 321 / 474 (y 50, texture fractions 0 / 0.25 / 0.5 / 0.75), then the 105 x 33 player-slot labels at x = 31 / 184 / 337 / 490, y = 81 and 125. Next: diff those 34 calls with the port (the port has no players pane yet).
