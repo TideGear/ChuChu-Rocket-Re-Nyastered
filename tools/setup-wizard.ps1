@@ -15,19 +15,17 @@ if (-not (Test-Path $GameFiles)) { throw "Game files folder not found: $GameFile
 if (-not $Cache) { $Cache = Join-Path $env:APPDATA "ReNyastered" }
 New-Item -ItemType Directory -Force $Cache | Out-Null
 
-# Python 3.12 (needed only for extraction)
-$py = $null
-foreach ($cand in @("py -3.12", "py -3", "python")) {
-    try { $v = & cmd /c "$cand --version 2>&1"; if ($v -match "Python 3\.(1[0-9])") { $py = $cand; break } } catch {}
-}
-if (-not $py) { throw "Python 3.10+ not found. Install it from python.org, then run setup again." }
-Write-Host "Using $py"
-$pillow = & cmd /c "$py -c ""import PIL"" 2>&1"
-if ($LASTEXITCODE -ne 0) { Write-Host "Installing Pillow (image library)..."; & cmd /c "$py -m pip install --user pillow" | Out-Null }
+. (Join-Path $PSScriptRoot 'setup-python.ps1')
+$python = Get-SetupPython (Join-Path $root 'local/tools/windows')
+$prefix = $python.Prefix
+Write-Host "Using $($python.Exe)"
 
 $log = Join-Path $Cache "setup.log"
 Write-Host "Extracting assets from your files (this can take several minutes). Log: $log"
-& cmd /c "$py ""$root\tools\extract_all.py"" --game-files ""$GameFiles"" --cache ""$Cache"" > ""$log"" 2>&1"
+& {
+    $ErrorActionPreference = 'Continue'
+    & $python.Exe @prefix (Join-Path $PSScriptRoot 'extract_all.py') --game-files $GameFiles --cache $Cache *> $log
+}
 if ($LASTEXITCODE -ne 0) { Get-Content $log -Tail 20; throw "Extraction failed" }
 Write-Host "Extraction finished. Manifest: $Cache\manifest.json"
 

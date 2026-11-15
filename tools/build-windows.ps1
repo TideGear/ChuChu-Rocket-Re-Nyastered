@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Import-Module Microsoft.PowerShell.Utility, Microsoft.PowerShell.Archive
+. (Join-Path $PSScriptRoot 'windows-download.ps1')
 $root = Split-Path -Parent $PSScriptRoot
 $tools = Join-Path $root 'local/tools/windows'
 if ($env:CCR_TOOL_ARCHIVES) {
@@ -17,16 +18,7 @@ function Get-BuildTool($Name, $Version, $Url, $Hash, $Executable) {
     New-Item -ItemType Directory -Path $staging | Out-Null
     try {
         $archive = Join-Path $staging "$Name.zip"
-        if ($env:CCR_TOOL_ARCHIVES) {
-            Write-Host "Using local $Name $Version archive"
-            Copy-Item -LiteralPath (Join-Path $env:CCR_TOOL_ARCHIVES "$Name.zip") -Destination $archive
-        } else {
-            Write-Host "Downloading $Name $Version"
-            Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $archive
-        }
-        if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $Hash) {
-            throw "$Name $Version archive failed its SHA-256 check."
-        }
+        Get-VerifiedArchive "$Name $Version" "$Name.zip" $Url $Hash $archive
         $unpacked = Join-Path $staging 'unpacked'
         Expand-Archive -LiteralPath $archive -DestinationPath $unpacked
         if (-not (Test-Path -LiteralPath (Join-Path $unpacked $Executable) -PathType Leaf)) {
