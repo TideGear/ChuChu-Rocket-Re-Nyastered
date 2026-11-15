@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 TABLES = {'hd_arrows': 567, 'hd_cursors': 654, 'hd_crowns': 648, 'hd_digits': 651,   # images 0x54, 0x60, 0x5e, 0x5f
           'hd_cat0': 345, 'hd_cat1': 354, 'hd_cat2': 363, 'hd_gold0': 392, 'hd_gold1': 396, 'hd_gold2': 400, 'hd_mouse0': 411, 'hd_mouse1': 415, 'hd_mouse2': 419}   # walk sheets side/back/front: HD images 0x28..0x2a, 0x2f..0x31, 0x33..0x35
 SHEETS = {'hd_time': (677, 679), 'hd_bhud65': (661, 664), 'hd_bhud68': (671, 676), 'hd_stagenum': (752, 754), 'hd_frame78': (718, 720), 'hd_font0': (0, 3)}  # font0: image 0 = the default Latin font (BHLib_PrintString, non-Japanese), widths = record 874   # 0x65 player panels, 0x68 battle HUD pieces (renderFourBattleHud 0x21038)   # HD 1.0 image 0x69: in-play timer digits (clock2D 0x20e54)
-LOCALE_SHEETS = {'hd_phud5c': (27, 31)}   # HD 1.0 image 0x5c (puzzle HUD strip/panel), ccrpad_en records 912/916 - 885
+LOCALE_SHEETS = {'hd_phud5c': (27, 31), 'hd_pause79': (65, 70)}   # HD 1.0 image 0x5c (puzzle HUD strip/panel), ccrpad_en records 912/916 - 885
 def main(pack, out):
     import struct, textures as T
     ts = {t['rec']: t for t in T.textures(pack)}
@@ -40,7 +40,7 @@ def textmap(thin, out):
         for sg in m.segs:
             if sg[1] <= a < sg[1] + sg[2]: o = sg[3] + a - sg[1]; return m.d[o:o + n]
     T = struct.unpack('<1200i', rd(struct.unpack('<I', rd(0xeb548, 4))[0], 4800))
-    keys = list(range(0x1ab, 0x1b0)) + list(range(0x1e8, 0x1e8 + 101))
+    keys = [k for k in range(1200) if 965 <= T[k] < 1220]   # every key that resolves to a language-pack text
     open(os.path.join(out, 'hd_textmap.tsv'), 'wb').write((chr(10).join('%d%s%d' % (k, chr(9), T[k]) for k in keys) + chr(10)).encode('latin-1')); print('textmap', len(keys))
 if __name__ == '__main__':
     main(sys.argv[1], sys.argv[2]); texts(sys.argv[1], sys.argv[2])

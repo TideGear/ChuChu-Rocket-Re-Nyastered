@@ -59,7 +59,7 @@ struct App {
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont; std::vector<uint8_t> hdFontW; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdPause; std::vector<uint8_t> hdFontW; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -118,7 +118,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadHdText(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -250,6 +250,9 @@ struct App {
             cx = (int)((float)cx + (float)hdFontW[c] * scale); }
         SDL_SetTextureColorMod(hdFont.tex, 255, 255, 255); SDL_SetTextureAlphaMod(hdFont.tex, 255);
     }
+    void blitFlip(Sheet& sh, int frame, float ax, float ay, float scale, bool mirror) {   // Render::drawImage flags & 2 = swap u0/u1 (horizontal mirror of the frame in place; these frames are centred on their anchor)
+        if (frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
+        SDL_Rect dst{(int)std::lround(ax + of.x * scale), (int)std::lround(ay + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)}; SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, mirror ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE); }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
     void cursor(int cx, int cy, int player, int ticks, bool bracket) {
         int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
@@ -382,7 +385,7 @@ struct PuzzleMode : Screen {
     void putAt(int cx, int cy, int d) { sim.removeArrow(cx, cy); if (d >= 0 && used(d) < stock[d]) sim.placeArrow(cx, cy, d); }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
     bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
-    bool dash = false;
+    bool dash = false; bool paused = false, pconf = false;   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
         sim.load(stages.list[cur].st); prev.clear(); dash = false; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
@@ -413,6 +416,11 @@ struct PuzzleMode : Screen {
     bool hudButton(App& a, const SDL_Event& e) {
         float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
         auto in = [&](float x0, float y0, float x1, float y1) { return lx >= x0 && lx < x1 && ly >= y0 && ly < y1; };
+        if (paused) {   // PuzzleGameScreen::handleInput while PA_IsPaused (0x1299c..): rects 1 (128, 313)-(403, 413) and 2 (590, 314)-(881, 414), transcribed literally
+            if (in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; } }
+            if (in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }   // Input::setData(10, 1) = leave the screen; BGM_Release (not read yet) not reproduced
+            return true; }
+        if (in(10, 669, 173, 711)) { paused = true; a.playSfx(4); return true; }   // rect 0 = the pause button: Input::setData(0xb, 1) -> PA_PauseController, sound 4 (BGM_Pause not reproduced)
         if (in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
         if (in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
@@ -420,7 +428,7 @@ struct PuzzleMode : Screen {
     }
     int cticks = 0;
     void tick(App& a) override {
-        cticks++;
+        if (paused) return; cticks++;
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
         if (!running) return;
         sim.tick(); a.stepAngles(sim);
@@ -447,6 +455,18 @@ struct PuzzleMode : Screen {
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
             const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, 720.0f, 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }
+        a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // end of renderPuzzleHudiPad: drawImage(0x68, 5, 92, 690) = the pause button (rect 0)
+        if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
+            SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0xc0); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all);
+            const float bx = 512.0f, by = 400.0f, sc = 2.0f;   // layout +0x520 = 400, +0x568 = 2.0
+            a.blitFlip(a.hdPause, 0, bx, by, sc, false); a.blitFlip(a.hdPause, 1, bx - 10.0f, by - 2.0f, sc, pconf);
+            if (pconf) { a.blitFlip(a.hdPause, 3, bx - 226.0f, by - 32.0f, sc, false); a.blitFlip(a.hdPause, 2, bx + 206.0f, by - 32.0f, sc, true); }
+            else { a.blitFlip(a.hdPause, 2, bx - 226.0f, by - 32.0f, sc, false); a.blitFlip(a.hdPause, 3, bx + 206.0f, by - 32.0f, sc, true); }
+            const std::string* t1 = a.hdString(0x1a9); const std::string* t2 = a.hdString(0x1aa);   // 'Resume', 'Quit'; y offset +10 because the device class is > 10 (CoreSettingsInit sets the global 0x172c10 = 1)
+            if (t1) a.printString(*t1, bx - 252.0f, by - 40.0f + 10.0f, 255, 255, 255, 255, 1.6f, 0, true);
+            if (t2) a.printString(*t2, bx + 238.0f, by - 40.0f + 10.0f, 255, 255, 255, 255, 1.6f, 0, true);
+            a.drawFrame5(512, 50, 320);
+            if (!(gApp && gApp->stageSet != 0) && cur < 100) { const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, 512.0f, 50.0f, 0, 0, 0, 255, 0.8f, 0, true); } }
         SDL_RenderSetViewport(a.ren, nullptr);
     }
 };
