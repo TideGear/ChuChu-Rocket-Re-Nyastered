@@ -609,6 +609,17 @@ struct PlayersInputLogic {
     }
 };
 
+// ---------------------------------------------------------------- battle setup, settings pane: menu item rectangles (HD 1.0 PlayerSelectScreen::initSettingsPaneMenuItems 0x31690, phone-style branch: +0xa7c = 0)
+// items: 0 back (0, 711, 57 x 57), 1 corner (967, 711, 57 x 57), 2..9 buttons 30 x 30. Values read from the original under Unicorn (tools/players_settings_diff.py).
+struct SettingsPaneItems {
+    struct PaneRect { int x, y, w, h; };
+    static void layout(PaneRect out[10]) {
+        out[0] = {0, 711, 57, 57}; out[1] = {967, 711, 57, 57};
+        static const int bx[8] = {12, 207, 12, 207, 248, 443, 248, 443}, by[8] = {205, 205, 240, 240, 52, 52, 91, 91};
+        for (int i = 0; i < 8; i++) out[2 + i] = {bx[i], by[i], 30, 30};
+    }
+};
+
 // ---------------------------------------------------------------- Help & Options, main list (HD 1.0 HelpOptionsScreen: initMainMenuItems 0x23c1c, render 0x24bdc / renderGenericMenuItems 0x229a8, handleInput 0x246c8, process 0x245b4)
 struct OptionsMode : Screen {
     int phase = 0x11, sel = 0, chosen = -1, mascot = 0, sub = 0; double fade = 500000.0, t = 0; bool leave = false;   // sub: 0 main list, 2 language list (a28)
@@ -1088,6 +1099,7 @@ int main(int argc, char** argv) {
     if (const char* jt = getenv("CCR_JUDGET")) { int s[2], r[2], wn[2], rw, df, wp, rc; if (sscanf(jt, "%d,%d;%d,%d;%d,%d;%d,%d,%d,%d", s, s + 1, r, r + 1, wn, wn + 1, &rw, &df, &wp, &rc) == 10) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWinTeam(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
+    if (getenv("CCR_SETTINGSRECTS")) { SettingsPaneItems::PaneRect r[10]; SettingsPaneItems::layout(r); for (int i = 0; i < 10; i++) printf("%d %d %d %d %d\n", i, r[i].x, r[i].y, r[i].w, r[i].h); return 0; }
     if (const char* pin = getenv("CCR_PLAYIN")) { PlayersInputLogic pil; for (int i = 0; i < 14; i++) { pil.sfx.clear(); pil.press(i); printf("%d d3c=%d d40=%d d44=%d d58=%d a40=%d a3c=%d a38=%d d20=%d\n", i, pil.d3c, pil.d40, pil.d44, pil.d58, pil.a40, pil.a3c, pil.a38, pil.d20); } return 0; }
     if (const char* ph = getenv("CCR_PLAYHELP")) { int a, bb, v, x, y; int h[6] = {0,0,0,0,0,0}; if (sscanf(ph, "m:%d,%d,%d", &a, &bb, &v) == 3) { uint8_t lit[8] = {0,0,0,0,0,0,0,0}; if (a != 0 || bb != 1 || true) {} PlayersInputHelpers::mutexPlayer(lit, a, bb, v); printf("%d %d\n", lit[a], lit[bb]); return 0; } if (sscanf(ph, "r:%d,%d,%d,%d,%d,%d,%d", &x, &y, h, h + 1, h + 2, h + 3, h + 4) == 7) { PlayersInputHelpers::Row rows[6]; for (int i = 0; i < 5; i++) rows[i].h = h[i]; rows[5].h = 0; PlayersInputHelpers::reposition(x, y, rows); printf("%d %d\n", x, y); for (int i = 0; i < 5; i++) printf("%d %d\n", rows[i].x, rows[i].y); return 0; } return 0; }
     if (const char* pp = getenv("CCR_PLAYERSTEST")) { int h[4] = {0, 1, 0, 1}, l[4] = {0, 0, 0, 0}; if (sscanf(pp, "%d,%d,%d,%d;%d,%d,%d,%d", h, h + 1, h + 2, h + 3, l, l + 1, l + 2, l + 3) >= 4) { std::vector<std::string> lg; PlayersPane::draw(app, h, l, &lg); for (auto& s : lg) printf("%s%c", s.c_str(), 10); } return 0; }
