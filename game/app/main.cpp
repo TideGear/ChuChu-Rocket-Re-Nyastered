@@ -637,6 +637,75 @@ static int playersFlowStep(int st, int tim, int a3c, int a40, int net, int split
     if (a40 == 1) return split ? 0x14 : 0x13;
     return split ? 0x10 : 0xf;
 }
+// iPad PlayerSelectScreen::render (HD 1.0 0x35154).
+struct PlayersFrame {
+    int state = 0x23, pane = 0, team = 0, costume = 0;
+    int loaded = 0, textureCount = 0, catFrame = 0, mouseFrame = 0;
+    float fade = 500000.0f, catX = -GW * 0.15f, mouseX = -GW * 0.05f;
+
+    void draw(App& app, const std::function<void(int)>& drawPane) const {
+        const auto texture = [&](int id, int frame, float x, float y, bool tile) {
+            Sheet* sheet = app.imgSheet(id);
+            if (!sheet || frame < 0 || frame >= static_cast<int>(sheet->fr.size())) return;
+            if (!tile && state == 0x23) {
+                x += sheet->off[frame].x;
+                y += sheet->off[frame].y;
+            }
+            const int w = tile ? 128 : sheet->sz[frame].x - 2;
+            const int h = tile ? 128 : sheet->sz[frame].y - 2;
+            if (app.uiLog) {
+                char line[128];
+                snprintf(line, sizeof line, "RT %d %d %.4f %.4f %d %d", id, frame, x, y, w, h);
+                app.uiLog->push_back(line);
+            } else {
+                const SDL_Rect& frameRect = sheet->fr[frame];
+                const SDL_Rect src{frameRect.x + 1, frameRect.y + 1, w, h};
+                const SDL_FRect dst{x, y, static_cast<float>(w), static_cast<float>(h)};
+                SDL_RenderCopyF(app.ren, sheet->tex, &src, &dst);
+            }
+        };
+        const auto overlay = [&](int alpha) {
+            if (app.uiLog) app.uiLog->push_back("black " + std::to_string(alpha));
+            else app.fillRect(0, 0, GW, GH, 0, 0, 0, alpha);
+        };
+        const auto message = [&](const std::string& text) {
+            if (app.hdFont.box.size() <= 91) return;
+            const float y = GH * 0.5f - app.hdFont.box[91].y;
+            app.printString(text, GW * 0.5f, y, 255, 255, 255, 255, 1.0f, 0, false);
+        };
+
+        if (state == 0x23) {
+            overlay(255);
+            if (const auto* format = app.hdString(0x17d)) {
+                char text[128];
+                snprintf(text, sizeof text, format->c_str(), loaded, textureCount);
+                message(text);
+            }
+            texture(40, catFrame, catX, GH * 0.75f, false);
+            texture(costume == 1 ? 75 : costume == 2 ? 63 : 51, mouseFrame, mouseX, GH * 0.75f, false);
+            return;
+        }
+
+        // The iPad tile map, resource key 0x126 (record 880).
+        static constexpr int tiles[6][8] = {
+            {0, 1, 2, 3, 4, 4, 4, 4}, {5, 6, 7, 8, 9, 10, 4, 4},
+            {11, 12, 4, 4, 13, 14, 4, 15}, {16, 17, 18, 19, 20, 21, 22, 23},
+            {24, 25, 26, 27, 28, 29, 30, 31}, {32, 4, 4, 4, 33, 34, 35, 36},
+        };
+        for (int row = 0; row < 6; ++row)
+            for (int col = 0; col < 8; ++col)
+                texture(28, tiles[row][col], 128.0f * col, 128.0f * row, true);
+        texture(34, team == 1 ? 3 : 2, 208, 50, false);
+        if (pane == 0 || pane == 1) drawPane(pane);
+        if (state == 0x24 || state == 0x26) {
+            overlay(static_cast<int>((fade / 500000.0f) * 255.0f));
+        } else if (state == 0x27) {
+            overlay(192);
+            if (const auto* text = app.hdString(0x182)) message(*text);
+        }
+    }
+};
+
 struct PlayersPane {
     // human[p] 1 = human, 0 = CPU; level[p] = CPU level index (0 Weak .. 3 Strong), shown as 'Weak' text in the level tag
     static void draw(App& a, const int human[4], const int level[4], std::vector<std::string>* log) {
@@ -1182,6 +1251,18 @@ struct BattleMode : Screen {
     }
 };
 
+static int saveFrame(SDL_Renderer* renderer, const char* path) {
+    int width, height;
+    if (SDL_GetRendererOutputSize(renderer, &width, &height) < 0) return 1;
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!surface) return 1;
+    const bool saved = SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                                            surface->pixels, surface->pitch) == 0 &&
+                       SDL_SaveBMP(surface, path) == 0;
+    SDL_FreeSurface(surface);
+    return saved ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     if (getenv("CCR_PSTEST23")) {
         PlayersTextureLoad load;
@@ -1259,6 +1340,22 @@ int main(int argc, char** argv) {
         printf("%#x t%d a3c%d a40=%d net%d split%d dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f%c", st, tim, a3c, a40, net, split, dt, f0, req, ops.c_str(), fade, 10); idx++; } return 0; }
     if (const char* pin = getenv("CCR_PLAYIN")) { PlayersInputLogic pil; for (int i = 0; i < 14; i++) { pil.sfx.clear(); pil.press(i); printf("%d d3c=%d d40=%d d44=%d d58=%d a40=%d a3c=%d a38=%d d20=%d\n", i, pil.d3c, pil.d40, pil.d44, pil.d58, pil.a40, pil.a3c, pil.a38, pil.d20); } return 0; }
     if (const char* ph = getenv("CCR_PLAYHELP")) { int a, bb, v, x, y; int h[6] = {0,0,0,0,0,0}; if (sscanf(ph, "m:%d,%d,%d", &a, &bb, &v) == 3) { uint8_t lit[8] = {0,0,0,0,0,0,0,0}; if (a != 0 || bb != 1 || true) {} PlayersInputHelpers::mutexPlayer(lit, a, bb, v); printf("%d %d\n", lit[a], lit[bb]); return 0; } if (sscanf(ph, "r:%d,%d,%d,%d,%d,%d,%d", &x, &y, h, h + 1, h + 2, h + 3, h + 4) == 7) { PlayersInputHelpers::Row rows[6]; for (int i = 0; i < 5; i++) rows[i].h = h[i]; rows[5].h = 0; PlayersInputHelpers::reposition(x, y, rows); printf("%d %d\n", x, y); for (int i = 0; i < 5; i++) printf("%d %d\n", rows[i].x, rows[i].y); return 0; } return 0; }
+    if (const char* spec = getenv("CCR_PSRENDER")) {
+        PlayersFrame frame;
+        if (sscanf(spec, "%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f", &frame.state, &frame.pane,
+                   &frame.team, &frame.costume, &frame.loaded, &frame.textureCount, &frame.catFrame,
+                   &frame.mouseFrame, &frame.fade, &frame.catX, &frame.mouseX) != 11) return 1;
+        if (const char* shot = getenv("CCR_SHOT")) {
+            SDL_RenderSetLogicalSize(app.ren, GW, GH);
+            frame.draw(app, [](int) {});
+            return saveFrame(app.ren, shot);
+        }
+        std::vector<std::string> trace;
+        app.uiLog = &trace;
+        frame.draw(app, [&](int pane) { trace.push_back("pane " + std::to_string(pane)); });
+        for (const auto& call : trace) puts(call.c_str());
+        return 0;
+    }
     if (const char* pp = getenv("CCR_PLAYERSTEST")) { int h[4] = {0, 1, 0, 1}, l[4] = {0, 0, 0, 0}; if (sscanf(pp, "%d,%d,%d,%d;%d,%d,%d,%d", h, h + 1, h + 2, h + 3, l, l + 1, l + 2, l + 3) >= 4) { std::vector<std::string> lg; PlayersPane::draw(app, h, l, &lg); for (auto& s : lg) printf("%s%c", s.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
     if (!enter(start)) return 2;
@@ -1269,8 +1366,10 @@ int main(int argc, char** argv) {
         std::vector<std::array<int, 3>> clicks; if (const char* c = getenv("CCR_CLICKS")) { int t, x, y, n; const char* p = c; while (sscanf(p, "%d:%d,%d%n", &t, &x, &y, &n) == 3) { clicks.push_back({t, x, y}); p += n; if (*p == ';') p++; else break; } }   // headless test input: tick:x,y;... (window pixels)
         int lastSong = -2; for (int i = 0; i < ticks; i++) {
             for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
-        mode->draw(app, 1.0f); int ow = W, oh = H; SDL_GetRendererOutputSize(app.ren, &ow, &oh); SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, ow, oh, 32, SDL_PIXELFORMAT_ARGB8888);
-        SDL_RenderReadPixels(app.ren, nullptr, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch); SDL_SaveBMP(s, shot); SDL_FreeSurface(s); SDL_Quit(); return 0;
+        mode->draw(app, 1.0f);
+        const int result = saveFrame(app.ren, shot);
+        SDL_Quit();
+        return result;
     }
     if (getenv("CCR_BENCH")) {   // headless render benchmark: CCR_BENCH=<frames> CCR_HZ=<simulated display rate> CCR_SIZE=WxH; fixed 60 Hz ticks, interpolated draws at the output size
         int frames = atoi(getenv("CCR_BENCH")); double hz = getenv("CCR_HZ") ? atof(getenv("CCR_HZ")) : 60.0; double a2 = 0; long ticks = 0;

@@ -36,9 +36,11 @@ Done and verified this session (details and dates in docs/roadmap.md, entries da
   - The network flag for process is the byte pointed to by global 0xeb450. Case 12 reads a different pointer, via 0x32170 -> 0xeb494 -> 0x175010.
 
 Open, next in order:
-1. Trace render (0x35155), then wire a PlayersMode screen from stage select to battle (today "BATTLE" goes straight to BattleMode).
+1. Wire the iPad player-select renderer and panes into a live PlayersMode. Trace the remaining pane interactions and the transition from battle stage select into player select before changing the main-menu Battle route.
 2. Then the rest of phase A from docs/roadmap.md: roulette wheel, celebration rockets, tutorial, Stage Challenge, Puzzle Edit, Costumes. Phases B–G follow the roadmap.
 
 State 0x23 now has a standalone port and a headless differential test. The original constructor fills its list by calling `loadBattleGraphics` (0xc104) at 0x34bf2. The port accepts the ordered texture IDs and issues one upload per tick, then releases the entries in reverse and signals 0x24. The live PlayersMode will need to supply the list and connect those operations to the renderer.
+
+`PlayersFrame` ports the iPad drawing around the panes in states 0x23–0x27. `tools/players_render_diff.py` compares it with the original render at 0x35154, recording which pane the original calls. In state 0x23, the cat uses frame +0xa60 and x +0xa4c. The costume mascot uses frame +0xa78 and x +0xa64. The app's HD image exporter includes the six image slots used by the renderer.
 
 On Windows, run `build.cmd --target ccr` from Command Prompt or `.\build.cmd --target ccr` from PowerShell. The script downloads pinned Zig, CMake and Ninja into `local/tools/windows` on first use. Its CMake cache is `build/game-zig`, with executables in `build/game`. Python is `py -3`.
