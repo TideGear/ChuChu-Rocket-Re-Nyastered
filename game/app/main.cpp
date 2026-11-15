@@ -9,6 +9,7 @@
 #include "battle_preview.hpp"
 #include "roulette_pose.hpp"
 #include "roulette_draw.hpp"
+#include "rocket_lid.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -1875,6 +1876,22 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 }
 
 int main(int argc, char** argv) {
+    if (getenv("CCR_ROCKET_LID_TRACE")) {
+        int player, team, x, y;
+        unsigned globalTime;
+        while (scanf("%d %d %d %d %u", &player, &team, &x, &y, &globalTime) == 5) {
+            if (player < 0 || player >= 4 || x < 0 || x >= kCols || y < 0 || y >= kRows) return 1;
+            RocketLid lid;
+            for (int i = 0; i < 640; ++i) {
+                lid.tick(x, y, globalTime + i);
+                const auto image = rocketLidImage(player, team != 0, x, y, lid.openness,
+                    (x + 0.5f) * kCell, (y + 0.5f) * kCell, CELL / kCell, OX, OY);
+                printf("%d %d %d %a %d %d %d %a %a\n", lid.phase, lid.count, lid.angle,
+                       lid.openness, image.image, image.frame, image.flags, image.x, image.y);
+            }
+        }
+        return 0;
+    }
     if (getenv("CCR_ROULETTE_MESH_TRACE")) {
         RoulettePose pose;
         float u0, v0, u1, v1;
