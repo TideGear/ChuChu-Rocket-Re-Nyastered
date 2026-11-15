@@ -766,12 +766,40 @@ struct PlayersInputLogic {
 // items: 0 back (0, 711, 57 x 57), 1 corner (967, 711, 57 x 57), 2..9 buttons 30 x 30. Values read from the original under Unicorn (tools/players_settings_diff.py).
 struct SettingsPaneItems {
     struct PaneRect { int x, y, w, h; };
+    static int hit(const PaneRect* rects, int count, int x, int y) {
+        for (int i = 0; i < count; ++i) {
+            const auto& r = rects[i];
+            if (r.x <= x && x <= r.x + r.w && r.y <= y && y <= r.y + r.h) return i;
+        }
+        return -1;
+    }
     // updateMenuItemFromTouchEvent (press, 0): the first item (in order 0..9) whose rect contains the point, edges inclusive; -1 if none
-    static int hit(int x, int y) { PaneRect r[10]; layout(r); for (int i = 0; i < 10; i++) if (r[i].x <= x && x <= r[i].x + r[i].w && r[i].y <= y && y <= r[i].y + r[i].h) return i; return -1; }
+    static int hit(int x, int y) { PaneRect r[10]; layout(r); return hit(r, 10, x, y); }
     static void layout(PaneRect out[10]) {
         out[0] = {0, 711, 57, 57}; out[1] = {967, 711, 57, 57};
         static const int bx[8] = {12, 207, 12, 207, 248, 443, 248, 443}, by[8] = {205, 205, 240, 240, 52, 52, 91, 91};
         for (int i = 0; i < 8; i++) out[2 + i] = {bx[i], by[i], 30, 30};
+    }
+
+    // HD initSettingsPaneMenuItems, iPad branch. Network mode omits both
+    // launch buttons from the active menu items.
+    static int layoutPad(PaneRect (&out)[37], bool network) {
+        for (int i = 0; i < 25; ++i)
+            out[i] = {228 + (i % 5) * 54, 258 + (i / 5) * 34, 46, 30};
+        out[25] = {0, 711, 57, 57};
+        out[26] = {967, 711, 57, 57};
+        out[27] = {208, 444, 40, 40};
+        out[28] = {468, 444, 40, 40};
+        out[29] = {208, 500, 40, 40};
+        out[30] = {468, 500, 40, 40};
+        out[31] = {533, 250, 40, 40};
+        out[32] = {793, 250, 40, 40};
+        out[33] = {533, 312, 40, 40};
+        out[34] = {793, 312, 40, 40};
+        if (network) return 35;
+        out[35] = {364, 610, 118, 93};
+        out[36] = {542, 610, 118, 93};
+        return 37;
     }
 };
 
@@ -1332,6 +1360,25 @@ int main(int argc, char** argv) {
     if (getenv("CCR_PANELS")) { SettingsListPanels::Draw d[4]; SettingsListPanels::draws(d); for (int i = 0; i < 4; i++) printf("%d %d %d %d %d %d %d %d\n", d[i].sx, d[i].sy, d[i].sw, d[i].sh, d[i].x, d[i].y, d[i].w, d[i].h); return 0; }
     if (getenv("CCR_LEVELROWS")) { std::vector<SettingsLevelList::Row> rw; SettingsLevelList::rows(0.0f, rw); for (auto& r : rw) printf("PS %s %.1f %.1f %.3f\n", r.text.c_str(), r.x, r.y, r.scale); return 0; }
     if (getenv("CCR_SETTINGSRECTS")) { SettingsPaneItems::PaneRect r[10]; SettingsPaneItems::layout(r); for (int i = 0; i < 10; i++) printf("%d %d %d %d %d\n", i, r[i].x, r[i].y, r[i].w, r[i].h); return 0; }
+    if (getenv("CCR_PAD_SETTINGS")) {
+        for (bool network : {false, true}) {
+            SettingsPaneItems::PaneRect rects[37];
+            const int count = SettingsPaneItems::layoutPad(rects, network);
+            printf("count %d\n", count);
+            for (int i = 0; i < count; ++i) {
+                const auto& r = rects[i];
+                printf("%d %d %d %d\n", r.x, r.y, r.w, r.h);
+            }
+            int tests;
+            if (scanf("%d", &tests) != 1 || tests < 0) return 1;
+            for (int i = 0; i < tests; ++i) {
+                int x, y;
+                if (scanf("%d %d", &x, &y) != 2) return 1;
+                printf("hit %d\n", SettingsPaneItems::hit(rects, count, x, y));
+            }
+        }
+        return 0;
+    }
     if (getenv("CCR_PSTEST24")) { for (float dt : {1.0f, 1.0f / 60.0f}) for (float f0 : {0.0f, 0.5f, 1.5f}) { std::string ops; float fade = f0; int req = playersFlowStep(0x24, 0, 0, 0, 0, 0, dt, fade, ops);
         printf("0x24 dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f%c", dt, f0, req, ops.c_str(), fade, 10); }
         for (int a44 : {0, 1, 2}) printf("0x25 a44=%d -> req=%d ops=[%s]%c", a44, 0, playersRouteOps(a44).c_str(), 10); return 0; }
