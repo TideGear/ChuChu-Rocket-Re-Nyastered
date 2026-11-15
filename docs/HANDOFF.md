@@ -22,3 +22,23 @@ Goal text: `local/goal.txt` (not committed) / the 9-item goal pasted via /goal. 
 - Challenge: the player's role in the types other than mod-5 == 3 is unexplained by static reading; do a runtime trace (Android emulator harness, inject touches into `ChallengeGameScreen`) before porting.
 - Main-menu items "The Basics", "Stage Challenge" and "Options" do nothing yet (they play the buzz sound); Android's options defaults are music 75, sfx 100 and eight flags (`initializeOptionsData` 0x682ec); `handleSoundMenuItemSelection` is empty.
 - Build on Windows from a plain bash: use a .cmd that calls `vcvars64.bat` (VS 18 BuildTools) then `cmake --build build/game --target ccr`.
+
+## Update 2026-11-14 (evening) — battle setup / player select (HD 1.0)
+Done and verified this session (details and dates in docs/roadmap.md, entries dated 2026-11-14):
+- Players pane input, all 14 cases: `tools/players_input_diff.py` (0 mismatches). Case 12 is the team toggle (+0xa40, 0<->1). It is gated by +0xd20 == 0 or the network flag (`tools/oracle/team_toggle_probe.py`).
+- Player select states 0x24–0x27: `playersFlowStep` / `playersRouteOps` in game/app/main.cpp. `tools/players_state_diff.py` covers 201 cases against `tools/oracle/players_state_probe.py` (Unicorn) with 0 mismatches. States:
+  - 0x24 fade-in, then song 5 and state 0x25.
+  - 0x25 routes to the players or settings pane.
+  - 0x26 fades to Menu (4) when +0xa3c is set.
+  - 0x27 picks the battle screen: 0x13 / 0x14 for team, 0xf / 0x10 for four battle (split flag +0xa7d), 0x11 for network, gated by state timer & 7 > 4.
+- Oracle facts to remember:
+  - `process(float)` takes dt in r1.
+  - The frame loop (`EAGLView_drawView` 0x97b8) also leaves dt in d6, which state 0x23 reads, so the harness must set D6.
+  - The network flag for process is the byte pointed to by global 0xeb450. Case 12 reads a different pointer, via 0x32170 -> 0xeb494 -> 0x175010.
+
+Open, next in order:
+1. State 0x23 (texture load tick and animation clocks). The constructor (0x34a00) creates the +0xa1c list empty, and `_BHLib_SearchList` returns NULL on an empty list. Find the code that fills that list first, then build an oracle harness. Call `putTextureIntoTSpace` (0xcff0) and `destroyTSpaceEntryNode` (0xcfa8) through record-only stubs, and set D6 = dt.
+2. Render (0x35155), then a PlayersMode screen in the port wiring stage select -> player select -> battle (today "BATTLE" goes straight to BattleMode).
+3. Then the rest of phase A from docs/roadmap.md: roulette wheel, celebration rockets, tutorial, Stage Challenge, Puzzle Edit, Costumes. Phases B–G follow the roadmap.
+
+Build from bash or PowerShell: `cmd.exe /c "\"c:\Dev\ChuChu Rocket\build.cmd\" --target ccr"` (build.cmd passes its arguments to `cmake --build`). Python is `py -3`.
