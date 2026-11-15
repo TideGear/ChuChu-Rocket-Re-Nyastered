@@ -21,6 +21,7 @@ def item_stub(uc, a, s, u):
     uc.reg_write(UC_ARM_REG_R0, ITEM['v']); uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
 def run(item, press=0, flags=None):
     ITEM['v'] = item; del log[:]
+    o.write(scr + 0xa08, struct.pack('<I', scr + 0x8))   # current menu item pointer (the pane's first item)
     if flags:
         for off, val in flags.items(): o.write(scr + off, bytes([val]) if off < 0xd00 else struct.pack('<I', val))
     o.call(0x31d24, scr, 0, 0, press)
