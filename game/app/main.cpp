@@ -570,6 +570,7 @@ struct PlayersPane {
         for (int p = 0; p < 4; p++) {   // level tags: 106 x 31 at y 151 (lit state not traced: drawn at the default frame)
             float sx = 37.0f + 153.0f * p; rt(a.plLabels, 107, 66, 106, 31, sx, 151.0f, 106, 31);
             /* level text: source not yet traced (the text 'Weak' is not in the en table keys 0x185..0x18e) */ }
+        rt(a.ssArrows, 0, 0, 59, 59, 0.0f, 709.0f, 59, 59); rt(a.ssArrows, 60, 0, 59, 59, 965.0f, 709.0f, 59, 59);   // back button (image 17 frame 0) and the corner button (frame 1), both 59 x 59
     }
 };
 

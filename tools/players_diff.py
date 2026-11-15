@@ -9,7 +9,6 @@ o.call(0x32194, P.scr); env.log.clear(); o.call(0x33514, P.scr)
 exp = []
 for l in env.log:
     if l[0] == 'RenderTexture':
-        if l[2] == 709.0 or l[1] == 965.0: continue   # back and corner buttons: not ported yet
         if l[1] == 0.0 and l[2] == 0.0 and False: continue
         exp.append('RT %.1f %.1f %d %d' % (l[1], l[2], round(l[3]), round(l[4])))
     elif l[0] == 'PrintString':
