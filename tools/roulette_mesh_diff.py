@@ -29,6 +29,10 @@ class DrawOracle(IOSOracle):
             elif name == '_glFrustumf':
                 tail = self.read(uc.reg_read(UC_ARM_REG_SP), 8)
                 self.calls.append((name, tuple(map(u2f, r)) + struct.unpack('<2f', tail)))
+            elif name == '_glLightfv':
+                self.calls.append((name, (*r[:2], *struct.unpack('<4f', self.read(r[2], 16)))))
+            elif name in ('_glEnable', '_glDisable', '_glShadeModel'):
+                self.calls.append((name, (r[0],)))
             elif name in ('_glViewport', '_glCullFace', '_glNormalPointer', '_glDrawElements',
                           '_glVertexPointer', '_glTexCoordPointer'):
                 self.calls.append((name, tuple(r)))
@@ -50,12 +54,17 @@ def original_vertices(oracle, pose):
     assert (mode, count, scalar) == (4, 48, 0x1403)
     indices = struct.unpack('<48H', oracle.read(index_pointer, 96))
     end = next(i for i, (name, _) in enumerate(calls) if name == '_glDrawElements')
+    draw_calls = calls[:end]
+    assert [a for name, a in draw_calls if name == '_glLightfv'] == [
+        (0x4000, 0x1201, 32, 32, 32, 1), (0x4000, 0x1203, 0, 23.5, -25.5, 0)]
+    assert ('_glDisable', (0xb71,)) in draw_calls
+    assert ('_glShadeModel', (0x1d01,)) in draw_calls
     left, right, bottom, top, near, _ = by_name['_glFrustumf']
     rows = []
     for i in range(max(indices) + 1):
         data = struct.unpack('<8f', oracle.read(pointer + i * stride, stride))
         x, y, z = data[3:6]
-        for name, a in reversed(calls[:end]):
+        for name, a in reversed(draw_calls):
             if name == '_glTranslatef':
                 x, y, z = x + a[0], y + a[1], z + a[2]
             elif name == '_glScalef':
@@ -85,7 +94,9 @@ def main():
     oracle.call(0x15188)
     image = oracle.u32(env.appdata + 0x3cc + 4 * 99)
     frame = oracle.u32(image + 0x28) + 4
+    oracle.call(0xb194, image, f2u(0), f2u(0), f2u(1024), f2u(1024))
     actual_uv = struct.unpack('<4f', oracle.read(frame, 16))
+    assert actual_uv == (1 / 1024, 1 / 1024, 379 / 1024, 513 / 1024)
     poses = list(product((45.5, 557.3334, 970.0), (201.0, 380.0, 653.0),
                          range(0, 360, 45), (1.0, 30.0, 37.5)))
     cases = []

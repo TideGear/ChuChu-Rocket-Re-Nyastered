@@ -8,7 +8,7 @@
 #include "../core/angle.hpp"
 #include "battle_preview.hpp"
 #include "roulette_pose.hpp"
-#include "roulette_mesh.hpp"
+#include "roulette_draw.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -69,6 +69,7 @@ struct App {
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     BattlePreviewAtlas battlePreviewAtlas;
+    RouletteDraw rouletteDraw;
     Stages battlePreviewStages;
     bool battlePreviewLoaded = false;
     std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> battlePreviewTexture{nullptr, SDL_DestroyTexture};
@@ -1804,6 +1805,16 @@ struct BattleMode : Screen {
           const float y = 84.0f; float x = 78.0f; const float step = 14.0f;
           a.blit(a.hdTime, mm % 10, x, y, 0.8f); a.blit(a.hdTime, 10, x + step, y, 0.8f); float x2 = x + step + (float)((int)step / 2); a.blit(a.hdTime, ss / 10, x2, y, 0.8f); a.blit(a.hdTime, ss % 10, x2 + step, y, 0.8f); }
         SDL_RenderSetViewport(a.ren, nullptr); for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // banner tasks drawn over the HUD
+        int rollTick, roller, outcome;
+        if (game.rouletteDrawState(rollTick, roller, outcome)) {
+            const auto& cell = game.sim.rocketPos[roller];
+            const auto pose = battleRoulettePose(rollTick, cell[0], cell[1], outcome, OX, OY, CELL / kCell);
+            // Slot 99 is byte-identical across the five exported iPad language packs.
+            a.rouletteDraw.draw(a.ren, a.root + "/ret_all/loc_en/img_99", pose, GW, GH);
+            if (a.headless && getenv("CCR_ROULETTE_DRAW_TRACE"))
+                printf("roulette %d %d %d %d %d %a %a %a %a\n", game.frame, rollTick, roller,
+                       cell[0], cell[1], pose.x, pose.y, pose.degrees, pose.scale);
+        }
         if (mode >= 4) { int sc[4]; for (int p = 0; p < 4; p++) sc[p] = game.score.player[p]; int reach = 0; if (!(gTime & 0x20) && !matchOver) for (int p = 0; p < 4; p++) if (wins[p] == winPoint) reach |= 1 << p;   // PM_DispReach: blinks with the global time, none when the match is over
             if (game.teamMode) { int ts[2] = {game.score.team[0], game.score.team[1]}, tr[2] = {rank[0], rank[1]}; a.judgeWinTeam(ts, tr, wins, roundWinner, drawFlag, winPoint, reach & 3, true); } else a.judgeWin(sc, rank, wins, roundWinner, drawFlag, winPoint, reach, true);
             for (auto& s : smokes_) a.drawImage(0x92, s.n, s.x, s.y - a.layF(0x230), 0, 1.0f, 255);
@@ -2163,7 +2174,7 @@ int main(int argc, char** argv) {
             for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
         mode->draw(app, 1.0f);
         const int result = saveFrame(app.ren, shot);
-        mode.reset(); app.battlePreviewTexture.reset(); SDL_Quit();
+        mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit();
         return result;
     }
     if (getenv("CCR_BENCH")) {   // headless render benchmark: CCR_BENCH=<frames> CCR_HZ=<simulated display rate> CCR_SIZE=WxH; fixed 60 Hz ticks, interpolated draws at the output size
@@ -2176,7 +2187,7 @@ int main(int argc, char** argv) {
         double sec = (double)(SDL_GetPerformanceCounter() - t0) / SDL_GetPerformanceFrequency(); int ow = 0, oh = 0; SDL_GetRendererOutputSize(app.ren, &ow, &oh);
         printf("output %dx%d simulated %.0f Hz: %d frames, %ld sim ticks (%.3f s simulated, %.1f ticks/s), draw %.2f ms/frame (%s renderer)\n", ow, oh, hz, frames, ticks, frames / hz, ticks / (frames / hz), drawMs / frames, getenv("CCR_GPU") ? "GPU" : "software");
         if (const char* out = getenv("CCR_OUT")) { SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, ow, oh, 32, SDL_PIXELFORMAT_ARGB8888); SDL_RenderReadPixels(app.ren, nullptr, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch); SDL_SaveBMP(s, out); SDL_FreeSurface(s); }
-        (void)sec; mode.reset(); app.battlePreviewTexture.reset(); SDL_Quit(); return 0;
+        (void)sec; mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit(); return 0;
     }
     Uint64 last = SDL_GetPerformanceCounter();
     std::function<void()> frame = [&]() {
@@ -2197,5 +2208,5 @@ int main(int argc, char** argv) {
 #else
     while (!app.quit) frame();
 #endif
-    mode.reset(); app.battlePreviewTexture.reset(); SDL_Quit(); return 0;
+    mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit(); return 0;
 }

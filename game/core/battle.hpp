@@ -44,6 +44,13 @@ public:
     int localPlayer = 0;
     int activeEventKind() const { return evs_.empty() ? -1 : evs_.back().kind; }   // roulette outcome (0..7) of the running event, or -1 (the original picks the BGM from it: FUN_0003c56c)
     bool rollPending() const { return roll_.active; }
+    bool rouletteDrawState(int& tick, int& player, int& outcome) const {
+        if (!roll_.active || roll_.elapsed <= 0) return false;
+        tick = roll_.elapsed - 1;
+        player = lastRoller_;
+        outcome = roll_.outcome;
+        return true;
+    }
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
