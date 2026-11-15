@@ -1486,9 +1486,27 @@ struct BattleMode : Screen {
         switch (button) { case SDL_CONTROLLER_BUTTON_DPAD_UP: moveCur(p, 0, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: moveCur(p, 0, 1); break; case SDL_CONTROLLER_BUTTON_DPAD_LEFT: moveCur(p, -1, 0); break; case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: moveCur(p, 1, 0); break;
             case SDL_CONTROLLER_BUTTON_Y: place(p, curX[p], curY[p], 2); break; case SDL_CONTROLLER_BUTTON_A: place(p, curX[p], curY[p], 0); break; case SDL_CONTROLLER_BUTTON_X: place(p, curX[p], curY[p], 1); break; case SDL_CONTROLLER_BUTTON_B: place(p, curX[p], curY[p], 3); break; default: break; }
     }
-    bool load(const std::string& root, int stage, uint32_t sd) {
+    bool load(const std::string& root, int stage, uint32_t sd,
+              const SettingsPaneItems::PadRules* rules = nullptr) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
-        game.teamMode = getenv("CCR_TEAM") != nullptr; game.gbaCpu = getenv("CCR_CPU") && std::string(getenv("CCR_CPU")) == "gba"; game.rouletteManager = true; game.rotateOwn = true; game.baseScale = 1.0f; int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes;   // 1-3 minute rounds (NGI_SetGameTimer)
+        game.teamMode = getenv("CCR_TEAM") != nullptr;
+        game.gbaCpu = getenv("CCR_CPU") && std::string(getenv("CCR_CPU")) == "gba";
+        game.rouletteManager = true;
+        game.rotateOwn = true;
+        game.generatorParams = GenParams{};
+        if (rules) {
+            // HD 1.0 GA_OnGameFlag and GE_StartGenerator4Manager.
+            constexpr float speeds[] = {0.25f, 0.75f, 1.0f, 1.25f, 2.0f};
+            game.baseScale = speeds[rules->speedIndex];
+            game.roundFrames = (rules->timeIndex + 1) * 60 * 60;
+            game.generatorParams.pSpecial2 *= rules->highMice ? 5.0f : 1.0f;
+            winPoint = rules->pointIndex;
+        } else {
+            game.baseScale = 1.0f;
+            int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3;
+            game.roundFrames = minutes * 60 * 60;
+            winPoint = getenv("CCR_WINPOINT") ? atoi(getenv("CCR_WINPOINT")) : 2;
+        }
         if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
@@ -1512,7 +1530,6 @@ struct BattleMode : Screen {
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
         if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
         { int left = game.roundFrames - game.clock; if (left >= 0 && left % 60 == 0 && left != lastLeftSec) { lastLeftSec = left; int sec = left / 60; int m = sec == 3 ? 2 : sec == 2 ? 1 : sec == 1 ? 0 : sec == 30 ? 3 : sec == 60 ? 4 : sec == 120 ? 5 : -1; if (m >= 0) banners.push_back({0, m, 0, App::countLife(m)}); } }   // FB_Exe_GAME: BCD 0x300 / 0x200 / 0x100, 0x3000, 0x10000, 0x20000
-        if (gTime == 0 && getenv("CCR_WINPOINT")) winPoint = atoi(getenv("CCR_WINPOINT"));   // test override of GetWinPoint
         gTime++;
         for (auto& rk : rockets_) { if (rk.state == 0) { rk.y -= 2.0f; if (rk.y > rk.tx) { if ((gTime & 7) == 0) smokes_.push_back({rk.x, rk.y, 0}); } else { rk.state = 1; rk.scale = 1.0f; rk.dscale = 0.4f; flashes_.push_back({rk.x + 17.0f, rk.tx + 32.0f, 0.1f, 0.4f}); rk.y = rk.tx; if (gApp) { gApp->playSfx(0x14); } } }
             else if (rk.state == 1) { if (rk.scale >= 1.0f) { rk.scale += rk.dscale; if (rk.scale >= 4.0f) rk.dscale = -rk.dscale; } else { rk.scale = 1.0f; rk.state = 2; } } }
@@ -1706,6 +1723,22 @@ int main(int argc, char** argv) {
         }
         output.close();
         return output.fail() ? 1 : 0;
+    }
+    if (getenv("CCR_PAD_MATCH_RULES")) {
+        int points, speed, time, high;
+        while (scanf("%d %d %d %d", &points, &speed, &time, &high) == 4) {
+            if (points < 0 || points > 4 || speed < 0 || speed > 4 || time < 0 || time > 2 ||
+                high < 0 || high > 1) return 1;
+            const SettingsPaneItems::PadRules rules{points, speed, time, high != 0, false};
+            BattleMode battle;
+            if (!battle.load(app.root, 0, 1, &rules)) return 1;
+            for (int round = 0; round < 2; ++round) {
+                printf("%d %d %a %a %a\n", battle.winPoint, battle.game.roundFrames,
+                       battle.game.sim.catSpeed, battle.game.sim.mouseSpeed, battle.game.gen->params().pSpecial2);
+                if (round == 0) battle.restart();
+            }
+        }
+        return 0;
     }
     if (getenv("CCR_PAD_SETTINGS_INPUT")) {
         SettingsPaneItems::LocalPadInput input;

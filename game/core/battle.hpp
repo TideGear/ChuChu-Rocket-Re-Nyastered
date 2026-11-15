@@ -26,6 +26,7 @@ public:
     int frame = 0, clock = 0, roundFrames = 60 * 180;   // clock = frames the round countdown has run: it stops while the roulette wheel task is alive (FourBattleLoop phase 2 counts the timers only when RL_GetRoulette4Status() == 0)
           // round length: setting-dependent in the original (not extracted yet)
     float baseScale = 1.0f;                      // GA_OnGameFlag speed-option multiplier (0.25 with the option unset)
+    GenParams generatorParams;
     float charaSpeed = 1.0f;                     // GA_SetCharaSpeed (events scale cat and mouse together); base speeds 1.0 / 1.5
     int event = -1, eventLeft = 0; bool over = false;
     int rankOf(int p) const { return rank_[p]; }
@@ -51,7 +52,7 @@ public:
         sim.battle = true; sim.trace = debug; sim.load(st);
         std::vector<GenCell> cells; for (auto& g : sim.gens) cells.push_back({g.x, g.y, g.dir});
         for (auto& r : slot_) for (int& v : r) v = -1; for (int& v : ring_) v = 0;
-        gen.reset(new Generator(cells, seed)); sim.rnd = [this]() { return gen->rng().next(); }; if (rouletteManager) roulette.reset(new Roulette(gen->rng())); else roulette.reset(new Roulette());   // RL_StartRoulette4Manager draws 128 numbers from the shared stream spawned_ = 0; lastRoll.clear();
+        gen = std::make_unique<Generator>(cells, seed, generatorParams); sim.rnd = [this]() { return gen->rng().next(); }; if (rouletteManager) roulette.reset(new Roulette(gen->rng())); else roulette.reset(new Roulette());   // RL_StartRoulette4Manager draws 128 numbers from the shared stream spawned_ = 0; lastRoll.clear();
         frame = 0; over = false; event = -1; eventLeft = 0; charaSpeed = 1.0f; applySpeed();
         clock = 0; score = Scoreboard(); for (int& r : rank_) r = 0; roll_ = Roll(); evs_.clear(); lastRoller_ = 0; pendingRoll_ = -1; cpuPuts.clear(); cpuLcg.state = (uint32_t)cpuEnv.globalTime;
         cpuEnv.sim = &sim; cpuEnv.gameType = 0;
@@ -103,7 +104,8 @@ public:
 private:
     size_t spawned_ = 0; int slot_[4][3] = {{-1,-1,-1},{-1,-1,-1},{-1,-1,-1},{-1,-1,-1}}; int ring_[4] = {0,0,0,0};
     
-    void applySpeed() { sim.catSpeed = baseScale * charaSpeed; sim.mouseSpeed = 1.5f * baseScale * charaSpeed; }
+    float mouseSpeed(float scale) const { return (1.5f * scale) * baseScale; }  // GA_GetMouseSpeed
+    void applySpeed() { sim.catSpeed = baseScale * charaSpeed; sim.mouseSpeed = mouseSpeed(charaSpeed); }
     void spawnPending(bool fresh) { for (size_t i = spawned_; i < gen->spawns.size(); i++) { const Spawn& s = gen->spawns[i]; sim.spawn(!s.cat, s.mouseType, s.x, s.y, s.dir, fresh); } spawned_ = gen->spawns.size(); }
     void gbaStart(uint32_t seed) {
         gba::Env& e = gbaEnv; e = gba::Env(); e.lcg = seed * 2654435761u + 1u; e.mode = 0;
@@ -198,7 +200,7 @@ private:
             float v = -1.0f;
             if (e.state == 0) v = -1.0f;   // the start (state 0) takes effect from the next frame (measured)
             else if (e.count + 1 > e.limit && e.kind != 0 && e.kind != 1 && e.kind != 4 && e.kind != 7) v = 1.0f;
-            if (v >= 0.0f && e.slot >= 0) { sim.spdSlot = e.slot; sim.spdMouse = 1.5f * baseScale * v; sim.spdCat = baseScale * v; }
+            if (v >= 0.0f && e.slot >= 0) { sim.spdSlot = e.slot; sim.spdMouse = mouseSpeed(v); sim.spdCat = baseScale * v; }
         }
     }
     // The destructors of the event tasks (RL_Eve_*Dest): run when the task ends and also when a new roll deletes the running event (RL_RollRoulette4 deletes the task stored in its global).
@@ -219,7 +221,7 @@ private:
         float before = charaSpeed;
         for (const Ev& e : evs_) { eventDest(e.kind); sim.releaseSlot(e.slot); }
         evs_.clear(); event = -1;
-        if (charaSpeed != before) { sim.spdSlot = atSlot >= 0 ? atSlot : -1; sim.spdMouse = 1.5f * baseScale * charaSpeed; sim.spdCat = baseScale * charaSpeed; if (atSlot < 0) applySpeed(); }
+        if (charaSpeed != before) { sim.spdSlot = atSlot >= 0 ? atSlot : -1; sim.spdMouse = mouseSpeed(charaSpeed); sim.spdCat = baseScale * charaSpeed; if (atSlot < 0) applySpeed(); }
         else applySpeed();
     }
     void stepRoulette() {
