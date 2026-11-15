@@ -59,7 +59,7 @@ struct App {
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -118,7 +118,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); }
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
         { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); dpressOk = loadSheet(ret2 + "dpress", dpress); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
@@ -483,6 +483,14 @@ struct BattleMode : Screen {
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
         a.entities(game.sim, prev, paused ? 1.0f : alpha);
         for (int p = 0; p < 4; p++) if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame, (game.sim.coll[curY[p]][curX[p]] & 0xF00) != 0);
+        { SDL_RenderSetViewport(a.ren, nullptr);   // battle HUD frame (HD 1.0 renderFourBattleHud 0x21038, free-for-all branch; layout struct values): image 0x68 frame 1 at (+0xb4, +0xb8) = (82, 62),
+          // frame 2 at y + 0xbc (92) and 8 more times at + 0xc0 (0), frame 3 at + 0xc4 (0); frame 0 at (+0xc8, +0xcc) = (68, 88); player panels image 0x65 frame p at (280 + 192 p, 680) (+0x90..+0x9c),
+          // separator 0x68 frame 4 at each panel 1..3 + (+0xa0, +0xa4) = (-1, -22); frame 5 at (+0xd0, +0xd4) = (82, 720). drawImage(id, frame, x, y, 0, 1.0, 255). The team branch (frames 6..13) is not drawn yet.
+          int x0 = 82, y = 62; a.blit(a.hdHud68, 1, (float)x0, (float)y); y += 92; a.blit(a.hdHud68, 2, (float)x0, (float)y);
+          for (int k = 1; k < 9; k++) { y += 0; a.blit(a.hdHud68, 2, (float)x0, (float)y); } y += 0; a.blit(a.hdHud68, 3, (float)x0, (float)(y + 0));
+          a.blit(a.hdHud68, 0, 68.0f, 88.0f);
+          for (int p = 0; p < 4; p++) { float px = 280.0f + 192.0f * p, py = 680.0f; a.blit(a.hdHud65, p, px, py); if (p > 0) a.blit(a.hdHud68, 4, px - 1.0f, py - 22.0f); }
+          a.blit(a.hdHud68, 5, 82.0f, 720.0f); }
         SDL_RenderSetViewport(a.ren, nullptr);   // score digits (FUN_00030e18, iPad layout struct: x = 250 + 192 p + 30 k, y = 691; sprite r0729 frames 0..9 centred on their anchor); the player panels behind them (image 0x6d) are NOT drawn yet: their position field was not matched
         for (int p = 0; p < 4; p++) { int v = std::min(game.score.player[p], 999); int dg[3] = {v / 100 % 10, v / 10 % 10, v % 10};
             for (int k = 0; k < 3; k++) a.blit(a.digits, dg[k] == 1 ? 1 : dg[k] == 0 ? 0 : dg[k], 250.0f + 192 * p + 30 * k, 691.0f); }

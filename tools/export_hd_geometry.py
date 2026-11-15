@@ -5,7 +5,7 @@ import os, shutil, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 TABLES = {'hd_arrows': 567, 'hd_cursors': 654, 'hd_crowns': 648, 'hd_digits': 651,   # images 0x54, 0x60, 0x5e, 0x5f
           'hd_cat0': 345, 'hd_cat1': 354, 'hd_cat2': 363, 'hd_gold0': 392, 'hd_gold1': 396, 'hd_gold2': 400, 'hd_mouse0': 411, 'hd_mouse1': 415, 'hd_mouse2': 419}   # walk sheets side/back/front: HD images 0x28..0x2a, 0x2f..0x31, 0x33..0x35
-SHEETS = {'hd_time': (677, 679)}   # HD 1.0 image 0x69: in-play timer digits (clock2D 0x20e54)
+SHEETS = {'hd_time': (677, 679), 'hd_bhud65': (661, 664), 'hd_bhud68': (671, 676)}   # 0x65 player panels, 0x68 battle HUD pieces (renderFourBattleHud 0x21038)   # HD 1.0 image 0x69: in-play timer digits (clock2D 0x20e54)
 def main(pack, out):
     import struct, textures as T
     ts = {t['rec']: t for t in T.textures(pack)}
