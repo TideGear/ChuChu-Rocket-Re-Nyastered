@@ -59,7 +59,7 @@ struct App {
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -118,7 +118,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -226,6 +226,8 @@ struct App {
     void arrowIcon(float cx, float cy, int dir, int owner, float sc) { static const double rot[4] = {180.0, 270.0, 0.0, 90.0}; blit(arw, owner & 3, cx, cy, sc, rot[dir & 3]); }
     // Cursor (image 0x6b: frame = player; CU_CursorDrawPriority/DispCursorPriority): scale 1 + 0.1 sin(angle), angle = (player << 14) + 0x1000 per tick (CU_CursorCons, FUN_0002b344); over a cell with an object
     // (collision bits 0xF00) the square bracket (frame 4) is drawn with scale 1 + 0.075 sin(2 angle) (CU_CursorDrawPrioritySquare).
+    // Render::drawFrame type 5 (HD 1.0 0x1a60c): image 0x78 (frame table record 720: 58 px tiles), tile = 58 - 2; n = width / tile pieces centred on x: frames 0, 1..., 2 at y
+    void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
     void cursor(int cx, int cy, int player, int ticks, bool bracket) {
         int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
         blit(cur, player & 3, ax, ay, 1.0f + 0.1f * (float)std::sin(ang * 6.283185307 / 65536.0));
@@ -418,6 +420,7 @@ struct PuzzleMode : Screen {
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
         { static const int ord[4] = {3, 1, 2, 0}; static const int rot16[4] = {4, 12, 0, 8}; float x = (float)OX + 64.0f;
           for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.blit(a.arw, 0, x, 706.0f, 0.6f, rot16[k] * 22.5); x += 60.0f; } } }
+        a.drawFrame5(90, 410, 180); a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         SDL_RenderSetViewport(a.ren, nullptr);
     }
 };
