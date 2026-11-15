@@ -372,6 +372,19 @@ struct App {
             int lit = shown < 0 ? 0 : shown;
             for (int k = 0; k <= wp; k++) drawImage(0x5d, p, x + layF(0x19c + wp * 0x14 + 4 * k), y + layF(0x198), 0, 1.0f, lit <= k ? 0x22 : 0xff);
             if ((reach >> p) & 1) drawImage(0x91, 0, x + layF(0x200), y + layF(0x204), 0, 1.0f, 255); } }
+    // JudgeWinTeamPriority (HD 1.0 0x1ce64): the result screen of team battles (two teams: players 0 / 2 and 1 / 3); checked with tools/oracle/hd_judge_probe.py (tools/judge_team_diff.py)
+    void judgeWinTeam(const int tscore[2], const int trank[2], const int wins[2], int roundWinner, int drawFlag, int wp, int reach, bool gameFlag = false) {
+        int cnt = (trank[0] == 0) + (trank[1] == 0); int sl = trank[1] == 0 ? 1 : 0;
+        if (cnt == 1) { drawImage(0x87, 4, layF(0x148), layF(0x14c), 0, layF(0x144), 255); drawImage(0x87, sl, layF(0x150), layF(0x154), 0, layF(0x144), 255); drawImage(0x88, 0, layF(0x158), layF(0x15c), 0, 1.0f, 255);
+            drawImage(0x62, sl, layF(0x3d4), layF(0x3dc), 0, 2.0f, 0xde); drawImage(0x62, sl + 2, layF(0x3d8), layF(0x3dc), 0, 2.0f, 0xde); }
+        else drawImage(0x89, 0, layF(0x10c), layF(0x110), 0, 1.0f, 255);
+        for (int k = 0; k < 2; k++) drawImage(0x6a, 12 + k, (float)k * layF(0x3e8) + layF(0x3e4), layF(0x3e0), 0, 1.0f, 255);
+        float yd = (float)(int)layF(0x400);
+        for (int t = 0; t < 2; t++) { int sc = tscore[t]; float x = (float)(int)(t == 0 ? layF(0x3f4) : layF(0x3f8)); drawImage(0x5f, (sc / 100) % 10, x, yd, 0, layF(0x3f0), 255); x = (float)(int)(x + layF(0x3fc)); drawImage(0x5f, (sc / 10) % 10, x, yd, 0, layF(0x3f0), 255); x = (float)(int)(x + layF(0x3fc)); drawImage(0x5f, sc % 10, x, yd, 0, layF(0x3f0), 255); }
+        for (int t = 0; t < 2; t++) { float tx = (float)t * layF(0x3e8) + layF(0x3e4), iy = layF(0x404) + layF(0x408);
+            int shown = wins[t]; if (!gameFlag && drawFlag != 1 && t == roundWinner) shown--; int lit = shown < 0 ? 0 : shown;
+            for (int k = 0; k <= wp; k++) drawImage(0x5d, 4 + t, tx + layF(0x30c + wp * 0x14 + t * 0x64 + 4 * k), iy + layF(0x308), 0, 1.0f, k >= lit ? 0x22 : 0xff);
+            if ((reach >> t) & 1) drawImage(0x91, 0, tx + (t == 0 ? layF(0x2fc) : layF(0x300)), iy + layF(0x304), 0, 1.0f, 255); } }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
     void cursor(int cx, int cy, int player, int ticks, bool bracket) {
         int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
@@ -887,7 +900,7 @@ struct BattleMode : Screen {
     }
     bool load(const std::string& root, int stage, uint32_t sd) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
-        game.gbaCpu = getenv("CCR_CPU") && std::string(getenv("CCR_CPU")) == "gba"; game.rouletteManager = true; game.rotateOwn = true; game.baseScale = 1.0f; int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes;   // 1-3 minute rounds (NGI_SetGameTimer)
+        game.teamMode = getenv("CCR_TEAM") != nullptr; game.gbaCpu = getenv("CCR_CPU") && std::string(getenv("CCR_CPU")) == "gba"; game.rouletteManager = true; game.rotateOwn = true; game.baseScale = 1.0f; int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3; game.roundFrames = 60 * 60 * minutes;   // 1-3 minute rounds (NGI_SetGameTimer)
         if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
@@ -922,14 +935,16 @@ struct BattleMode : Screen {
             if (mode == 4 && modeTick > 0xf0 && tapped) { tapped = false; nextRound(); }
             else if (mode == 5) {   // FourBattleLoop mode 5 sub-states 0..3 (0x1c5c4): wait for the rocket, 30 ticks, 180 ticks (song 0x11), then the congratulations after 0xf0 ticks; a touch or 0x538 ticks ends
                 if (tapped && sub5 >= 1) { if (gApp) gApp->playSfx(3); back = true; }
-                else if (sub5 == 0) { for (auto& rk : rockets_) if (rk.state >= 2) { sub5 = 1; cnt5 = 0x1e; } }
+                else if (sub5 == 0) { if (game.teamMode) { sub5 = 1; cnt5 = 0x1e; } for (auto& rk : rockets_) if (rk.state >= 2) { sub5 = 1; cnt5 = 0x1e; } }
                 else if (sub5 == 1) { if (--cnt5 < 0) { sub5 = 2; cnt5 = 0xb4; } }
                 else if (sub5 == 2) { if (--cnt5 < 0) { sub5 = 3; cnt5 = 0; } }
                 else { cnt5++; if (cnt5 == 0xf0) { congra = true; if (gApp) gApp->playSfx(0x14); } if (cnt5 <= 0x5f && (cnt5 & 0x1f) == 0 && gApp) gApp->playSfx(0x15); if (cnt5 > 0x538) { if (gApp) gApp->playSfx(3); back = true; } } }
             return; }   // mode 4: JudgeWin until 0xf0 ticks and a touch   // mode 4: JudgeWin until 0xf0 ticks and a touch; mode 5: until a touch (the original waits at most 0x538 ticks)
         if (mode == 3) { modeTick++; if (modeTick > 0x3b) endRound(); }
         for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } if (mode == 2 || mode == 3) game.tick(); a.stepAngles(game.sim); }
-    void endRound() {   // FourBattleLoop mode 3 after 60 ticks (free-for-all): the only player with dense rank 0 wins the round
+    void endRound() {   // FourBattleLoop mode 3 after 60 ticks: the only player (team battle: team) with dense rank 0 wins the round
+        if (game.teamMode) { int ts[2] = {game.score.team[0], game.score.team[1]}; int tr[2] = {ts[0] >= ts[1] ? 0 : 1, ts[1] >= ts[0] ? 0 : 1}; for (int p = 0; p < 4; p++) rank[p] = tr[p & 1]; modeTick = 0; rockets_.clear(); smokes_.clear(); flashes_.clear();
+            if (tr[0] != tr[1]) { int w = tr[0] == 0 ? 0 : 1; roundWinner = w; drawFlag = 0; int old = wins[w]++; matchOver = old == winPoint; } else { drawFlag = 1; matchOver = false; } mode = matchOver ? 5 : 4; return; }   // the team result rocket (ResultRocketCons, team branch) is not ported
         int sc[4]; for (int p = 0; p < 4; p++) sc[p] = game.score.player[p]; int cnt = 0, w = 0; for (int p = 0; p < 4; p++) { int r = 0; for (int q = 0; q < 4; q++) if (sc[q] > sc[p]) { bool dup = false; for (int k = 0; k < q; k++) if (sc[k] == sc[q]) dup = true; if (!dup) r++; } rank[p] = r; if (r == 0) { cnt++; w = p; } }
         modeTick = 0; rockets_.clear(); smokes_.clear(); flashes_.clear(); if (cnt == 1) { roundWinner = w; drawFlag = 0; int old = wins[w]++; matchOver = old == winPoint; if (gApp) rockets_.push_back({w, 0, (float)w * gApp->layF(0x108) + gApp->layF(0x104) + gApp->layF(0x19c + winPoint * 0x14 + 4 * (wins[w] - 1)), 620.0f, 361.0f, 1.0f, 0.4f}); } else { drawFlag = 1; matchOver = false; }
         mode = matchOver ? 5 : 4; }
@@ -967,7 +982,7 @@ struct BattleMode : Screen {
           SDL_Rect vp3{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp3); }
         SDL_RenderSetViewport(a.ren, nullptr); for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // banner tasks drawn over the HUD
         if (mode >= 4) { int sc[4]; for (int p = 0; p < 4; p++) sc[p] = game.score.player[p]; int reach = 0; if (!(gTime & 0x20) && !matchOver) for (int p = 0; p < 4; p++) if (wins[p] == winPoint) reach |= 1 << p;   // PM_DispReach: blinks with the global time, none when the match is over
-            a.judgeWin(sc, rank, wins, roundWinner, drawFlag, winPoint, reach, true);
+            if (game.teamMode) { int ts[2] = {game.score.team[0], game.score.team[1]}, tr[2] = {rank[0], rank[1]}; a.judgeWinTeam(ts, tr, wins, roundWinner, drawFlag, winPoint, reach & 3, true); } else a.judgeWin(sc, rank, wins, roundWinner, drawFlag, winPoint, reach, true);
             for (auto& s : smokes_) a.drawImage(0x92, s.n, s.x, s.y - a.layF(0x230), 0, 1.0f, 255);
             for (auto& rk : rockets_) a.drawImage(0x5d, rk.player, rk.x, rk.y - a.layF(0x22c), 0, rk.scale, 255);
             if (congra) { a.drawImage(0x90, 0, a.layF(0x208), a.layF(0x20c), 0, 1.0f, 255); a.drawImage(0x62, roundWinner, a.layF(0x214), a.layF(0x218), 0, 2.0f, 255); }   // DispCongraDrawPriority 0x1f990 (the congratulation rockets, CongraRocketCons, are not ported)
@@ -1011,6 +1026,7 @@ int main(int argc, char** argv) {
     if (const char* bt = getenv("CCR_BUBBLE")) {   // development check: CCR_BUBBLE="x,y,w,flags,p6,alpha|text" prints the draw calls of Render::drawBubble (tools/bubble_diff.py compares them with the original)
         int x, y, w, fl, p6, al; int n = 0; if (sscanf(bt, "%d,%d,%d,%d,%d,%d|%n", &x, &y, &w, &fl, &p6, &al, &n) >= 6 && n > 0) { std::vector<std::string> lg; app.bubbleLog = &lg; app.drawBubble(x, y, w, bt + n, fl, p6, al); for (auto& s : lg) printf("%s\n", s.c_str()); } return 0; }
     if (const char* ht = getenv("CCR_HELPTEST")) { int tp, pg; if (sscanf(ht, "%d,%d", &tp, &pg) == 2) { std::vector<std::string> lg; app.uiLog = &lg; HelpMode hm; hm.phase = 0x15; hm.a20 = 0; if (tp < 0) hm.a34 = -1; else { hm.a34 = 1; hm.topic = tp; hm.page = pg; } hm.draw(app, 0); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
+    if (const char* jt = getenv("CCR_JUDGET")) { int s[2], r[2], wn[2], rw, df, wp, rc; if (sscanf(jt, "%d,%d;%d,%d;%d,%d;%d,%d,%d,%d", s, s + 1, r, r + 1, wn, wn + 1, &rw, &df, &wp, &rc) == 10) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWinTeam(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }

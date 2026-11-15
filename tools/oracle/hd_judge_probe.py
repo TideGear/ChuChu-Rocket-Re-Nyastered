@@ -20,3 +20,8 @@ def judge(scores, ranks, wp, reach=0, wins=(0, 0, 0, 0), winner=0, flag=0):
     o.write(0x2596c4 + 0x24, struct.pack('<i', winner)); o.write(0x2596c4 + 0x28, struct.pack('<i', flag)); o.write(0x104fb4, struct.pack('<i', wp)); state['reach'] = reach; del log[:]; o.call(0x1c99c, 0); return list(log)
 if __name__ == '__main__':
     for l in judge([12, 5, 7, 0], [0, 2, 1, 3], 3, 0b0100): print(l)
+
+def judge_team(tscores, tranks, wp, reach=0, wins=(0, 0), winner=0, flag=0):
+    for i in range(2): o.write(arr + 0x20 + 4 * i, struct.pack('<i', tscores[i])); o.write(arr + 0x28 + 4 * i, struct.pack('<i', tranks[i]))
+    for i in range(2): o.write(0x2596c4 + 0x14 + 4 * i, struct.pack('<i', wins[i]))
+    o.write(0x2596c4 + 0x24, struct.pack('<i', winner)); o.write(0x2596c4 + 0x28, struct.pack('<i', flag)); o.write(0x104fb4, struct.pack('<i', wp)); state['reach'] = reach; del log[:]; o.call(0x1ce64, 0); return list(log)
