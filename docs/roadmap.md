@@ -20,6 +20,10 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Ported the iPad Team Battle HUD panels, team score digits and scoreboard crowns, and restored the iPad sidebar for both battle modes. The base HUD and score digits precede the board at render priorities -788 and -784, with crowns drawn later. `tools/battle_hud_diff.py` matched 1,384 draw calls over 64 original iPad frames, including all human/CPU masks, combined scores, ties, and crown blink boundaries. The original draws fixed “Computer” tags even when those slots are human. It scales the leading crown to 1.3 in both modes. Headless captures checked the sidebar, score panel overlap and crowns in both modes. Refresh the iPad image export for slots 94, 95 and 106 using `tools/export_hd_images.py` and its updated default list. Playfield crowns over rockets and the in-match win-point icons remain open. Next, trace those overlays and their draw order.
 
+## Battle overlays (2026-11-15)
+
+- Ported `GameWinRocketDraw` and `MapCrawnDraw2D` on the iPad Battle route. Win icons blink with the rank task and survive a score reset between rounds. Team win icons hide while paused. Leading players and tied leaders mark their current rocket cells, including both rockets on a leading team. The iPad origin comes from `CoreSettingsInit`, and priority `0x28f` draws these overlays after sprites and before cursor rings. The rank-task counter includes the intro. The expanded `tools/battle_hud_diff.py` matched 1,588 draws across 64 original frames, including paused cases, zero scores with prior wins, and crowns at field edges. Headless captures checked a leader crown over a rocket and a green win icon surviving the next-round transition. Re-export iPad image slot 103 for the icons. Next, trace the battle roulette overlay's rendering and its transitions.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.

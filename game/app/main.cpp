@@ -454,20 +454,41 @@ struct App {
             }
         }
     }
-    void drawBattleHudCrowns(bool team, int tick, const Scoreboard& score, const int (&ranks)[4]) {
+    // RankCrawnDrawPriority (0x28f) runs after field objects and before the cursor ring.
+    void drawBattleRankOverlay(bool team, bool paused, int tick, const Scoreboard& score,
+                               const int (&ranks)[4], const int (&wins)[4], const int (&rockets)[4][2]) {
         if ((tick & 31) <= 10) return;
         const int* scores = team ? score.team : score.player;
         const int count = team ? 2 : 4;
         int total = 0;
         for (int p = 0; p < count; ++p) total += scores[p];
-        if (total == 0) return;
+        auto crown = [&](int rank, float x, float y, float scale) {
+            if (imgLog || imgSheet(0x5e)) drawImage(0x5e, rank, x, y, 0, scale, 255);
+            else blit(crowns, rank, x, y, scale);
+        };
+        auto rocketCrown = [&](int slot) {
+            constexpr float scale = CELL / kCell;
+            const double worldX = 14.5 * rockets[slot][0] + 19.5;
+            const float worldY = 14.5f * rockets[slot][1] + 3.0f;
+            crown(0, static_cast<float>(OX + worldX * scale), OY + worldY * scale, 1.0f);
+        };
         for (int p = 0; p < count; ++p) {
+            // GameWinRocketDraw uses the accumulated wins, even at zero score.
+            if (!team || !paused) {
+                const float start = team ? 298 + 496 * p : 234 + 192 * p;
+                const float step = team ? 14 : 12;
+                for (int w = 0; w < wins[p]; ++w)
+                    drawImage(0x67, team ? p + 4 : p, start + step * w, team ? 644 : 640, 0, 1.0f, 255);
+            }
+            if (total == 0) continue;
             const int rank = team ? scores[p] < scores[1 - p] : ranks[p];
             const float x = team ? 430 + 270 * p : 324 + 192 * p;
             const float y = team ? 640 : 644;
-            const float scale = rank == 0 ? 1.3f : 1.0f;
-            if (imgLog || imgSheet(0x5e)) drawImage(0x5e, rank, x, y, 0, scale, 255);
-            else blit(crowns, rank, x, y, scale);
+            crown(rank, x, y, rank == 0 ? 1.3f : 1.0f);
+            if (rank == 0) {
+                rocketCrown(p);
+                if (team) rocketCrown(p + 2);
+            }
         }
     }
     // Battle banner tasks (HD 1.0 BattleCountDrawPriority 0x1f580 and RoundCountDrawPriority 0x205fc; checked against the original with tools/oracle/hd_task_probe.py)
@@ -1769,10 +1790,12 @@ struct BattleMode : Screen {
         for (int p = 0; p < 4; ++p)
             if (lv[p] < 0 && (game.sim.coll[curY[p]][curX[p]] & 0xF00)) a.cursor(curX[p], curY[p], p, game.frame, true);
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku);
+        const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
+        if (intro > 0 && !game.over)
+            a.drawBattleRankOverlay(game.teamMode, paused, intro + game.frame, game.score, ranks,
+                                    wins, game.sim.rocketPos);
         for (int p = 0; p < 4; ++p)
             if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame);
-        const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
-        a.drawBattleHudCrowns(game.teamMode, game.frame, game.score, ranks);
         { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
           int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock); int secs = (left + 59) / 60; int mm = secs / 60, ss = secs % 60;
@@ -1944,15 +1967,18 @@ int main(int argc, char** argv) {
         return output.fail() ? 1 : 0;
     }
     if (getenv("CCR_BATTLE_HUD_TRACE")) {
-        int team, showScores, tick, ranks[4];
+        int team, showScores, tick, paused, ranks[4], wins[4], rockets[4][2];
         Scoreboard score;
         while (scanf("%d %d %d %d %d %d %d %d %d %d %d %d %d", &team, &showScores, &tick,
                      &score.player[0], &score.player[1], &score.player[2], &score.player[3],
                      &score.team[0], &score.team[1], &ranks[0], &ranks[1], &ranks[2], &ranks[3]) == 13) {
+            if (scanf("%d %d %d %d %d", &paused, &wins[0], &wins[1], &wins[2], &wins[3]) != 5) return 1;
+            for (auto& rocket : rockets)
+                if (scanf("%d %d", &rocket[0], &rocket[1]) != 2) return 1;
             std::vector<std::string> trace;
             app.imgLog = &trace;
             app.drawBattleHud(team != 0, showScores != 0, score);
-            app.drawBattleHudCrowns(team != 0, tick, score, ranks);
+            app.drawBattleRankOverlay(team != 0, paused != 0, tick, score, ranks, wins, rockets);
             app.imgLog = nullptr;
             for (const auto& call : trace) puts(call.c_str());
             puts("end");
