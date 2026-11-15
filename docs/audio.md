@@ -28,6 +28,23 @@ SFX and voices (iOS/Android 52 effects, mono ~70 kbps; Dreamcast `DP2SOUND.MLT`,
 ## Sound-effect ids (2026-11-13)
 Android 1.15 `ChuSECall(id, _)` (0x3d508) calls `AppData::playSFX(table[id].first)`; the 8-byte table at 0x63a00 maps ids 0..28 to themselves (ids 29..39 map to 40..50, the extra effects). Id 7 (cat enters rocket) is dropped when it fires less than 3 global ticks after its previous call. The app now follows this (battle hook: arrow placed 1, mouse home 6, cat in rocket 7 with the 3-tick rule, roulette 10, refused 0x13). Still to do: the sound index -> file mapping for ids >= 29, per-screen music selection and loop points, and the same tables for iOS/Dreamcast.
 
+### “Zero!” trigger audit (2026-11-14)
+
+`App::loadAudio` loads the iOS clip `019.ogg` into SFX slot 19 (0x13). All six extracted iOS copies have identical SHA-256 hashes. The current app can request the slot through these paths:
+
+| Action | What the sound indicates |
+| --- | --- |
+| Confirm **The Basics** or **Stage Challenge** on the main menu | The tutorial and Challenge entry are unfinished. |
+| Confirm **Help & Options** | The iPad menu refuses entry if the Options screen's required assets are unavailable. The fallback menu has no Options route, even if it can display the label. |
+| Confirm **Costumes** in Help & Options | The costume submenu is unfinished. This happens before any per-costume unlock check. |
+| Confirm **How to Play** or **Credits** in Help & Options | These screens exist. They use the same refusal path when their asset checks fail. |
+| Confirm a language whose exported text table is missing | The port plays the confirmation sound, then 0x13 and retains the current language. This includes Japanese with the current HD assets, and applies to any missing locale export. |
+| Press **Previous** on the first iPad puzzle page, or **Next** on the last page or when progress still locks the next page | Intentional page refusal. The original iPad `StageSelectScreen::handleInput` uses 0x13 on these paths. Other stage sets use the plain list. |
+| Attempt a refused arrow placement as battle player 1 | The port uses the clip for an invalid cell (existing arrow that cannot be rotated, rocket, hole, generator) or a placement rejected by the core during cursor lock or after the round. The intro and pending roulette checks can discard input before it reaches this hook. In Android, `AR_PutArrow` (0x286ac) plays 0x13 for local-player collision refusal in one branch. Its other branch delegates to 0x2859c, which rejects collisions without directly playing a sound. The port's individual refusal branches still need parity checks. |
+| The battle clock reaches zero | Intentional countdown voice. `BattleGame::tick` evaluates `0x13 - secondsLeft`. The original HD battle timer also requests 0x13 at zero. |
+
+Scope: the current port's SFX call sites and dispatch, checked against the local original code for stage-page refusal and the countdown. The original tutorial-completion gate refuses Puzzle, Stage Challenge and Battle with SFX 3. The port currently bypasses that gate. Its Stage Challenge button still cannot enter the mode. iPod Music and Game Center are hidden by the Options hit test and cannot trigger 0x13 there.
+
 ## Localization source (2026-11-13)
 The Android resources already hold every UI string per language (`libccrjni/<lang>/NNNN.bin`, 414 files per language; text ones are small null-terminated strings). `tools/export_strings.py` exports them to one table: 6 languages (de, en, es, fr, it, ja); en/fr/de/es/it are UTF-8 or single-byte Latin-1 accented text, Japanese is stored as 16-bit glyph codes into the Japanese font sheet (not text). Example: resource 0125 "Puzzle", 0126 "Challenge"/"Défi"/"Herausforderung"/"Sfida"/"Desafío", 0127 "Battle", 0128 "Help & Options", 0129 the tutorial hint. Next: compare with the iOS and Dreamcast (ENGLISH/FRENCH/GERMAN/SPANISH/JAPANIESE) text, choose a best source per language, and map the glyph codes to Japanese text with the font sheet.
 

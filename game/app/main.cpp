@@ -839,14 +839,14 @@ struct OptionsMode : Screen {
         if (before != hit && hit != back()) { a.playSfx(0); return; }
         if (sub == 2) {   // HelpOptionsScreen::handleLanguageMenuItemSelection 0x2437c: items 0..5 -> AppData::setLocale + reload the language textures, 6 = back to the main list
             a.playSfx(2); if (hit == back()) { sub = 0; sel = 0; return; }
-            if (a.langAvailable(hit)) a.setLanguage(hit); else a.playSfx(0x13);   // HD 1.0 has no Japanese pack
+            if (a.langAvailable(hit)) a.setLanguage(hit); else a.playSfx(0x13);   // selected locale files missing (including Japanese with the HD 1.0 assets)
             return; }
         if (hit == back()) { a.playSfx(2); chosen = 7; fade = 0; phase = 0x13; return; }
         if (hit == 0 && HelpMode::ok(a)) { a.playSfx(2); chosen = 0; fade = 0; phase = 0x13; return; }   // How to Play
         if (hit == 5 && CreditsMode::ok(a)) { a.playSfx(2); chosen = 5; fade = 0; phase = 0x13; return; }   // Credits
         if (hit == 1) { a.playSfx(2); sub = 1; drag = -1; return; }   // Sounds
         if (hit == 2) { a.playSfx(2); sub = 2; sel = a.lang; return; }   // Language
-        a.playSfx(0x13); }   // Costumes are not ported yet (docs/roadmap.md)
+        a.playSfx(0x13); }   // Costumes is unfinished. How to Play and Credits also land here if their required assets are unavailable.
     // renderSoundMenuItems 0x22dcc (checked against the original with tools/oracle/hd_options_probe.py, tools/options_diff.py); log != nullptr records the calls instead of drawing
     void drawSounds(App& a, int music, int sfx, int dragState, std::vector<std::string>* log) {
         auto rt = [&](Sheet& sh, int fr, float x, float y, int w, int h, int srcw) { if (log) { char t[120]; snprintf(t, sizeof t, "RT %.1f %.1f %d %d %.1f", x, y, w, h, fr == 1 && &sh == &a.opSld ? 0.5f : 0.0f); log->push_back(t); return; }
