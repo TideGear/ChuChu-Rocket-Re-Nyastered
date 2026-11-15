@@ -24,6 +24,15 @@ def stub(name):
 o.uc.hook_add(UC_HOOK_CODE, stub('precalc'), begin=PRECALC, end=PRECALC + 2)
 o.uc.hook_add(UC_HOOK_CODE, stub('remove'), begin=REMOVE, end=REMOVE + 2)
 o.uc.hook_add(UC_HOOK_CODE, stub('put'), begin=PUT, end=PUT + 2)
+CHANGE, SONG, PPANE, SPANE = 0xbcc4, 0xc9b4, 0x32bbc, 0x32b1c
+def stub_change(uc, a, s, u):   # changeGameState(app, state): record it and store the state the way the game does (+0x668, timer +0x66c cleared)
+    calls.append(('change', uc.reg_read(UC_ARM_REG_R0), uc.reg_read(UC_ARM_REG_R1), 0))
+    uc.mem_write(env.appdata + 0x668, struct.pack('<I', uc.reg_read(UC_ARM_REG_R1))); uc.mem_write(env.appdata + 0x66c, struct.pack('<I', 0))
+    uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+o.uc.hook_add(UC_HOOK_CODE, stub_change, begin=CHANGE, end=CHANGE + 2)
+o.uc.hook_add(UC_HOOK_CODE, stub('song'), begin=SONG, end=SONG + 2)
+o.uc.hook_add(UC_HOOK_CODE, stub('ppane'), begin=PPANE, end=PPANE + 2)
+o.uc.hook_add(UC_HOOK_CODE, stub('spane'), begin=SPANE, end=SPANE + 2)
 def f2u(x): return struct.unpack('<I', struct.pack('<f', x))[0]
 def run(state, a3c, a40, tim=0, net=0, split=0, dt=1.0 / 60, fade=0.0):
     ad = env.appdata
@@ -38,7 +47,7 @@ def run(state, a3c, a40, tim=0, net=0, split=0, dt=1.0 / 60, fade=0.0):
     return req, list(calls), fade_after
 def line(st, tim, a3c, a40, net, split, dt, fade):
     req, cl, fa = run(st, a3c, a40, tim, net, split, dt, fade)
-    ops = ';'.join(('precalc(%d,%d)' % (r0, r2)) if n == 'precalc' else ('%s(%d,%d)' % (n, r1, r2)) for n, r0, r1, r2 in cl)   # remove/put: texture id r1, value r2
+    ops = ';'.join(('precalc(%d,%d)' % (r0, r2)) if n == 'precalc' else ('change(%d)' % r1 if n == 'change' else ('song(%d)' % r1 if n == 'song' else ('%s(%d,%d)' % (n, r1, r2)))) for n, r0, r1, r2 in cl)   # remove/put: texture id r1, value r2
     return '%#x t%d a3c%d a40=%d net%d split%d dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f' % (st, tim, a3c, a40, net, split, dt, fade, req, ops, fa)
 def grid():
     out = []
@@ -51,7 +60,21 @@ def grid():
                             out.append(line(st, tim, a3c, a40, net, split, 1.0, 499999.5 if st == 0x26 else 0.0))
                             out.append(line(st, tim, a3c, a40, net, split, 1.0 / 60, 0.5))
     return out
+def grid24():
+    out = []
+    for dt in (1.0, 1.0 / 60):
+        for fade0 in (0.0, 0.5, 1.5):
+            req, cl, fa = run(0x24, 0, 0, 0, 0, 0, dt, fade0)
+            ops = ';'.join('%s(%d)' % (n, r1) for n, r0, r1, r2 in cl)
+            out.append('0x24 dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f' % (dt, fade0, req, ops, fa))
+    for a44 in (0, 1, 2):
+        o.write(scr + 0xa44, struct.pack('<I', a44))
+        req, cl, fa = run(0x25, 0, 0, 0, 0, 0, 1.0 / 60, 0.0)
+        ops = ';'.join('%s' % n for n, r0, r1, r2 in cl)
+        out.append('0x25 a44=%d -> req=%d ops=[%s]' % (a44, req, ops))
+    return out
 if __name__ == '__main__':
-    if '--grid' in sys.argv: print('\n'.join(grid()))
+    if '--grid24' in sys.argv: print('\n'.join(grid24()))
+    elif '--grid' in sys.argv: print('\n'.join(grid()))
     else:
         for l in grid()[:4]: print(l)

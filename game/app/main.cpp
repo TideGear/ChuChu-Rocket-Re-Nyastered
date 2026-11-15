@@ -557,10 +557,13 @@ struct HelpMode : Screen {
 // 0x26: the fade timer +0xa38 grows by dt; at >= 500000 it clamps and, when +0xa3c is set, requests Menu (4).
 // 0x27: acts only when (state timer & 7) > 4. Network flag: precalc(a40 == 1, 7) and screen 0x11.
 // Local: split flag +0xa7d gives remove(0x63) / put(0x64, 1); a40 == 1 -> screen 0x13 (split 0x14), else 0xf (split 0x10); precalc(a40 == 1, 7).
+// PlayerSelectScreen::handleInput routing in state 0x25 (HD 1.0 0x34fb8): +0xa44 == 0 -> processPlayersPane, == 1 -> processSettingsPane, else nothing.
+static std::string playersRouteOps(int a44) { return a44 == 0 ? "ppane" : a44 == 1 ? "spane" : ""; }
 static int playersFlowStep(int st, int tim, int a3c, int a40, int net, int split, float dt, float& fade, std::string& ops) {
     ops.clear(); char b[64];
     auto add = [&](const char* t) { if (!ops.empty()) ops += ';'; ops += t; };
     if (st == 0x26) { fade = fade + dt; if (!(fade >= 500000.0f)) return 0; fade = 500000.0f; return a3c == 0 ? 0 : 4; }
+    if (st == 0x24) { fade = fade - dt; if (fade > 0.0f) return 0; fade = 0.0f; add("change(37)"); add("song(5)"); return 0; }   // fade-in ends: changeGameState(0x25) then playSong(5)
     if (st != 0x27 || (tim & 7) <= 4) return 0;
     snprintf(b, sizeof b, "precalc(%d,7)", a40 == 1 ? 1 : 0);
     if (net) { add(b); return 0x11; }
@@ -1159,6 +1162,9 @@ int main(int argc, char** argv) {
     if (getenv("CCR_PANELS")) { SettingsListPanels::Draw d[4]; SettingsListPanels::draws(d); for (int i = 0; i < 4; i++) printf("%d %d %d %d %d %d %d %d\n", d[i].sx, d[i].sy, d[i].sw, d[i].sh, d[i].x, d[i].y, d[i].w, d[i].h); return 0; }
     if (getenv("CCR_LEVELROWS")) { std::vector<SettingsLevelList::Row> rw; SettingsLevelList::rows(0.0f, rw); for (auto& r : rw) printf("PS %s %.1f %.1f %.3f\n", r.text.c_str(), r.x, r.y, r.scale); return 0; }
     if (getenv("CCR_SETTINGSRECTS")) { SettingsPaneItems::PaneRect r[10]; SettingsPaneItems::layout(r); for (int i = 0; i < 10; i++) printf("%d %d %d %d %d\n", i, r[i].x, r[i].y, r[i].w, r[i].h); return 0; }
+    if (getenv("CCR_PSTEST24")) { for (float dt : {1.0f, 1.0f / 60.0f}) for (float f0 : {0.0f, 0.5f, 1.5f}) { std::string ops; float fade = f0; int req = playersFlowStep(0x24, 0, 0, 0, 0, 0, dt, fade, ops);
+        printf("0x24 dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f%c", dt, f0, req, ops.c_str(), fade, 10); }
+        for (int a44 : {0, 1, 2}) printf("0x25 a44=%d -> req=%d ops=[%s]%c", a44, 0, playersRouteOps(a44).c_str(), 10); return 0; }
     if (getenv("CCR_PSTEST")) { int idx = 0; for (int st : {0x26, 0x27}) for (int tim : {3, 5}) for (int a3c : {0, 1}) for (int a40 : {0, 1, 2}) for (int net : {0, 1}) for (int split : {0, 1}) for (int k = 0; k < 2; k++) {
         float dt = k == 0 ? 1.0f : 1.0f / 60.0f, f0 = k == 0 ? (st == 0x26 ? 499999.5f : 0.0f) : 0.5f; std::string ops; float fade = f0; int req = playersFlowStep(st, tim, a3c, a40, net, split, dt, fade, ops);
         printf("%#x t%d a3c%d a40=%d net%d split%d dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f%c", st, tim, a3c, a40, net, split, dt, f0, req, ops.c_str(), fade, 10); idx++; } return 0; }
