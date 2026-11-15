@@ -2,9 +2,17 @@
 
 **This is a fully human-driven, AI-powered reimplementation of SEGA's ChuChu Rocket!** I direct the project and set the standard for accepting changes. AI assists with reverse engineering, implementation, testing and documentation. When a feature is verified against an original release, the documentation shows how the comparison ran and which cases it covered.
 
-**This is very much a work in progress.** Menus, visuals, and gameplay will continue to change as more of the original releases are reproduced and verified.
+### Work-in-progress screenshots
 
-> **Unofficial fan project.** This project has no affiliation with SEGA. The game's artwork, music, stages and marks belong to their respective owners. The repository contains the project source and documentation. Use your own lawfully obtained game files to generate assets and screenshots locally. See [asset handling and release notes](docs/distribution.md).
+![Title screen with the Dreamcast logo and iPad background](docs/screenshots/title-wip.png)
+
+| Puzzle | Battle |
+| --- | --- |
+| ![Puzzle stage 25, Gang of cats](docs/screenshots/puzzle-wip.png) | ![Battle against three CPU opponents](docs/screenshots/battle-wip.png) |
+
+**This is very much a work in progress.** These captures show the current development build. Menus, visuals, and gameplay will continue to change as more of the original releases are reproduced and verified.
+
+> **Unofficial fan project.** This project has no affiliation with SEGA. The artwork shown in the screenshots, along with the original games’ music, stages and marks, belongs to the respective rights holders. Use your own lawfully obtained game files to generate the assets required to play. See [asset handling and release notes](docs/distribution.md).
 
 The project brings together the strongest parts of the Dreamcast, Game Boy Advance, iOS and Android releases in a portable C++ and SDL2 implementation. The current build pairs the iPad layout with the Dreamcast title logo and CD music when those assets are available. Each [asset and rule source](docs/provenance.md) is documented separately.
 

@@ -5,7 +5,7 @@ Re-Nyastered is an unofficial fan project. SEGA and the other rights holders ret
 ## Local development
 
 - Keep lawfully obtained originals in `Original Game Files/` or an external folder. Setup normally writes its extracted assets, original-code analysis inputs and reports to `%APPDATA%\ReNyastered`. Repository-local research and build outputs belong under the ignored `local/`, `analysis/` and `build/` folders.
-- Keep screenshots with original artwork under `local/`. The game can capture them from your own exported assets using `CCR_SHOT` and `CCR_TICKS`. Keep decompiler dumps, extracted art, music, text, boards, saves and game binaries local too. Commit implementation code, tools and documentation of behavior and provenance.
+- Keep development captures under `local/`. The three in-game screenshots in `docs/screenshots/` illustrate the port’s progress in the README. The game can capture them from your own exported assets using `CCR_SHOT` and `CCR_TICKS`. Keep decompiler dumps, extracted art, music, text, boards, saves and game binaries local. Commit implementation code, tools and documentation of behavior and provenance.
 - `RN_WEB_ASSETS` embeds local game data in the browser build output. Use it only for local testing. For a hosted build, configure with `RN_WEB_ASSETS` empty and check the entire publish directory for preloaded data, copied caches and icons derived from original artwork. Browser-side asset import is still planned.
 
 ## Before distributing a release

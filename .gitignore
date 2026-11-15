@@ -33,7 +33,9 @@
 *.ogg
 *.wav
 *.png
-/docs/screenshots/
+!/docs/screenshots/title-wip.png
+!/docs/screenshots/puzzle-wip.png
+!/docs/screenshots/battle-wip.png
 *.wasm
 *.data
 *.snap
