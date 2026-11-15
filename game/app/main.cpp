@@ -881,6 +881,37 @@ struct SettingsPaneItems {
         out[36] = {542, 610, 118, 93};
         return 37;
     }
+
+    // HD 1.0 renderSettingsPane: the three backgrounds and the 25 stage cells.
+    static void drawPadStageGrid(App& app, int selected, std::vector<std::string>* trace) {
+        const auto texture = [&](int image, int frame, int x, int y) {
+            Sheet* sheet = app.imgSheet(image);
+            if (!sheet || frame >= static_cast<int>(sheet->sz.size())) return;
+            const int w = sheet->sz[frame].x - 2, h = sheet->sz[frame].y - 2;
+            if (trace) {
+                char line[96];
+                snprintf(line, sizeof line, "RT %d %d %d %d %d %d", image, frame, x, y, w, h);
+                trace->push_back(line);
+            } else app.rtex(*sheet, frame, x, y, w, h);
+        };
+        texture(38, 0, 208, 247);
+        texture(38, 1, 548, 361);
+        texture(38, 2, 508, 351);
+
+        PaneRect items[37];
+        layoutPad(items, false);
+        for (int i = 0; i < 25; ++i) {
+            const auto& cell = items[i];
+            texture(31, i == selected ? 1 : 0, cell.x, cell.y);
+            const std::string text = i == 24 ? "?" : std::to_string(i + 1);
+            const int x = cell.x + cell.w / 2, y = cell.y + 4;
+            if (trace) {
+                char line[96];
+                snprintf(line, sizeof line, "PS %s %d %d", text.c_str(), x, y);
+                trace->push_back(line);
+            } else app.printString(text, x, y, 255, 255, 255, 255, 0.75f, 0, false);
+        }
+    }
 };
 
 // ---------------------------------------------------------------- settings pane: CPU level list rows (HD 1.0 renderSettingsPane 0x2fa70, default scroll 0 = pane +0xab0): 'Level 1'..'Level 24' then 'Random'; text x 61, scale 0.75, y = 115 + 24 k (+ the scroll offset); 'Random' at y 691
@@ -1440,6 +1471,21 @@ int main(int argc, char** argv) {
     if (getenv("CCR_PANELS")) { SettingsListPanels::Draw d[4]; SettingsListPanels::draws(d); for (int i = 0; i < 4; i++) printf("%d %d %d %d %d %d %d %d\n", d[i].sx, d[i].sy, d[i].sw, d[i].sh, d[i].x, d[i].y, d[i].w, d[i].h); return 0; }
     if (getenv("CCR_LEVELROWS")) { std::vector<SettingsLevelList::Row> rw; SettingsLevelList::rows(0.0f, rw); for (auto& r : rw) printf("PS %s %.1f %.1f %.3f\n", r.text.c_str(), r.x, r.y, r.scale); return 0; }
     if (getenv("CCR_SETTINGSRECTS")) { SettingsPaneItems::PaneRect r[10]; SettingsPaneItems::layout(r); for (int i = 0; i < 10; i++) printf("%d %d %d %d %d\n", i, r[i].x, r[i].y, r[i].w, r[i].h); return 0; }
+    if (const char* spec = getenv("CCR_PAD_SETTINGS_GRID")) {
+        const int selected = atoi(spec);
+        if (const char* shot = getenv("CCR_SHOT")) {
+            SDL_RenderSetLogicalSize(app.ren, GW, GH);
+            PlayersFrame frame;
+            frame.state = 0x25;
+            frame.pane = 1;
+            frame.draw(app, [&](int) { SettingsPaneItems::drawPadStageGrid(app, selected, nullptr); });
+            return saveFrame(app.ren, shot);
+        }
+        std::vector<std::string> trace;
+        SettingsPaneItems::drawPadStageGrid(app, selected, &trace);
+        for (const auto& call : trace) puts(call.c_str());
+        return 0;
+    }
     if (getenv("CCR_PAD_SETTINGS")) {
         for (bool network : {false, true}) {
             SettingsPaneItems::PaneRect rects[37];

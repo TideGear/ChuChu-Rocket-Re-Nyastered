@@ -57,7 +57,7 @@ App: `App::playSong` (restarts only on a different song), songs loaded on demand
 
 ## Mobile audio: source comparison (2026-11-13, `tools/compare_sfx.py`)
 - **iOS**: all six builds (1.0.2, HD 1.0, 1.1, 1.1.2 and both ORBiT builds) carry **byte-identical audio**: 52 sound effects (mono, 44.1 kHz, Vorbis nominal 70 kbps, about 1.0 MB in total) and 15 songs (mono, 44.1 kHz, nominal 48 kbps, about 7.7 MB).
-- **Android** (1.14 and 1.15): 66 Ogg files in `res/raw`, **all 66 byte-identical** to the iOS files (52 effects + 14 of the 15 songs, or the same set re-packed). So for the mobile builds there is exactly **one** audio source; neither a re-sign/crack nor a platform difference altered any of it.
+- **Android** (1.14 and 1.15): 66 Ogg files in each `res/raw`, **all 66 byte-identical** to the matching iOS files (51 effects and all 15 songs). A SHA-256 comparison on 2026-11-14 identified `J024.ogg` as the one iOS effect absent from both APKs.
 - **Best source per class**: songs = Dreamcast CD audio (lossless stereo; mobile is the re-encoded mono copy); sound effects = the mobile files for now (52 mono ~70 kbps Vorbis), since the Dreamcast AICA sample banks (`DP2SOUND.MLT`, `CHU2_SE.MLT`) are not decoded and validated yet (see the unvalidated ADPCM attempt above); the Dreamcast effects may be higher quality or different; `VOICE.AFS` on the US disc is silent.
 
 ## AICA sample bank: corrected assessment (2026-11-13)

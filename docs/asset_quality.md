@@ -4,6 +4,10 @@
 
 **Caveat:** pieces are matched by record id within a pack family (the UI/background pack, and the character pack), which assumes the builds number the same piece the same way; this was checked by eye on a few records (title, rocket, digits) but not for every record, and records present in several builds with the same size are not compared for content. Ties go to the first folder listed. The Dreamcast textures (named, not numbered) and the GBA graphics are compared by hand for the title/menu/HUD pieces in [provenance.md](provenance.md) and not in this table.
 
+## Matching release pairs (2026-11-14)
+
+SHA-256 hashes matched for all 142 exported `main_png` textures between Android 1.14 and 1.15 and for all 136 `ccrpad_png` textures between the two iPad HD 1.0 archives. These comparisons cover the named PNGs in those packs. The zero “largest” totals for the second member of each pair reflect the table's tie rule.
+
 | source folder | textures | records where it is the largest | records only it has |
 |---|---|---|---|
 | android:com_sega_ccr_1_14_paid | 142 | 82 | 0 |
