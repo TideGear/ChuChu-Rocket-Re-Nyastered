@@ -64,7 +64,7 @@ struct App {
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -123,7 +123,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_hlp_hdr", hlHdr); loadSheet(ret + "hd_hlp_tab", hlTab); loadSheet(ret + "hd_hlp_frm", hlFrm); loadSheet(ret + "hd_hlp_dia", hlDia); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -276,6 +276,7 @@ struct App {
     }
     // BHLib_RenderTexture(x, y, w, h, frame uv): the frame's pixels are scaled to (w, h); tint white
     void rtex(Sheet& sh, int frame, float x, float y, int w, int h) { if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect s = sh.fr[frame]; s.x += 1; s.y += 1; s.w = w; s.h = h; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(ren, sh.tex, &s, &d); }   // the 1 px ring around each frame is padding: the call's size (frame box - 2) is the inner area
+    void rtexRaw(Sheet& sh, int frame, float x, float y, int w, int h) { if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(ren, sh.tex, &sh.fr[frame], &d); }   // frames without the 1 px ring (exact sheets)
     void rtexBox(Sheet& sh, int frame, float x, float y) { if (frame >= 0 && frame < (int)sh.box.size()) rtex(sh, frame, x, y, sh.box[frame].x - 2, sh.box[frame].y - 2); }   // the common call: size = frame box shorts - 2
     void blitFlip(Sheet& sh, int frame, float ax, float ay, float scale, bool mirror) {   // Render::drawImage flags & 2 = swap u0/u1 (horizontal mirror of the frame in place; these frames are centred on their anchor)
         if (frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
@@ -478,6 +479,61 @@ struct CreditsMode : Screen {
     }
 };
 
+// ---------------------------------------------------------------- Options > How to Play (HD 1.0 HelpScreen: init 0x26218, process 0x24f00, handleInput 0x250c8, render 0x25314; draw calls checked with tools/oracle/hd_help_probe.py)
+struct HelpMode : Screen {
+    int phase = 0x14, a34 = -1, topic = -1, page = 0, sel = 0, mascot = 0, leaveTo = 0; bool a31 = false, a32 = false, leave = false; double a20 = 500000.0, t = 0;
+    static constexpr int N = 6; static constexpr int key[N] = {0x169, 0x16a, 0x16b, 0x16c, 0x16d, 0x16e}; static constexpr int pagesN[N] = {6, 2, 2, 1, 1, 1}, firstKey[N] = {367, 373, 375, 377, 378, 379};   // DAT 0xe78ac: (page count, first text key)
+    static constexpr int px[N] = {145, 225, 305, 385, 465, 545}, py[N] = {173, 263, 353, 433, 523, 613};
+    static bool ok(App& a) { return a.opBg.tex && a.hlHdr.tex && a.hlTab.tex && a.hlFrm.tex && a.hlDia.tex && a.ssTab.tex && a.mnBars.tex && a.ssArrows.tex && a.hdFont.tex; }
+    int music() override { return phase == 0x14 ? -1 : 5; }
+    int hit(App& a, float lx, float ly) { for (int i = 0; i < N; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (px[i] <= lx && lx <= px[i] + w && py[i] <= ly && ly <= py[i] + h) return i; } int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 6; return -1; }
+    void event(App& a, const SDL_Event& e) override {
+        if (phase != 0x15 || e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT) return;
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int x = (int)lx, y = (int)ly;
+        if (a34 < 0) {   // topic list
+            int h = hit(a, lx, ly); if (h < 0) return; int before = sel; if (h < 6) sel = h;
+            if (before == h || h == 6) { a.playSfx(2); if (h == 6) { phase = 0x16; a20 = 0; leaveTo = 1; return; } topic = h; a20 = 0; a31 = true; a32 = false; a34 = 2; page = 0; }
+            else a.playSfx(0); return; }
+        if (a34 != 1) return;   // page view: left / right half = previous / next page, the bar's arrows, the back area
+        const int cnt = pagesN[topic]; auto prev = [&] { if (page == 0) return; page--; a.playSfx(2); }; auto next = [&] { if (page >= cnt - 1) return; page++; a.playSfx(2); };
+        if (!(512 < x || y >= 718)) prev(); else if (!(x <= 512 || y >= 718)) next();
+        else if (357 <= x && x <= 404 && 724 <= y && y <= 768) prev(); else if (617 <= x && x <= 664 && 724 <= y && y <= 768) next();
+        else if (x <= 0x31 && y > 718) { a20 = 0; a32 = true; a34 = 2; a.playSfx(3); } }
+    void tick(App& a) override {
+        if (phase == 0x14) { a20 -= 16384.0; if (a20 <= 0) { a20 = 0; phase = 0x15; } }
+        else if (phase == 0x16) { a20 += 16384.0; if (a20 >= 500000.0) { a20 = 500000.0; leave = true; } }
+        else if (phase == 0x15) {
+            if (a34 == 2) { a20 += 16384.0; if (a20 >= 500000.0) { a20 = 500000.0; if (!a32) a34 = 0; else { a32 = false; topic = -1; a34 = -1; phase = 0x14; } a31 = false; } }
+            else if (a34 == 0) { a20 -= 16384.0; if (a20 <= 0) { a20 = 0; a34 = 1; } }
+            else if (a34 != 1) { t += 16384.0; if (t >= 166666.671875) { t -= 166666.671875; mascot = (mascot + 1) % 12; } } } }
+    const char* next() override { if (!leave) return nullptr; leave = false; return "OPTIONS"; }
+    // the frame of a page: filled panel, side edges and a top / bottom row of 8 px tiles (offsets of the pad layout)
+    void panel(App& a) {
+        SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_Rect r{211, 90, 596, 223}; SDL_RenderFillRect(a.ren, &r);
+        a.rtexRaw(a.hlFrm, 0, 208, 87, 8, 229); a.rtexRaw(a.hlFrm, 2, 808, 87, 8, 229);
+        for (int x = 216; x <= 800; x += 8) { a.rtexRaw(a.hlFrm, 1, (float)x, 87, 8, 8); a.rtexRaw(a.hlFrm, 3, (float)x, 309, 8, 7); }
+        a.rtexRaw(a.hlFrm, 1, 800, 87, 8, 8); a.rtexRaw(a.hlFrm, 3, 800, 309, 8, 7); }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        static const int tm[48] = {0,1,2,3,3,3,4,5,6,7,8,3,9,10,11,12,13,14,15,16,17,18,19,3,3,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,3,35,36,37,38,39,3,3};
+        for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
+        if (a31 || a34 < 0) {
+            a.rtexRaw(a.hlHdr, 0, 208, 50, 350, 34);
+            for (int i = 0; i < N; i++) { int w = a.mnBars.fr[0].w, h = a.mnBars.fr[0].h; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
+                if (const std::string* s = a.hdString(key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
+                if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); } } }
+        else {
+            panel(a); a.rtexRaw(a.hlTab, 0, 208, 50, 263, 38);
+            if (const std::string* s = a.hdString(key[topic])) a.printString(*s, 228, 55, 16, 16, 112, 255, 0.4f, 1, false, 1);
+            if (const std::string* s = a.hdString(firstKey[topic] + page)) a.printString(*s, 216, 95, 16, 16, 112, 255, 0.4f, 1, false, 1);
+            if (topic == 0 && page == 1) a.rtexRaw(a.hlDia, 0, 332, 146, 360, 163); else if (topic == 0 && page == 2) a.rtexRaw(a.hlDia, 1, 242, 121, 540, 188); else if (topic == 1 && page == 1) a.rtexRaw(a.hlDia, 2, 242, 177, 540, 132);
+            a.rtex(a.ssTab, 0, 360, 727, 303, 41);
+            if (const std::string* f = a.hdString(0x17f)) { char tx[128]; snprintf(tx, sizeof tx, f->c_str(), page + 1, pagesN[topic]); a.printString(tx, 512, 735, 16, 16, 112, 255, 0.4f, 0, false, 1); } }
+        a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
+        if (phase != 0x15 || a34 == 0 || a34 == 2) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(a20 / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
+    }
+};
+
 // ---------------------------------------------------------------- Help & Options, main list (HD 1.0 HelpOptionsScreen: initMainMenuItems 0x23c1c, render 0x24bdc / renderGenericMenuItems 0x229a8, handleInput 0x246c8, process 0x245b4)
 struct OptionsMode : Screen {
     int phase = 0x11, sel = 0, chosen = -1, mascot = 0, sub = 0; double fade = 500000.0, t = 0; bool leave = false;   // sub: 0 main list, 2 language list (a28)
@@ -509,10 +565,11 @@ struct OptionsMode : Screen {
             if (a.langAvailable(hit)) a.setLanguage(hit); else a.playSfx(0x13);   // HD 1.0 has no Japanese pack
             return; }
         if (hit == back()) { a.playSfx(2); chosen = 7; fade = 0; phase = 0x13; return; }
+        if (hit == 0 && HelpMode::ok(a)) { a.playSfx(2); chosen = 0; fade = 0; phase = 0x13; return; }   // How to Play
         if (hit == 5 && CreditsMode::ok(a)) { a.playSfx(2); chosen = 5; fade = 0; phase = 0x13; return; }   // Credits
         if (hit == 1) { a.playSfx(2); sub = 1; drag = -1; return; }   // Sounds
         if (hit == 2) { a.playSfx(2); sub = 2; sel = a.lang; return; }   // Language
-        a.playSfx(0x13); }   // How to Play, Costumes are not ported yet (docs/roadmap.md)
+        a.playSfx(0x13); }   // Costumes are not ported yet (docs/roadmap.md)
     // renderSoundMenuItems 0x22dcc (checked against the original with tools/oracle/hd_options_probe.py, tools/options_diff.py); log != nullptr records the calls instead of drawing
     void drawSounds(App& a, int music, int sfx, int dragState, std::vector<std::string>* log) {
         auto rt = [&](Sheet& sh, int fr, float x, float y, int w, int h, int srcw) { if (log) { char t[120]; snprintf(t, sizeof t, "RT %.1f %.1f %d %d %.1f", x, y, w, h, fr == 1 && &sh == &a.opSld ? 0.5f : 0.0f); log->push_back(t); return; }
@@ -530,7 +587,7 @@ struct OptionsMode : Screen {
         if (phase == 0x11) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0x12; } }
         else if (phase == 0x12) { t += 16384.0; if (t >= 166666.671875) { t -= 166666.671875; mascot = (mascot + 1) % 12; } }
         else if (phase == 0x13) { fade += 16384.0; if (fade >= 500000.0) { fade = 500000.0; leave = true; } } }
-    const char* next() override { if (!leave) return nullptr; leave = false; return chosen == 5 ? "CREDITS" : "MENU"; }
+    const char* next() override { if (!leave) return nullptr; leave = false; return chosen == 5 ? "CREDITS" : chosen == 0 ? "HELP" : "MENU"; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         static const int tm[48] = {0,1,2,3,3,3,4,5,6,7,8,3,9,10,11,12,13,14,15,16,17,18,19,3,3,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,3,35,36,37,38,39,3,3};   // tilemap resource 0x125 (HD ccrpad rec 879)
@@ -940,6 +997,7 @@ int main(int argc, char** argv) {
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" || name == "battle") { auto m = std::make_unique<BattleMode>(); memcpy(m->lv, lv, sizeof lv); if (!m->load(app.root, stageNo, seed)) { printf("cannot load battle stages\n"); return false; } mode = std::move(m); }
+        else if (name == "HELP" && HelpMode::ok(app)) mode = std::make_unique<HelpMode>();
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
         else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
