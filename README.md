@@ -2,31 +2,42 @@
 
 **This is a fully human-driven, AI-powered reimplementation of SEGA's ChuChu Rocket!** I direct the project and set the standard for accepting changes. AI assists with reverse engineering, implementation, testing and documentation. When a feature is verified against an original release, the documentation shows how the comparison ran and which cases it covered.
 
-> **Unofficial fan project.** This project has no affiliation with SEGA. The game's artwork, music, stages and marks belong to their respective owners. You need your own copies of the original releases. This repository contains source code only. Setup extracts game assets into a local cache on your machine.
+**This is very much a work in progress.** Menus, visuals, and gameplay will continue to change as more of the original releases are reproduced and verified.
+
+> **Unofficial fan project.** This project has no affiliation with SEGA. The game's artwork, music, stages and marks belong to their respective owners. The repository contains the project source and documentation. Use your own lawfully obtained game files to generate assets and screenshots locally. See [asset handling and release notes](docs/distribution.md).
 
 The project brings together the strongest parts of the Dreamcast, Game Boy Advance, iOS and Android releases in a portable C++ and SDL2 implementation. The current build pairs the iPad layout with the Dreamcast title logo and CD music when those assets are available. Each [asset and rule source](docs/provenance.md) is documented separately.
 
-[Build and play](#build-and-setup-windows) · [Original files needed by mode](#which-original-files-do-i-need) · [Verification results](docs/verification.md) · [Roadmap](docs/roadmap.md)
+[Build and play](#build-and-setup-windows) · [Original files needed by mode](#which-original-files-do-i-need) · [Status and plan](#status-and-plan) · [Verification results](docs/verification.md)
 
-## Status
+## Status and plan
 
-| Area | Current build |
-| --- | --- |
-| Playable on Windows | Puzzle stage select and play, Battle against CPU opponents or with up to four local players, title and menus, and parts of Help & Options. Battle has the countdown, music transitions and sound effects. |
-| Platforms | The Windows app runs. The web build runs headlessly. The simulation core and tests cross-compile for Android arm64. |
-| Verified against originals | Puzzle movement matches all 2,548 tested stages across the tested mobile builds. Battle scoring, roulette selection and CPU placement have separate mobile checks. Dreamcast coverage includes speed, roulette, scoring and parts of the CPU task. GBA coverage includes puzzle stage 1 and the CPU routines. |
-| Determinism and network | Replay tests cover native and WebAssembly. The lockstep protocol has passed loopback UDP tests with packet loss. The in-game lobby is still in progress. |
-| In progress | The Basics, Stage Challenge, full Team Battle setup, Puzzle Edit, character animations, the roulette wheel, costumes and unlockables, Dreamcast effects, Android app and browser asset import. |
+**Playable now on Windows:** Puzzle with stage select, Battle with local hotseat for up to four players on one machine and CPU opponents, the title and main menu, and parts of Help & Options.
 
-See the [verification commands and measured cases](docs/verification.md), the [per-version matrix](docs/version_matrix.md) and the [known gaps](docs/known_gaps.md).
+**Planned multiplayer:** Wireless local play via mobile devices and online play.
+
+| Phase | What’s in place | What’s planned |
+| --- | --- | --- |
+| **A. Original UI** | iPad title and menus, puzzle stage select, parts of both HUDs, pause and battle round banners. Battle setup panes have verified drawing and input components. The board uses the original iPad wall order and depth-sorts its moving sprites and rockets. | Wire the battle setup into play, complete the HUDs and results, finish The Basics and Options, and restore the roulette wheel, rocket animations and cursor trails. Verify draw order, overlaps, wall joins and clipping against the original when adding or changing a scene. |
+| **B. Rule parity** | Puzzle movement matches the 2,548 tested mobile stages. Mobile battle scoring, roulette selection and CPU placement have separate comparisons. Some forced roulette outcomes already have whole-battle results. | Match all eight forced roulette outcomes across all 26 cases each, including per-rank thresholds. Finish and verify Team Battle, trace and port all 25 Stage Challenge stages, and implement the original Puzzle Edit rules. |
+| **C. Version differences** | Dreamcast input and speed, scoring, roulette and parts of the CPU task are documented or compared. GBA puzzle stage 1 and individual CPU routines have ROM comparisons. Several iOS releases have their own runs. | Verify Dreamcast heat maps and full-battle CPU placement, determine Dreamcast effect playback rates, match GBA battle rules and full CPU placement, explain the GBA score gap, and cover remaining iOS-specific differences. |
+| **D. Content and options** | Asset extractors and a cross-version stage registry exist. The current build can play the main puzzles, GBA extras and the Dreamcast Express set with the corresponding exports. Some sound and language options work. | Verify original unlocks and options, add unlock-all, import DLC skins and VMU saves, determine PuzzleP arrow stock, and make every stage set selectable. |
+| **E. Audio** | Dreamcast CD music is preferred when available. The mobile audio supplies effects and voices. Several music and effect triggers have been traced, and mobile files have been compared by hash. | Match every music, effect and voice trigger, including loop points and fades. Finish the quality evidence for audio, fonts and 3D assets. |
+| **F. Platforms and play** | Windows build, fixed 60 Hz simulation with interpolation, headless 2D GPU measurements at 4K, local hotseat for up to four players, and headless WebAssembly runs. Deterministic replays and loopback UDP lockstep have been tested. | Verify sustained and uncapped 4K performance as rendering is completed, implement wireless local play via mobile devices and online play, build and test the Android arm64 app, and finish the web app’s asset import and PWA checks in a headless browser and on iOS Safari. |
+| **G. Documentation and setup** | Cross-version matrix, asset provenance, original-file requirements, and a portable Zig build. Setup unpacks originals and records their hashes. | Complete the evidence and provenance for each version, automate the remaining asset exports, and verify the full setup-to-play process on a clean machine. |
+
+See the [roadmap and dated work log](docs/roadmap.md), [verification results](docs/verification.md), [per-version matrix](docs/version_matrix.md) and [known gaps](docs/known_gaps.md) for the evidence behind each row.
 
 ## Build and setup (Windows)
-1. Install Python 3.12 for asset extraction. Setup installs Pillow if needed.
-2. Choose the [original files](#which-original-files-do-i-need) for the modes you want. Run `setup.cmd` and point it at the folder holding those files. Setup unpacks them to `%APPDATA%\ReNyastered` by default and records the inputs, hashes and extraction errors in `manifest.json`. On the first build it downloads and verifies portable Zig 0.14.1, CMake 4.0.3 and Ninja 1.12.1, then keeps them in `local/tools/windows` for future builds.
-3. [Export the assets for play](#export-assets-for-play), then run `build\game\ccr.exe`. Pass the exported asset folder as the first argument or use `CCR_ASSETS`. Run `build.cmd` to rebuild the code. Useful switches include `CCR_CPU=gba` for GBA-style battle AI, `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4`, `CCR_SIZE=3840x2160` and `CCR_FULLSCREEN=1`.
-4. Tests never open a window or play audio when run headless (`CCR_HEADLESS`, `CCR_SHOT`, `CCR_BENCH`); the C++ tests are CMake targets in `game/` (`determinism_test`, `battle_full_test`, `cpu_test`, `netplay_test`, ...).
 
-For an offline build, set `CCR_TOOL_ARCHIVES` to a folder containing `zig.zip`, `cmake.zip`, `ninja.zip`, `SDL2-2.30.9.tar.gz` and `stb_vorbis.c` from the pinned upstream releases. Zig uses its own CMake cache in `build/game-zig`. Executables still go in `build/game`.
+1. Install Python 3.12 for asset extraction. Setup also accepts Python 3.10 or later and installs Pillow if needed.
+2. Put your [original game files](#which-original-files-do-i-need) in `Original Game Files` beside `setup.cmd`, then run `setup.cmd` from the checkout. If that folder is absent, setup asks for the path. To specify both paths directly from PowerShell, run `.\setup.cmd -GameFiles 'D:\My Game Files' -Cache 'D:\ReNyastered'`.
+3. Setup extracts into `%APPDATA%\ReNyastered\assets` by default and writes `manifest.json` and `setup.log` beside `assets`. It then builds `build\game\ccr.exe`. The first build downloads and verifies portable Zig 0.14.1, CMake 4.0.3, Ninja 1.12.1, SDL2 2.30.9 and `stb_vorbis.c`. The build uses the checkout's `local\tools\windows` and `build\game-zig` folders. Visual Studio C++ Build Tools are unnecessary.
+4. Complete the [gameplay exports](#export-assets-for-play) for the modes you want, then launch `build\game\ccr.exe`. Pass the `assets` folder as the first argument or set `CCR_ASSETS` if you use a custom cache.
+
+Run `build.cmd --target ccr` to rebuild only the game. For an offline build, set `CCR_TOOL_ARCHIVES` to a folder containing `zig.zip`, `cmake.zip`, `ninja.zip`, `SDL2-2.30.9.tar.gz` and `stb_vorbis.c` from the [pinned tool and dependency URLs](tools/build-windows.ps1) and [CMake configuration](game/CMakeLists.txt). Offline extraction also needs Pillow installed in advance.
+
+Runtime options include `CCR_CPU=gba` for GBA-style battle AI, `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4`, `CCR_SIZE=3840x2160` and `CCR_FULLSCREEN=1`. Use `CCR_HEADLESS`, `CCR_SHOT` or `CCR_BENCH` for silent runs without a visible window. The C++ tests are CMake targets in `game/`, including `determinism_test`, `battle_full_test`, `cpu_test` and `netplay_test`.
 
 Other platforms: the core and tests cross-compile for Android arm64 (NDK) and build for WebAssembly (Emscripten; see [docs/roadmap.md](docs/roadmap.md)); neither has been run on a device yet.
 

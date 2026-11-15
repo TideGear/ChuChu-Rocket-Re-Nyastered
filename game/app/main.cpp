@@ -207,27 +207,37 @@ struct App {
     // Render::buildPlayfield (Android 0x37c50), read from the code: for every cell the floor tile atlas frame 8 + colour * 2 + ((col ^ row) & 1) (a pit, tile 0x11, replaces the floor with frame 7), a rocket cell gets its round base (frame 6), a
     // generator cell the ring frame table[(col >> 2) + 3 * (row / 3)] (frames 26..34); then every wall edge as a bar of frame wallColor (horizontal, edge row 0..9) or wallColor + 3 (vertical, edge column 0..12), anchored at the edge centre.
     // Colours by game type (Render::createPlayfieldPreview, 0x38458): free-for-all and team battle: floor {1,3,4,5}[stage & 3], wall 0; challenge: floor 1, wall 1; puzzle: floor (group & 3) + 2, wall 2.
-    void board(const Stage& st, int floorColor = 0, int wallColor = 0) {
+    void board(const Stage& st, int floorColor, int wallColor, int ox = OX, int oy = OY) {
         static const int ring[9] = {0x1b, 0x1c, 0x1d, 0x22, 0x1a, 0x1e, 0x21, 0x20, 0x1f};
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
-            float ax = c * CELL + CELL / 2.0f, ay = r * CELL + CELL / 2.0f; uint8_t t = st.tiles[r * 12 + c];
+            float ax = ox + c * CELL + CELL / 2.0f, ay = oy + r * CELL + CELL / 2.0f; uint8_t t = st.tiles[r * 12 + c];
             if (t == 0x11) { blit(atlas, 7, ax, ay); continue; }
             blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
             if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay);
             else if (t >= 5 && t <= 8) blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay);
         }
-        for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) if (st.hw[r * 12 + c]) blit(atlas, wallColor, c * CELL + CELL / 2.0f, (float)(r * CELL));
-        for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) if (st.vw[r * 13 + c]) blit(atlas, wallColor + 3, (float)(c * CELL), r * CELL + CELL / 2.0f);
-    }
-    // In-play rockets: frame 0 (closed sphere) of the owner's rocket sheet at the rocket cell, scale = size value x 0.8 (RO_RocketSetPukuPuku, FUN_0003be00).
-    void rockets(const Sim& sim, const float* puku) {
-        for (int p = 0; p < 4; p++) blit(rk[p], 0, sim.rocketPos[p][0] * CELL + CELL / 2.0f, sim.rocketPos[p][1] * CELL + CELL / 2.0f, (puku ? puku[p] : 1.0f) * 0.8f);
+        // HD 1.0 createPlayfield draws horizontal and vertical edge rows in
+        // alternation. Keep its wall footprint and use the higher-resolution art.
+        auto wall = [&](int frame, int x, int y, int w, int h) {
+            SDL_Rect src = atlas.fr[frame];
+            ++src.x;
+            --src.w;
+            SDL_Rect dst{ox + x, oy + y, w, h};
+            SDL_RenderCopy(ren, atlas.tex, &src, &dst);
+        };
+        for (int r = 0; r <= kRows; ++r) {
+            for (int c = 0; c < kCols; ++c)
+                if (st.hw[r * kCols + c]) wall(wallColor, c * CELL - 8, r * CELL - 11, 83, 24);
+            if (r == kRows) break;
+            for (int c = 0; c <= kCols; ++c)
+                if (st.vw[r * (kCols + 1) + c]) wall(wallColor + 3, c * CELL - 9, r * CELL - 10, 23, 84);
+        }
     }
     // Arrow sprite (image 0x5f, frame = owner; the art points up, rotated clockwise by the heading); a struck arrow is drawn at 0.7 (AR_ArrowDrawPriority).
     void arrow(int x, int y, int dir, int owner, int hits = 0, int ttl = -1) {
         if (ttl >= 0 && !(ttl > 60 || (ttl > 0 && (ttl & 1)))) return;   // in the last 60 ticks the arrow flickers (drawn only on odd ticks)
         static const double rot[4] = {180.0, 270.0, 0.0, 90.0};   // south, west, north, east
-        blit(arw, owner & 3, (x + 0.5f) * CELL, (y + 0.5f) * CELL, hits ? 0.7f : 1.0f, rot[dir & 3]);
+        blit(arw, owner & 3, OX + (x + 0.5f) * CELL, OY + (y + 0.5f) * CELL, hits ? 0.7f : 1.0f, rot[dir & 3]);
     }
     void arrowIcon(float cx, float cy, int dir, int owner, float sc) { static const double rot[4] = {180.0, 270.0, 0.0, 90.0}; blit(arw, owner & 3, cx, cy, sc, rot[dir & 3]); }
     // Cursor (image 0x6b: frame = player; CU_CursorDrawPriority/DispCursorPriority): scale 1 + 0.1 sin(angle), angle = (player << 14) + 0x1000 per tick (CU_CursorCons, FUN_0002b344); over a cell with an object
@@ -405,10 +415,12 @@ struct App {
             for (int k = 0; k <= wp; k++) drawImage(0x5d, 4 + t, tx + layF(0x30c + wp * 0x14 + t * 0x64 + 4 * k), iy + layF(0x308), 0, 1.0f, k >= lit ? 0x22 : 0xff);
             if ((reach >> t) & 1) drawImage(0x91, 0, tx + (t == 0 ? layF(0x2fc) : layF(0x300)), iy + layF(0x304), 0, 1.0f, 255); } }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
-    void cursor(int cx, int cy, int player, int ticks, bool bracket) {
-        int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
-        blit(cur, player & 3, ax, ay, 1.0f + 0.1f * (float)std::sin(ang * 6.283185307 / 65536.0));
-        if (bracket) blit(cur, 4, ax, ay, 1.0f + 0.075f * (float)std::sin(2 * ang * 6.283185307 / 65536.0));
+    void cursor(int cx, int cy, int player, int ticks, bool bracket = false) {
+        int ang = (player << 14) + 0x1000 * ticks;
+        float x = OX + (cx + 0.5f) * CELL, y = OY + (cy + 0.5f) * CELL;
+        float phase = (bracket ? 2.0f : 1.0f) * ang * 6.283185307f / 65536.0f;
+        blit(cur, bracket ? 4 : player & 3, x, y,
+             1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase));
     }
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
@@ -419,25 +431,64 @@ struct App {
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
         for (size_t i = 0; i < sim.ents.size(); i++) { const Entity& e = sim.ents[i]; angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed); }
     }
-    void entities(const Sim& sim, std::vector<std::pair<float, float>>& prev, float alpha) {
+    struct FieldObject {
+        int depth;
+        float x, z;
+        size_t index;
+        bool rocket;
+    };
+    std::vector<FieldObject> fieldObjects;
+    void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
+                          float alpha, const float* puku = nullptr) {
+        fieldObjects.clear();
+        auto rocket = [&](int x, int y, int player) {
+            float z = (y + 0.5f) * kCell;
+            fieldObjects.push_back({static_cast<int>(z), (x + 0.5f) * kCell, z,
+                                    static_cast<size_t>(player), true});
+        };
+        if (puku) {
+            for (int p = 0; p < 4; ++p) rocket(sim.rocketPos[p][0], sim.rocketPos[p][1], p);
+        } else {
+            for (int y = 0; y < kRows; ++y)
+                for (int x = 0; x < kCols; ++x)
+                    if (sim.coll[y][x] & kRocket) rocket(x, y, 0);
+        }
+
         while (prev.size() < sim.ents.size()) prev.push_back({sim.ents[prev.size()].x, sim.ents[prev.size()].z});
-        for (size_t i = 0; i < sim.ents.size(); i++) {
-            const Entity& en = sim.ents[i]; if (!en.alive || en.done || en.rocketIn) continue;
-            float x = prev[i].first + (en.x - prev[i].first) * alpha, z = prev[i].second + (en.z - prev[i].second) * alpha;
+        for (size_t i = 0; i < sim.ents.size(); ++i) {
+            const Entity& en = sim.ents[i];
+            if (!en.alive || en.done || en.rocketIn) continue;
+            float x = prev[i].first + (en.x - prev[i].first) * alpha;
+            float z = prev[i].second + (en.z - prev[i].second) * alpha;
             if (std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
+            fieldObjects.push_back({static_cast<int>(en.z), x, z, i, false});
+        }
+
+        // HD 1.0 adds these sprites to the same render list using truncated
+        // world Z. Equal-depth sprites keep their submission order.
+        std::stable_sort(fieldObjects.begin(), fieldObjects.end(),
+                         [](const FieldObject& a, const FieldObject& b) { return a.depth < b.depth; });
+        for (const FieldObject& object : fieldObjects) {
+            float x = OX + object.x * (CELL / kCell), z = OY + object.z * (CELL / kCell);
+            size_t i = object.index;
+            if (object.rocket) {
+                blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f);
+                continue;
+            }
+            const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
             if (walkOk) {   // original view choice (CA_CatDrawSTPriority / FUN_0003582c, literals from the code): back view for angles in [0x6001, 0xA000], front outside [0x2001, 0xE000], side otherwise
                 unsigned a = (unsigned)ang & 0xffff; int view = (a >= 0x6001 && a <= 0xA000) ? 1 : ((a < 0x2001 || a > 0xE000) ? 2 : 0);
                 Sheet& sh = !en.mouse ? catV[view] : (en.type == 1 ? goldV[view] : mouseV[view]);
                 int frame = !en.mouse ? (i < cphase.size() ? (int)cphase[i] : 0) : gtime % 11; frame = std::min(frame, (int)sh.fr.size() - 1);
                 const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame]; float sc = CELL / 64.0f; if (frame < (int)sh.fit.size()) sc *= sh.fit[frame];   // drawn at the original iPad (HD 1.0) frame size
-                SDL_Rect dst{(int)std::lround(x * (CELL / 15.0f) + of.x * sc), (int)std::lround(z * (CELL / 15.0f) + of.y * sc), (int)std::lround(fr.w * sc), (int)std::lround(fr.h * sc)};
+                SDL_Rect dst{(int)std::lround(x + of.x * sc), (int)std::lround(z + of.y * sc), (int)std::lround(fr.w * sc), (int)std::lround(fr.h * sc)};
                 bool flip = view == 0 && a > 0x2000 && a < 0x8000;   // the side art faces east; west-facing is mirrored (unverified: the flag the original passes to drawImage is not in the decompile)
                 SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE); continue;
             }
             Sheet& sh = !en.mouse ? cat : (en.type == 1 ? gold : mouse);
             const SDL_Rect& fr = sh.fr[(ang >> 11) & 31]; float sc = CELL * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
-            SDL_Rect dst{(int)(x * (CELL / 15.0f)) - dw / 2, (int)(z * (CELL / 15.0f)) - dh * 2 / 3, dw, dh}; SDL_RenderCopy(ren, sh.tex, &fr, &dst);
+            SDL_Rect dst{(int)(x) - dw / 2, (int)(z) - dh * 2 / 3, dw, dh}; SDL_RenderCopy(ren, sh.tex, &fr, &dst);
         }
     }
 };
@@ -1225,12 +1276,12 @@ struct PuzzleMode : Screen {
     }
     const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void draw(App& a, float alpha) override {
-        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren); { SDL_Rect vp{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp); }   // field coordinates start at (OX, OY)
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
         { const int set = gApp ? gApp->stageSet : 0; a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2); }   // puzzle colours (createPlayfieldPreview): floor (level & 3) + 2, wall 2; the extra levels (type 200) floor 1, wall 1
-        a.rockets(sim, nullptr);
         for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
-        a.entities(sim, prev, running ? alpha : 1.0f);
-        if (state == 0) a.cursor(curX, curY, 0, cticks, (sim.coll[curY][curX] & 0xF00) != 0);
+        if (state == 0 && (sim.coll[curY][curX] & 0xF00)) a.cursor(curX, curY, 0, cticks, true);
+        a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
+        if (state == 0) a.cursor(curX, curY, 0, cticks);
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
         { int n = cur % 25 + 1; a.blit(a.hdPhud, 1, 90.0f, 520.0f, 1.3f); a.blit(a.hdStageNum, n / 10, 70.0f, 584.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 120.0f, 584.0f, 1.3f); }   // renderPuzzleHudiPad: "stage" label (0x5c frame 1) at (90, 520) and the number (image 0x84, (stage mod 25) + 1, tens at (70, 584), ones at (120, 584)), all at scale 1.3; the stage-name frame and text are not drawn yet
         a.blit(a.hdPhud, 0, 85.0f, 190.0f);   // renderHudLeft (0x11e18): image 0x5c frame 0 (Start/Dash, Cancel panel) at layout (+0x64, +0x68) = (85, 190); its glow highlights (image 0x9d frames 4/5/6) and button hit rects are not done yet
@@ -1271,8 +1322,8 @@ struct StageSelectMode : Screen {
     void preview(App& a) {   // Render::createPlayfieldPreview(3, stage, 0x94): the field (floor colour (stage / 25 & 3) + 2, wall colour 2) at (32, 32) in an 832 x 640 texture
         int s = selPage * 25 + sel; if (s == prevKey && a.ssPrev) return; prevKey = s;
         if (!a.ssPrev) { a.ssPrev = SDL_CreateTexture(a.ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, 832, 640); SDL_SetTextureBlendMode(a.ssPrev, SDL_BLENDMODE_BLEND); }
-        SDL_SetRenderTarget(a.ren, a.ssPrev); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0); SDL_RenderClear(a.ren); SDL_Rect vp{32, 32, 800, 608}; SDL_RenderSetViewport(a.ren, &vp);
-        a.board(stages.list[s].st, ((s / 25) & 3) + 2, 2); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderTarget(a.ren, nullptr);
+        SDL_SetRenderTarget(a.ren, a.ssPrev); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0); SDL_RenderClear(a.ren);
+        a.board(stages.list[s].st, ((s / 25) & 3) + 2, 2, 32, 32); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderTarget(a.ren, nullptr);
     }
     void origEvent(App& a, const SDL_Event& e) {
         if (e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT || phase != 0x21) return;   // handleInput works only in state 0x21
@@ -1411,12 +1462,14 @@ struct BattleMode : Screen {
     void nextRound() { roundNo++; cur = (cur + 1) % (int)stages.list.size(); restart(); mode = 2; }   // GA_SetStageNumber(stage + 1, wrapping to 0)
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
-        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren); { SDL_Rect vp{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp); }
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
-        a.rockets(game.sim, game.puku);
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
-        a.entities(game.sim, prev, paused ? 1.0f : alpha);
-        for (int p = 0; p < 4; p++) if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame, (game.sim.coll[curY[p]][curX[p]] & 0xF00) != 0);
+        for (int p = 0; p < 4; ++p)
+            if (lv[p] < 0 && (game.sim.coll[curY[p]][curX[p]] & 0xF00)) a.cursor(curX[p], curY[p], p, game.frame, true);
+        a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku);
+        for (int p = 0; p < 4; ++p)
+            if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame);
         { SDL_RenderSetViewport(a.ren, nullptr);   // battle HUD frame (HD 1.0 renderFourBattleHud 0x21038, free-for-all branch; layout struct values): image 0x68 frame 1 at (+0xb4, +0xb8) = (82, 62),
           // frame 2 at y + 0xbc (92) and 8 more times at + 0xc0 (0), frame 3 at + 0xc4 (0); frame 0 at (+0xc8, +0xcc) = (68, 88); player panels image 0x65 frame p at (280 + 192 p, 680) (+0x90..+0x9c),
           // separator 0x68 frame 4 at each panel 1..3 + (+0xa0, +0xa4) = (-1, -22); frame 5 at (+0xd0, +0xd4) = (82, 720). drawImage(id, frame, x, y, 0, 1.0, 255). The team branch (frames 6..13) is not drawn yet.
@@ -1428,18 +1481,15 @@ struct BattleMode : Screen {
         SDL_RenderSetViewport(a.ren, nullptr);   // score digits (FUN_00030e18, iPad layout struct: x = 250 + 192 p + 30 k, y = 691; sprite r0729 frames 0..9 centred on their anchor); the player panels behind them (image 0x6d) are NOT drawn yet: their position field was not matched
         for (int p = 0; p < 4; p++) { int v = std::min(game.score.player[p], 999); int dg[3] = {v / 100 % 10, v / 10 % 10, v % 10};
             for (int k = 0; k < 3; k++) a.blit(a.digits, dg[k] == 1 ? 1 : dg[k] == 0 ? 0 : dg[k], 250.0f + 192 * p + 30 * k, 691.0f); }
-        SDL_Rect vp2{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp2);
         { SDL_RenderSetViewport(a.ren, nullptr);   // rank crowns (HD 1.0 RankCrawnDrawPriority 0x209ac, free-for-all): shown while (task counter & 31) > 10 and the score total is non-zero;
           // image 0x5e frame = rank at (+0x6c + 192 p, +0x70) = (324 + 192 p, 644) (+0x74/+0x78 step). The task counter is taken as the battle frame count (the task starts with the battle).
           int tot = 0; for (int p = 0; p < 4; p++) tot += game.score.player[p];
-          if ((game.frame & 31) > 10 && tot != 0) for (int p = 0; p < 4; p++) a.blit(a.crowns, game.rankOf(p), 324.0f + 192.0f * p, 644.0f);
-          SDL_Rect vp4{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp4); }
+          if ((game.frame & 31) > 10 && tot != 0) for (int p = 0; p < 4; p++) a.blit(a.crowns, game.rankOf(p), 324.0f + 192.0f * p, 644.0f); }
         { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
           int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock); int secs = (left + 59) / 60; int mm = secs / 60, ss = secs % 60;
           const float y = 84.0f; float x = 78.0f; const float step = 14.0f;
-          a.blit(a.hdTime, mm % 10, x, y, 0.8f); a.blit(a.hdTime, 10, x + step, y, 0.8f); float x2 = x + step + (float)((int)step / 2); a.blit(a.hdTime, ss / 10, x2, y, 0.8f); a.blit(a.hdTime, ss % 10, x2 + step, y, 0.8f);
-          SDL_Rect vp3{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp3); }
+          a.blit(a.hdTime, mm % 10, x, y, 0.8f); a.blit(a.hdTime, 10, x + step, y, 0.8f); float x2 = x + step + (float)((int)step / 2); a.blit(a.hdTime, ss / 10, x2, y, 0.8f); a.blit(a.hdTime, ss % 10, x2 + step, y, 0.8f); }
         SDL_RenderSetViewport(a.ren, nullptr); for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // banner tasks drawn over the HUD
         if (mode >= 4) { int sc[4]; for (int p = 0; p < 4; p++) sc[p] = game.score.player[p]; int reach = 0; if (!(gTime & 0x20) && !matchOver) for (int p = 0; p < 4; p++) if (wins[p] == winPoint) reach |= 1 << p;   // PM_DispReach: blinks with the global time, none when the match is over
             if (game.teamMode) { int ts[2] = {game.score.team[0], game.score.team[1]}, tr[2] = {rank[0], rank[1]}; a.judgeWinTeam(ts, tr, wins, roundWinner, drawFlag, winPoint, reach & 3, true); } else a.judgeWin(sc, rank, wins, roundWinner, drawFlag, winPoint, reach, true);

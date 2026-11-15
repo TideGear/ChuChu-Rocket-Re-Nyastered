@@ -1,4 +1,14 @@
-# Roadmap and status against the goal (updated 2026-11-12)
+# Roadmap and work log
+
+See the [current phase summary](../README.md#status-and-plan) for what is in place and what is planned. The table below records the initial November 12 baseline. The dated entries further down record later work and corrections.
+
+## Playfield rendering (2026-11-14)
+
+- HD 1.0 registers the board at priority -780, arrows at -770 and cursor brackets at -760. Cats, mice and rockets share a draw list sorted by integer world Z, with the cursor ring at priority 700. The port now follows these playfield layers and locates puzzle rockets by their actual cells.
+- The iPad composes horizontal and vertical wall rows in alternation. The wall calls for all 25 free-for-all and 25 team preview cases matched the Dreamcast board data and the positions now used by the renderer. The Puzzle and Battle captures confirm visible top and left overhangs and all four outside corner joins.
+- The iPad battle preview oracle captures the original 832 × 640 RGBA4444 upload. All 25 stages yielded distinct results in each mode, and all 25 pairs differed between free-for-all and team. The Settings pane still needs the preview compositor.
+
+## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
 

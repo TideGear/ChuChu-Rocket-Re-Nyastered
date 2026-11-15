@@ -31,8 +31,11 @@
 *.pvr
 *.prs
 *.ogg
+*.wav
 *.png
-!/docs/**/*.png
+/docs/screenshots/
+*.wasm
+*.data
 *.snap
 *.trace
 *.disasm
