@@ -1,27 +1,24 @@
 # ChuChu Rocket! Re-Nyastered
 
-> **Not affiliated with SEGA.** This is an unofficial, fan-made reimplementation. *ChuChu Rocket!* and all related marks, art, music
-> and stages are the property of SEGA. **You must own the original game** (this project reads your own copies of the iOS, Android,
-> Game Boy Advance and Dreamcast releases). Please buy them where you still can.
+**This is a fully human-driven, AI-powered reimplementation of SEGA's ChuChu Rocket!** I direct the project and set the standard for accepting changes. AI assists with reverse engineering, implementation, testing and documentation. When a feature is verified against an original release, the documentation shows how the comparison ran and which cases it covered.
 
-A faithful, best-of-all-versions reimplementation of ChuChu Rocket! in portable C++ (SDL2) for Windows, 64-bit Android and the web.
-This repository is **source code only**: no game data, no original code, and nothing derived from either. Assets are extracted on
-your machine from your own files into a local cache and are never committed or shipped.
+> **Unofficial fan project.** This project has no affiliation with SEGA. The game's artwork, music, stages and marks belong to their respective owners. You need your own copies of the original releases. This repository contains source code only. Setup extracts game assets into a local cache on your machine.
 
-## Status (work in progress)
-The project is well short of its goal; the honest, current list is in [docs/known_gaps.md](docs/known_gaps.md). Summary:
+The project brings together the strongest parts of the Dreamcast, Game Boy Advance, iOS and Android releases in a portable C++ and SDL2 implementation. The current build pairs the iPad layout with the Dreamcast title logo and CD music when those assets are available. Each [asset and rule source](docs/provenance.md) is documented separately.
 
-**Done and verified (evidence in [docs/verification.md](docs/verification.md) and [docs/version_matrix.md](docs/version_matrix.md))**
-- A deterministic fixed 60 Hz simulation of puzzle and battle play (`game/core/`). Against the original code of each build, run unmodified in an emulator:
-  puzzle movement on all 2,548 stages for Android 1.14 and 1.15 and iOS 1.0.2, HD 1.0, 1.1 and the 1.0 ORBiT build; battle scoring, roulette selection and CPU players
-  for the Android and iOS builds; for the Dreamcast, the speed table, roulette selector, scoring and the CPU task (decisions, cursor and arrow stage) in an SH-4 interpreter. GBA puzzle stage 1 matches the real ROM.
-- Replays and lockstep netplay: the simulation is bit-exact across runs and across native/WebAssembly; the lockstep protocol survives 30-60% packet loss with no desync (loopback UDP tested).
-- Extractors for the iOS and Android packs, Dreamcast files/textures/3D models/CD audio, GBA stage data and the Dreamcast DLC (including the character skins), a master stage registry, and a localization table for six languages (`tools/`).
+[Build and play](#build-and-setup-windows) · [Original files needed by mode](#which-original-files-do-i-need) · [Verification results](docs/verification.md) · [Roadmap](docs/roadmap.md)
 
-**Playable now (Windows, `ccr.exe`; also builds for the web)**: title screen and main menu in the original iPad layout with the best-quality art found,
-Puzzle and Battle (CPU opponents, 1-4 local players via `CCR_HUMANS`), music following the original's triggers, battle sound effects, 4K-capable resolution-independent rendering.
+## Status
 
-**Still in progress**: the roulette wheel and character animations, The Basics, Stage Challenge, full Team Battle setup, Puzzle Edit, costumes and unlockables, in-game netplay screens, Dreamcast sound effects, the Android app and browser import. Puzzle stage select, parts of Help & Options, the battle countdown and parts of the HUD are in the current build.
+| Area | Current build |
+| --- | --- |
+| Playable on Windows | Puzzle stage select and play, Battle against CPU opponents or with up to four local players, title and menus, and parts of Help & Options. Battle has the countdown, music transitions and sound effects. |
+| Platforms | The Windows app runs. The web build runs headlessly. The simulation core and tests cross-compile for Android arm64. |
+| Verified against originals | Puzzle movement matches all 2,548 tested stages across the tested mobile builds. Battle scoring, roulette selection and CPU placement have separate mobile checks. Dreamcast coverage includes speed, roulette, scoring and parts of the CPU task. GBA coverage includes puzzle stage 1 and the CPU routines. |
+| Determinism and network | Replay tests cover native and WebAssembly. The lockstep protocol has passed loopback UDP tests with packet loss. The in-game lobby is still in progress. |
+| In progress | The Basics, Stage Challenge, full Team Battle setup, Puzzle Edit, character animations, the roulette wheel, costumes and unlockables, Dreamcast effects, Android app and browser asset import. |
+
+See the [verification commands and measured cases](docs/verification.md), the [per-version matrix](docs/version_matrix.md) and the [known gaps](docs/known_gaps.md).
 
 ## Build and setup (Windows)
 1. Install Python 3.12 for asset extraction. Setup installs Pillow if needed.
