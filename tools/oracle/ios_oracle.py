@@ -1,6 +1,6 @@
 """Development-time oracle for the user's own iOS armv7 build (thinned Mach-O): runs functions under Unicorn by symbol name.
 usage: o = IOSOracle(path); o.call('_FI_CheckAndCorrectAngle', r0, r1...)"""
-import math, os, struct, sys
+import math, os, re, struct, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from macho import Macho
 from unicorn import UcError
@@ -62,9 +62,19 @@ class IOSOracle:
         elif name == '_sprintf':
             fmt = bytearray(); k = 0
             while self.read(r[1] + k, 1) != bytes(1): fmt.append(self.read(r[1] + k, 1)[0]); k += 1
-            sp = self.uc.reg_read(UC_ARM_REG_SP); args = [r[2], r[3]] + [self.u32(sp + 4 * i) for i in range(4)]; txt = fmt.decode('latin-1').replace('%%', chr(1))
-            while '%d' in txt: txt = txt.replace('%d', str(s32(args.pop(0))), 1)
-            txt = txt.replace(chr(1), '%'); self.write(r[0], txt.encode('latin-1') + bytes(1)); ret = len(txt)
+            sp = self.uc.reg_read(UC_ARM_REG_SP)
+            args = iter([r[2], r[3]] + [self.u32(sp + 4 * i) for i in range(4)])
+            def substitute(match):
+                token = match.group()
+                if token == '%%': return '%'
+                value = next(args)
+                if token == '%d': return str(s32(value))
+                result = bytearray()
+                while (byte := self.read(value + len(result), 1)) != b'\0':
+                    result.extend(byte)
+                return result.decode('latin-1')
+            txt = re.sub(r'%[ds%]', substitute, fmt.decode('latin-1'))
+            self.write(r[0], txt.encode('latin-1') + bytes(1)); ret = len(txt)
         elif name == '_malloc': ret = self.alloc(r[0])
         elif name == '_calloc': ret = self.alloc(r[0] * r[1])
         elif name == '_free': ret = 0

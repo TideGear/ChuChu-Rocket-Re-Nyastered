@@ -882,27 +882,28 @@ struct SettingsPaneItems {
         return 37;
     }
 
+    static void drawPadTexture(App& app, std::vector<std::string>* trace, int image, int frame, int x, int y) {
+        Sheet* sheet = app.imgSheet(image);
+        if (!sheet || frame >= static_cast<int>(sheet->sz.size())) return;
+        const int w = sheet->sz[frame].x - 2, h = sheet->sz[frame].y - 2;
+        if (trace) {
+            char line[96];
+            snprintf(line, sizeof line, "RT %d %d %d %d %d %d", image, frame, x, y, w, h);
+            trace->push_back(line);
+        } else app.rtex(*sheet, frame, x, y, w, h);
+    }
+
     // HD 1.0 renderSettingsPane: the three backgrounds and the 25 stage cells.
     static void drawPadStageGrid(App& app, int selected, std::vector<std::string>* trace) {
-        const auto texture = [&](int image, int frame, int x, int y) {
-            Sheet* sheet = app.imgSheet(image);
-            if (!sheet || frame >= static_cast<int>(sheet->sz.size())) return;
-            const int w = sheet->sz[frame].x - 2, h = sheet->sz[frame].y - 2;
-            if (trace) {
-                char line[96];
-                snprintf(line, sizeof line, "RT %d %d %d %d %d %d", image, frame, x, y, w, h);
-                trace->push_back(line);
-            } else app.rtex(*sheet, frame, x, y, w, h);
-        };
-        texture(38, 0, 208, 247);
-        texture(38, 1, 548, 361);
-        texture(38, 2, 508, 351);
+        drawPadTexture(app, trace, 38, 0, 208, 247);
+        drawPadTexture(app, trace, 38, 1, 548, 361);
+        drawPadTexture(app, trace, 38, 2, 508, 351);
 
         PaneRect items[37];
         layoutPad(items, false);
         for (int i = 0; i < 25; ++i) {
             const auto& cell = items[i];
-            texture(31, i == selected ? 1 : 0, cell.x, cell.y);
+            drawPadTexture(app, trace, 31, i == selected ? 1 : 0, cell.x, cell.y);
             const std::string text = i == 24 ? "?" : std::to_string(i + 1);
             const int x = cell.x + cell.w / 2, y = cell.y + 4;
             if (trace) {
@@ -911,6 +912,66 @@ struct SettingsPaneItems {
                 trace->push_back(line);
             } else app.printString(text, x, y, 255, 255, 255, 255, 0.75f, 0, false);
         }
+    }
+
+    struct PadRules {
+        int pointIndex, speedIndex, timeIndex;
+        bool highMice, split;
+    };
+
+    // Local iPad path following the stage grid. The preview texture is generated
+    // separately and drawn at this point, before the two corner buttons.
+    static void drawPadRules(App& app, const PadRules& rules, const std::function<void(const SDL_Rect&)>& preview,
+                             std::vector<std::string>* trace) {
+        const auto label = [&](int x, int y, int key, auto... values) {
+            const auto* format = app.hdString(key);
+            if (!format) return;
+            char text[128];
+            snprintf(text, sizeof text, format->c_str(), values...);
+            if (trace) {
+                char line[180];
+                snprintf(line, sizeof line, "PS %s %d %d", text, x, y);
+                trace->push_back(line);
+            } else app.printString(text, x, y, 0, 0, 0, 255, 0.55f, 0, false);
+        };
+        static constexpr int speeds[] = {0x185, 0x186, 0x1ab, 0x187, 0x188};
+        const auto text = [&](int key) {
+            const auto* value = app.hdString(key);
+            return value ? value->c_str() : "";
+        };
+        drawPadTexture(app, trace, 33, 0, 208, 443);
+        label(356, 455, 0x183, rules.pointIndex + 1);
+        drawPadTexture(app, trace, 33, 0, 208, 500);
+        label(356, 512, 0x184, text(speeds[rules.speedIndex]));
+        drawPadTexture(app, trace, 33, 0, 532, 251);
+        label(680, 263, 0x189, rules.timeIndex + 1, text(rules.timeIndex == 0 ? 0x18a : 0x18b));
+        drawPadTexture(app, trace, 33, 0, 532, 313);
+        label(680, 325, 0x18c, text(rules.highMice ? 0x18d : 0x1ab));
+
+        PaneRect items[37];
+        layoutPad(items, false);
+        for (int i = 0; i < 2; ++i) {
+            const auto& button = items[35 + i];
+            drawPadTexture(app, trace, 39, i, button.x, button.y);
+            if (i == static_cast<int>(rules.split)) {
+                const PaneRect border[] = {
+                    {button.x - 9, button.y - 10, button.w + 18, 3},
+                    {button.x + button.w + 7, button.y - 9, 3, button.h + 18},
+                    {button.x - 9, button.y + button.h + 7, button.w + 18, 3},
+                    {button.x - 10, button.y - 9, 3, button.h + 18},
+                };
+                for (const auto& r : border) {
+                    if (trace) {
+                        char line[100];
+                        snprintf(line, sizeof line, "FR %d %d %d %d 192 35 35 255", r.x, r.y, r.w, r.h);
+                        trace->push_back(line);
+                    } else app.fillRect(r.x, r.y, r.w, r.h, 192, 35, 35, 255);
+                }
+            }
+        }
+        if (preview) preview({564, 367, 234, 188});
+        for (int i = 0; i < 2; ++i)
+            drawPadTexture(app, trace, 17, i, items[25 + i].x, items[25 + i].y);
     }
 };
 
@@ -1471,6 +1532,31 @@ int main(int argc, char** argv) {
     if (getenv("CCR_PANELS")) { SettingsListPanels::Draw d[4]; SettingsListPanels::draws(d); for (int i = 0; i < 4; i++) printf("%d %d %d %d %d %d %d %d\n", d[i].sx, d[i].sy, d[i].sw, d[i].sh, d[i].x, d[i].y, d[i].w, d[i].h); return 0; }
     if (getenv("CCR_LEVELROWS")) { std::vector<SettingsLevelList::Row> rw; SettingsLevelList::rows(0.0f, rw); for (auto& r : rw) printf("PS %s %.1f %.1f %.3f\n", r.text.c_str(), r.x, r.y, r.scale); return 0; }
     if (getenv("CCR_SETTINGSRECTS")) { SettingsPaneItems::PaneRect r[10]; SettingsPaneItems::layout(r); for (int i = 0; i < 10; i++) printf("%d %d %d %d %d\n", i, r[i].x, r[i].y, r[i].w, r[i].h); return 0; }
+    if (const char* spec = getenv("CCR_PAD_RULES")) {
+        int points, speed, time, high, split;
+        if (sscanf(spec, "%d,%d,%d,%d,%d", &points, &speed, &time, &high, &split) != 5 ||
+            speed < 0 || speed >= 5) return 1;
+        const SettingsPaneItems::PadRules rules{points, speed, time, high != 0, split != 0};
+        if (const char* shot = getenv("CCR_SHOT")) {
+            SDL_RenderSetLogicalSize(app.ren, GW, GH);
+            PlayersFrame frame;
+            frame.state = 0x25;
+            frame.pane = 1;
+            frame.draw(app, [&](int) {
+                SettingsPaneItems::drawPadStageGrid(app, 0, nullptr);
+                SettingsPaneItems::drawPadRules(app, rules, {}, nullptr);
+            });
+            return saveFrame(app.ren, shot);
+        }
+        std::vector<std::string> trace;
+        SettingsPaneItems::drawPadRules(app, rules, [&](const SDL_Rect& r) {
+            char line[100];
+            snprintf(line, sizeof line, "preview %d %d %d %d", r.x, r.y, r.w, r.h);
+            trace.push_back(line);
+        }, &trace);
+        for (const auto& call : trace) puts(call.c_str());
+        return 0;
+    }
     if (const char* spec = getenv("CCR_PAD_SETTINGS_GRID")) {
         const int selected = atoi(spec);
         if (const char* shot = getenv("CCR_SHOT")) {
