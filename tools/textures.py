@@ -15,11 +15,18 @@ def textures(base):
                     data += open(os.path.join(base, '%04d.bin' % j), 'rb').read(); j += 1
                 if len(data) == need:
                     out.append({'rec': i, 'w': w, 'h': h, 'data': data, 'next': j}); i = j; continue
+                data = b''; j = i + 1; need4 = w * h * 4          # some textures (the stage select tile sheet) are 32-bit RGBA
+                while j < len(idx) and len(data) < need4 and idx[j]['size'] > 8:
+                    data += open(os.path.join(base, '%04d.bin' % j), 'rb').read(); j += 1
+                if len(data) == need4:
+                    out.append({'rec': i, 'w': w, 'h': h, 'data': data, 'next': j, 'bpp': 4}); i = j; continue
         i += 1
     return out
 
 def to_image(t, fmt='rgba4444'):
     w, h = t['w'], t['h']
+    if t.get('bpp') == 4:
+        return Image.frombytes('RGBA', (w, h), t['data'])
     px = struct.unpack('<%dH' % (w * h), t['data']); out = bytearray()
     if fmt == 'rgba4444':
         for v in px: out += bytes((((v >> 12) & 15) * 17, ((v >> 8) & 15) * 17, ((v >> 4) & 15) * 17, (v & 15) * 17))

@@ -31,7 +31,7 @@ static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
 static const int GW = 1024, GH = 768, OX = 184, OY = 32;
 static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {250, 170, 30, 255}, {240, 60, 60, 255}, {40, 190, 70, 255}};   // player order of the original art (arrow sheet r0645, cursor sheet r0732, rocket sheets r0651/r0663/r0675/r0687): blue, orange, red, green
 
-struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; };   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
+struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; std::vector<SDL_Point> box; };   // box = frame record shorts 2, 3 (the draw box BHLib_RenderTexture callers use, minus 2)   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
 
 struct Stages { struct E { Stage st; std::vector<std::array<uint8_t, 3>> sol; char title[33]; int src, idx; }; std::vector<E> list; };
 static bool loadStages(const char* path, Stages& out, int onlySrc) {
@@ -57,9 +57,14 @@ static bool loadStageSet(const std::string& root, int set, Stages& out) { return
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
+    uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
+    void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((root + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
+    bool isCleared(int s) { loadProgress(); return s >= 0 && s < 100 && ((clr[s / 25] >> (s % 25)) & 1); }
+    int maxStage() { loadProgress(); for (int i = 0; i < 3; i++) if ((clr[i] & 0x1ffffff) != 0x1ffffff) return i; return 3; }   // VMU::getPuzzleMaxStage 0x372b4
+    void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdPause; std::vector<uint8_t> hdFontW; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -99,7 +104,7 @@ struct App {
         std::vector<float> fl(n * 9); if (fread(fl.data(), 4, fl.size(), f) != fl.size()) { fclose(f); return false; } fclose(f);
         for (uint32_t i = 0; i < n; i++) { const float* e = &fl[i * 9];
             s.fr.push_back({(int)std::lround(e[0] * s.w), (int)std::lround(e[1] * s.h), (int)std::lround((e[2] - e[0]) * s.w), (int)std::lround((e[3] - e[1]) * s.h)});
-            int16_t v[10]; memcpy(v, &e[4], 20); s.off.push_back({v[4], v[5]}); }
+            int16_t v[10]; memcpy(v, &e[4], 20); s.off.push_back({v[4], v[5]}); s.box.push_back({v[2], v[3]}); }
         return true;
     }
     bool init() {
@@ -118,7 +123,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_ss_hdr", ssHdr); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -230,26 +235,30 @@ struct App {
     // HD 1.0 text (Render::printString 0x1a19c -> BHLib_PrintString 0x9dc0, Latin branch): font 0 = image 0 (texture ccrpad rec 0, frames rec 3, per-glyph advance = rec 874), glyph index = character code
     void loadHdText(const std::string& ret) {
         FILE* f = fopen((ret + "hd_font0.widths.bin").c_str(), "rb"); if (f) { hdFontW.resize(256); if (fread(hdFontW.data(), 1, 256, f) != 256) hdFontW.clear(); fclose(f); }
+        f = fopen((ret + "hd_font1.widths.bin").c_str(), "rb"); if (f) { hdFontW1.resize(256); if (fread(hdFontW1.data(), 1, 256, f) != 256) hdFontW1.clear(); fclose(f); }
         auto tsv = [&](const char* name, auto&& put) { FILE* g = fopen((ret + name).c_str(), "rb"); if (!g) return; std::string all; char b[4096]; size_t n; while ((n = fread(b, 1, sizeof b, g)) > 0) all.append(b, n); fclose(g);
             size_t pos = 0; while (pos < all.size()) { size_t e = all.find((char)10, pos); if (e == std::string::npos) e = all.size(); std::string line = all.substr(pos, e - pos); pos = e + 1; size_t t = line.find((char)9); if (t != std::string::npos) put(atoi(line.c_str()), line.substr(t + 1)); } };
         tsv("hd_text_en.tsv", [&](int k, const std::string& v) { hdText[k] = v; }); tsv("hd_textmap.tsv", [&](int k, const std::string& v) { hdTextMap[k] = atoi(v.c_str()); });
     }
     const std::string* hdString(int key) { auto m = hdTextMap.find(key); if (m == hdTextMap.end()) return nullptr; auto t = hdText.find(m->second); return t == hdText.end() ? nullptr : &t->second; }
-    int hdTextWidth(const std::string& s, size_t from, float scale) { int w = 0; for (size_t i = from; i < s.size() && s[i] != 10; i++) w += hdFontW[(uint8_t)s[i]]; return (int)((float)w * scale); }
+    int hdTextWidth(const std::string& s, size_t from, float scale, int fontNo = 0) { const std::vector<uint8_t>& fw = fontNo == 1 ? hdFontW1 : hdFontW; int w = 0; for (size_t i = from; i < s.size() && s[i] != 10; i++) w += fw[(uint8_t)s[i]]; return (int)((float)w * scale); }
     // align 0 centred, 1 left, 2 right (BHLib_PrintString param_10); vcenter = param_11 (y -= 0.5 * line height * scale); line height = short at frame 91 + 22 of the frame table (CreateFont: texture + 0x28 -> +0xce6) = 32 for font 0
-    void printString(const std::string& s, float x, float y, int r, int g, int b, int al, float scale, int align, bool vcenter) {
-        if (!hdFont.tex || hdFontW.empty()) return; const float lineH = 32.0f;
+    void printString(const std::string& s, float x, float y, int r, int g, int b, int al, float scale, int align, bool vcenter, int fontNo = 0) {
+        Sheet& hdFont = fontNo == 1 ? hdFont1 : this->hdFont; const std::vector<uint8_t>& fw = fontNo == 1 ? hdFontW1 : hdFontW; if (!hdFont.tex || fw.empty() || hdFont.box.size() < 92) return; const float lineH = (float)hdFont.box[91].y;
         int cy = (int)y; if (vcenter) cy = (int)((float)cy + lineH * scale * -0.5f);
-        auto startX = [&](size_t from) { int w = hdTextWidth(s, from, scale); return align == 1 ? (int)x : (int)(x - (float)(align == 0 ? w / 2 : w)); };
+        auto startX = [&](size_t from) { int w = hdTextWidth(s, from, scale, fontNo); return align == 1 ? (int)x : (int)(x - (float)(align == 0 ? w / 2 : w)); };
         int cx = startX(0); SDL_SetTextureColorMod(hdFont.tex, (Uint8)r, (Uint8)g, (Uint8)b); SDL_SetTextureAlphaMod(hdFont.tex, (Uint8)al);
         for (size_t i = 0; i < s.size(); i++) { uint8_t c = (uint8_t)s[i];
             if (c == 10) { cy = (int)((float)cy + lineH * scale); if (i + 1 < s.size() && align != 1) cx = startX(i + 1); else cx = (int)x; continue; }
             if (c != 0x20 && c < hdFont.fr.size()) { const SDL_Rect& fr = hdFont.fr[c]; const SDL_Point& of = hdFont.off[c];
                 int x0 = (int)((float)cx + (float)of.x * scale), y0 = (int)((float)cy + (float)of.y * scale), x1 = (int)((float)cx + (float)(fr.w + of.x) * scale), y1 = (int)((float)cy + (float)(fr.h + of.y) * scale);
                 SDL_Rect dst{x0, y0, x1 - x0, y1 - y0}; SDL_RenderCopy(ren, hdFont.tex, &fr, &dst); }
-            cx = (int)((float)cx + (float)hdFontW[c] * scale); }
+            cx = (int)((float)cx + (float)fw[c] * scale); }
         SDL_SetTextureColorMod(hdFont.tex, 255, 255, 255); SDL_SetTextureAlphaMod(hdFont.tex, 255);
     }
+    // BHLib_RenderTexture(x, y, w, h, frame uv): the frame's pixels are scaled to (w, h); tint white
+    void rtex(Sheet& sh, int frame, float x, float y, int w, int h) { if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect s = sh.fr[frame]; s.x += 1; s.y += 1; s.w = w; s.h = h; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(ren, sh.tex, &s, &d); }   // the 1 px ring around each frame is padding: the call's size (frame box - 2) is the inner area
+    void rtexBox(Sheet& sh, int frame, float x, float y) { if (frame >= 0 && frame < (int)sh.box.size()) rtex(sh, frame, x, y, sh.box[frame].x - 2, sh.box[frame].y - 2); }   // the common call: size = frame box shorts - 2
     void blitFlip(Sheet& sh, int frame, float ax, float ay, float scale, bool mirror) {   // Render::drawImage flags & 2 = swap u0/u1 (horizontal mirror of the frame in place; these frames are centred on their anchor)
         if (frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
         SDL_Rect dst{(int)std::lround(ax + of.x * scale), (int)std::lround(ay + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)}; SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, mirror ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE); }
@@ -434,7 +443,7 @@ struct PuzzleMode : Screen {
         sim.tick(); a.stepAngles(sim);
         if (dash) { sim.tick(); a.stepAngles(sim); }   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
-        if (sim.killed > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; }
+        if (sim.killed > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur); }
     }
     const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void draw(App& a, float alpha) override {
@@ -474,9 +483,53 @@ struct PuzzleMode : Screen {
 // ---------------------------------------------------------------- stage select (functional; the original's layout/art is not reproduced yet: docs/known_gaps.md)
 struct StageSelectMode : Screen {
     Stages stages; int cur = 0, page = 0; bool go = false, back = false; static constexpr int COLS = 5, ROWS = 4, PER = COLS * ROWS;
-    int music() override { return 0; }
-    std::string rootDir; bool load(const std::string& root, int start) { rootDir = root; if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = start % (int)stages.list.size(); page = cur / PER; return true; }
-    void event(App&, const SDL_Event& e) override {
+    int music() override { return orig() ? (phase == 0x20 ? -1 : 5) : 0; }
+    std::string rootDir; bool load(const std::string& root, int start) { rootDir = root; if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = start % (int)stages.list.size(); page = cur / PER; selPage = cur / 25; sel = cur % 25; lastItem = sel; return true; }
+    // ---- the original iPad layout (HD 1.0 StageSelectScreen 0x10b54 grid branch, device class > 10), used for the 100 original puzzles; other stage sets keep the plain list below
+    int phase = 0x20, selPage = 0, sel = 0, lastItem = 0, chosen = 0, prevKey = -1; double timer = 500000.0; bool leave = false, leaveBack = false;
+    bool orig() { return gApp && gApp->stageSet == 0 && gApp->ssBg.tex && gApp->ssCells.tex && gApp->hdFont1.tex && gApp->ssArrows.tex && gApp->ssPanel.tex && gApp->ssTab.tex && gApp->ssHdr.tex && gApp->ssBubble.tex && stages.list.size() >= 100; }
+    struct Item { int x, y, w, h; };
+    Item item(App& a, int i) { if (i < 25) return {228 + 54 * (i % 5), 259 + 34 * (i / 5), 46, 30}; if (i == 25) return {208, 444, 40, 40}; if (i == 26) return {468, 444, 40, 40}; return {0, 768 - a.ssArrows.fr[0].h, a.ssArrows.fr[0].w, a.ssArrows.fr[0].h}; }   // MenuItems 0..0x1b from StageSelectScreen::init
+    void preview(App& a) {   // Render::createPlayfieldPreview(3, stage, 0x94): the field (floor colour (stage / 25 & 3) + 2, wall colour 2) at (32, 32) in an 832 x 640 texture
+        int s = selPage * 25 + sel; if (s == prevKey && a.ssPrev) return; prevKey = s;
+        if (!a.ssPrev) { a.ssPrev = SDL_CreateTexture(a.ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, 832, 640); SDL_SetTextureBlendMode(a.ssPrev, SDL_BLENDMODE_BLEND); }
+        SDL_SetRenderTarget(a.ren, a.ssPrev); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0); SDL_RenderClear(a.ren); SDL_Rect vp{32, 32, 800, 608}; SDL_RenderSetViewport(a.ren, &vp);
+        a.board(stages.list[s].st, ((s / 25) & 3) + 2, 2); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderTarget(a.ren, nullptr);
+    }
+    void origEvent(App& a, const SDL_Event& e) {
+        if (e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT || phase != 0x21) return;   // handleInput works only in state 0x21
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int px = (int)lx, py = (int)ly;
+        int hit = -1; for (int i = 0; i < 28 && hit < 0; i++) { Item t = item(a, i); if (t.x <= px && px <= t.x + t.w && t.y <= py && py <= t.y + t.h) hit = i; }   // AppScreen::updateMenuItemFromTouchEvent: inclusive rects, first match
+        int before = lastItem; if (hit >= 0) lastItem = hit;
+        auto startStage = [&](int it) { a.playSfx(2); chosen = it; timer = 0; phase = 0x22; leaveBack = false; };
+        if (hit < 0) { if (px >= 564 && px <= 798 && py >= 367 && py <= 555) startStage(before); return; }   // the preview rect (this+0xa7c..0xa88)
+        if (hit == 25) { selPage--; if (selPage < 0) { selPage = 0; a.playSfx(0x13); } else a.playSfx(1); preview(a); return; }
+        if (hit == 26) { if (selPage < 3 && selPage + 1 <= a.maxStage()) { selPage++; preview(a); a.playSfx(1); } else a.playSfx(0x13); return; }
+        if (hit == 27) { a.playSfx(3); chosen = 27; leaveBack = true; timer = 0; phase = 0x22; return; }
+        if (before != hit) { a.playSfx(0); sel = hit; preview(a); } else startStage(hit);
+    }
+    void origTick(App& a) {
+        if (phase == 0x20) { timer -= 16384.0; if (timer <= 0) { timer = 0; phase = 0x21; } }   // StageSelectScreen::process: fade in 0.5 s (the song 5 starts here)
+        else if (phase == 0x22) { timer += 16384.0; if (timer >= 500000.0) { timer = 500000.0; leave = true; } }
+    }
+    void origDraw(App& a) {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); preview(a); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        static const int tm[48] = {0,1,2,3,4,4,4,4,5,6,7,8,9,10,4,4,11,12,4,4,13,14,4,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,4,4,4,33,34,35,36};   // tilemap resource 0x126 (HD ccrpad rec 880): 8 x 6 tiles of 128 px
+        for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.ssBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
+        a.rtexBox(a.ssHdr, 0, 208, 50);   // slot 0x454 frame a20 (0 = Puzzle)
+        a.rtex(a.ssPanel, 0, 208, 247, a.ssPanel.fr[0].w, a.ssPanel.fr[0].h); a.rtex(a.ssPanel, 1, 548, 361, a.ssPanel.fr[1].w, a.ssPanel.fr[1].h); a.rtex(a.ssPanel, 2, 508, 351, a.ssPanel.fr[2].w, a.ssPanel.fr[2].h);
+        for (int i = 0; i < 25; i++) { Item t = item(a, i); a.rtexBox(a.ssCells, i == sel ? 1 : 0, (float)t.x, (float)t.y);
+            char nb[16]; snprintf(nb, sizeof nb, "%d", i + 1); a.printString(nb, (float)(t.x + (a.ssCells.box[0].x) / 2), (float)t.y + 1.0f, 255, 255, 255, 255, 0.45f, 0, false, 1);
+            if (a.isCleared(selPage * 25 + i)) a.rtexBox(a.ssCells, 4, (float)(t.x + (a.ssCells.box[0].x - 2) / 2 - (a.ssCells.box[4].x - 2) / 2), (float)(t.y + (a.ssCells.box[0].y - 2) / 2 - (a.ssCells.box[4].y - 2) / 2)); }
+        a.rtexBox(a.ssTab, 0, 208, 443); { int l = selPage + 1; a.rtexBox(a.ssTab, l, (float)(208 + (a.ssTab.box[0].x - 2) / 2 - (a.ssTab.box[l].x - 2) / 2), (float)(443 + (a.ssTab.box[0].y - 2) / 2 - (a.ssTab.box[l].y - 2) / 2)); }
+        a.rtexBox(a.ssBubble, 0, 548, 292);
+        if (const std::string* nm = a.hdString(0x1e8 + sel + selPage * 25)) a.printString(*nm, 682.0f, 299.0f, 0, 0, 0, 255, 0.45f, 0, false, 1);
+        if (a.ssPrev) { SDL_Rect d{564, 367, 234, 188}; SDL_RenderCopy(a.ren, a.ssPrev, nullptr, &d); }
+        a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.fr[0].h), a.ssArrows.fr[0].w, a.ssArrows.fr[0].h);
+        if (timer > 0) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(timer / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
+    }
+    void event(App& a, const SDL_Event& e) override {
+        if (orig()) { origEvent(a, e); return; }
         if (e.type != SDL_KEYDOWN) return; int n = (int)stages.list.size(); SDL_Keycode k = e.key.keysym.sym;
         if (k == SDLK_RIGHT) cur = (cur + 1) % n; else if (k == SDLK_LEFT) cur = (cur + n - 1) % n;
         else if (k == SDLK_DOWN) cur = std::min(n - 1, cur + COLS); else if (k == SDLK_UP) cur = std::max(0, cur - COLS);
@@ -485,8 +538,10 @@ struct StageSelectMode : Screen {
         else if (k == SDLK_RETURN || k == SDLK_SPACE) go = true; else if (k == SDLK_ESCAPE) back = true;
         page = cur / PER;
     }
-    const char* next() override { if (back) { back = false; return "MENU"; } if (go) { go = false; if (gApp) gApp->nextStage = cur; return "PUZZLE"; } return nullptr; }
+    void tick(App& a) override { if (orig()) origTick(a); }
+    const char* next() override { if (orig()) { if (!leave) return nullptr; leave = false; if (leaveBack) return "MENU"; int s = std::max(0, std::min(99, chosen + selPage * 25)); if (gApp) gApp->nextStage = s; return "PUZZLE"; } if (back) { back = false; return "MENU"; } if (go) { go = false; if (gApp) gApp->nextStage = cur; return "PUZZLE"; } return nullptr; }
     void draw(App& a, float) override {
+        if (orig()) { origDraw(a); return; }
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
         a.text(gApp && gApp->stageSet == 2 ? "PUZZLE  DREAMCAST EXPRESS" : gApp && gApp->stageSet ? "PUZZLE  MORE STAGES" : "PUZZLE  STAGE SELECT", 24, 14, 34);
         const int cw = 140, ch = 78, x0 = (W - COLS * cw) / 2, y0 = 80;
@@ -612,7 +667,7 @@ int main(int argc, char** argv) {
         if (const char* keys = getenv("CCR_KEYS")) for (const char* p = keys; *p; p++) { SDL_Event e{}; e.type = SDL_KEYDOWN; e.key.keysym.sym = (*p == ' ') ? SDLK_SPACE : (*p == 'D') ? SDLK_DOWN : (*p == 'E') ? SDLK_RETURN : *p; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); }
         std::vector<std::array<int, 3>> clicks; if (const char* c = getenv("CCR_CLICKS")) { int t, x, y, n; const char* p = c; while (sscanf(p, "%d:%d,%d%n", &t, &x, &y, &n) == 3) { clicks.push_back({t, x, y}); p += n; if (*p == ';') p++; else break; } }   // headless test input: tick:x,y;... (window pixels)
         int lastSong = -2; for (int i = 0; i < ticks; i++) {
-            for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); } mode->tick(app); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
+            for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
         mode->draw(app, 1.0f); int ow = W, oh = H; SDL_GetRendererOutputSize(app.ren, &ow, &oh); SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, ow, oh, 32, SDL_PIXELFORMAT_ARGB8888);
         SDL_RenderReadPixels(app.ren, nullptr, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch); SDL_SaveBMP(s, shot); SDL_FreeSurface(s); SDL_Quit(); return 0;
     }
@@ -638,7 +693,7 @@ int main(int argc, char** argv) {
             else { mode->event(app, e); if (const char* nx = mode->next()) { enter(nx); acc = 0; } }
         }
         Uint64 now = SDL_GetPerformanceCounter(); acc += (double)(now - last) / (double)SDL_GetPerformanceFrequency(); last = now; if (acc > 0.25) acc = 0.25;
-        while (acc >= dt) { mode->tick(app); acc -= dt; }
+        while (acc >= dt) { mode->tick(app); if (const char* nx = mode->next()) { enter(nx); acc = 0; break; } acc -= dt; }   // screens that finish by themselves (fade-outs) are polled after every tick
         if (mode->music() >= 0) app.pumpMusic(mode->music());
         mode->draw(app, (float)(acc / dt)); SDL_RenderPresent(app.ren);
     };
