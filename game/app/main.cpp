@@ -64,7 +64,7 @@ struct App {
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -123,7 +123,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_ss_hdr", ssHdr); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_ss_hdr", ssHdr); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_bubtail", hdBubTail); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -262,6 +262,53 @@ struct App {
     void blitFlip(Sheet& sh, int frame, float ax, float ay, float scale, bool mirror) {   // Render::drawImage flags & 2 = swap u0/u1 (horizontal mirror of the frame in place; these frames are centred on their anchor)
         if (frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
         SDL_Rect dst{(int)std::lround(ax + of.x * scale), (int)std::lround(ay + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)}; SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, mirror ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE); }
+    // ---- Render::drawBubble (HD 1.0 0x1ae80): word-wrapped text in a bubble built from 34 px tiles of image 0x9c (3 x 3 style body, frames 4..7 = the tail notch), plus a tail image (image 0xb for flag 1, image 0x9c frame 8 scaled 0.6 otherwise).
+    // Checked against the original under Unicorn (tools/oracle/hd_bubble_probe.py) by tools/bubble_diff.py.
+    static int wrapText(const std::vector<uint8_t>& fw, const std::string& s, std::vector<uint16_t>& out, int maxLines, int maxW, float scale) {   // _BHLib_WrapText 0x9aac, Latin branch
+        out.assign(maxLines, 0); int len = (int)s.size(), i = 0, start = 0, line = 0; float acc = 0.0f;
+        while (i < len) { unsigned char c = (unsigned char)s[i];
+            if (c == 10) { out[line] = (uint16_t)start; line++; if (line == maxLines) return 0; start = i + 1; i++; acc = 0.0f; }
+            else { float w = (float)fw[c] * scale; float na = acc + w; if (na <= (float)maxW) { acc = (float)(int)na; i++; }
+                else { out[line] = (uint16_t)start; line++; if (line == maxLines) return 0; int j = i - 1; int k = j; while (k >= 0 && s[k] != ' ' && s[k] != 10) k--;
+                    if (k < (int)out[line - 1]) k = j; start = k + 1; i = k + 1; acc = 0.0f; } } }
+        out[line] = (uint16_t)start; line++; if (line == maxLines) return 0; out[line] = (uint16_t)((start == 0 ? len : i) + 1); return line; }
+    void imgDraw(int id, int frame, float x, float y, int flags, float scale, int alpha) {
+        if (bubbleLog) { char b[160]; snprintf(b, sizeof b, "drawImage %d %d %.1f %.1f %d %.4f %d", id, frame, x, y, flags, scale, alpha); bubbleLog->push_back(b); return; }
+        Sheet& sh = id == 11 ? hdBubTail : hdBub9; if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
+        SDL_Rect dst{(int)std::lround(x + of.x * scale), (int)std::lround(y + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)};
+        SDL_SetTextureAlphaMod(sh.tex, (Uint8)alpha); SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, (SDL_RendererFlip)((flags & 2 ? SDL_FLIP_HORIZONTAL : 0) | (flags & 4 ? SDL_FLIP_VERTICAL : 0))); SDL_SetTextureAlphaMod(sh.tex, 255); }
+    void drawBubble(int x, int y, int width, const std::string& text, int f, int p6, int alpha, int tex = -1) {
+        const float L534 = 0.8f; const bool pad = true;   // layout +0x534 (text scale); the global 0x172c10 == 1 on the iPad class
+        Sheet& tb = hdBubTail; Sheet& t9 = hdBub9; if (!t9.tex || !tb.tex || hdFontW.empty() || hdFont.box.size() < 92) return;
+        float tailW, tailH, tailScale; if (f & 1) { tailH = (float)(tb.box[0].y - 2); tailW = (float)(tb.box[0].x - 2); tailScale = 1.0f; } else { tailH = (float)(t9.box[8].y - 2) * 0.6f; tailW = (float)(t9.box[8].x - 2) * 0.6f; tailScale = 0.6f; }
+        const int tile = t9.box[0].x - 2; int ip0 = (int)((float)y + tailH * -0.5f); int s26 = ip0 - tile;
+        std::vector<uint16_t> out; int lines = wrapText(hdFontW, text, out, 0x100, (width - 2 * tile) & 0xffff, L534);
+        const float fh = (float)hdFont.box[91].y; const float s22 = fh * L534; const float s24 = pad ? fh * 0.9f : s22;
+        float total = (float)lines * s22 + (float)tile; int tot = (int)total; int rows = tot / tile; if (tile * rows != tot) rows++; int rt = tile * rows;
+        int fb = width / tile, rw = tile * fb; if (rw != width) { fb++; rw = tile * fb; } int lastCol = fb - 1, halfW = rw / 2, sb = tile / 2;
+        int tc = (f & 4) == 0 ? fb - 7 : 5; int mode58 = 0; if (pad && (f & 1)) { tc = 4; mode58 = 1; }
+        float s28 = 0.0f, s30 = 0.0f; float rowY = (float)(s26 + sb - rt);
+        for (int ip = 0; ip < rows + 1; ip++, rowY += (float)tile) {
+            int cx = x + sb - halfW, sl = x + tile + sb - halfW, r8 = x + sb - tile - halfW;
+            for (int col = 0; col < fb; col++, cx += tile, sl += tile, r8 += tile) {
+                int fr = -1, fl = 0, adj = 0;
+                if (ip == 0) { if (col == 0) { fr = 0; } else if (col == lastCol) { fr = 0; fl = 2; adj = 2; } else fr = 2; }
+                else if (ip == rows - 1) {
+                    if (col == 0) { fr = 0; fl = 4; } else if (col == lastCol) { fr = 0; fl = 6; adj = 2; }
+                    else if (col == tc) { if ((f & 4) != 0 || mode58 != 0) { fr = 5; fl = 2; adj = 2; } else { fr = 4; } }
+                    else if (col == tc + 1) { if ((f & 4) == 0 && mode58 == 0) { fr = 5; } else { fr = 4; fl = 2; adj = 2; } }
+                    else { fr = 2; fl = 4; } }
+                else if (ip == rows) {
+                    if (col == tc) { if ((f & 4) == 0 && mode58 == 0) { s30 = (float)sl; s28 = rowY; fr = 6; } else { fr = 7; fl = 2; adj = 2; } }
+                    else if (col == tc + 1) { if ((f & 4) == 0 && mode58 == 0) { fr = 7; } else { s30 = (float)r8; s28 = rowY; fr = 6; fl = 2; adj = 2; } } }
+                else { if (col == 0) fr = 1; else if (col == lastCol) { fr = 1; fl = 2; adj = 2; } else fr = 3; }
+                if (fr >= 0) imgDraw(0x9c, fr, (float)(cx - adj), rowY, fl, 1.0f, alpha); } }
+        float ty = ((float)s26 - (float)lines * s24) + s24 * -0.5f + (float)sb;
+        for (int k = 0; k < lines; k++) { int a0 = out[k], len = (int)out[k + 1] - a0; std::string ln = (text + std::string(1, (char)0)).substr(a0, std::max(0, len)); if (!ln.empty()) ln.pop_back();   // strncpy copies the source's terminator for the last line, so only the separator of the other lines is dropped
+            if (!ln.empty()) { if (bubbleLog) { char bb[200]; snprintf(bb, sizeof bb, "printString %s %.1f %.4f %d %d %d %d %.4f %d %d %d", ln.c_str(), (float)x, ty, 16, 16, 112, alpha & 255, L534, 0, 1, tex); bubbleLog->push_back(bb); } else printString(ln, (float)x, ty, 16, 16, 112, alpha & 255, L534, 0, true); }
+            ty += s22; }
+        if (f & 1) { int lr = (f & 4) ? 2 : 0; int s10 = (f & 4) ? (int)(-tailW) : 0; if (mode58) s10 = (int)((float)s10 - tailW); imgDraw(11, p6, (float)s10 + s30, s28 + 0.0f, lr, tailScale, alpha); }
+        else { int lr = (f & 4) ? 2 : 0; int hx = (int)(tailW * 0.5f); float tx = (float)((f & 4) ? -hx : hx) + s30; float tyy = (float)(int)(tailH * 0.5f) + s28; imgDraw(0x9c, 8, tx, tyy, lr, tailScale, alpha); } }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
     void cursor(int cx, int cy, int player, int ticks, bool bracket) {
         int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
@@ -660,6 +707,8 @@ int main(int argc, char** argv) {
         else mode = std::make_unique<MenuMode>();
         return true;
     };
+    if (const char* bt = getenv("CCR_BUBBLE")) {   // development check: CCR_BUBBLE="x,y,w,flags,p6,alpha|text" prints the draw calls of Render::drawBubble (tools/bubble_diff.py compares them with the original)
+        int x, y, w, fl, p6, al; int n = 0; if (sscanf(bt, "%d,%d,%d,%d,%d,%d|%n", &x, &y, &w, &fl, &p6, &al, &n) >= 6 && n > 0) { std::vector<std::string> lg; app.bubbleLog = &lg; app.drawBubble(x, y, w, bt + n, fl, p6, al); for (auto& s : lg) printf("%s\n", s.c_str()); } return 0; }
     if (!enter(start)) return 2;
     const double dt = 1.0 / 60.0; double acc = 0;
     if (const char* shot = getenv("CCR_SHOT")) {

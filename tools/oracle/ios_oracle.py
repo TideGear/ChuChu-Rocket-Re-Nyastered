@@ -44,6 +44,21 @@ class IOSOracle:
         elif name == '_floorf': ret = f2u(math.floor(f(0)))
         elif name in ('_memset', '_memset_pattern4'): self.write(r[0], bytes([r[1] & 255]) * r[2]); ret = r[0]
         elif name in ('_memcpy', '_memmove'): self.write(r[0], self.read(r[1], r[2])); ret = r[0]
+        elif name == '_strlen':
+            n = 0
+            while self.read(r[0] + n, 1) != bytes(1): n += 1
+            ret = n
+        elif name == '_strcpy':
+            n = 0
+            while self.read(r[1] + n, 1) != bytes(1): n += 1
+            self.write(r[0], self.read(r[1], n + 1)); ret = r[0]
+        elif name == '_strncpy':
+            src = b''
+            for k in range(r[2]):
+                c = self.read(r[1] + k, 1)
+                src += c
+                if c == bytes(1): break
+            self.write(r[0], src.ljust(r[2], bytes(1))); ret = r[0]
         elif name == '_malloc': ret = self.alloc(r[0])
         elif name == '_calloc': ret = self.alloc(r[0] * r[1])
         elif name == '_free': ret = 0
