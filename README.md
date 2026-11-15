@@ -4,7 +4,7 @@
 
 ### Work-in-progress screenshots
 
-![Title screen with the Dreamcast logo and iPad background](docs/screenshots/title-wip.png)
+<img src="docs/screenshots/title-wip.png" width="50%" alt="Title screen with the Dreamcast logo and iPad background">
 
 | Puzzle | Battle |
 | --- | --- |

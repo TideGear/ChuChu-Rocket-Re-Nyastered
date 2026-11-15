@@ -1581,6 +1581,9 @@ struct BattleMode : Screen {
 static int saveFrame(SDL_Renderer* renderer, const char* path) {
     int width, height;
     if (SDL_GetRendererOutputSize(renderer, &width, &height) < 0) return 1;
+    // SDL2 reads back the current viewport. Capture the full output even if
+    // the screen changed its logical size after drawing, as TitleMode does.
+    if (SDL_RenderSetLogicalSize(renderer, 0, 0) < 0) return 1;
     SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
     if (!surface) return 1;
     const bool saved = SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,

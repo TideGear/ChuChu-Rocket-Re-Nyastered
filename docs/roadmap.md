@@ -4,6 +4,7 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 ## Playfield rendering (2026-11-14)
 
+- Fixed headless screenshot readback after the title resets the gameplay viewport. The old 1024 × 768 capture had only 921 drawn columns. Readback now covers all 1024 columns at 4:3 and retains equal 160-pixel side bars at 1280 × 720. Replaced the README capture and set its display width to 50%.
 - HD 1.0 registers the board at priority -780, arrows at -770 and cursor brackets at -760. Cats, mice and rockets share a draw list sorted by integer world Z, with the cursor ring at priority 700. The port now follows these playfield layers and locates puzzle rockets by their actual cells.
 - The iPad composes horizontal and vertical wall rows in alternation. The wall calls for all 25 free-for-all and 25 team preview cases matched the Dreamcast board data and the positions now used by the renderer. The Puzzle and Battle captures confirm visible top and left overhangs and all four outside corner joins.
 - The Battle Settings preview now composes the original 832 × 640 RGBA4444 texture from the locally extracted iPad atlas and Dreamcast boards. The floor copy, quantized object blends, wall joins and random-stage board match all 50 original iPad uploads byte for byte (`tools/battle_preview_diff.py`). Headless captures exercised the Settings pane in free-for-all and team, including the random choice. Next, connect the verified Settings and Players panes to the live Battle menu route.
