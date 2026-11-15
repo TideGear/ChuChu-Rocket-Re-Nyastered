@@ -49,6 +49,10 @@ Scope: the current port's SFX call sites and dispatch, checked against the local
 
 During Cat Mania, HD 1.0 `RL_Eve_NekoFever` (0x1dbbc) checks the gameplay flag and rolls once on each multiple of 16 before the event expires. A roll strictly below 0.3 requests effect 27 (`027.ogg`). This is separate from effect 7 for a cat entering a rocket. The port now plays effect 27 from its existing RNG check. A Unicorn probe covered 30 cases for the game flag, frame boundary, event expiry, and both sides of the threshold, including equality.
 
+### Ordinary cat cues
+
+The cat update requests `007.ogg` on the rocket-entry branch when the gameplay flag is set. The corresponding paths are HD 1.0 `CA_CatExe` (0x14524), iOS 1.0.2 (0x160e0), iOS 1.1.2 (0x126e8), and Android `FUN_00028ffc`. The walking and hole branches in these routines have no direct call to that cue. Cat Attack also requests slot 7. The iPad dispatcher refreshes its timestamp on every request, including suppressed requests, and requires three ticks since the last request. The port now keeps this cooldown on a clock that continues across rounds. A headless battle queued the decoded clip 17 times. The Dreamcast and GBA cat audio paths and indirect mobile callers still need tracing.
+
 HD 1.0 `RL_RouletteExec` plays `010.ogg` on the first visible tick and `011.ogg` 30 ticks later, when the drum stops. At tick 60 it plays the outcome voice. In outcome order, the file numbers are 119, 120, 117, 118, 122, 121, 123, and 124. `ChuSECall` maps the numbers 117–124 to AudioItem slots 32–39. The Japanese group uses the same files with a `J` prefix. Place Arrows Again also plays `013.ogg` on the event task's first tick. The port uses these original clips from the local iOS extraction. The original requests event music on the first visible roulette tick and passes a 60-tick transition to `BGM_Change` where applicable. The port's event music selection still follows the gameplay event state, and timed music transitions remain open.
 
 ## Localization source (2026-11-13)

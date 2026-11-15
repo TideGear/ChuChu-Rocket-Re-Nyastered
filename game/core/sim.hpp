@@ -3,6 +3,7 @@
 // Units: world units (1 cell = 15.0), one tick = one original logic step (60 Hz). float32 like the original.
 #pragma once
 #include "angle.hpp"
+#include "mouse_ghost.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -80,16 +81,21 @@ public:
     // Deferred task deletion (original: eaten mouse -> state 0x354f8 runs next tick, creates a 48-tick effect task (if < 12 alive) then deletes the mouse;
     // mouse in rocket -> 0x35488 runs next tick and deletes). Slots matter because collision entries keep task pointers.
     struct PendingFree { int ent, when; bool effect; };
-    std::vector<PendingFree> pendingFree; std::vector<std::pair<int,int>> effects;     // effects: (slot, execs so far)
+    std::vector<PendingFree> pendingFree;
+    std::vector<MouseGhost> effects;
     bool poolModel = false;                                                              // battle mode only
     void scheduleFree(size_t ent, int when, bool effect) { if (poolModel) pendingFree.push_back({(int)ent, when, effect}); }
     void poolTick() {
-        for (auto& e : effects) e.second++;
-        for (size_t i = 0; i < effects.size();) { if (effects[i].second >= 48) { releaseSlot(effects[i].first); effects.erase(effects.begin() + i); } else i++; }
+        for (auto& e : effects) e.tick();
+        for (size_t i = 0; i < effects.size();) { if (effects[i].age >= 48) { releaseSlot(effects[i].slot); effects.erase(effects.begin() + i); } else i++; }
         for (size_t i = 0; i < pendingFree.size();) {
             PendingFree& p = pendingFree[i];
             if (p.when <= now) {
-                if (p.effect && effects.size() < 12) { int sl = allocSlot(-2); if (sl >= 0) effects.push_back({sl, 0}); }
+                if (p.effect && effects.size() < 12) {
+                    const int slot = allocSlot(-2);
+                    const auto& mouse = ents[p.ent];
+                    if (slot >= 0) effects.push_back({slot, ents.size(), mouse.x, mouse.z, mouse.heading << 14});
+                }
                 releaseSlot(ents[p.ent].slot); pendingFree.erase(pendingFree.begin() + i);
             } else i++;
         }

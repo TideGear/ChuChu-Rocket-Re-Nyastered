@@ -225,6 +225,8 @@ struct App {
         if (id >= 117 && id < 117 + static_cast<int>(rouletteVoice.size()))
             clip = lang == 5 ? &rouletteVoiceJapanese[id - 117] : &rouletteVoice[id - 117];
         if (!clip || clip->empty()) return;
+        if (headless && id == 7 && getenv("CCR_CAT_AUDIO_TRACE"))
+            printf("cat rocket clip 007.ogg %zu samples\n", clip->size());
         if (headless && id >= 117 && getenv("CCR_ROULETTE_AUDIO_TRACE"))
             printf("roulette clip %s%03d.ogg %zu samples\n", lang == 5 ? "J" : "", id, clip->size());
         SDL_LockAudioDevice(adev);
@@ -589,6 +591,7 @@ struct App {
         float x, z;
         size_t index;
         bool rocket;
+        bool ghost = false;
     };
     std::vector<FieldObject> fieldObjects;
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
@@ -608,7 +611,16 @@ struct App {
         }
 
         while (prev.size() < sim.ents.size()) prev.push_back({sim.ents[prev.size()].x, sim.ents[prev.size()].z});
-        for (size_t i = 0; i < sim.ents.size(); ++i) {
+        size_t ghostIndex = 0;
+        for (size_t i = 0; i <= sim.ents.size(); ++i) {
+            while (ghostIndex < sim.effects.size() && sim.effects[ghostIndex].submission == i) {
+                const auto& ghost = sim.effects[ghostIndex];
+                if (ghost.age > 0)
+                    fieldObjects.push_back({std::max(-64, static_cast<int>(ghost.z)), ghost.x, ghost.z,
+                                            ghostIndex, false, true});
+                ++ghostIndex;
+            }
+            if (i == sim.ents.size()) break;
             const Entity& en = sim.ents[i];
             if (!en.alive || en.done || en.rocketIn) continue;
             float x = prev[i].first + (en.x - prev[i].first) * alpha;
@@ -624,6 +636,11 @@ struct App {
         for (const FieldObject& object : fieldObjects) {
             float x = OX + object.x * (CELL / kCell), z = OY + object.z * (CELL / kCell);
             size_t i = object.index;
+            if (object.ghost) {
+                const auto& ghost = sim.effects[i];
+                drawImage(ghost.image(), ghost.age & 7, x, z, ghost.flags(), ghost.scale(), 255);
+                continue;
+            }
             if (object.rocket) {
                 blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f);
                 continue;
@@ -1851,7 +1868,11 @@ struct BattleMode : Screen {
         if (localTeam < 0) if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
         game.sfx = [this](int id) {
-            if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; }
+            if (id == 7) {
+                const int elapsed = gTime - lastCatSfx;
+                lastCatSfx = gTime;  // ChuSECall updates the timer even for a suppressed request.
+                if (elapsed < 3) return;
+            }
             if (!gApp) return;
             if (gApp->headless && (id == 10 || id == 11 || id == 13 || id >= 117) &&
                 getenv("CCR_ROULETTE_AUDIO_TRACE"))
@@ -2010,6 +2031,18 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 }
 
 int main(int argc, char** argv) {
+    if (getenv("CCR_MOUSE_GHOST_TRACE")) {
+        MouseGhost ghost{};
+        while (scanf("%f %f %d", &ghost.x, &ghost.z, &ghost.angle) == 3) {
+            ghost.age = 0;
+            for (int i = 1; i < 48; ++i) {
+                ghost.tick();
+                printf("%d %d %d %a %a %a\n", ghost.image(), ghost.age & 7, ghost.flags(),
+                       ghost.x * (CELL / kCell) + OX, ghost.z * (CELL / kCell) + OY, ghost.scale());
+            }
+        }
+        return 0;
+    }
     if (getenv("CCR_ROCKET_LAUNCH_TRACE")) {
         int player, team, x, y;
         unsigned globalTime;

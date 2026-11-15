@@ -40,6 +40,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Restored the Cat Mania cat call (iPad HD 1.0 effect 27) from the same RNG roll already consumed by the simulation. A 30-case Unicorn probe verified the rule, including the strict 0.3 cutoff. Next, trace the remaining cat and mouse-death call sites across versions and port the caught-mouse ghost.
 
+- Connected caught-mouse ghosts to shared-screen Battle's existing 12-effect task pool. The draw submits at integer world Z with the other field sprites. `tools/mouse_ghost_diff.py` matched 564 iPad overhead draws exactly, across all four initial headings and three positions. Re-export iPad slots 44–46 for the art. Puzzle and other views still need the effect. Also fixed the original three-tick cooldown for the ordinary cat rocket-entry clip and confirmed playback queues `007.ogg` headlessly. Next, trace the corresponding Dreamcast and GBA cues and the puzzle ghost handoff.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
