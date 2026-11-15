@@ -566,12 +566,14 @@ struct App {
             for (int k = 0; k <= wp; k++) drawImage(0x5d, 4 + t, tx + layF(0x30c + wp * 0x14 + t * 0x64 + 4 * k), iy + layF(0x308), 0, 1.0f, k >= lit ? 0x22 : 0xff);
             if ((reach >> t) & 1) drawImage(0x91, 0, tx + (t == 0 ? layF(0x2fc) : layF(0x300)), iy + layF(0x304), 0, 1.0f, 255); } }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
-    void cursor(int cx, int cy, int player, int ticks, bool bracket = false) {
+    void cursorAt(float x, float y, int player, int ticks, bool bracket = false) {
         int ang = (player << 14) + 0x1000 * ticks;
-        float x = OX + (cx + 0.5f) * CELL, y = OY + (cy + 0.5f) * CELL;
         float phase = (bracket ? 2.0f : 1.0f) * ang * 6.283185307f / 65536.0f;
         blit(cur, bracket ? 4 : player & 3, x, y,
              1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase));
+    }
+    void cursor(int cx, int cy, int player, int ticks, bool bracket = false) {
+        cursorAt(OX + (cx + 0.5f) * CELL, OY + (cy + 0.5f) * CELL, player, ticks, bracket);
     }
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
@@ -1530,8 +1532,78 @@ struct DragGesture {
     int end(App& a, const SDL_Event& e) { on = false; float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); lx -= OX; ly -= OY; float dx = lx - x0, dy = ly - y0; float wdx = (float)(e.button.x - wx0), wdy = (float)(e.button.y - wy0); if (wdx * wdx + wdy * wdy <= 0.25f) return -1; if (std::fabs(dy) < std::fabs(dx)) return dx > 0 ? 3 : 1; return dy > 0 ? 0 : 2; }
 };
 
+static int arrowKey(SDL_Keycode key) {
+    switch (key) {
+    case SDLK_s: case SDLK_DOWN: return 0;
+    case SDLK_a: case SDLK_LEFT: return 1;
+    case SDLK_w: case SDLK_UP: return 2;
+    case SDLK_d: case SDLK_RIGHT: return 3;
+    default: return -1;
+    }
+}
+
+struct MouseAim {
+    float x = 0, y = 0;
+    bool inside = false;
+    void update(App& app, int windowX, int windowY) {
+        if (!app.headless) SDL_GetMouseState(&windowX, &windowY);
+        SDL_RenderSetLogicalSize(app.ren, GW, GH);
+        SDL_RenderWindowToLogical(app.ren, windowX, windowY, &x, &y);
+        inside = x >= OX && y >= OY && x < OX + kCols * CELL && y < OY + kRows * CELL;
+    }
+    int cellX() const { return static_cast<int>((x - OX) / CELL); }
+    int cellY() const { return static_cast<int>((y - OY) / CELL); }
+};
+
+struct PadAim {
+    float x, y, previousX = x, previousY = y;
+    int targetX = -1, targetY = -1;
+
+    // Dreamcast 1ST_READ.BIN at 0x8c014220.
+    void tick(SDL_GameController* pad) {
+        previousX = x;
+        previousY = y;
+        const auto axis = [&](SDL_GameControllerAxis which) {
+            const int value = SDL_GameControllerGetAxis(pad, which);
+            const float delta = (value >> 8) * 256 * 0.00009f;
+            return std::fabs(delta) < 0.09f ? 0.0f : delta;
+        };
+        const float dx = axis(SDL_CONTROLLER_AXIS_LEFTX), dy = axis(SDL_CONTROLLER_AXIS_LEFTY);
+        if (dx != 0 || dy != 0) {
+            x = std::clamp(x + dx, 0.0f, kCols * kCell - 0.01f);
+            y = std::clamp(y + dy, 0.0f, kRows * kCell - 0.01f);
+            targetX = targetY = -1;
+            return;
+        }
+        const auto step = [&](float& position, int& target, int cells,
+                              SDL_GameControllerButton negative, SDL_GameControllerButton positive) {
+            if (target < 0) {
+                const int direction = SDL_GameControllerGetButton(pad, positive) -
+                                      SDL_GameControllerGetButton(pad, negative);
+                if (!direction) return;
+                const int next = static_cast<int>(position / kCell) + direction;
+                if (next < 0 || next >= cells) return;
+                target = next;
+            }
+            const float center = (target + 0.5f) * kCell;
+            if (std::fabs(center - position) <= 1.8f) target = -1;
+            else position += center > position ? 1.8f : -1.8f;
+        };
+        step(x, targetX, kCols, SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+        step(y, targetY, kRows, SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+    }
+
+    void draw(App& app, int player, int ticks, float alpha) const {
+        app.cursorAt(OX + (previousX + (x - previousX) * alpha) * (CELL / kCell),
+                     OY + (previousY + (y - previousY) * alpha) * (CELL / kCell), player, ticks);
+    }
+};
+
 // ---------------------------------------------------------------- puzzle
 struct PuzzleMode : Screen {
+    MouseAim aim;
+    bool mouseCursor = false;
+    PadAim padAim{82.5f, 67.5f};
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 5, curY = 4; SDL_GameController* pad = nullptr;
     void putAt(int cx, int cy, int d) { sim.removeArrow(cx, cy); if (d >= 0 && used(d) < stock[d]) sim.placeArrow(cx, cy, d); }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
@@ -1546,21 +1618,36 @@ struct PuzzleMode : Screen {
         for (auto& s : stages.list[cur].sol) stock[s[2] & 3]++;       // arrow stock from the reference solution (stage struct counts not exported yet)
     }
     int used(int d) const { int n = 0; for (auto& a : sim.arrows) if (a.live && a.dir == d) n++; return n; }
+    ~PuzzleMode() override { if (pad) SDL_GameControllerClose(pad); }
     void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+            aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
+                          e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y);
+            mouseCursor = true;
+        } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
+            if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0);
             if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); }   /* a cleared stage leads to the next one */
                 else if (state >= 3) reset(); }
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); }
-            else if (state == 0) { if (k == SDLK_UP) curY = std::max(0, curY - 1); else if (k == SDLK_DOWN) curY = std::min(8, curY + 1); else if (k == SDLK_LEFT) curX = std::max(0, curX - 1); else if (k == SDLK_RIGHT) curX = std::min(11, curX + 1);   // keyboard: arrows move the cursor, W/A/S/D place up/left/down/right (the pad's face buttons)
-                else if (k == SDLK_w) putAt(curX, curY, 2); else if (k == SDLK_s) putAt(curX, curY, 0); else if (k == SDLK_a) putAt(curX, curY, 1); else if (k == SDLK_d) putAt(curX, curY, 3); } }
+            else if (state == 0 && !paused && !e.key.repeat && aim.inside && arrowKey(k) >= 0) {
+                mouseCursor = true;
+                putAt(aim.cellX(), aim.cellY(), arrowKey(k));
+            } }
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && hudButton(a, e)) {}   // HD 1.0 PuzzleGameScreen::handleInput: rect 3 Start (flag 1), rect 4 Cancel (flag 2)
         else if (e.type == SDL_MOUSEBUTTONDOWN && state == 0 && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e);
         else if (e.type == SDL_MOUSEBUTTONUP && state == 0 && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); putAt(cx, cy, d); }   // a tap (d = -1) deletes the arrow on the cell
         else if (e.type == SDL_CONTROLLERDEVICEADDED && !pad) pad = SDL_GameControllerOpen(e.cdevice.which);
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN && state == 0) { int b = e.cbutton.button;   // Dreamcast-style pad: D-pad moves the cursor, Y/A/X/B place up/down/left/right, Start runs
-            if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) curY = std::max(0, curY - 1); else if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) curY = std::min(8, curY + 1); else if (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT) curX = std::max(0, curX - 1); else if (b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) curX = std::min(11, curX + 1);
-            else if (b == SDL_CONTROLLER_BUTTON_Y) putAt(curX, curY, 2); else if (b == SDL_CONTROLLER_BUTTON_A) putAt(curX, curY, 0); else if (b == SDL_CONTROLLER_BUTTON_X) putAt(curX, curY, 1); else if (b == SDL_CONTROLLER_BUTTON_B) putAt(curX, curY, 3);
+        else if (e.type == SDL_CONTROLLERDEVICEREMOVED && pad &&
+                 SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cdevice.which) {
+            SDL_GameControllerClose(pad);
+            pad = nullptr;
+        }
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad && state == 0 && !paused &&
+                 SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cbutton.which) { int b = e.cbutton.button;
+            mouseCursor = false;
+            if (b == SDL_CONTROLLER_BUTTON_Y) putAt(curX, curY, 2); else if (b == SDL_CONTROLLER_BUTTON_A) putAt(curX, curY, 0); else if (b == SDL_CONTROLLER_BUTTON_X) putAt(curX, curY, 1); else if (b == SDL_CONTROLLER_BUTTON_B) putAt(curX, curY, 3);
             else if (b == SDL_CONTROLLER_BUTTON_START) { state = 1; running = true; } }
     }
     // Touch rects of the puzzle screen (HD 1.0 PuzzleGameScreen::process 0x12994 -> Input::addRect(i, x0, y0, x1, y1) from layout +0x4d0 + 16 i): rect 3 (18, 88)-(160, 190) Start/Dash, rect 4 (21, 229)-(159, 275) Cancel.
@@ -1581,6 +1668,12 @@ struct PuzzleMode : Screen {
     int cticks = 0;
     void tick(App& a) override {
         if (paused) return; cticks++;
+        if (pad && state == 0) {
+            padAim.tick(pad);
+            if (padAim.x != padAim.previousX || padAim.y != padAim.previousY) mouseCursor = false;
+            curX = static_cast<int>(padAim.x / kCell);
+            curY = static_cast<int>(padAim.y / kCell);
+        }
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
         if (!running) return;
         sim.tick(); a.stepAngles(sim);
@@ -1593,9 +1686,14 @@ struct PuzzleMode : Screen {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
         { const int set = gApp ? gApp->stageSet : 0; a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2); }   // puzzle colours (createPlayfieldPreview): floor (level & 3) + 2, wall 2; the extra levels (type 200) floor 1, wall 1
         for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
-        if (state == 0 && (sim.coll[curY][curX] & 0xF00)) a.cursor(curX, curY, 0, cticks, true);
+        const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
+        const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
+        if (showCursor && (sim.coll[aimY][aimX] & 0xF00)) a.cursor(aimX, aimY, 0, cticks, true);
         a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
-        if (state == 0) a.cursor(curX, curY, 0, cticks);
+        if (showCursor) {
+            if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks);
+            else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha);
+        }
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
         { int n = cur % 25 + 1; a.blit(a.hdPhud, 1, 90.0f, 520.0f, 1.3f); a.blit(a.hdStageNum, n / 10, 70.0f, 584.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 120.0f, 584.0f, 1.3f); }   // renderPuzzleHudiPad: "stage" label (0x5c frame 1) at (90, 520) and the number (image 0x84, (stage mod 25) + 1, tens at (70, 584), ones at (120, 584)), all at scale 1.3; the stage-name frame and text are not drawn yet
         a.blit(a.hdPhud, 0, 85.0f, 190.0f);   // renderHudLeft (0x11e18): image 0x5c frame 0 (Start/Dash, Cancel panel) at layout (+0x64, +0x68) = (85, 190); its glow highlights (image 0x9d frames 4/5/6) and button hit rects are not done yet
@@ -1700,8 +1798,11 @@ struct StageSelectMode : Screen {
 
 // ---------------------------------------------------------------- battle
 struct BattleMode : Screen {
+    MouseAim aim;
+    bool mouseCursor = false;
+    PadAim padAim[4]{{37.5f, 37.5f}, {142.5f, 37.5f}, {37.5f, 97.5f}, {142.5f, 97.5f}};
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
-    // 4-player local input: mouse = player 1; keyboard sets WASD+Q (P1), IJKL+U (P2), keypad 8456+0 (P3); gamepads in connection order (D-pad moves the cursor, DC buttons Y/A/X/B place up/down/left/right)
+    // Mouse and keyboard control player 1. Controller face buttons place arrows.
     // FourBattleLoop (HD 1.0 0x1c2b8) mode 1: a 120-tick intro (the round panel from tick 1 for 75 ticks, the Round START banner at tick 90 for 45 ticks), then play starts
     // FourBattleLoop modes 3..5 (0x1c3c2..): 3 round end (60 ticks), 4 between rounds (result screen, next round after 240 ticks and a touch), 5 match over
     int mode = 2, modeTick = 0, wins[4] = {0, 0, 0, 0}, winPoint = 2, roundWinner = 0, drawFlag = 0, gTime = 0, rank[4] = {0, 0, 0, 0}; bool tapped = false, matchOver = false, congra = false; int sub5 = 0, cnt5 = 0;   // winPoint: GetWinPoint (initial data value 2)
@@ -1711,17 +1812,19 @@ struct BattleMode : Screen {
     DragGesture drag; int lastCatSfx = -100; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
     ~BattleMode() override { for (auto* pad : pads) if (pad) SDL_GameControllerClose(pad); }
     void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
-    void moveCur(int p, int dx, int dy) { curX[p] = std::max(0, std::min(11, curX[p] + dx)); curY[p] = std::max(0, std::min(8, curY[p] + dy)); }
-    bool keyPlayer(SDL_Keycode k) {   // keyboard = player 1: arrows move the cursor, W/A/S/D place up/left/down/right (the Dreamcast face buttons Y/X/A/B); the mouse is player 1 too (drag gesture)
-        if (lv[0] >= 0) return false;
-        if (k == SDLK_UP) moveCur(0, 0, -1); else if (k == SDLK_DOWN) moveCur(0, 0, 1); else if (k == SDLK_LEFT) moveCur(0, -1, 0); else if (k == SDLK_RIGHT) moveCur(0, 1, 0);
-        else if (k == SDLK_w) place(0, curX[0], curY[0], 2); else if (k == SDLK_s) place(0, curX[0], curY[0], 0); else if (k == SDLK_a) place(0, curX[0], curY[0], 1); else if (k == SDLK_d) place(0, curX[0], curY[0], 3);
-        else return false;
+    bool keyPlayer(const SDL_KeyboardEvent& key) {
+        const int direction = arrowKey(key.keysym.sym);
+        if (lv[0] >= 0 || direction < 0) return false;
+        if (!paused && !key.repeat && aim.inside) {
+            mouseCursor = true;
+            place(0, aim.cellX(), aim.cellY(), direction);
+        }
         return true;
     }
     void padButton(int p, int button) {
         if (p < 0 || p > 3 || lv[p] >= 0) return;
-        switch (button) { case SDL_CONTROLLER_BUTTON_DPAD_UP: moveCur(p, 0, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: moveCur(p, 0, 1); break; case SDL_CONTROLLER_BUTTON_DPAD_LEFT: moveCur(p, -1, 0); break; case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: moveCur(p, 1, 0); break;
+        if (p == 0) mouseCursor = false;
+        switch (button) {
             case SDL_CONTROLLER_BUTTON_Y: place(p, curX[p], curY[p], 2); break; case SDL_CONTROLLER_BUTTON_A: place(p, curX[p], curY[p], 0); break; case SDL_CONTROLLER_BUTTON_X: place(p, curX[p], curY[p], 1); break; case SDL_CONTROLLER_BUTTON_B: place(p, curX[p], curY[p], 3); break; default: break; }
     }
     bool load(const std::string& root, int stage, uint32_t sd,
@@ -1763,6 +1866,11 @@ struct BattleMode : Screen {
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
     void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+            aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
+                          e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y);
+            mouseCursor = true;
+        } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_CONTROLLERDEVICEADDED) {
             const auto id = SDL_JoystickGetDeviceInstanceID(e.cdevice.which);
             for (auto* pad : pads) if (pad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id) return;
@@ -1775,7 +1883,10 @@ struct BattleMode : Screen {
             }
         }
         else if (e.type == SDL_CONTROLLERBUTTONDOWN) { for (int p = 0; p < 4; p++) if (pads[p] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[p])) == e.cbutton.which) padButton(p, e.cbutton.button); }
-        else if (e.type == SDL_KEYDOWN && keyPlayer(e.key.keysym.sym)) {}
+        else if (e.type == SDL_KEYDOWN && arrowKey(e.key.keysym.sym) >= 0) {
+            if (!a.headless) aim.update(a, 0, 0);
+            keyPlayer(e.key);
+        }
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_SPACE) paused = !paused; else if (k == SDLK_r) restart(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); restart(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); restart(); } }
@@ -1783,6 +1894,18 @@ struct BattleMode : Screen {
         else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (d >= 0) place(0, cx, cy, d); }   // no drag = no arrow (Input::getArrowType returns 0)
     }
     void tick(App& a) override { if (paused) return;
+        if (intro >= 120 && mode == 2 && !game.rollPending()) {
+            for (int p = 0; p < 4; ++p) {
+                if (!pads[p] || lv[p] >= 0) continue;
+                auto& pointer = padAim[p];
+                pointer.tick(pads[p]);
+                if (p == 0 && (pointer.x != pointer.previousX || pointer.y != pointer.previousY)) mouseCursor = false;
+                curX[p] = static_cast<int>(pointer.x / kCell);
+                curY[p] = static_cast<int>(pointer.y / kCell);
+            }
+        } else {
+            for (auto& pointer : padAim) { pointer.previousX = pointer.x; pointer.previousY = pointer.y; }
+        }
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
         if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
         gTime++;
@@ -1801,7 +1924,9 @@ struct BattleMode : Screen {
                 else { cnt5++; if (cnt5 == 0xf0) { congra = true; if (gApp) gApp->playSfx(0x14); } if (cnt5 <= 0x5f && (cnt5 & 0x1f) == 0 && gApp) gApp->playSfx(0x15); if (cnt5 > 0x538) { if (gApp) gApp->playSfx(3); back = true; } } }
             return; }   // mode 4: JudgeWin until 0xf0 ticks and a touch   // mode 4: JudgeWin until 0xf0 ticks and a touch; mode 5: until a touch (the original waits at most 0x538 ticks)
         if (mode == 3) { modeTick++; if (modeTick > 0x3b) endRound(); }
-        for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } const int previousClock = game.clock;
+        for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; }
+        if (mouseCursor && aim.inside) { game.humanCell[0][0] = aim.cellX(); game.humanCell[0][1] = aim.cellY(); }
+        const int previousClock = game.clock;
         if (mode == 2 || mode == 3) game.tick();
         // FB_Exe_GAME checks the BCD time after decrementing it.
         const int left = game.roundFrames - game.clock;
@@ -1826,15 +1951,23 @@ struct BattleMode : Screen {
         a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
-        for (int p = 0; p < 4; ++p)
-            if (lv[p] < 0 && (game.sim.coll[curY[p]][curX[p]] & 0xF00)) a.cursor(curX[p], curY[p], p, game.frame, true);
+        for (int p = 0; p < 4; ++p) {
+            const bool mouse = p == 0 && mouseCursor;
+            if (lv[p] >= 0 || (mouse && !aim.inside)) continue;
+            const int x = mouse ? aim.cellX() : curX[p], y = mouse ? aim.cellY() : curY[p];
+            if (game.sim.coll[y][x] & 0xF00) a.cursor(x, y, p, game.frame, true);
+        }
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku);
         const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
         if (intro > 0 && !game.over)
             a.drawBattleRankOverlay(game.teamMode, paused, intro + game.frame, game.score, ranks,
                                     wins, game.sim.rocketPos);
-        for (int p = 0; p < 4; ++p)
-            if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame);
+        for (int p = 0; p < 4; ++p) {
+            if (lv[p] >= 0) continue;
+            if (p == 0 && mouseCursor) {
+                if (aim.inside) a.cursorAt(aim.x, aim.y, p, game.frame);
+            } else padAim[p].draw(a, p, game.frame, paused ? 1.0f : alpha);
+        }
         { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
           int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock); int secs = (left + 59) / 60; int mm = secs / 60, ss = secs % 60;
@@ -2253,7 +2386,25 @@ int main(int argc, char** argv) {
     const double dt = 1.0 / 60.0; double acc = 0;
     if (const char* shot = getenv("CCR_SHOT")) {
         int ticks = getenv("CCR_TICKS") ? atoi(getenv("CCR_TICKS")) : 600;
-        if (const char* keys = getenv("CCR_KEYS")) for (const char* p = keys; *p; p++) { SDL_Event e{}; e.type = SDL_KEYDOWN; e.key.keysym.sym = (*p == ' ') ? SDLK_SPACE : (*p == 'D') ? SDLK_DOWN : (*p == 'E') ? SDLK_RETURN : *p; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); }
+        if (const char* aim = getenv("CCR_AIM")) {
+            SDL_Event e{};
+            e.type = SDL_MOUSEMOTION;
+            if (sscanf(aim, "%d,%d", &e.motion.x, &e.motion.y) == 2) mode->event(app, e);
+        }
+        if (const char* keys = getenv("CCR_KEYS")) for (const char* p = keys; *p; p++) {
+            SDL_Event e{};
+            e.type = SDL_KEYDOWN;
+            switch (*p) {
+            case 'D': e.key.keysym.sym = SDLK_DOWN; break;
+            case 'U': e.key.keysym.sym = SDLK_UP; break;
+            case 'L': e.key.keysym.sym = SDLK_LEFT; break;
+            case 'R': e.key.keysym.sym = SDLK_RIGHT; break;
+            case 'E': e.key.keysym.sym = SDLK_RETURN; break;
+            default: e.key.keysym.sym = *p; break;
+            }
+            mode->event(app, e);
+            if (const char* nx = mode->next()) enter(nx);
+        }
         std::vector<std::array<int, 3>> clicks; if (const char* c = getenv("CCR_CLICKS")) { int t, x, y, n; const char* p = c; while (sscanf(p, "%d:%d,%d%n", &t, &x, &y, &n) == 3) { clicks.push_back({t, x, y}); p += n; if (*p == ';') p++; else break; } }   // headless test input: tick:x,y;... (window pixels)
         int lastSong = -2; for (int i = 0; i < ticks; i++) {
             for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }

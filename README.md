@@ -88,9 +88,14 @@ $retina = Join-Path $assets 'ios\SEGA_ChuChu_Rocket_v1_1_2_iPad_iPhone_iPod_Touc
 Use the extracted iOS 1.1.2 folder shown in `assets\ios` if its name differs. If setup used a custom cache, set `$assets` to that cache's `assets` subfolder.
 
 - **Battle:** run `& $python tools/export_battle.py "$assets/dreamcast/files/ENGLISH" "$assets/battle_stages.bin"`, then launch with `battle` in place of `puzzle`.
+
 - **Phone menus and title:** run `export_android_ui.py` with your extracted build folder under `assets/android` and `$assets/ret_all` as the output. To add menu strings, run `export_strings.py` with that build's `libccrjni` subfolder, a local JSON output path, and `$assets/strings` for the translated tables.
 - **iPad menus and HUD:** see the [UI art notes](docs/ui_art.md) for HD exporters and input packs. These use the HD 1.0 `ccrpad` resources under `assets/ios`, with the matching thinned `.armv7` executable under the cache's `work/ios` when required. Run `& $python tools/export_dc_ui.py "$assets/dreamcast/prs_png" "$assets/ret_all" "$assets/dreamcast/png"` to add the Dreamcast logo and prompt.
 - **Dreamcast Express:** export to `assets/gba/dlc_stages.bin` using [`tools/export_dlc_stages.py`](tools/export_dlc_stages.py) and see the [DLC notes](docs/dlc.md). The exporter currently expects the repository's original-files layout.
+
+In Puzzle and Battle, aim with the mouse and press **WASD** or the **arrow keys** to place an arrow in the hovered cell. Mouse dragging also places arrows. On a controller, move with the left stick or D-pad and use the four face buttons in their directional positions, as on Dreamcast.
+
+The [presentation audit](docs/presentation_audit.md) tracks missing startup screens, effects, and animation. Live gameplay currently uses mobile sprites. The [Dreamcast models](docs/dreamcast_models.md) have been extracted and rendered offline.
 
 ## Where each asset and rule comes from
 [docs/provenance.md](docs/provenance.md) lists, per asset class and per piece, the version used and the measurements behind the choice (music: Dreamcast CD audio; title logo: Dreamcast; backgrounds and sprites: iPad HD pack; strings: Android resources; rules: each version's own code). [docs/version_matrix.md](docs/version_matrix.md) compares every subsystem across all versions.

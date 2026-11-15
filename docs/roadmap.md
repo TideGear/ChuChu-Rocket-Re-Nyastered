@@ -36,6 +36,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Ported the shared-screen iPad launch body and smoke. The body rises one unit per tick until it passes height 200. Smoke spawns every eighth global tick from the body's pre-move height, first draws the following tick, and uses ten frames over 30 ticks. `tools/rocket_launch_diff.py` ran the original task server and render list and matched 86,400 sorted body, lid, and smoke draws across 72 cases. Cases include opposite board edges, all rocket colors, the puzzle and battle game types, and three global-clock offsets. The original sorts the body at world Z plus height, smoke one unit lower than its own Z plus height, and the lid at its fixed world Z. Local exports for slots 122–127 and 146 succeeded. Live puzzle and battle finish triggers, glow, and the optional foreground wall redraw remain open. Next, trace those triggers and wall redraws, then connect the verified sequence.
 
+- Recorded missing presentation and verified the iPad eaten-mouse ghost creation threshold in [presentation_audit.md](presentation_audit.md). Mouse position now drives the Puzzle and Battle cursor, and WASD and the arrow keys place directions in the hovered cell. Controller face buttons follow the Dreamcast mapping, while stick and held D-pad move the cursor through intermediate positions using constants from `1ST_READ.BIN`. Controller behavior still needs a hardware comparison, including cell edges, simultaneous inputs, and trigger actions. Prioritize the eaten-mouse ghost and startup screen traces, then continue the wall redraw and launch integration.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
