@@ -11,3 +11,12 @@ for d20 in (0, 1):
             o.write(scr + 0xa40, struct.pack('<I', a40))
             r = P.run(12)
             print('d20', d20, 'a40', hex(a40), r, hex(struct.unpack('<I', bytes(o.read(scr + 0xa40, 4)))[0]))
+# network flag row: DAT_00032170 is a literal-pool pointer to a cell holding the flag address (*DAT is the flag byte's address)
+cell = struct.unpack('<I', bytes(o.read(0x32170, 4)))[0]
+flag = struct.unpack('<I', bytes(o.read(cell, 4)))[0]
+print('flag cell', hex(cell), 'flag addr', hex(flag))
+for d20 in (0, 1):
+    for a40 in (0, 1):
+        o.write(flag, bytes([1])); o.write(scr + 0xd20, bytes([d20])); o.write(scr + 0xa40, struct.pack('<I', a40))
+        r = P.run(12); o.write(flag, bytes([0]))
+        print('net=1 d20', d20, 'a40', a40, r, struct.unpack('<I', bytes(o.read(scr + 0xa40, 4)))[0])
