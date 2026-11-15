@@ -352,7 +352,7 @@ struct App {
     float layF(int off) { if (!layLoaded) { layLoaded = true; if (FILE* f = fopen((root + "/hd10_layout.bin").c_str(), "rb")) { lay.resize(0x700); size_t n = fread(lay.data(), 1, lay.size(), f); lay.resize(n); fclose(f); } } float v = 0; if (off + 4 <= (int)lay.size()) memcpy(&v, &lay[off], 4); return v; }
     // JudgeWinPriority (HD 1.0 0x1c99c): the round / match result screen; scores, dense ranks (0 = best), wins shown (already minus the win of this round while it is being awarded), win point target, reach mask
     // checked against the original with tools/oracle/hd_judge_probe.py (tools/judge_diff.py)
-    void judgeWin(const int score[4], const int rank[4], const int wins[4], int roundWinner, int drawFlag, int wp, int reach) {
+    void judgeWin(const int score[4], const int rank[4], const int wins[4], int roundWinner, int drawFlag, int wp, int reach, bool gameFlag = false) {   // gameFlag = GA_GetGameFlag (set by GA_OnGameFlag for the whole battle)
         int cnt = (1 - rank[0] < 0 ? 0 : 1 - rank[0]) + (rank[1] == 0) + (rank[2] == 0) + (rank[3] == 0); int w = rank[3] == 0 ? 3 : rank[2] == 0 ? 2 : rank[1] == 0 ? 1 : 0;   // the (last) player with rank 0
         if (cnt == 1) { drawImage(0x87, 4, layF(0x148), layF(0x14c), 0, layF(0x144), 255); drawImage(0x87, w, layF(0x150), layF(0x154), 0, layF(0x144), 255); drawImage(0x88, 0, layF(0x158), layF(0x15c), 0, 1.0f, 255); drawImage(0x62, w, layF(0x160), layF(0x164), 0, 2.0f, 0xde); }
         else drawImage(0x89, 0, layF(0x10c), layF(0x110), 0, 1.0f, 255);
@@ -363,7 +363,7 @@ struct App {
         for (int p = 0; p < 4; p++) { float x = layF(0x104) + (float)p * layF(0x108), y = layF(0xfc);
             drawImage(0x6a, p * 2, x, y, 0, 1.0f, 255);
             int shown = wins[p];
-            if (p == roundWinner && drawFlag != 1) shown--;   // [0x2596c4 + 0x28] != 1: the round's win is not counted yet (flag [0x28] set when the round was a draw)
+            if (!gameFlag && p == roundWinner && drawFlag != 1) shown--;   // [0x2596c4 + 0x28] != 1: the round's win is not counted yet (flag [0x28] set when the round was a draw)
             int lit = shown < 0 ? 0 : shown;
             for (int k = 0; k <= wp; k++) drawImage(0x5d, p, x + layF(0x19c + wp * 0x14 + 4 * k), y + layF(0x198), 0, 1.0f, lit <= k ? 0x22 : 0xff);
             if ((reach >> p) & 1) drawImage(0x91, 0, x + layF(0x200), y + layF(0x204), 0, 1.0f, 255); } }
@@ -804,6 +804,10 @@ struct BattleMode : Screen {
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
     // 4-player local input: mouse = player 1; keyboard sets WASD+Q (P1), IJKL+U (P2), keypad 8456+0 (P3); gamepads in connection order (D-pad moves the cursor, DC buttons Y/A/X/B place up/down/left/right)
     // FourBattleLoop (HD 1.0 0x1c2b8) mode 1: a 120-tick intro (the round panel from tick 1 for 75 ticks, the Round START banner at tick 90 for 45 ticks), then play starts
+    // FourBattleLoop modes 3..5 (0x1c3c2..): 3 round end (60 ticks), 4 between rounds (result screen, next round after 240 ticks and a touch), 5 match over
+    int mode = 2, modeTick = 0, wins[4] = {0, 0, 0, 0}, winPoint = 2, roundWinner = 0, drawFlag = 0, gTime = 0, rank[4] = {0, 0, 0, 0}; bool tapped = false, matchOver = false;   // winPoint: GetWinPoint (initial data value 2)
+    // ResultRocket tasks (0x1fe24 Cons, 0x1ff58 Exec, 0x1fcf8 Draw; smoke 0x1fe10 / flash 0x1fdc8): the win icon rises from y = 620 (2 per tick) to 361, pulses (scale 1 -> 4 -> 1) and settles
+    struct Rocket { int player, state; float x, y, tx, scale, dscale; }; std::vector<Rocket> rockets_; struct Smoke { float x, y; int n; }; std::vector<Smoke> smokes_; struct Flash { float x, y, scale, delta; }; std::vector<Flash> flashes_;
     int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners; int lastLeftSec = -1;
     DragGesture drag; int lastCatSfx = -100; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
     void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
@@ -828,7 +832,7 @@ struct BattleMode : Screen {
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
         restart(); return true;
     }
-    void restart() { intro = 0; banners.clear(); lastLeftSec = -1; game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
+    void restart() { rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); lastLeftSec = -1; game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
@@ -839,14 +843,27 @@ struct BattleMode : Screen {
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_SPACE) paused = !paused; else if (k == SDLK_r) restart(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); restart(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); restart(); } }
-        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e);
+        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) { tapped = true; drag.begin(a, e); }
         else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (d >= 0) place(0, cx, cy, d); }   // no drag = no arrow (Input::getArrowType returns 0)
     }
     void tick(App& a) override { if (paused) return;
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
         if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
         { int left = game.roundFrames - game.clock; if (left >= 0 && left % 60 == 0 && left != lastLeftSec) { lastLeftSec = left; int sec = left / 60; int m = sec == 3 ? 2 : sec == 2 ? 1 : sec == 1 ? 0 : sec == 30 ? 3 : sec == 60 ? 4 : sec == 120 ? 5 : -1; if (m >= 0) banners.push_back({0, m, 0, App::countLife(m)}); } }   // FB_Exe_GAME: BCD 0x300 / 0x200 / 0x100, 0x3000, 0x10000, 0x20000
-        for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } game.tick(); a.stepAngles(game.sim); }
+        gTime++;
+        for (auto& rk : rockets_) { if (rk.state == 0) { rk.y -= 2.0f; if (rk.y > rk.tx) { if ((gTime & 7) == 0) smokes_.push_back({rk.x, rk.y, 0}); } else { rk.state = 1; rk.scale = 1.0f; rk.dscale = 0.4f; flashes_.push_back({rk.x + 17.0f, rk.tx + 32.0f, 0.1f, 0.4f}); rk.y = rk.tx; if (gApp) { gApp->playSfx(0x14); } } }
+            else if (rk.state == 1) { if (rk.scale >= 1.0f) { rk.scale += rk.dscale; if (rk.scale >= 4.0f) rk.dscale = -rk.dscale; } else { rk.scale = 1.0f; rk.state = 2; } } }
+        for (auto& s : smokes_) s.n++; smokes_.erase(std::remove_if(smokes_.begin(), smokes_.end(), [](const Smoke& s) { return s.n > 8; }), smokes_.end());
+        for (auto& f : flashes_) { if (f.scale < 0.1f) { f.scale = -1.0f; continue; } f.scale += f.delta; if (f.scale >= 1.4f) f.delta = -f.delta; } flashes_.erase(std::remove_if(flashes_.begin(), flashes_.end(), [](const Flash& f) { return f.scale < 0.0f; }), flashes_.end());
+        if (mode == 2 && game.over) { mode = 3; modeTick = 0; }
+        if (mode >= 4) { modeTick++; if (mode == 4 && modeTick > 0xf0 && tapped) { tapped = false; nextRound(); } else if (mode == 5 && (modeTick > 0x538 || (modeTick > 0xf0 && tapped))) back = true; return; }   // mode 4: JudgeWin until 0xf0 ticks and a touch; mode 5: until a touch (the original waits at most 0x538 ticks)
+        if (mode == 3) { modeTick++; if (modeTick > 0x3b) endRound(); }
+        for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } if (mode == 2 || mode == 3) game.tick(); a.stepAngles(game.sim); }
+    void endRound() {   // FourBattleLoop mode 3 after 60 ticks (free-for-all): the only player with dense rank 0 wins the round
+        int sc[4]; for (int p = 0; p < 4; p++) sc[p] = game.score.player[p]; int cnt = 0, w = 0; for (int p = 0; p < 4; p++) { int r = 0; for (int q = 0; q < 4; q++) if (sc[q] > sc[p]) { bool dup = false; for (int k = 0; k < q; k++) if (sc[k] == sc[q]) dup = true; if (!dup) r++; } rank[p] = r; if (r == 0) { cnt++; w = p; } }
+        modeTick = 0; rockets_.clear(); smokes_.clear(); flashes_.clear(); if (cnt == 1) { roundWinner = w; drawFlag = 0; int old = wins[w]++; matchOver = old == winPoint; if (gApp) rockets_.push_back({w, 0, (float)w * gApp->layF(0x108) + gApp->layF(0x104) + gApp->layF(0x19c + winPoint * 0x14 + 4 * (wins[w] - 1)), 620.0f, 361.0f, 1.0f, 0.4f}); } else { drawFlag = 1; matchOver = false; }
+        mode = matchOver ? 5 : 4; }
+    void nextRound() { roundNo++; cur = (cur + 1) % (int)stages.list.size(); restart(); mode = 2; }   // GA_SetStageNumber(stage + 1, wrapping to 0)
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren); { SDL_Rect vp{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp); }
@@ -879,6 +896,11 @@ struct BattleMode : Screen {
           a.blit(a.hdTime, mm % 10, x, y, 0.8f); a.blit(a.hdTime, 10, x + step, y, 0.8f); float x2 = x + step + (float)((int)step / 2); a.blit(a.hdTime, ss / 10, x2, y, 0.8f); a.blit(a.hdTime, ss % 10, x2 + step, y, 0.8f);
           SDL_Rect vp3{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp3); }
         SDL_RenderSetViewport(a.ren, nullptr); for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // banner tasks drawn over the HUD
+        if (mode >= 4) { int sc[4]; for (int p = 0; p < 4; p++) sc[p] = game.score.player[p]; int reach = 0; if (!(gTime & 0x20) && !matchOver) for (int p = 0; p < 4; p++) if (wins[p] == winPoint) reach |= 1 << p;   // PM_DispReach: blinks with the global time, none when the match is over
+            a.judgeWin(sc, rank, wins, roundWinner, drawFlag, winPoint, reach, true);
+            for (auto& s : smokes_) a.drawImage(0x92, s.n, s.x, s.y - a.layF(0x230), 0, 1.0f, 255);
+            for (auto& rk : rockets_) a.drawImage(0x5d, rk.player, rk.x, rk.y - a.layF(0x22c), 0, rk.scale, 255);
+            for (auto& f : flashes_) a.drawImage(0x87, 4, f.x, f.y - a.layF(0x22c), 0, f.scale, 0x40); }
         SDL_RenderSetViewport(a.ren, nullptr);
     }
 };
