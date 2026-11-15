@@ -707,6 +707,75 @@ struct PlayersFrame {
 };
 
 struct PlayersPane {
+    // HD 1.0 renderPlayersPane, iPad branch, local setup.
+    static void drawPad(App& a, const int human[4], const int level[4], int slider, int pressed,
+                        std::vector<std::string>* trace) {
+        Sheet* labels = a.imgSheet(36);
+        if (!labels || a.hdFont.box.size() <= 91 || a.hdFontW.empty()) return;
+        const float lineHeight = static_cast<float>(a.hdFont.box[91].y);
+        const auto texture = [&](int image, int frame, int x, int y) {
+            Sheet* sheet = a.imgSheet(image);
+            if (!sheet || frame >= static_cast<int>(sheet->sz.size())) return;
+            const int w = sheet->sz[frame].x - 2, h = sheet->sz[frame].y - 2;
+            if (trace) {
+                char line[128];
+                snprintf(line, sizeof line, "RT %d %d %d %d %d %d", image, frame, x, y, w, h);
+                trace->push_back(line);
+            } else a.rtex(*sheet, frame, x, y, w, h);
+        };
+        const auto label = [&](int key, int x, int y, int width, int height,
+                               float scale, int color, bool shrink) {
+            const auto* text = a.hdString(key);
+            if (!text) return;
+            const int center = x + width / 2;
+            const float top = y + (height - lineHeight * scale) * 0.5f;
+            if (shrink) {
+                int textWidth;
+                do {
+                    textWidth = a.hdTextWidth(*text, 0, scale);
+                    scale -= 0.05f;
+                } while (textWidth > 103);
+            }
+            if (trace) {
+                char line[256];
+                snprintf(line, sizeof line, "PS %s %d %.1f %.3f %d", text->c_str(), center, top, scale, color);
+                trace->push_back(line);
+            } else a.printString(*text, static_cast<float>(center), top, color, color, color, 255, scale, 0, false);
+        };
+
+        for (int p = 0; p < 4; ++p) texture(35, p, 213 + 151 * p, 178);
+        for (int p = 0; p < 4; ++p) {
+            texture(36, human[p] ? 3 : 2, 234 + 151 * p, 219);
+            texture(36, human[p] ? 2 : 3, 234 + 151 * p, 278);
+        }
+        texture(12, pressed == 8 ? 3 : 2, 84, 560);
+        texture(12, pressed == 9 ? 3 : 2, 634, 560);
+        for (int p = 0; p < 4; ++p) {
+            label(0x1df, 234 + 151 * p, 219, 103, 31, 0.55f, 0, true);
+            label(0x1e0, 234 + 151 * p, 278, 103, 31, 0.55f, 0, true);
+        }
+        label(0x1db, 84, 560, 306, 60, 1.0f, 255, true);
+        label(0x1dc, 634, 560, 306, 60, 1.0f, 255, true);
+
+        for (int p = 0; p < 4; ++p) {
+            const int x = 244 + p * 151, y = 314;
+            if (p != 0 && slider == p) {
+                texture(36, 0, x, y);
+                for (int row = 0; row < 6; ++row)
+                    label(0x1e1 + row, x, y + 28 * row, 104, 28, 0.5f, 0, false);
+                if (labels->off.size() > 4) {
+                    const auto& offset = labels->off[4];
+                    texture(36, 4, x + 52 + offset.x, y + 28 * level[p] + 14 + offset.y);
+                }
+            } else {
+                texture(36, 1, x, y);
+                label(0x1e1 + (p == 0 ? 0 : level[p]), x, y, 104, 29, 0.5f, 0, false);
+            }
+        }
+        texture(17, 0, 0, 711);
+        texture(17, 1, 967, 711);
+    }
+
     // human[p] 1 = human, 0 = CPU; level[p] = CPU level index (0 Weak .. 3 Strong), shown as 'Weak' text in the level tag
     static void draw(App& a, const int human[4], const int level[4], std::vector<std::string>* log) {
         auto rt = [&](Sheet& sh, int sx, int sy, int sw, int sh_, float x, float y, int w, int h) {
@@ -1428,6 +1497,22 @@ int main(int argc, char** argv) {
         std::vector<std::string> trace;
         app.uiLog = &trace;
         frame.draw(app, [&](int pane) { trace.push_back("pane " + std::to_string(pane)); });
+        for (const auto& call : trace) puts(call.c_str());
+        return 0;
+    }
+    if (const char* spec = getenv("CCR_PAD_PLAYERS")) {
+        int human[4], level[4], slider, pressed;
+        if (sscanf(spec, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &human[0], &human[1], &human[2],
+                   &human[3], &level[0], &level[1], &level[2], &level[3], &slider, &pressed) != 10) return 1;
+        if (const char* shot = getenv("CCR_SHOT")) {
+            SDL_RenderSetLogicalSize(app.ren, GW, GH);
+            PlayersFrame frame;
+            frame.state = 0x25;
+            frame.draw(app, [&](int) { PlayersPane::drawPad(app, human, level, slider, pressed, nullptr); });
+            return saveFrame(app.ren, shot);
+        }
+        std::vector<std::string> trace;
+        PlayersPane::drawPad(app, human, level, slider, pressed, &trace);
         for (const auto& call : trace) puts(call.c_str());
         return 0;
     }

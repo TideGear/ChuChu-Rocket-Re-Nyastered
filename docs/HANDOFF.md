@@ -36,7 +36,7 @@ Done and verified this session (details and dates in docs/roadmap.md, entries da
   - The network flag for process is the byte pointed to by global 0xeb450. Case 12 reads a different pointer, via 0x32170 -> 0xeb494 -> 0x175010.
 
 Open, next in order:
-1. Wire the iPad player-select renderer and panes into a live PlayersMode. The HD 1.0 menu requests PlayerSelectScreen (0x0a) directly for Battle. The stage grid is on its Settings pane, which opens through players-pane item 14. Its input logic now matches the original. The separate StageSelectScreen (0x09) is the Puzzle route. Finish the iPad pane layout, actions and rendering before changing the main-menu Battle route.
+1. Wire the iPad player-select renderer and panes into a live PlayersMode. The HD 1.0 menu requests PlayerSelectScreen (0x0a) directly for Battle. The stage grid is on its Settings pane, which opens through players-pane item 14. That input and the local iPad Players pane render now match the original. The separate StageSelectScreen (0x09) is the Puzzle route. Next, port the iPad Settings pane's drawing and actions before changing the main-menu Battle route.
 2. Then the rest of phase A from docs/roadmap.md: roulette wheel, celebration rockets, tutorial, Stage Challenge, Puzzle Edit, Costumes. Phases B–G follow the roadmap.
 
 State 0x23 now has a standalone port and a headless differential test. The original constructor fills its list by calling `loadBattleGraphics` (0xc104) at 0x34bf2. The port accepts the ordered texture IDs and issues one upload per tick, then releases the entries in reverse and signals 0x24. The live PlayersMode will need to supply the list and connect those operations to the renderer.
