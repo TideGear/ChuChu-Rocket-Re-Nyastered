@@ -534,7 +534,7 @@ struct HelpMode : Screen {
             a.rtex(a.ssTab, 0, 360, 727, 303, 41);
             if (const std::string* f = a.hdString(0x17f)) { char tx[128]; snprintf(tx, sizeof tx, f->c_str(), page + 1, pagesN[topic]); a.printString(tx, 512, 735, 16, 16, 112, 255, 0.4f, 0, false, 1); } }
         a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
-        if (phase != 0x15 || a34 == 0 || a34 == 2) a.fillRect(0, 0, GW, GH, 0, 0, 0, (int)(a20 / 500000.0 * 255.0));
+        if (!(phase == 0x15 && a34 == 1)) a.fillRect(0, 0, GW, GH, 0, 0, 0, (int)(a20 / 500000.0 * 255.0));
     }
 };
 
