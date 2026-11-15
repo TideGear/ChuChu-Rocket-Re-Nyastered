@@ -740,6 +740,8 @@ struct PlayersInputHelpers {
 // checked with tools/players_input_diff.py against the original under Unicorn (tools/oracle/hd_players_input_probe.py), in the same item sequence
 struct PlayersInputLogic {
     int d58 = -1, d3c = 0, d40 = 0, d44 = 0, a40 = 0, a3c = 0, a38 = 0, d20 = 0, a7c = 0, d18 = 0, g170 = 0; std::vector<int> sfx; bool gameState38 = false;
+    bool networkReady = false, d34 = false;
+    bool openSettings = false, settingsSyncRequested = false;
     void play(int id) { sfx.push_back(id); }
     void mutex(int a, int b, int v) { (void)a; (void)b; (void)v; }   // the lit flags of the two buttons (not in this dump)
     // one press on item it (press = 0); returns after the switch's own sound and state effects
@@ -757,6 +759,15 @@ struct PlayersInputLogic {
         case 10: case 11: play(2); return;
         case 12: if (d20 == 0 || g170 != 0) { play(2); a40 = (a40 == 0) ? 1 : 0; return; } play(3); return;
         case 13: if (d20 == 0) { play(3); a3c = 1; a38 = 0; gameState38 = true; return; } return;
+        case 14:
+            if (d20 != 0) {
+                if (g170 == 0 || !networkReady) { play(3); return; }
+                play(2);
+                if (d34) settingsSyncRequested = true;
+            }
+            play(2);
+            openSettings = true;
+            return;
         default: return;
         }
     }
@@ -1386,6 +1397,23 @@ int main(int argc, char** argv) {
         float dt = k == 0 ? 1.0f : 1.0f / 60.0f, f0 = k == 0 ? (st == 0x26 ? 499999.5f : 0.0f) : 0.5f; std::string ops; float fade = f0; int req = playersFlowStep(st, tim, a3c, a40, net, split, dt, fade, ops);
         printf("%#x t%d a3c%d a40=%d net%d split%d dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f%c", st, tim, a3c, a40, net, split, dt, f0, req, ops.c_str(), fade, 10); idx++; } return 0; }
     if (const char* pin = getenv("CCR_PLAYIN")) { PlayersInputLogic pil; for (int i = 0; i < 14; i++) { pil.sfx.clear(); pil.press(i); printf("%d d3c=%d d40=%d d44=%d d58=%d a40=%d a3c=%d a38=%d d20=%d\n", i, pil.d3c, pil.d40, pil.d44, pil.d58, pil.a40, pil.a3c, pil.a38, pil.d20); } return 0; }
+    if (getenv("CCR_PLAY_SETTINGS")) {
+        for (int connections : {0, 1})
+            for (int host : {0, 1})
+                for (bool ready : {false, true})
+                    for (bool d34 : {false, true}) {
+                        PlayersInputLogic input;
+                        input.d20 = connections;
+                        input.g170 = host;
+                        input.networkReady = ready;
+                        input.d34 = d34;
+                        input.press(14);
+                        printf("%d %d", input.openSettings, input.settingsSyncRequested);
+                        for (int sound : input.sfx) printf(" %d", sound);
+                        puts("");
+                    }
+        return 0;
+    }
     if (const char* ph = getenv("CCR_PLAYHELP")) { int a, bb, v, x, y; int h[6] = {0,0,0,0,0,0}; if (sscanf(ph, "m:%d,%d,%d", &a, &bb, &v) == 3) { uint8_t lit[8] = {0,0,0,0,0,0,0,0}; if (a != 0 || bb != 1 || true) {} PlayersInputHelpers::mutexPlayer(lit, a, bb, v); printf("%d %d\n", lit[a], lit[bb]); return 0; } if (sscanf(ph, "r:%d,%d,%d,%d,%d,%d,%d", &x, &y, h, h + 1, h + 2, h + 3, h + 4) == 7) { PlayersInputHelpers::Row rows[6]; for (int i = 0; i < 5; i++) rows[i].h = h[i]; rows[5].h = 0; PlayersInputHelpers::reposition(x, y, rows); printf("%d %d\n", x, y); for (int i = 0; i < 5; i++) printf("%d %d\n", rows[i].x, rows[i].y); return 0; } return 0; }
     if (const char* spec = getenv("CCR_PSRENDER")) {
         PlayersFrame frame;
