@@ -298,8 +298,24 @@ struct App {
     void imgDraw(int id, int frame, float x, float y, int flags, float scale, int alpha) {
         if (bubbleLog) { char b[160]; snprintf(b, sizeof b, "drawImage %d %d %.1f %.1f %d %.4f %d", id, frame, x, y, flags, scale, alpha); bubbleLog->push_back(b); return; }
         Sheet& sh = id == 11 ? hdBubTail : hdBub9; if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
-        SDL_Rect dst{(int)std::lround(x + of.x * scale), (int)std::lround(y + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)};
+        const SDL_Point& size = sh.sz[frame];
+        // HD drawImage mirrors the horizontal offset about the anchor before
+        // swapping the U coordinates. The tail notch tiles are asymmetric.
+        const int offsetX = (flags & 2) ? -of.x - size.x : of.x;
+        SDL_Rect dst{static_cast<int>(x + offsetX * scale), static_cast<int>(y + of.y * scale),
+                     static_cast<int>(std::lround(size.x * scale)), static_cast<int>(std::lround(size.y * scale))};
         SDL_SetTextureAlphaMod(sh.tex, (Uint8)alpha); SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, (SDL_RendererFlip)((flags & 2 ? SDL_FLIP_HORIZONTAL : 0) | (flags & 4 ? SDL_FLIP_VERTICAL : 0))); SDL_SetTextureAlphaMod(sh.tex, 255); }
+    void drawBubbleBorderJoin(int x, int y, int alpha) {
+        if (bubbleLog) return;
+        // The mirrored notch and the next bottom tile meet at their transparent
+        // gutters. Continue the straight bottom edge through those two pixels.
+        const SDL_Rect& edge = hdBub9.fr[2];
+        SDL_Rect src{edge.x + edge.w / 2, edge.y, 2, edge.h};
+        SDL_Rect dst{x, y - edge.h / 2, 2, edge.h};
+        SDL_SetTextureAlphaMod(hdBub9.tex, (Uint8)alpha);
+        SDL_RenderCopyEx(ren, hdBub9.tex, &src, &dst, 0.0, nullptr, SDL_FLIP_VERTICAL);
+        SDL_SetTextureAlphaMod(hdBub9.tex, 255);
+    }
     void drawBubble(int x, int y, int width, const std::string& text, int f, int p6, int alpha, int tex = -1) {
         const float L534 = 0.8f; const bool pad = true;   // layout +0x534 (text scale); the global 0x172c10 == 1 on the iPad class
         Sheet& tb = hdBubTail; Sheet& t9 = hdBub9; if (!t9.tex || !tb.tex || hdFontW.empty() || hdFont.box.size() < 92) return;
@@ -325,7 +341,10 @@ struct App {
                     if (col == tc) { if ((f & 4) == 0 && mode58 == 0) { s30 = (float)sl; s28 = rowY; fr = 6; } else { fr = 7; fl = 2; adj = 2; } }
                     else if (col == tc + 1) { if ((f & 4) == 0 && mode58 == 0) { fr = 7; } else { s30 = (float)r8; s28 = rowY; fr = 6; fl = 2; adj = 2; } } }
                 else { if (col == 0) fr = 1; else if (col == lastCol) { fr = 1; fl = 2; adj = 2; } else fr = 3; }
-                if (fr >= 0) imgDraw(0x9c, fr, (float)(cx - adj), rowY, fl, 1.0f, alpha); } }
+                if (fr >= 0) imgDraw(0x9c, fr, (float)(cx - adj), rowY, fl, 1.0f, alpha);
+                if (fr == 4 && fl == 2 && col + 1 < lastCol) drawBubbleBorderJoin(cx + sb - adj, (int)rowY, alpha);
+            }
+        }
         float ty = ((float)s26 - (float)lines * s24) + s24 * -0.5f + (float)sb;
         for (int k = 0; k < lines; k++) { int a0 = out[k], len = (int)out[k + 1] - a0; std::string ln = (text + std::string(1, (char)0)).substr(a0, std::max(0, len)); if (!ln.empty()) ln.pop_back();   // strncpy copies the source's terminator for the last line, so only the separator of the other lines is dropped
             if (!ln.empty()) { if (bubbleLog) { char bb[200]; snprintf(bb, sizeof bb, "printString %s %.1f %.4f %d %d %d %d %.4f %d %d %d", ln.c_str(), (float)x, ty, 16, 16, 112, alpha & 255, L534, 0, 1, tex); bubbleLog->push_back(bb); } else printString(ln, (float)x, ty, 16, 16, 112, alpha & 255, L534, 0, true); }
@@ -553,6 +572,52 @@ struct HelpMode : Screen {
 
 // ---------------------------------------------------------------- battle setup, players pane (HD 1.0 PlayerSelectScreen::renderPlayersPane 0x33514). Verified draw calls: panels, slot labels, player and CPU level texts.
 // Not ported yet (listed in docs/roadmap.md): the two bottom sheets, the Host / Join network buttons, the back button and the second corner button.
+// PlayerSelectScreen::process state 0x23 (HD 1.0 0x34e16).
+struct PlayersTextureLoad {
+    struct Clock {
+        float elapsed = 0;
+        unsigned frame = 0, frameCount = 0;
+
+        void step(float dt) {
+            elapsed += dt;
+            const float period = 1000000.0f / elapsed;
+            if (elapsed >= period) {
+                elapsed -= period;
+                if (++frame == frameCount) frame = 0;
+            }
+        }
+    };
+
+    Clock preview, character;
+    float pulse = 0, pulseRate = 0;
+    std::vector<int> textures;
+    size_t loaded = 0;
+
+    // Returns true when the next screen state is 0x24. The original retires
+    // the list on the tick after the last upload.
+    template <class Put, class Release>
+    bool step(float dt, int screenWidth, Put put, Release release) {
+        if (loaded >= textures.size()) {
+            for (auto it = textures.rbegin(); it != textures.rend(); ++it) release(*it);
+            textures.clear();
+            return true;
+        }
+
+        put(textures[loaded], 1);
+        ++loaded;
+        character.step(dt);
+        pulseRate += 5.0f;
+        pulse += 5.0f;
+        if (pulse >= static_cast<float>(screenWidth) * 1.1f) {
+            const float negativeWidth = -static_cast<float>(screenWidth);
+            pulse = negativeWidth * 0.15f;
+            pulseRate = negativeWidth * 0.05f;
+        }
+        preview.step(dt);
+        return false;
+    }
+};
+
 // PlayerSelectScreen::process, states 0x26 / 0x27 (HD 1.0 0x34de4; ground truth tools/oracle/players_state_probe.py, read in docs/roadmap.md 2026-11-14).
 // 0x26: the fade timer +0xa38 grows by dt; at >= 500000 it clamps and, when +0xa3c is set, requests Menu (4).
 // 0x27: acts only when (state timer & 7) > 4. Network flag: precalc(a40 == 1, 7) and screen 0x11.
@@ -1118,6 +1183,30 @@ struct BattleMode : Screen {
 };
 
 int main(int argc, char** argv) {
+    if (getenv("CCR_PSTEST23")) {
+        PlayersTextureLoad load;
+        int width, count;
+        float dt;
+        if (scanf("%d %d %f %f %f %f %u %u %f %u %u", &width, &count, &dt,
+                  &load.pulse, &load.pulseRate,
+                  &load.preview.elapsed, &load.preview.frame, &load.preview.frameCount,
+                  &load.character.elapsed, &load.character.frame, &load.character.frameCount) != 11 ||
+            count < 0) return 1;
+        for (int i = 0; i < count; ++i) {
+            int texture;
+            if (scanf("%d", &texture) != 1) return 1;
+            load.textures.push_back(texture);
+        }
+        while (true) {
+            const bool finished = load.step(dt, width,
+                [](int texture, int space) { printf("put:%d:%d ", texture, space); },
+                [](int texture) { printf("destroy:%d ", texture); });
+            printf("%d %zu %a %a %a %u %a %u\n", finished ? 0x24 : 0x23, load.loaded,
+                   load.pulse, load.pulseRate, load.preview.elapsed, load.preview.frame,
+                   load.character.elapsed, load.character.frame);
+            if (finished) return 0;
+        }
+    }
     // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ReNyastered/assets).
     std::string root; int shift = 0;
     auto hasAssets = [](const std::string& d) { FILE* f = fopen((d + "/ret_all/r0930.tex.bin").c_str(), "rb"); if (f) { fclose(f); return true; } return false; };

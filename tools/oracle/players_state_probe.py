@@ -1,8 +1,8 @@
-"""Ground truth for PlayerSelectScreen::process states 0x26 / 0x27 (HD 1.0 0x34de4; read in docs/roadmap.md 2026-11-14).
-process(float dt) takes dt in r1 (vmov s16, r1). Per call it prints the requested screen the original writes (+0x658, unchanged = 0),
-the precalcTextures(r0, r2) calls, the texture removal/put calls on the split flag +0xa7d, and the fade timer +0xa38 after the call.
-Prerequisites as in settings_press_inited.py (field grids, playfields, texture spaces, constructor).
-Usage: py -3 players_state_probe.py [--grid]"""
+"""Ground truth for HD 1.0 PlayerSelectScreen::process (0x34de4).
+The loading trace uses the constructor's battle graphics list and records
+uploads, releases, clocks and the state transition. The other state grids
+cover pane routing, fade, music and the requested battle screen.
+Usage: py -3 players_state_probe.py [--grid | --grid24]"""
 import os, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hd_env
@@ -33,6 +33,66 @@ o.uc.hook_add(UC_HOOK_CODE, stub_change, begin=CHANGE, end=CHANGE + 2)
 o.uc.hook_add(UC_HOOK_CODE, stub('song'), begin=SONG, end=SONG + 2)
 o.uc.hook_add(UC_HOOK_CODE, stub('ppane'), begin=PPANE, end=PPANE + 2)
 o.uc.hook_add(UC_HOOK_CODE, stub('spane'), begin=SPANE, end=SPANE + 2)
+
+def record_destroy(uc, addr, size, user):
+    entry = o.u32(uc.reg_read(UC_ARM_REG_R1))
+    calls.append(('destroy', 0, o.u32(entry + 0x10), 0))
+
+# Record the real destructor, so the last tick also tests list unlinking.
+o.uc.hook_add(UC_HOOK_CODE, record_destroy, begin=0xcfa8, end=0xcfa8)
+
+
+def loading_trace(costume, width, dt, clocks, empty=False):
+    ad = env.appdata
+    # addTSpaceEntry orders the list by the dimensions in the texture objects.
+    # hd_env's draw-only texture objects leave those fields unset.
+    texture_keys = struct.unpack('<160i', o.read(0xe6704, 640))
+    for slot, key in enumerate(texture_keys):
+        obj = o.u32(ad + 0x3cc + 4 * slot)
+        if not obj:
+            continue
+        record = env.T[key]
+        pack = 'ccrpad' if record < 885 else 'ccrpad_en'
+        with open(os.path.join(hd_env.PACK, pack, '%04d.bin' % (record if record < 885 else record - 885)), 'rb') as data:
+            o.write(obj, data.read(8))
+    o.write(ad + 0x4f, bytes([costume]))
+    screen = env.alloc(0xe00)
+    o.call(0x34a00, screen)
+    head = screen + 0xa1c
+    count = o.u32(screen + 0xa30)
+    if empty:
+        count = 0
+        o.write(head, struct.pack('<II', head, head))
+        o.write(screen + 0xa30, struct.pack('<I', count))
+    node = o.u32(head)
+    textures = []
+    for index in range(count):
+        assert node != head and o.u32(node + 0xc) == index
+        textures.append(o.u32(node + 0x10))
+        node = o.u32(node)
+    assert node == head
+
+    pulse, rate, preview, preview_frame, preview_count, character, character_frame, character_count = clocks
+    o.write(screen + 0xa4c, struct.pack('<ff', pulse, 0))
+    o.write(screen + 0xa58, struct.pack('<fIIf', preview, preview_count, preview_frame, rate))
+    o.write(screen + 0xa70, struct.pack('<fII', character, character_count, character_frame))
+    o.write(o.u32(0xeb488), struct.pack('<i', width))
+    o.write(ad + 0x668, struct.pack('<I', 0x23))
+
+    trace = []
+    for _ in range(count + 1):
+        calls.clear()
+        o.uc.reg_write(UC_ARM_REG_D6, f2u(dt))
+        o.call(PROCESS, screen, f2u(dt))
+        state = o.u32(ad + 0x668)
+        ops = tuple((name, r1, r2) for name, _, r1, r2 in calls if name != 'change')
+        fields = tuple(o.u32(screen + offset) for offset in (0xa4c, 0xa64, 0xa58, 0xa60, 0xa70, 0xa78))
+        trace.append((ops, state, o.u32(screen + 0xa2c), *fields))
+    assert state == 0x24
+    assert o.u32(head) == o.u32(head + 4) == head
+    return textures, trace
+
+
 def f2u(x): return struct.unpack('<I', struct.pack('<f', x))[0]
 def run(state, a3c, a40, tim=0, net=0, split=0, dt=1.0 / 60, fade=0.0):
     ad = env.appdata

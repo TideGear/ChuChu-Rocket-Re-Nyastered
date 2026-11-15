@@ -37,8 +37,9 @@ Done and verified this session (details and dates in docs/roadmap.md, entries da
   - The network flag for process is the byte pointed to by global 0xeb450. Case 12 reads a different pointer, via 0x32170 -> 0xeb494 -> 0x175010.
 
 Open, next in order:
-1. State 0x23 (texture load tick and animation clocks). The constructor (0x34a00) creates the +0xa1c list empty, and `_BHLib_SearchList` returns NULL on an empty list. Find the code that fills that list first, then build an oracle harness. Call `putTextureIntoTSpace` (0xcff0) and `destroyTSpaceEntryNode` (0xcfa8) through record-only stubs, and set D6 = dt.
-2. Render (0x35155), then a PlayersMode screen in the port wiring stage select -> player select -> battle (today "BATTLE" goes straight to BattleMode).
-3. Then the rest of phase A from docs/roadmap.md: roulette wheel, celebration rockets, tutorial, Stage Challenge, Puzzle Edit, Costumes. Phases B–G follow the roadmap.
+1. Trace render (0x35155), then wire a PlayersMode screen from stage select to battle (today "BATTLE" goes straight to BattleMode).
+2. Then the rest of phase A from docs/roadmap.md: roulette wheel, celebration rockets, tutorial, Stage Challenge, Puzzle Edit, Costumes. Phases B–G follow the roadmap.
+
+State 0x23 now has a standalone port and a headless differential test. The original constructor fills its list by calling `loadBattleGraphics` (0xc104) at 0x34bf2. The port accepts the ordered texture IDs and issues one upload per tick, then releases the entries in reverse and signals 0x24. The live PlayersMode will need to supply the list and connect those operations to the renderer.
 
 Build from bash or PowerShell: `cmd.exe /c "\"c:\Dev\ChuChu Rocket\build.cmd\" --target ccr"` (build.cmd passes its arguments to `cmake --build`). Python is `py -3`.

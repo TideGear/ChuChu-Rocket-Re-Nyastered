@@ -8,6 +8,8 @@ exe = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'game', 
 cases = [(512, 300, 400, 'Hello world, this is a test of the bubble', 1, 0, 255), (512, 300, 400, 'Hello world, this is a test of the bubble', 0, 0, 255), (300, 500, 260, 'Learn the basics in the Tutorial to unlock Puzzle, Challenge and Battle modes!', 1, 1, 255),
          (700, 650, 330, 'Enjoy ChuChu Rocket!', 4, 0, 200), (500, 400, 250, 'Up to 4 players!', 5, 1, 255), (480, 330, 300, 'A very long text without any break characters aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 0, 0, 255),
          (200, 200, 100, 'Hi', 1, 0, 255), (800, 700, 500, 'Line one\nLine two\nand line three is a bit longer than the others', 4, 0, 255), (512, 384, 640, 'Select Tutorial to begin!', 0, 0, 255)]
+cases.extend((792, 367, 350, 'Learn the basics in the Tutorial to unlock Puzzle, Challenge and Battle modes!', 1, frame, 255)
+             for frame in (0, 1))
 o, log, _ = P.make(); bad = 0
 for c in cases:
     ref = P.bubble(o, log, *c)
@@ -28,3 +30,4 @@ for c in cases:
             x = a[i] if i < len(a) else None; y = b[i] if i < len(b) else None
             if x != y: print('   ref', x, '\n   got', y); break
 print('mismatches:', bad)
+sys.exit(1 if bad else 0)
