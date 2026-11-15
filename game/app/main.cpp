@@ -227,6 +227,8 @@ struct App {
         if (!clip || clip->empty()) return;
         if (headless && id == 7 && getenv("CCR_CAT_AUDIO_TRACE"))
             printf("cat rocket clip 007.ogg %zu samples\n", clip->size());
+        if (headless && id == 27 && getenv("CCR_CAT_AUDIO_TRACE"))
+            printf("cat cue clip 027.ogg %zu samples\n", clip->size());
         if (headless && id >= 117 && getenv("CCR_ROULETTE_AUDIO_TRACE"))
             printf("roulette clip %s%03d.ogg %zu samples\n", lang == 5 ? "J" : "", id, clip->size());
         SDL_LockAudioDevice(adev);
@@ -639,6 +641,8 @@ struct App {
             if (object.ghost) {
                 const auto& ghost = sim.effects[i];
                 drawImage(ghost.image(), ghost.age & 7, x, z, ghost.flags(), ghost.scale(), 255);
+                if (headless && getenv("CCR_MOUSE_GHOST_LIVE_TRACE"))
+                    printf("mouse ghost %d %.3f %.3f\n", ghost.age, x, z);
                 continue;
             }
             if (object.rocket) {
@@ -1620,6 +1624,7 @@ struct PadAim {
 struct PuzzleMode : Screen {
     MouseAim aim;
     bool mouseCursor = false;
+    bool pendingFailureCue = false;
     PadAim padAim{82.5f, 67.5f};
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 5, curY = 4; SDL_GameController* pad = nullptr;
@@ -1629,7 +1634,7 @@ struct PuzzleMode : Screen {
     bool dash = false; bool paused = false, pconf = false;   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
-        sim.load(stages.list[cur].st); prev.clear(); dash = false; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
+        sim.load(stages.list[cur].st); prev.clear(); dash = false; pendingFailureCue = false; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = 0;
         for (auto& s : stages.list[cur].sol) stock[s[2] & 3]++;       // arrow stock from the reference solution (stage struct counts not exported yet)
@@ -1692,11 +1697,19 @@ struct PuzzleMode : Screen {
             curY = static_cast<int>(padAim.y / kCell);
         }
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
+        if (state == 3) {
+            // HD 1.0 PuzzleLoop handles the failure before continuing the task pass.
+            if (pendingFailureCue) { a.playSfx(27); pendingFailureCue = false; }
+            ++sim.now;
+            sim.tickEffects();
+            if (dash) { ++sim.now; sim.tickEffects(); }
+            return;
+        }
         if (!running) return;
         sim.tick(); a.stepAngles(sim);
         if (dash) { sim.tick(); a.stepAngles(sim); }   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
-        if (sim.killed > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur); }
+        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; pendingFailureCue = true; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur); }
     }
     const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void draw(App& a, float alpha) override {

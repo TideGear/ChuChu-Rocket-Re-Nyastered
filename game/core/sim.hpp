@@ -84,17 +84,20 @@ public:
     std::vector<PendingFree> pendingFree;
     std::vector<MouseGhost> effects;
     bool poolModel = false;                                                              // battle mode only
-    void scheduleFree(size_t ent, int when, bool effect) { if (poolModel) pendingFree.push_back({(int)ent, when, effect}); }
-    void poolTick() {
+    void scheduleFree(size_t ent, int when, bool effect) {
+        if (poolModel || effect) pendingFree.push_back({static_cast<int>(ent), when, effect});
+    }
+    void tickEffects() {
         for (auto& e : effects) e.tick();
         for (size_t i = 0; i < effects.size();) { if (effects[i].age >= 48) { releaseSlot(effects[i].slot); effects.erase(effects.begin() + i); } else i++; }
         for (size_t i = 0; i < pendingFree.size();) {
             PendingFree& p = pendingFree[i];
             if (p.when <= now) {
                 if (p.effect && effects.size() < 12) {
-                    const int slot = allocSlot(-2);
+                    const int slot = poolModel ? allocSlot(-2) : -1;
                     const auto& mouse = ents[p.ent];
-                    if (slot >= 0) effects.push_back({slot, ents.size(), mouse.x, mouse.z, mouse.heading << 14});
+                    if (!poolModel || slot >= 0)
+                        effects.push_back({slot, ents.size(), mouse.x, mouse.z, mouse.heading << 14});
                 }
                 releaseSlot(ents[p.ent].slot); pendingFree.erase(pendingFree.begin() + i);
             } else i++;
@@ -155,7 +158,7 @@ public:
     void tick() {
         now++;
         for (auto& e : ents) e.reg = false;
-        if (poolModel) poolTick();
+        tickEffects();
         for (auto& m : ents) if (m.mouse && m.alive && !m.done && m.hit) {      // mouse tick: if (flags & 1) -> eaten state, no movement
             m.alive = false; m.hit = false; killed++; killedByCat++; endTicks.push_back(now); scheduleFree(&m - ents.data(), now + 1, true);
             if (battle) events.push_back({Event::MouseEaten, 0, m.type});

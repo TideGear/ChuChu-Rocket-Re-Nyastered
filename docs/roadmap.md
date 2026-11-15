@@ -42,6 +42,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Connected caught-mouse ghosts to shared-screen Battle's existing 12-effect task pool. The draw submits at integer world Z with the other field sprites. `tools/mouse_ghost_diff.py` matched 564 iPad overhead draws exactly, across all four initial headings and three positions. Re-export iPad slots 44–46 for the art. Puzzle and other views still need the effect. Also fixed the original three-tick cooldown for the ordinary cat rocket-entry clip and confirmed playback queues `007.ogg` headlessly. Next, trace the corresponding Dreamcast and GBA cues and the puzzle ghost handoff.
 
+- Traced the HD 1.0 Puzzle failure transition. A killed mouse or a cat in the rocket requests cue 27 in the following loop tick, then the effect tasks continue running in phase 6. The port now plays the cue once and keeps the ghost advancing during the frozen failure state. The focus and full failure presentation remain open. Next, trace the Dreamcast and GBA cat cues and the remaining startup presentation.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
