@@ -30,7 +30,7 @@ def make(lang='en'):
         tb = o.u32(o.u32(ad + 0x3cc + 4 * img) + 0x28); lh = struct.unpack_from('<h', o.read(tb, 4 + 36 * 92), 4 + 36 * 91 + 22)[0]
         f = o.alloc(0x20); o.write(f, struct.pack('<IIIII', o.u32(ad + 0x3cc + 4 * img), lh, 255, len(w), put(w))); return f
     f0 = font(0, w874); f1 = font(2, w876); o.write(ad + 0x64c, struct.pack('<I', f0)); o.write(ad + 0x384, struct.pack('<I', f1)); e.fontname = {f0: 0, f1: 1}
-    o.write(ad + 0x390, struct.pack('<I', 11)); o.write(ad + 0x664, struct.pack('<I', 0))
+    o.write(ad + 0x44, struct.pack('<I', 36)); o.write(ad + 0x390, struct.pack('<I', 11)); o.write(ad + 0x664, struct.pack('<I', 0))
     A = o.alloc(8); o.write(0xeb444, struct.pack('<I', A)); o.write(A, struct.pack('<I', ad))
     layout = put(open(os.path.join(ROOT, 'local', 'cache', 'assets', 'hd10_layout.bin'), 'rb').read()); A2 = o.alloc(8); o.write(0xeb4fc, struct.pack('<I', A2)); o.write(A2, struct.pack('<I', layout))
     A3 = o.alloc(8); o.write(0xeb51c, struct.pack('<I', A3)); o.write(A3, struct.pack('<I', 1))

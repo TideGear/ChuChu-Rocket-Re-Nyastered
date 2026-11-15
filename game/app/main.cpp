@@ -262,6 +262,7 @@ struct App {
     int hdTextWidth(const std::string& s, size_t from, float scale, int fontNo = 0) { const std::vector<uint8_t>& fw = fontNo == 1 ? hdFontW1 : hdFontW; int w = 0; for (size_t i = from; i < s.size() && s[i] != 10; i++) w += fw[(uint8_t)s[i]]; return (int)((float)w * scale); }
     // align 0 centred, 1 left, 2 right (BHLib_PrintString param_10); vcenter = param_11 (y -= 0.5 * line height * scale); line height = short at frame 91 + 22 of the frame table (CreateFont: texture + 0x28 -> +0xce6) = 32 for font 0
     void printString(const std::string& s, float x, float y, int r, int g, int b, int al, float scale, int align, bool vcenter, int fontNo = 0) {
+        if (uiLog) { char t[300]; std::string q = s; for (auto& ch : q) if (ch == 10) ch = 124; snprintf(t, sizeof t, "PS %s %.1f %.1f %.3f %d", q.c_str(), x, y, scale, align); uiLog->push_back(t); return; }
         Sheet& hdFont = fontNo == 1 ? hdFont1 : this->hdFont; const std::vector<uint8_t>& fw = fontNo == 1 ? hdFontW1 : hdFontW; if (!hdFont.tex || fw.empty() || hdFont.box.size() < 92) return; const float lineH = (float)hdFont.box[91].y;
         int cy = (int)y; if (vcenter) cy = (int)((float)cy + lineH * scale * -0.5f);
         auto startX = [&](size_t from) { int w = hdTextWidth(s, from, scale, fontNo); return align == 1 ? (int)x : (int)(x - (float)(align == 0 ? w / 2 : w)); };
@@ -275,8 +276,11 @@ struct App {
         SDL_SetTextureColorMod(hdFont.tex, 255, 255, 255); SDL_SetTextureAlphaMod(hdFont.tex, 255);
     }
     // BHLib_RenderTexture(x, y, w, h, frame uv): the frame's pixels are scaled to (w, h); tint white
-    void rtex(Sheet& sh, int frame, float x, float y, int w, int h) { if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect s = sh.fr[frame]; s.x += 1; s.y += 1; s.w = w; s.h = h; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(ren, sh.tex, &s, &d); }   // the 1 px ring around each frame is padding: the call's size (frame box - 2) is the inner area
-    void rtexRaw(Sheet& sh, int frame, float x, float y, int w, int h) { if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(ren, sh.tex, &sh.fr[frame], &d); }   // frames without the 1 px ring (exact sheets)
+    std::vector<std::string>* uiLog = nullptr;   // when set, rtex / rtexRaw / printString / fillRect record 'RT x y w h', 'PS text x y scale align' and 'FR x y w h' instead of drawing
+    void logRT(float x, float y, int w, int h) { char t[100]; snprintf(t, sizeof t, "RT %.1f %.1f %d %d", x, y, w, h); uiLog->push_back(t); }
+    void fillRect(int x, int y, int w, int h, int r, int g, int bl, int al) { if (uiLog) { char t[100]; snprintf(t, sizeof t, "FR %d %d %d %d", x, y, w, h); uiLog->push_back(t); return; } SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(ren, r, g, bl, al); SDL_Rect q{x, y, w, h}; SDL_RenderFillRect(ren, &q); }
+    void rtex(Sheet& sh, int frame, float x, float y, int w, int h) { if (uiLog) { logRT(x, y, w, h); return; } if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect s = sh.fr[frame]; s.x += 1; s.y += 1; s.w = w; s.h = h; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(ren, sh.tex, &s, &d); }   // the 1 px ring around each frame is padding: the call's size (frame box - 2) is the inner area
+    void rtexRaw(Sheet& sh, int frame, float x, float y, int w, int h) { if (uiLog) { logRT(x, y, w, h); return; } if (!sh.tex || frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(ren, sh.tex, &sh.fr[frame], &d); }   // frames without the 1 px ring (exact sheets)
     void rtexBox(Sheet& sh, int frame, float x, float y) { if (frame >= 0 && frame < (int)sh.box.size()) rtex(sh, frame, x, y, sh.box[frame].x - 2, sh.box[frame].y - 2); }   // the common call: size = frame box shorts - 2
     void blitFlip(Sheet& sh, int frame, float ax, float ay, float scale, bool mirror) {   // Render::drawImage flags & 2 = swap u0/u1 (horizontal mirror of the frame in place; these frames are centred on their anchor)
         if (frame < 0 || frame >= (int)sh.fr.size()) return; SDL_Rect fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame];
@@ -509,7 +513,7 @@ struct HelpMode : Screen {
     const char* next() override { if (!leave) return nullptr; leave = false; return "OPTIONS"; }
     // the frame of a page: filled panel, side edges and a top / bottom row of 8 px tiles (offsets of the pad layout)
     void panel(App& a) {
-        SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_Rect r{211, 90, 596, 223}; SDL_RenderFillRect(a.ren, &r);
+        a.fillRect(211, 90, 596, 223, 255, 255, 255, 255);
         a.rtexRaw(a.hlFrm, 0, 208, 87, 8, 229); a.rtexRaw(a.hlFrm, 2, 808, 87, 8, 229);
         for (int x = 216; x <= 800; x += 8) { a.rtexRaw(a.hlFrm, 1, (float)x, 87, 8, 8); a.rtexRaw(a.hlFrm, 3, (float)x, 309, 8, 7); }
         a.rtexRaw(a.hlFrm, 1, 800, 87, 8, 8); a.rtexRaw(a.hlFrm, 3, 800, 309, 8, 7); }
@@ -519,7 +523,7 @@ struct HelpMode : Screen {
         for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
         if (a31 || a34 < 0) {
             a.rtexRaw(a.hlHdr, 0, 208, 50, 350, 34);
-            for (int i = 0; i < N; i++) { int w = a.mnBars.fr[0].w, h = a.mnBars.fr[0].h; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
+            for (int i = 0; i < N; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
                 if (const std::string* s = a.hdString(key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
                 if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); } } }
         else {
@@ -530,7 +534,7 @@ struct HelpMode : Screen {
             a.rtex(a.ssTab, 0, 360, 727, 303, 41);
             if (const std::string* f = a.hdString(0x17f)) { char tx[128]; snprintf(tx, sizeof tx, f->c_str(), page + 1, pagesN[topic]); a.printString(tx, 512, 735, 16, 16, 112, 255, 0.4f, 0, false, 1); } }
         a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
-        if (phase != 0x15 || a34 == 0 || a34 == 2) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(a20 / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
+        if (phase != 0x15 || a34 == 0 || a34 == 2) a.fillRect(0, 0, GW, GH, 0, 0, 0, (int)(a20 / 500000.0 * 255.0));
     }
 };
 
@@ -594,7 +598,7 @@ struct OptionsMode : Screen {
         for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
         a.rtex(a.opHdr, 0, 208, 50, a.opHdr.fr[0].w, a.opHdr.fr[0].h);
         if (sub == 1) { drawSounds(a, a.musicVol, a.sfxVol, drag, nullptr); if (phase != 0x12) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(fade / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); } return; }
-        for (int i = 0; i < N; i++) { if (!shown(i)) continue; int w = a.mnBars.fr[0].w, h = a.mnBars.fr[0].h; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
+        for (int i = 0; i < N; i++) { if (!shown(i)) continue; int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
             if (sub == 2 && i == 5 && a.langJa.tex) { const SDL_Rect& f = a.langJa.fr[0]; const SDL_Point& o = a.langJa.off[0]; a.rtex(a.langJa, 0, (float)(px[i] + w / 2 + o.x), (float)(py[i] + h / 2 + o.y), f.w, f.h); }   // the Japanese label is an image
             else if (const std::string* s = a.hdString(sub == 2 ? 0x1cd + i : key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
             if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); } }
@@ -636,7 +640,7 @@ struct HdMenuMode : Screen {
         a.rtex(a.mnDeco, 0, 208, 50, a.mnDeco.fr[0].w, a.mnDeco.fr[0].h);
         if (descKey >= 0) if (const std::string* d = a.hdString(descKey)) a.drawBubble(792, 367, 350, *d, 1, bubbleFrame, 255);
         if (const std::string* d = a.hdString(0x15b)) a.drawBubble(156, 714, 240, *d, 4, 0, 255);   // "Enjoy ChuChu Rocket!"
-        for (int i = 0; i < N; i++) { int w = a.mnBars.fr[0].w, h = a.mnBars.fr[0].h; int alpha = (!tutorialCleared() && i >= 1 && i <= 3) ? 0x80 : 0xff;
+        for (int i = 0; i < N; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; int alpha = (!tutorialCleared() && i >= 1 && i <= 3) ? 0x80 : 0xff;
             SDL_SetTextureAlphaMod(a.mnBars.tex, (Uint8)alpha); a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h); SDL_SetTextureAlphaMod(a.mnBars.tex, 255);
             if (const std::string* t = a.hdString(lab[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*t, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, alpha, sc, 0, false, 1); }
             if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); descKey = desc[i]; } }
@@ -1006,6 +1010,7 @@ int main(int argc, char** argv) {
     };
     if (const char* bt = getenv("CCR_BUBBLE")) {   // development check: CCR_BUBBLE="x,y,w,flags,p6,alpha|text" prints the draw calls of Render::drawBubble (tools/bubble_diff.py compares them with the original)
         int x, y, w, fl, p6, al; int n = 0; if (sscanf(bt, "%d,%d,%d,%d,%d,%d|%n", &x, &y, &w, &fl, &p6, &al, &n) >= 6 && n > 0) { std::vector<std::string> lg; app.bubbleLog = &lg; app.drawBubble(x, y, w, bt + n, fl, p6, al); for (auto& s : lg) printf("%s\n", s.c_str()); } return 0; }
+    if (const char* ht = getenv("CCR_HELPTEST")) { int tp, pg; if (sscanf(ht, "%d,%d", &tp, &pg) == 2) { std::vector<std::string> lg; app.uiLog = &lg; HelpMode hm; hm.phase = 0x15; hm.a20 = 0; if (tp < 0) hm.a34 = -1; else { hm.a34 = 1; hm.topic = tp; hm.page = pg; } hm.draw(app, 0); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
