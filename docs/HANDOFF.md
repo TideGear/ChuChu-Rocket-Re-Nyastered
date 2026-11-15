@@ -21,7 +21,6 @@ Goal text: `local/goal.txt` (not committed) / the 9-item goal pasted via /goal. 
 - Done since the handoff above: iOS older-build CPU diff fixed (all five iOS builds identical to the Android goldens); Dreamcast cursor/arrow input read (docs/known_gaps.md, `tools/shdis.py` SH-4 disassembler with literal resolution); Dreamcast "PRESS START BUTTON!" title prompt; rocket size growth in battle (`BattleGame::puku`); GBA direction-code experiment (no mapping explains the score gap); Challenge mode structure read (docs/modes.md: type = stage mod 5, win/lose checks per type, phases), with two corrections noted there.
 - Challenge: the player's role in the types other than mod-5 == 3 is unexplained by static reading; do a runtime trace (Android emulator harness, inject touches into `ChallengeGameScreen`) before porting.
 - Main-menu items "The Basics", "Stage Challenge" and "Options" do nothing yet (they play the buzz sound); Android's options defaults are music 75, sfx 100 and eight flags (`initializeOptionsData` 0x682ec); `handleSoundMenuItemSelection` is empty.
-- Build on Windows from a plain bash: use a .cmd that calls `vcvars64.bat` (VS 18 BuildTools) then `cmake --build build/game --target ccr`.
 
 ## Update 2026-11-14 (evening) — battle setup / player select (HD 1.0)
 Done and verified this session (details and dates in docs/roadmap.md, entries dated 2026-11-14):
@@ -42,4 +41,4 @@ Open, next in order:
 
 State 0x23 now has a standalone port and a headless differential test. The original constructor fills its list by calling `loadBattleGraphics` (0xc104) at 0x34bf2. The port accepts the ordered texture IDs and issues one upload per tick, then releases the entries in reverse and signals 0x24. The live PlayersMode will need to supply the list and connect those operations to the renderer.
 
-Build from bash or PowerShell: `cmd.exe /c "\"c:\Dev\ChuChu Rocket\build.cmd\" --target ccr"` (build.cmd passes its arguments to `cmake --build`). Python is `py -3`.
+On Windows, run `build.cmd --target ccr` from Command Prompt or `.\build.cmd --target ccr` from PowerShell. The script downloads pinned Zig, CMake and Ninja into `local/tools/windows` on first use. Its CMake cache is `build/game-zig`, with executables in `build/game`. Python is `py -3`.

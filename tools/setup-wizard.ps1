@@ -31,7 +31,7 @@ Write-Host "Extracting assets from your files (this can take several minutes). L
 if ($LASTEXITCODE -ne 0) { Get-Content $log -Tail 20; throw "Extraction failed" }
 Write-Host "Extraction finished. Manifest: $Cache\manifest.json"
 
-Write-Host "Building the game..."
-& cmd /c "`"$root\build.cmd`""
+Write-Host "Preparing the portable Zig toolchain and building the game..."
+& (Join-Path $root 'build.cmd')
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
-Write-Host "Done."
+Write-Host "Done. Game: $root\build\game\ccr.exe"
