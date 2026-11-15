@@ -64,7 +64,7 @@ struct App {
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -123,7 +123,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_phud5c", hdPhud); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_ss_hdr", ssHdr); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_mn_deco", mnDeco); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_op_hdr", opHdr); loadSheet(ret + "hd_bubtail", hdBubTail); loadSheet(ret + "hd_pause79", hdPause); loadHdText(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -233,12 +233,27 @@ struct App {
     // (collision bits 0xF00) the square bracket (frame 4) is drawn with scale 1 + 0.075 sin(2 angle) (CU_CursorDrawPrioritySquare).
     // Render::drawFrame type 5 (HD 1.0 0x1a60c): image 0x78 (frame table record 720: 58 px tiles), tile = 58 - 2; n = width / tile pieces centred on x: frames 0, 1..., 2 at y
     // HD 1.0 text (Render::printString 0x1a19c -> BHLib_PrintString 0x9dc0, Latin branch): font 0 = image 0 (texture ccrpad rec 0, frames rec 3, per-glyph advance = rec 874), glyph index = character code
+    // Language packs (Latin languages of HD 1.0; locale index of the original: 0 en, 1 fr, 2 it, 3 de, 4 es, 5 ja = no pack in this build): language-pack sheets and the text table (tools/export_hd_locale.py)
+    int lang = 0; std::string retDir;
+    static const char* langDir(int l) { static const char* n[6] = {"en", "fr", "it", "de", "es", "ja"}; return n[l < 0 || l > 5 ? 0 : l]; }
+    void freeSheet(Sheet& s) { if (s.tex) SDL_DestroyTexture(s.tex); s = Sheet(); }
+    bool langAvailable(int l) { FILE* f = fopen((retDir + "loc_" + langDir(l) + "/hd_text.tsv").c_str(), "rb"); if (f) fclose(f); return f != nullptr; }
+    void loadLocale(const std::string& ret) {
+        retDir = ret; if (const char* e = getenv("CCR_LANG")) for (int i = 0; i < 6; i++) if (!strcmp(e, langDir(i))) lang = i;
+        if (FILE* f = fopen((root + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; fclose(f); }
+        if (!langAvailable(lang)) lang = 0; applyLocale(); }
+    void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); if (FILE* f = fopen((root + "/options.bin").c_str(), "wb")) { unsigned char c = (unsigned char)l; fwrite(&c, 1, 1, f); fclose(f); } }
+    void applyLocale() {
+        std::string d = retDir + "loc_" + langDir(lang) + "/"; Sheet* sh[5] = {&hdPhud, &hdPause, &ssHdr, &mnDeco, &opHdr}; const char* nm[5] = {"hd_phud5c", "hd_pause79", "hd_ss_hdr", "hd_mn_deco", "hd_op_hdr"};
+        for (int i = 0; i < 5; i++) { freeSheet(*sh[i]); loadSheet(d + nm[i], *sh[i]); }
+        hdText.clear(); FILE* g = fopen((d + "hd_text.tsv").c_str(), "rb"); if (!g) return; std::string all; char bb[4096]; size_t n; while ((n = fread(bb, 1, sizeof bb, g)) > 0) all.append(bb, n); fclose(g);
+        size_t pos = 0; while (pos < all.size()) { size_t e = all.find((char)10, pos); if (e == std::string::npos) e = all.size(); std::string line = all.substr(pos, e - pos); pos = e + 1; size_t t = line.find((char)9); if (t != std::string::npos) hdText[atoi(line.c_str())] = line.substr(t + 1); } }
     void loadHdText(const std::string& ret) {
         FILE* f = fopen((ret + "hd_font0.widths.bin").c_str(), "rb"); if (f) { hdFontW.resize(256); if (fread(hdFontW.data(), 1, 256, f) != 256) hdFontW.clear(); fclose(f); }
         f = fopen((ret + "hd_font1.widths.bin").c_str(), "rb"); if (f) { hdFontW1.resize(256); if (fread(hdFontW1.data(), 1, 256, f) != 256) hdFontW1.clear(); fclose(f); }
         auto tsv = [&](const char* name, auto&& put) { FILE* g = fopen((ret + name).c_str(), "rb"); if (!g) return; std::string all; char b[4096]; size_t n; while ((n = fread(b, 1, sizeof b, g)) > 0) all.append(b, n); fclose(g);
             size_t pos = 0; while (pos < all.size()) { size_t e = all.find((char)10, pos); if (e == std::string::npos) e = all.size(); std::string line = all.substr(pos, e - pos); pos = e + 1; size_t t = line.find((char)9); if (t != std::string::npos) put(atoi(line.c_str()), line.substr(t + 1)); } };
-        tsv("hd_text_en.tsv", [&](int k, const std::string& v) { hdText[k] = v; }); tsv("hd_textmap.tsv", [&](int k, const std::string& v) { hdTextMap[k] = atoi(v.c_str()); });
+         tsv("hd_textmap.tsv", [&](int k, const std::string& v) { hdTextMap[k] = atoi(v.c_str()); });
     }
     const std::string* hdString(int key) { auto m = hdTextMap.find(key); if (m == hdTextMap.end()) return nullptr; auto t = hdText.find(m->second); return t == hdText.end() ? nullptr : &t->second; }
     int hdTextWidth(const std::string& s, size_t from, float scale, int fontNo = 0) { const std::vector<uint8_t>& fw = fontNo == 1 ? hdFontW1 : hdFontW; int w = 0; for (size_t i = from; i < s.size() && s[i] != 10; i++) w += fw[(uint8_t)s[i]]; return (int)((float)w * scale); }
@@ -392,20 +407,27 @@ struct TitleMode : Screen {
 
 // ---------------------------------------------------------------- Help & Options, main list (HD 1.0 HelpOptionsScreen: initMainMenuItems 0x23c1c, render 0x24bdc / renderGenericMenuItems 0x229a8, handleInput 0x246c8, process 0x245b4)
 struct OptionsMode : Screen {
-    int phase = 0x11, sel = 0, chosen = -1, mascot = 0; double fade = 500000.0, t = 0; bool leave = false;
+    int phase = 0x11, sel = 0, chosen = -1, mascot = 0, sub = 0; double fade = 500000.0, t = 0; bool leave = false;   // sub: 0 main list, 2 language list (a28)
     static constexpr int N = 7; static constexpr int key[N] = {0x15c, 0x15d, 0x15e, 0x15f, 0x160, 0x161, 0x1d8};   // How to Play, Sounds, Language, iPod Music, Costumes, Credits, Game Center
-    static constexpr int px[N] = {145, 225, 305, 385, 465, 545, 625}, py[N] = {173, 263, 353, 433, 523, 613, 630};   // table at 0xe786c
+    static constexpr int px[N] = {145, 225, 305, 385, 465, 545, 625}, py[N] = {173, 263, 353, 433, 523, 613, 630};   // table at 0xe786c (initLanguageMenuItems uses its first six rows)
     static bool ok(App& a) { return a.opBg.tex && a.opHdr.tex && a.mnBars.tex && a.mnMasc.tex && a.ssArrows.tex && a.hdFont1.tex; }
-    static bool shown(int i) { return i != 3 && i != 6; }   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
+    bool shown(int i) const { return sub == 2 ? i < 6 : (i != 3 && i != 6); }   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
+    int back() const { return sub == 2 ? 6 : 7; }
     int music() override { return phase == 0x11 ? -1 : 5; }
     int hitTest(App& a, float lx, float ly) { for (int i = 0; i < N; i++) if (shown(i)) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (px[i] <= lx && lx <= px[i] + w && py[i] <= ly && ly <= py[i] + h) return i; }
-        int bw = a.ssArrows.fr[0].w, bh = a.ssArrows.fr[0].h; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 7; return -1; }
+        int bw = a.ssArrows.fr[0].w, bh = a.ssArrows.fr[0].h; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return back(); return -1; }
     void event(App& a, const SDL_Event& e) override {
         if (phase != 0x12 || e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT) return;
         float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly); if (hit < 0) return;
-        int before = sel; if (hit < 7) sel = hit;
-        if (before == hit || hit == 7) { if (hit == 7) { a.playSfx(2); chosen = 7; fade = 0; phase = 0x13; } else a.playSfx(0x13); }   // How to Play, Sounds, Language, Costumes, Credits are not ported yet (docs/roadmap.md)
-        else a.playSfx(0); }
+        int before = sel; if (hit != back()) sel = hit;
+        if (before != hit && hit != back()) { a.playSfx(0); return; }
+        if (sub == 2) {   // HelpOptionsScreen::handleLanguageMenuItemSelection 0x2437c: items 0..5 -> AppData::setLocale + reload the language textures, 6 = back to the main list
+            a.playSfx(2); if (hit == back()) { sub = 0; sel = 0; return; }
+            if (a.langAvailable(hit)) a.setLanguage(hit); else a.playSfx(0x13);   // HD 1.0 has no Japanese pack
+            return; }
+        if (hit == back()) { a.playSfx(2); chosen = 7; fade = 0; phase = 0x13; return; }
+        if (hit == 2) { a.playSfx(2); sub = 2; sel = a.lang; return; }   // Language
+        a.playSfx(0x13); }   // How to Play, Sounds, Costumes, Credits are not ported yet (docs/roadmap.md)
     void tick(App& a) override {
         if (phase == 0x11) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0x12; } }
         else if (phase == 0x12) { t += 16384.0; if (t >= 166666.671875) { t -= 166666.671875; mascot = (mascot + 1) % 12; } }
@@ -417,7 +439,8 @@ struct OptionsMode : Screen {
         for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
         a.rtex(a.opHdr, 0, 208, 50, a.opHdr.fr[0].w, a.opHdr.fr[0].h);
         for (int i = 0; i < N; i++) { if (!shown(i)) continue; int w = a.mnBars.fr[0].w, h = a.mnBars.fr[0].h; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
-            if (const std::string* s = a.hdString(key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
+            if (sub == 2 && i == 5 && a.langJa.tex) { const SDL_Rect& f = a.langJa.fr[0]; const SDL_Point& o = a.langJa.off[0]; a.rtex(a.langJa, 0, (float)(px[i] + w / 2 + o.x), (float)(py[i] + h / 2 + o.y), f.w, f.h); }   // the Japanese label is an image
+            else if (const std::string* s = a.hdString(sub == 2 ? 0x1cd + i : key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
             if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); } }
         a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.fr[0].h), a.ssArrows.fr[0].w, a.ssArrows.fr[0].h);
         if (phase != 0x12) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(fade / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
