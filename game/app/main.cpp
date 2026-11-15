@@ -11,6 +11,7 @@
 #include "roulette_draw.hpp"
 #include "rocket_lid.hpp"
 #include "rocket_launch.hpp"
+#include "startup.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -669,6 +670,45 @@ struct App {
 
 static App* gApp = nullptr;   // for sound hooks
 struct Screen { virtual ~Screen() {} virtual void event(App&, const SDL_Event&) {} virtual void tick(App&) {} virtual void draw(App&, float) {} virtual int music() { return -1; } virtual const char* next() { return nullptr; } };
+
+struct StartupMode : Screen {
+    Startup splash;
+    static bool available(App& app) {
+        for (int i = 3; i <= 5; ++i) {
+            const auto* sheet = app.imgSheet(i);
+            if (!sheet || sheet->fr.empty()) return false;
+        }
+        return true;
+    }
+    void tick(App& app) override {
+        if (splash.tick(1000000.0f / 60.0f)) app.playSong(14);
+    }
+    void event(App&, const SDL_Event& event) override {
+        if ((event.type == SDL_KEYDOWN && !event.key.repeat) || event.type == SDL_MOUSEBUTTONDOWN ||
+            event.type == SDL_FINGERDOWN || event.type == SDL_CONTROLLERBUTTONDOWN) splash.press();
+    }
+    const char* next() override { return splash.phase == Startup::Title ? "TITLE" : nullptr; }
+    void draw(App& app, float) override {
+        SDL_RenderSetLogicalSize(app.ren, GW, GH);
+        const bool sonic = splash.image() == 5;
+        SDL_SetRenderDrawColor(app.ren, sonic ? 112 : 255, sonic ? 192 : 255, sonic ? 240 : 255, 255);
+        SDL_RenderClear(app.ren);
+        const auto* sheet = app.imgSheet(splash.image());
+        const auto& frame = sheet->fr[0];
+        const int w = sheet->sz[0].x - 2, h = sheet->sz[0].y - 2;
+        const int trimTop = sonic ? 0 : 1;
+        const SDL_Rect source{frame.x + 1, frame.y + 1 + trimTop, w, h - trimTop};
+        const SDL_Rect destination{(GW - w) / 2, (GH - h) / 2 + trimTop, w, h - trimTop};
+        SDL_SetTextureAlphaMod(sheet->tex, static_cast<Uint8>(splash.opacity()));
+        SDL_RenderCopy(app.ren, sheet->tex, &source, &destination);
+        SDL_SetTextureAlphaMod(sheet->tex, 255);
+        if (const int alpha = splash.blackout()) {
+            SDL_SetRenderDrawBlendMode(app.ren, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(app.ren, 0, 0, 0, static_cast<Uint8>(alpha));
+            SDL_RenderFillRect(app.ren, nullptr);
+        }
+    }
+};
 
 // ---------------------------------------------------------------- title (Android TitleScreen, phone layout 480x320)
 // State machine and constants read from the original (docs/ui_art.md): state 0xB fade-in 0.5 s (black rectangle, alpha = timer / 500000 * 255), 0xC wait (song 0 plays, the rocket orbits
@@ -2044,6 +2084,19 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 }
 
 int main(int argc, char** argv) {
+    if (getenv("CCR_STARTUP_FLOW_TRACE")) {
+        Startup splash;
+        float elapsed;
+        int press;
+        while (scanf("%f %d", &elapsed, &press) == 2) {
+            if (press) splash.press();
+            const bool jingle = splash.tick(elapsed);
+            printf("%d %a %d %d %d\n", static_cast<int>(splash.phase), splash.timer,
+                   jingle ? 1 : 0, splash.opacity(), splash.blackout());
+            if (splash.phase == Startup::Title) splash = Startup{};
+        }
+        return 0;
+    }
     if (getenv("CCR_MOUSE_GHOST_TRACE")) {
         MouseGhost ghost{};
         while (scanf("%f %f %d", &ghost.x, &ghost.z, &ghost.angle) == 3) {
@@ -2160,7 +2213,7 @@ int main(int argc, char** argv) {
     // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ReNyastered/assets).
     std::string root; int shift = 0;
     auto hasAssets = [](const std::string& d) { FILE* f = fopen((d + "/ret_all/r0930.tex.bin").c_str(), "rb"); if (f) { fclose(f); return true; } return false; };
-    if (argc >= 2 && std::string(argv[1]) != "menu" && std::string(argv[1]) != "puzzle" && std::string(argv[1]) != "battle") { root = argv[1]; shift = 1; }
+    if (argc >= 2 && std::string(argv[1]) != "menu" && std::string(argv[1]) != "puzzle" && std::string(argv[1]) != "battle" && std::string(argv[1]) != "title") { root = argv[1]; shift = 1; }
     else {
         std::vector<std::string> cand; if (const char* e = getenv("CCR_ASSETS")) cand.push_back(e);
         char* bp = SDL_GetBasePath(); std::string base = bp ? bp : ""; if (bp) SDL_free(bp);
@@ -2173,11 +2226,12 @@ int main(int argc, char** argv) {
         }
     }
     App app; app.root = root; if (!app.init()) return 2; gApp = &app;
-    std::string start = argc > 1 + shift ? argv[1 + shift] : "title"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
+    std::string start = argc > 1 + shift ? argv[1 + shift] : "STARTUP"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
     int lv[4] = {-1, 3, 3, 3}; if (argc > 4 + shift) { int k = 1; for (const char* p = argv[4 + shift]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
     std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
-        if ((name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
+        if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
+        else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();

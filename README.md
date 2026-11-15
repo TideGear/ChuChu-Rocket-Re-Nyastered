@@ -95,6 +95,8 @@ Use the extracted iOS 1.1.2 folder shown in `assets\ios` if its name differs. If
 
 In Puzzle and Battle, aim with the mouse and press **WASD** or the **arrow keys** to place an arrow in the hovered cell. Mouse dragging also places arrows. On a controller, move with the left stick or D-pad and use the four face buttons in their directional positions, as on Dreamcast.
 
+The default launch plays the iPad startup logos when image slots 3–5 are available. Refresh them with `tools/export_hd_images.py` if your cache predates those exports. Pass `title` to open the title screen directly.
+
 The [presentation audit](docs/presentation_audit.md) tracks missing startup screens, effects, and animation. Live gameplay currently uses mobile sprites. The [Dreamcast models](docs/dreamcast_models.md) have been extracted and rendered offline.
 
 ## Where each asset and rule comes from

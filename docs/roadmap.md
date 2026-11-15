@@ -44,6 +44,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Traced the HD 1.0 Puzzle failure transition. A killed mouse or a cat in the rocket requests cue 27 in the following loop tick, then the effect tasks continue running in phase 6. The port now plays the cue once and keeps the ghost advancing during the frozen failure state. The focus and full failure presentation remain open. Next, trace the Dreamcast and GBA cat cues and the remaining startup presentation.
 
+- Restored the iPad SEGA, Binary Hammer, and Sonic Team startup sequence before Title. `tools/startup_diff.py` matched 1,462 ticks of state, timer, fades, and the Sonic Team jingle request, including both skip paths. Headless captures matched the centered image rectangles, top-row trims and backgrounds from the original render calls. Re-export slots 3–5 for older caches. Next, verify the Dreamcast startup and continue the cross-version cat audio audit.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
