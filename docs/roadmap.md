@@ -18,6 +18,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Enabled the `?` board in both shared-screen battle modes. Despite the label, iPad HD 1.0 selects board index 24 directly at initial launch. `tools/battle_question_mark_trace.py` ran `LevelSelect` and the first 180 `FourBattleLoop` ticks for indices 23 and 24, in free-for-all and team, with three RNG seeds. All 12 runs requested the selected collision board and retained it into play. All 345 tile and wall bytes matched the local Dreamcast export. The live headless route now checks that both modes pass index 24 from the actual Settings grid, and a capture confirmed the four central generators and their layering. Next, trace the Battle HUD's player labels and team layout.
 
+- Ported the iPad Team Battle HUD panels, team score digits and scoreboard crowns, and restored the iPad sidebar for both battle modes. The base HUD and score digits precede the board at render priorities -788 and -784, with crowns drawn later. `tools/battle_hud_diff.py` matched 1,384 draw calls over 64 original iPad frames, including all human/CPU masks, combined scores, ties, and crown blink boundaries. The original draws fixed “Computer” tags even when those slots are human. It scales the leading crown to 1.3 in both modes. Headless captures checked the sidebar, score panel overlap and crowns in both modes. Refresh the iPad image export for slots 94, 95 and 106 using `tools/export_hd_images.py` and its updated default list. Playfield crowns over rockets and the in-match win-point icons remain open. Next, trace those overlays and their draw order.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.

@@ -410,6 +410,66 @@ struct App {
         Sheet* sh = imgSheet(id); if (!sh || frame < 0 || frame >= (int)sh->fr.size()) return; const SDL_Rect& fr = sh->fr[frame]; const SDL_Point& of = sh->off[frame];
         SDL_Rect dst{(int)std::lround(x + of.x * scale), (int)std::lround(y + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)};
         SDL_SetTextureAlphaMod(sh->tex, (Uint8)alpha); SDL_RenderCopyEx(ren, sh->tex, &fr, &dst, 0.0, nullptr, (SDL_RendererFlip)((flags & 2 ? SDL_FLIP_HORIZONTAL : 0) | (flags & 4 ? SDL_FLIP_VERTICAL : 0))); SDL_SetTextureAlphaMod(sh->tex, 255); }
+
+    // HD 1.0 iPad renderFourBattleHud and renderTeamBattleHud (-788),
+    // followed by score4pb2D or scoreteam2D (-784) before the field (-780).
+    void drawBattleHud(bool team, bool showScores, const Scoreboard& score) {
+        auto panel = [&](int id, int frame, float x, float y, int alpha = 255) {
+            if (imgLog || (id != 0x65 && id != 0x68)) {
+                drawImage(id, frame, x, y, 0, 1.0f, alpha);
+            } else {
+                Sheet& sheet = id == 0x65 ? hdHud65 : hdHud68;
+                if (!sheet.tex) return;
+                SDL_SetTextureAlphaMod(sheet.tex, static_cast<Uint8>(alpha));
+                blit(sheet, frame, x, y);
+                SDL_SetTextureAlphaMod(sheet.tex, 255);
+            }
+        };
+        for (int frame = 6; frame <= 13; ++frame) panel(0x68, frame, 82, 62 + 92 * (frame - 6));
+        panel(0x68, 0, 68, 88);
+        if (team) {
+            panel(0x6a, 8, 374, 685);
+            panel(0x68, 4, 319, 703, 222);
+            panel(0x6a, 9, 759, 685);
+            panel(0x68, 4, 815, 704, 222);
+            panel(0x68, 4, 814, 667, 222);
+        } else {
+            for (int p = 0; p < 4; ++p) {
+                float x = 280 + 192 * p;
+                panel(0x65, p, x, 680);
+                if (p != 0) panel(0x68, 4, x - 1, 658);
+            }
+        }
+        panel(0x68, 5, 82, 720);
+        if (!showScores) return;
+
+        for (int p = 0; p < (team ? 2 : 4); ++p) {
+            const int value = team ? score.team[p] : score.player[p];
+            const int glyphs[] = {(value / 100) % 10, (value / 10) % 10, value % 10};
+            const float x = team ? 404 + 268 * p : 250 + 192 * p;
+            const float y = team ? 685 : 691;
+            for (int k = 0; k < 3; ++k) {
+                if (imgLog || imgSheet(0x5f)) panel(0x5f, glyphs[k], x + k * 30, y);
+                else blit(digits, glyphs[k], x + k * 30, y);
+            }
+        }
+    }
+    void drawBattleHudCrowns(bool team, int tick, const Scoreboard& score, const int (&ranks)[4]) {
+        if ((tick & 31) <= 10) return;
+        const int* scores = team ? score.team : score.player;
+        const int count = team ? 2 : 4;
+        int total = 0;
+        for (int p = 0; p < count; ++p) total += scores[p];
+        if (total == 0) return;
+        for (int p = 0; p < count; ++p) {
+            const int rank = team ? scores[p] < scores[1 - p] : ranks[p];
+            const float x = team ? 430 + 270 * p : 324 + 192 * p;
+            const float y = team ? 640 : 644;
+            const float scale = rank == 0 ? 1.3f : 1.0f;
+            if (imgLog || imgSheet(0x5e)) drawImage(0x5e, rank, x, y, 0, scale, 255);
+            else blit(crowns, rank, x, y, scale);
+        }
+    }
     // Battle banner tasks (HD 1.0 BattleCountDrawPriority 0x1f580 and RoundCountDrawPriority 0x205fc; checked against the original with tools/oracle/hd_task_probe.py)
     static int countLife(int m) { return m > 5 ? 45 : (m <= 2 ? 60 : 120); }
     void battleCount(int m, int t) {
@@ -1703,6 +1763,7 @@ struct BattleMode : Screen {
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
+        a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
         for (int p = 0; p < 4; ++p)
@@ -1710,21 +1771,8 @@ struct BattleMode : Screen {
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku);
         for (int p = 0; p < 4; ++p)
             if (lv[p] < 0) a.cursor(curX[p], curY[p], p, game.frame);
-        { SDL_RenderSetViewport(a.ren, nullptr);   // battle HUD frame (HD 1.0 renderFourBattleHud 0x21038, free-for-all branch; layout struct values): image 0x68 frame 1 at (+0xb4, +0xb8) = (82, 62),
-          // frame 2 at y + 0xbc (92) and 8 more times at + 0xc0 (0), frame 3 at + 0xc4 (0); frame 0 at (+0xc8, +0xcc) = (68, 88); player panels image 0x65 frame p at (280 + 192 p, 680) (+0x90..+0x9c),
-          // separator 0x68 frame 4 at each panel 1..3 + (+0xa0, +0xa4) = (-1, -22); frame 5 at (+0xd0, +0xd4) = (82, 720). drawImage(id, frame, x, y, 0, 1.0, 255). The team branch (frames 6..13) is not drawn yet.
-          int x0 = 82, y = 62; a.blit(a.hdHud68, 1, (float)x0, (float)y); y += 92; a.blit(a.hdHud68, 2, (float)x0, (float)y);
-          for (int k = 1; k < 9; k++) { y += 0; a.blit(a.hdHud68, 2, (float)x0, (float)y); } y += 0; a.blit(a.hdHud68, 3, (float)x0, (float)(y + 0));
-          a.blit(a.hdHud68, 0, 68.0f, 88.0f);
-          for (int p = 0; p < 4; p++) { float px = 280.0f + 192.0f * p, py = 680.0f; a.blit(a.hdHud65, p, px, py); if (p > 0) a.blit(a.hdHud68, 4, px - 1.0f, py - 22.0f); }
-          a.blit(a.hdHud68, 5, 82.0f, 720.0f); }
-        SDL_RenderSetViewport(a.ren, nullptr);   // score digits (FUN_00030e18, iPad layout struct: x = 250 + 192 p + 30 k, y = 691; sprite r0729 frames 0..9 centred on their anchor); the player panels behind them (image 0x6d) are NOT drawn yet: their position field was not matched
-        for (int p = 0; p < 4; p++) { int v = std::min(game.score.player[p], 999); int dg[3] = {v / 100 % 10, v / 10 % 10, v % 10};
-            for (int k = 0; k < 3; k++) a.blit(a.digits, dg[k] == 1 ? 1 : dg[k] == 0 ? 0 : dg[k], 250.0f + 192 * p + 30 * k, 691.0f); }
-        { SDL_RenderSetViewport(a.ren, nullptr);   // rank crowns (HD 1.0 RankCrawnDrawPriority 0x209ac, free-for-all): shown while (task counter & 31) > 10 and the score total is non-zero;
-          // image 0x5e frame = rank at (+0x6c + 192 p, +0x70) = (324 + 192 p, 644) (+0x74/+0x78 step). The task counter is taken as the battle frame count (the task starts with the battle).
-          int tot = 0; for (int p = 0; p < 4; p++) tot += game.score.player[p];
-          if ((game.frame & 31) > 10 && tot != 0) for (int p = 0; p < 4; p++) a.blit(a.crowns, game.rankOf(p), 324.0f + 192.0f * p, 644.0f); }
+        const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
+        a.drawBattleHudCrowns(game.teamMode, game.frame, game.score, ranks);
         { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
           int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock); int secs = (left + 59) / 60; int mm = secs / 60, ss = secs % 60;
@@ -1894,6 +1942,22 @@ int main(int argc, char** argv) {
         }
         output.close();
         return output.fail() ? 1 : 0;
+    }
+    if (getenv("CCR_BATTLE_HUD_TRACE")) {
+        int team, showScores, tick, ranks[4];
+        Scoreboard score;
+        while (scanf("%d %d %d %d %d %d %d %d %d %d %d %d %d", &team, &showScores, &tick,
+                     &score.player[0], &score.player[1], &score.player[2], &score.player[3],
+                     &score.team[0], &score.team[1], &ranks[0], &ranks[1], &ranks[2], &ranks[3]) == 13) {
+            std::vector<std::string> trace;
+            app.imgLog = &trace;
+            app.drawBattleHud(team != 0, showScores != 0, score);
+            app.drawBattleHudCrowns(team != 0, tick, score, ranks);
+            app.imgLog = nullptr;
+            for (const auto& call : trace) puts(call.c_str());
+            puts("end");
+        }
+        return 0;
     }
     if (getenv("CCR_PAD_MATCH_RULES")) {
         int points, speed, time, high;
