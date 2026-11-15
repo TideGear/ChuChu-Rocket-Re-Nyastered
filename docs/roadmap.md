@@ -50,6 +50,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Verified GBA cat cue selection and sequence lookup with `tools/oracle/gba_cat_audio.py`. Cue 42 plays when a catch crosses the large-cat threshold at 50 in an eligible mode. Rocket entry uses cue 36 or 43 according to cat size, and reaching 100 also plays 43. All 12 forced cases passed, including small catches, mode gates, and a rejected rocket arrival. Next, trace the GBA sequence playback and remaining cat and mouse-death callers.
 
+- Followed the three GBA cat sequences through the original player and mixer with `tools/oracle/gba_cat_playback.py`. The two rocket cues use digital PCM, while the growth cue uses the hardware wave channel. Verified voice addresses, active frame counts, and which mixer buffers or registers change. The port still uses the verified mobile effects. Next, trace remaining cat and mouse-death call sites and compare the underlying assets across releases.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
