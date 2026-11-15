@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <utility>
 #include <string>
 #include <functional>
 #include <map>
@@ -1144,6 +1145,90 @@ struct LocalPlayersPaneInput {
     }
 };
 
+struct BattleSetupMode : Screen {
+    PlayersFrame frame;
+    LocalPlayersPaneInput players;
+    SettingsPaneItems::LocalPadInput settings;
+    int stateTicks = 0;
+    const char* destination = nullptr;
+
+    BattleSetupMode() { frame.state = 0x24; }  // SDL loads the required sheets before the fade.
+
+    static bool available(App& app) {
+        for (int image : {12, 17, 28, 31, 33, 34, 35, 36, 38, 39})
+            if (!app.imgSheet(image)) return false;
+        return app.hdFont.tex && !app.battlePreviewPixels(0, false).empty();
+    }
+
+    void event(App& app, const SDL_Event& event) override {
+        if (frame.state != 0x25 || event.type != SDL_MOUSEBUTTONDOWN ||
+            event.button.button != SDL_BUTTON_LEFT) return;
+        SDL_RenderSetLogicalSize(app.ren, GW, GH);
+        float x, y;
+        SDL_RenderWindowToLogical(app.ren, event.button.x, event.button.y, &x, &y);
+        if (x < 0 || x > GW || y < 0 || y > GH) return;
+        if (frame.pane == 0) {
+            players.touch(static_cast<int>(x), static_cast<int>(y), 0);
+            const auto& input = players.controls;
+            for (int sound : input.sfx) app.playSfx(sound);
+            frame.team = input.a40;
+            if (input.openSettings) frame.pane = 1;
+            if (input.gameState38) {
+                frame.state = 0x26;
+                frame.fade = 0.0f;
+            }
+            return;
+        }
+
+        using Action = SettingsPaneItems::LocalPadInput::Action;
+        const auto result = settings.touch(static_cast<int>(x), static_cast<int>(y), 0);
+        if (result.action == Action::Launch) {
+            // Split-screen rendering and the special random board launch are open.
+            if (settings.rules.split || settings.stage == 24) {
+                settings.launching = false;
+                app.playSfx(3);
+                return;
+            }
+            frame.state = 0x27;
+            stateTicks = 0;
+        } else if (result.action == Action::Players) {
+            frame.pane = 0;
+            players.controls.d58 = -1;
+        }
+        if (result.sound >= 0) app.playSfx(result.sound);
+    }
+
+    void tick(App&) override {
+        if (frame.state == 0x25 || destination) return;
+        std::string ops;
+        int request = playersFlowStep(frame.state, ++stateTicks, players.controls.a3c,
+                                      frame.team, 0, settings.rules.split, 16384.0f, frame.fade, ops);
+        if (frame.state == 0x24 && frame.fade == 0.0f) frame.state = 0x25;
+        if (request == 4) destination = "MENU";
+        if (request == 0xf || request == 0x13) destination = "BATTLE_MATCH";
+    }
+
+    int music() override { return frame.state == 0x24 ? -1 : 5; }
+    const char* next() override { return std::exchange(destination, nullptr); }
+
+    void draw(App& app, float) override {
+        SDL_RenderSetLogicalSize(app.ren, GW, GH);
+        SDL_RenderSetViewport(app.ren, nullptr);
+        frame.draw(app, [&](int pane) {
+            if (pane == 0) {
+                const auto& p = players.controls;
+                const int human[] = {1, !p.d3c, !p.d40, !p.d44};
+                PlayersPane::drawPad(app, human, players.levels.data(), p.d58, -1, nullptr);
+            } else {
+                SettingsPaneItems::drawPadStageGrid(app, settings.stage, nullptr);
+                SettingsPaneItems::drawPadRules(app, settings.rules, [&](const SDL_Rect& rect) {
+                    app.drawBattlePreview(settings.stage, frame.team != 0, rect);
+                }, nullptr);
+            }
+        });
+    }
+};
+
 struct SettingsLevelList {
     struct Row { std::string text; float x, y, scale; };
     static void rows(float scroll, std::vector<Row>& out) {
@@ -1510,8 +1595,9 @@ struct BattleMode : Screen {
     int mode = 2, modeTick = 0, wins[4] = {0, 0, 0, 0}, winPoint = 2, roundWinner = 0, drawFlag = 0, gTime = 0, rank[4] = {0, 0, 0, 0}; bool tapped = false, matchOver = false, congra = false; int sub5 = 0, cnt5 = 0;   // winPoint: GetWinPoint (initial data value 2)
     // ResultRocket tasks (0x1fe24 Cons, 0x1ff58 Exec, 0x1fcf8 Draw; smoke 0x1fe10 / flash 0x1fdc8): the win icon rises from y = 620 (2 per tick) to 361, pulses (scale 1 -> 4 -> 1) and settles
     struct Rocket { int player, state; float x, y, tx, scale, dscale; }; std::vector<Rocket> rockets_; struct Smoke { float x, y; int n; }; std::vector<Smoke> smokes_; struct Flash { float x, y, scale, delta; }; std::vector<Flash> flashes_;
-    int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners; int lastLeftSec = -1;
+    int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners;
     DragGesture drag; int lastCatSfx = -100; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
+    ~BattleMode() override { for (auto* pad : pads) if (pad) SDL_GameControllerClose(pad); }
     void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
     void moveCur(int p, int dx, int dy) { curX[p] = std::max(0, std::min(11, curX[p] + dx)); curY[p] = std::max(0, std::min(8, curY[p] + dy)); }
     bool keyPlayer(SDL_Keycode k) {   // keyboard = player 1: arrows move the cursor, W/A/S/D place up/left/down/right (the Dreamcast face buttons Y/X/A/B); the mouse is player 1 too (drag gesture)
@@ -1527,9 +1613,9 @@ struct BattleMode : Screen {
             case SDL_CONTROLLER_BUTTON_Y: place(p, curX[p], curY[p], 2); break; case SDL_CONTROLLER_BUTTON_A: place(p, curX[p], curY[p], 0); break; case SDL_CONTROLLER_BUTTON_X: place(p, curX[p], curY[p], 1); break; case SDL_CONTROLLER_BUTTON_B: place(p, curX[p], curY[p], 3); break; default: break; }
     }
     bool load(const std::string& root, int stage, uint32_t sd,
-              const SettingsPaneItems::PadRules* rules = nullptr) {
+              const SettingsPaneItems::PadRules* rules = nullptr, int localTeam = -1) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
-        game.teamMode = getenv("CCR_TEAM") != nullptr;
+        game.teamMode = localTeam < 0 ? getenv("CCR_TEAM") != nullptr : localTeam != 0;
         game.gbaCpu = getenv("CCR_CPU") && std::string(getenv("CCR_CPU")) == "gba";
         game.rouletteManager = true;
         game.rotateOwn = true;
@@ -1547,17 +1633,27 @@ struct BattleMode : Screen {
             game.roundFrames = minutes * 60 * 60;
             winPoint = getenv("CCR_WINPOINT") ? atoi(getenv("CCR_WINPOINT")) : 2;
         }
-        if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
+        if (localTeam < 0) if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
         restart(); return true;
     }
-    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); lastLeftSec = -1; game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
+    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
     void event(App& a, const SDL_Event& e) override {
-        if (e.type == SDL_CONTROLLERDEVICEADDED) { for (int p = 0; p < 4; p++) if (!pads[p]) { pads[p] = SDL_GameControllerOpen(e.cdevice.which); break; } }
+        if (e.type == SDL_CONTROLLERDEVICEADDED) {
+            const auto id = SDL_JoystickGetDeviceInstanceID(e.cdevice.which);
+            for (auto* pad : pads) if (pad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id) return;
+            for (auto& pad : pads) if (!pad) { pad = SDL_GameControllerOpen(e.cdevice.which); break; }
+        }
+        else if (e.type == SDL_CONTROLLERDEVICEREMOVED) {
+            for (auto& pad : pads) if (pad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cdevice.which) {
+                SDL_GameControllerClose(pad);
+                pad = nullptr;
+            }
+        }
         else if (e.type == SDL_CONTROLLERBUTTONDOWN) { for (int p = 0; p < 4; p++) if (pads[p] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[p])) == e.cbutton.which) padButton(p, e.cbutton.button); }
         else if (e.type == SDL_KEYDOWN && keyPlayer(e.key.keysym.sym)) {}
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
@@ -1569,7 +1665,6 @@ struct BattleMode : Screen {
     void tick(App& a) override { if (paused) return;
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
         if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
-        { int left = game.roundFrames - game.clock; if (left >= 0 && left % 60 == 0 && left != lastLeftSec) { lastLeftSec = left; int sec = left / 60; int m = sec == 3 ? 2 : sec == 2 ? 1 : sec == 1 ? 0 : sec == 30 ? 3 : sec == 60 ? 4 : sec == 120 ? 5 : -1; if (m >= 0) banners.push_back({0, m, 0, App::countLife(m)}); } }   // FB_Exe_GAME: BCD 0x300 / 0x200 / 0x100, 0x3000, 0x10000, 0x20000
         gTime++;
         for (auto& rk : rockets_) { if (rk.state == 0) { rk.y -= 2.0f; if (rk.y > rk.tx) { if ((gTime & 7) == 0) smokes_.push_back({rk.x, rk.y, 0}); } else { rk.state = 1; rk.scale = 1.0f; rk.dscale = 0.4f; flashes_.push_back({rk.x + 17.0f, rk.tx + 32.0f, 0.1f, 0.4f}); rk.y = rk.tx; if (gApp) { gApp->playSfx(0x14); } } }
             else if (rk.state == 1) { if (rk.scale >= 1.0f) { rk.scale += rk.dscale; if (rk.scale >= 4.0f) rk.dscale = -rk.dscale; } else { rk.scale = 1.0f; rk.state = 2; } } }
@@ -1586,7 +1681,18 @@ struct BattleMode : Screen {
                 else { cnt5++; if (cnt5 == 0xf0) { congra = true; if (gApp) gApp->playSfx(0x14); } if (cnt5 <= 0x5f && (cnt5 & 0x1f) == 0 && gApp) gApp->playSfx(0x15); if (cnt5 > 0x538) { if (gApp) gApp->playSfx(3); back = true; } } }
             return; }   // mode 4: JudgeWin until 0xf0 ticks and a touch   // mode 4: JudgeWin until 0xf0 ticks and a touch; mode 5: until a touch (the original waits at most 0x538 ticks)
         if (mode == 3) { modeTick++; if (modeTick > 0x3b) endRound(); }
-        for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } if (mode == 2 || mode == 3) game.tick(); a.stepAngles(game.sim); }
+        for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } const int previousClock = game.clock;
+        if (mode == 2 || mode == 3) game.tick();
+        // FB_Exe_GAME checks the BCD time after decrementing it.
+        const int left = game.roundFrames - game.clock;
+        if (mode == 2 && game.clock != previousClock && left >= 0 && left % 60 == 0) {
+            const int seconds = left / 60;
+            const int banner = seconds == 3 ? 2 : seconds == 2 ? 1 : seconds == 1 ? 0 :
+                               seconds == 30 ? 3 : seconds == 60 ? 4 : seconds == 120 ? 5 : -1;
+            if (banner >= 0) banners.push_back({0, banner, 0, App::countLife(banner)});
+        }
+        a.stepAngles(game.sim);
+    }
     void endRound() {   // FourBattleLoop mode 3 after 60 ticks: the only player (team battle: team) with dense rank 0 wins the round
         if (game.teamMode) { int ts[2] = {game.score.team[0], game.score.team[1]}; int tr[2] = {ts[0] >= ts[1] ? 0 : 1, ts[1] >= ts[0] ? 0 : 1}; for (int p = 0; p < 4; p++) rank[p] = tr[p & 1]; modeTick = 0; rockets_.clear(); smokes_.clear(); flashes_.clear();
             if (tr[0] != tr[1]) { int w = tr[0] == 0 ? 0 : 1; roundWinner = w; drawFlag = 0; int old = wins[w]++; matchOver = old == winPoint; } else { drawFlag = 1; matchOver = false; } mode = matchOver ? 5 : 4; return; }   // the team result rocket (ResultRocketCons, team branch) is not ported
@@ -1698,7 +1804,32 @@ int main(int argc, char** argv) {
         if ((name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
-        else if (name == "BATTLE" || name == "battle") { auto m = std::make_unique<BattleMode>(); memcpy(m->lv, lv, sizeof lv); if (!m->load(app.root, stageNo, seed)) { printf("cannot load battle stages\n"); return false; } mode = std::move(m); }
+        else if (name == "BATTLE" && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
+        else if (name == "BATTLE" || name == "battle" || name == "BATTLE_MATCH") {
+            auto battle = std::make_unique<BattleMode>();
+            if (name == "BATTLE_MATCH") {
+                const auto& setup = static_cast<const BattleSetupMode&>(*mode);
+                const auto& p = setup.players.controls;
+                const int cpu[] = {0, p.d3c, p.d40, p.d44};
+                for (int i = 0; i < 4; ++i) battle->lv[i] = cpu[i] ? setup.players.levels[i] : -1;
+                if (!battle->load(app.root, setup.settings.stage, seed, &setup.settings.rules, setup.frame.team)) return false;
+                if (app.headless && getenv("CCR_BATTLE_SETUP_TRACE")) {
+                    printf("battle %d %d %d %d %a %a %d %d %d %d\n", battle->cur, battle->game.teamMode,
+                           battle->winPoint, battle->game.roundFrames, battle->game.baseScale,
+                           battle->game.generatorParams.pSpecial2, battle->lv[0], battle->lv[1], battle->lv[2], battle->lv[3]);
+                }
+            } else {
+                memcpy(battle->lv, lv, sizeof lv);
+                if (!battle->load(app.root, stageNo, seed)) { puts("cannot load battle stages"); return false; }
+            }
+            for (int i = 0; i < SDL_NumJoysticks(); ++i) if (SDL_IsGameController(i)) {
+                SDL_Event event{};
+                event.type = SDL_CONTROLLERDEVICEADDED;
+                event.cdevice.which = i;
+                battle->event(app, event);
+            }
+            mode = std::move(battle);
+        }
         else if (name == "HELP" && HelpMode::ok(app)) mode = std::make_unique<HelpMode>();
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
@@ -1912,7 +2043,7 @@ int main(int argc, char** argv) {
             for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
         mode->draw(app, 1.0f);
         const int result = saveFrame(app.ren, shot);
-        SDL_Quit();
+        mode.reset(); app.battlePreviewTexture.reset(); SDL_Quit();
         return result;
     }
     if (getenv("CCR_BENCH")) {   // headless render benchmark: CCR_BENCH=<frames> CCR_HZ=<simulated display rate> CCR_SIZE=WxH; fixed 60 Hz ticks, interpolated draws at the output size
@@ -1925,7 +2056,7 @@ int main(int argc, char** argv) {
         double sec = (double)(SDL_GetPerformanceCounter() - t0) / SDL_GetPerformanceFrequency(); int ow = 0, oh = 0; SDL_GetRendererOutputSize(app.ren, &ow, &oh);
         printf("output %dx%d simulated %.0f Hz: %d frames, %ld sim ticks (%.3f s simulated, %.1f ticks/s), draw %.2f ms/frame (%s renderer)\n", ow, oh, hz, frames, ticks, frames / hz, ticks / (frames / hz), drawMs / frames, getenv("CCR_GPU") ? "GPU" : "software");
         if (const char* out = getenv("CCR_OUT")) { SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, ow, oh, 32, SDL_PIXELFORMAT_ARGB8888); SDL_RenderReadPixels(app.ren, nullptr, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch); SDL_SaveBMP(s, out); SDL_FreeSurface(s); }
-        (void)sec; SDL_Quit(); return 0;
+        (void)sec; mode.reset(); app.battlePreviewTexture.reset(); SDL_Quit(); return 0;
     }
     Uint64 last = SDL_GetPerformanceCounter();
     std::function<void()> frame = [&]() {
@@ -1946,5 +2077,5 @@ int main(int argc, char** argv) {
 #else
     while (!app.quit) frame();
 #endif
-    SDL_Quit(); return 0;
+    mode.reset(); app.battlePreviewTexture.reset(); SDL_Quit(); return 0;
 }
