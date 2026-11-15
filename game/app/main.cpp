@@ -6,6 +6,7 @@
 #include <SDL.h>
 #include "../core/battle.hpp"
 #include "../core/angle.hpp"
+#include "battle_preview.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -64,6 +65,43 @@ struct App {
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
+    BattlePreviewAtlas battlePreviewAtlas;
+    Stages battlePreviewStages;
+    bool battlePreviewLoaded = false;
+    std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> battlePreviewTexture{nullptr, SDL_DestroyTexture};
+    int battlePreviewKey = -1;
+
+    std::vector<uint16_t> battlePreviewPixels(int stage, bool team) {
+        if (!battlePreviewLoaded) {
+            battlePreviewLoaded = true;
+            loadStages((root + "/battle_stages.bin").c_str(), battlePreviewStages, 2);
+            std::error_code error;
+            for (const auto& entry : std::filesystem::directory_iterator(root + "/ios", error))
+                if (battlePreviewAtlas.load(entry.path() / "ccrpad")) break;
+        }
+        if (stage < 0 || stage >= static_cast<int>(battlePreviewStages.list.size())) return {};
+        return battlePreviewAtlas.compose(battlePreviewStages.list[stage].st, stage, team);
+    }
+
+    void drawBattlePreview(int stage, bool team, const SDL_Rect& dst) {
+        int key = stage * 2 + team;
+        if (battlePreviewKey != key) {
+            battlePreviewKey = key;
+            battlePreviewTexture.reset();
+            const auto pixels = battlePreviewPixels(stage, team);
+            if (pixels.empty()) return;
+            battlePreviewTexture.reset(SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA4444, SDL_TEXTUREACCESS_STATIC,
+                                                         BattlePreviewAtlas::width, BattlePreviewAtlas::height));
+            if (!battlePreviewTexture) return;
+            if (SDL_UpdateTexture(battlePreviewTexture.get(), nullptr, pixels.data(),
+                                  BattlePreviewAtlas::width * sizeof(uint16_t)) != 0) {
+                battlePreviewTexture.reset();
+                return;
+            }
+            SDL_SetTextureBlendMode(battlePreviewTexture.get(), SDL_BLENDMODE_BLEND);
+        }
+        if (battlePreviewTexture) SDL_RenderCopy(ren, battlePreviewTexture.get(), nullptr, &dst);
+    }
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
@@ -1588,13 +1626,21 @@ int main(int argc, char** argv) {
             speed < 0 || speed >= 5) return 1;
         const SettingsPaneItems::PadRules rules{points, speed, time, high != 0, split != 0};
         if (const char* shot = getenv("CCR_SHOT")) {
+            int stage = 0, team = 0;
+            if (const char* selection = getenv("CCR_PAD_PREVIEW")) {
+                if (sscanf(selection, "%d,%d", &stage, &team) != 2 || stage < 0 || stage >= 25 ||
+                    (team != 0 && team != 1)) return 1;
+            }
             SDL_RenderSetLogicalSize(app.ren, GW, GH);
             PlayersFrame frame;
             frame.state = 0x25;
             frame.pane = 1;
+            frame.team = team;
             frame.draw(app, [&](int) {
-                SettingsPaneItems::drawPadStageGrid(app, 0, nullptr);
-                SettingsPaneItems::drawPadRules(app, rules, {}, nullptr);
+                SettingsPaneItems::drawPadStageGrid(app, stage, nullptr);
+                SettingsPaneItems::drawPadRules(app, rules, [&](const SDL_Rect& rect) {
+                    app.drawBattlePreview(stage, team != 0, rect);
+                }, nullptr);
             });
             return saveFrame(app.ren, shot);
         }
@@ -1606,6 +1652,18 @@ int main(int argc, char** argv) {
         }, &trace);
         for (const auto& call : trace) puts(call.c_str());
         return 0;
+    }
+    if (const char* path = getenv("CCR_PAD_PREVIEW_DUMP")) {
+        std::ofstream output(path, std::ios::binary);
+        for (bool team : {false, true}) {
+            for (int stage = 0; stage < 25; ++stage) {
+                const auto pixels = app.battlePreviewPixels(stage, team);
+                if (pixels.empty() || !output.write(reinterpret_cast<const char*>(pixels.data()),
+                                                    pixels.size() * sizeof(uint16_t))) return 1;
+            }
+        }
+        output.close();
+        return output.fail() ? 1 : 0;
     }
     if (const char* spec = getenv("CCR_PAD_SETTINGS_GRID")) {
         const int selected = atoi(spec);
