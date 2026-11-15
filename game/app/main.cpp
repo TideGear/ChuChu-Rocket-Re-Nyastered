@@ -583,6 +583,32 @@ struct PlayersInputHelpers {
     static void reposition(int x, int y, Row rows[6]) { int yy = y; for (int i = 0; i < 6; i++) { rows[i].x = x; rows[i].y = yy; yy += rows[i].h; } }
 };
 
+// ---------------------------------------------------------------- players pane input, cases 0..13 (HD 1.0 PlayerSelectScreen::handlePlayersPaneInput 0x31d24); the field names are the screen offsets (+0xd3c etc.)
+// checked with tools/players_input_diff.py against the original under Unicorn (tools/oracle/hd_players_input_probe.py), in the same item sequence
+struct PlayersInputLogic {
+    int d58 = -1, d3c = 0, d40 = 0, d44 = 0, a40 = 0, a3c = 0, a38 = 0, d20 = 0, a7c = 0, d18 = 0, g170 = 0; std::vector<int> sfx; bool gameState38 = false;
+    void play(int id) { sfx.push_back(id); }
+    void mutex(int a, int b, int v) { (void)a; (void)b; (void)v; }   // the lit flags of the two buttons (not in this dump)
+    // one press on item it (press = 0); returns after the switch's own sound and state effects
+    void press(int it) {
+        a3c = 0;
+        if (it == 8 || it == 9) { if (d18 == 0) return; }   // the early return of the pane (clears the item's flag, nothing else)
+        switch (it) {
+        case 0: case 1: play(3); return;
+        case 2: if (d20 == 0 && a7c != 0) { play(2); d3c = 0; mutex(2, 3, 0); d58 = -1; return; } play(3); return;
+        case 3: if (d20 == 0 || (g170 != 0)) { play(1); d3c = 1; mutex(2, 3, 1); if (d58 == 1) { d58 = -1; return; } d58 = 1; return; } play(3); return;   // the slider re-layout is in PlayersInputHelpers
+        case 4: if (d20 == 0 && a7c != 0) { play(2); d40 = 0; d58 = -1; return; } play(3); return;
+        case 5: if (d20 == 0 || (g170 != 0)) { play(1); d40 = 1; mutex(4, 5, 1); if (d58 == 2) { d58 = -1; return; } d58 = 2; return; } play(3); return;
+        case 6: if (d20 == 0 && a7c != 0) { play(2); d44 = 0; d58 = -1; return; } play(3); return;
+        case 7: if (d20 == 0 || (g170 != 0)) { play(1); d44 = 1; mutex(6, 7, 1); if (d58 == 3) { d58 = -1; return; } d58 = 3; return; } play(3); return;
+        case 10: case 11: play(2); return;
+        case 12: if (d20 == 0 || g170 != 0) { play(2); a40 = (a40 == 0) ? 1 : 0; return; } play(3); return;
+        case 13: if (d20 == 0) { play(3); a3c = 1; a38 = 0; gameState38 = true; return; } return;
+        default: return;
+        }
+    }
+};
+
 // ---------------------------------------------------------------- Help & Options, main list (HD 1.0 HelpOptionsScreen: initMainMenuItems 0x23c1c, render 0x24bdc / renderGenericMenuItems 0x229a8, handleInput 0x246c8, process 0x245b4)
 struct OptionsMode : Screen {
     int phase = 0x11, sel = 0, chosen = -1, mascot = 0, sub = 0; double fade = 500000.0, t = 0; bool leave = false;   // sub: 0 main list, 2 language list (a28)
@@ -1062,6 +1088,7 @@ int main(int argc, char** argv) {
     if (const char* jt = getenv("CCR_JUDGET")) { int s[2], r[2], wn[2], rw, df, wp, rc; if (sscanf(jt, "%d,%d;%d,%d;%d,%d;%d,%d,%d,%d", s, s + 1, r, r + 1, wn, wn + 1, &rw, &df, &wp, &rc) == 10) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWinTeam(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
+    if (const char* pin = getenv("CCR_PLAYIN")) { PlayersInputLogic pil; for (int i = 0; i < 14; i++) { pil.sfx.clear(); pil.press(i); printf("%d d3c=%d d40=%d d44=%d d58=%d a40=%d a3c=%d a38=%d d20=%d\n", i, pil.d3c, pil.d40, pil.d44, pil.d58, pil.a40, pil.a3c, pil.a38, pil.d20); } return 0; }
     if (const char* ph = getenv("CCR_PLAYHELP")) { int a, bb, v, x, y; int h[6] = {0,0,0,0,0,0}; if (sscanf(ph, "m:%d,%d,%d", &a, &bb, &v) == 3) { uint8_t lit[8] = {0,0,0,0,0,0,0,0}; if (a != 0 || bb != 1 || true) {} PlayersInputHelpers::mutexPlayer(lit, a, bb, v); printf("%d %d\n", lit[a], lit[bb]); return 0; } if (sscanf(ph, "r:%d,%d,%d,%d,%d,%d,%d", &x, &y, h, h + 1, h + 2, h + 3, h + 4) == 7) { PlayersInputHelpers::Row rows[6]; for (int i = 0; i < 5; i++) rows[i].h = h[i]; rows[5].h = 0; PlayersInputHelpers::reposition(x, y, rows); printf("%d %d\n", x, y); for (int i = 0; i < 5; i++) printf("%d %d\n", rows[i].x, rows[i].y); return 0; } return 0; }
     if (const char* pp = getenv("CCR_PLAYERSTEST")) { int h[4] = {0, 1, 0, 1}, l[4] = {0, 0, 0, 0}; if (sscanf(pp, "%d,%d,%d,%d;%d,%d,%d,%d", h, h + 1, h + 2, h + 3, l, l + 1, l + 2, l + 3) >= 4) { std::vector<std::string> lg; PlayersPane::draw(app, h, l, &lg); for (auto& s : lg) printf("%s%c", s.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
