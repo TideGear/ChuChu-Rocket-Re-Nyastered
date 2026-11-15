@@ -398,6 +398,7 @@ struct PuzzleMode : Screen {
         a.entities(sim, prev, running ? alpha : 1.0f);
         if (state == 0) a.cursor(curX, curY, 0, cticks, (sim.coll[curY][curX] & 0xF00) != 0);
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
+        a.blit(a.hdPhud, 0, 85.0f, 190.0f);   // renderHudLeft (0x11e18): image 0x5c frame 0 (Start/Dash, Cancel panel) at layout (+0x64, +0x68) = (85, 190); its glow highlights (image 0x9d frames 4/5/6) and button hit rects are not done yet
         { float x = (float)OX + 40.0f; a.blit(a.hdPhud, 2, x, 690.0f); for (int k = 0; k < 10; k++) { x += 64.0f; a.blit(a.hdPhud, 3, x, 690.0f); } x += 64.0f; a.blit(a.hdPhud, 4, x, 690.0f); }
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
         { static const int ord[4] = {3, 1, 2, 0}; static const int rot16[4] = {4, 12, 0, 8}; float x = (float)OX + 64.0f;
