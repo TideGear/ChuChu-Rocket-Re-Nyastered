@@ -65,3 +65,6 @@ Emscripten 3.1.74 (installed by the user's approval into the git-ignored `local/
 **C. Other versions.** DC (heat map, whole-battle CPU, MANATEE.DRV SFX rate), GBA (battle rules and whole-battle CPU in the ROM harness, score gap), iOS-only differences.
 **D. Content.** Unlockables per version, options + unlock-all, DLC skins/VMU import, PuzzleP stock, all stage sets selectable.
 **E. Audio** trigger logging and quality evidence. **F. Platforms**: GPU 4K/uncapped measurement, 4-player, LAN/online, Android emulator (needs the user's OK to install a system image), WASM PWA. **G. Docs**: matrix, provenance, README.
+
+### Phase A notes (2026-11-14)
+- Puzzle buttons: HD 1.0 `PuzzleGameScreen::handleInput` tests rects 0 (field), 3 (Start/Dash -> flag 1), 0xc, 0xd (flag 0x10), 10/11, 4; no direct `Input::addRect`/`addButtonRect` call with these ids exists in the HD 1.0 decompile, so they are registered through a variable id (loop or table) — find that writer (Input rect table at `DAT_0003bcdc`, 20 bytes per id) before wiring the Start/Dash/Cancel clicks. Until then the puzzle starts with the keyboard (Space) only.
