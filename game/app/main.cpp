@@ -31,7 +31,7 @@ static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
 static const int GW = 1024, GH = 768, OX = 184, OY = 32;
 static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {250, 170, 30, 255}, {240, 60, 60, 255}, {40, 190, 70, 255}};   // player order of the original art (arrow sheet r0645, cursor sheet r0732, rocket sheets r0651/r0663/r0675/r0687): blue, orange, red, green
 
-struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; std::vector<SDL_Point> box; };   // box = frame record shorts 2, 3 (the draw box BHLib_RenderTexture callers use, minus 2)   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
+struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; std::vector<SDL_Point> box; std::vector<SDL_Point> sz; };   // sz = frame record shorts 0, 1 (the size the panel calls use), box = shorts 2, 3   // box = frame record shorts 2, 3 (the draw box BHLib_RenderTexture callers use, minus 2)   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
 
 struct Stages { struct E { Stage st; std::vector<std::array<uint8_t, 3>> sol; char title[33]; int src, idx; }; std::vector<E> list; };
 static bool loadStages(const char* path, Stages& out, int onlySrc) {
@@ -104,7 +104,7 @@ struct App {
         std::vector<float> fl(n * 9); if (fread(fl.data(), 4, fl.size(), f) != fl.size()) { fclose(f); return false; } fclose(f);
         for (uint32_t i = 0; i < n; i++) { const float* e = &fl[i * 9];
             s.fr.push_back({(int)std::lround(e[0] * s.w), (int)std::lround(e[1] * s.h), (int)std::lround((e[2] - e[0]) * s.w), (int)std::lround((e[3] - e[1]) * s.h)});
-            int16_t v[10]; memcpy(v, &e[4], 20); s.off.push_back({v[4], v[5]}); s.box.push_back({v[2], v[3]}); }
+            int16_t v[10]; memcpy(v, &e[4], 20); s.off.push_back({v[4], v[5]}); s.box.push_back({v[2], v[3]}); s.sz.push_back({v[0], v[1]}); }
         return true;
     }
     bool init() {
@@ -831,20 +831,20 @@ struct StageSelectMode : Screen {
         else if (phase == 0x22) { timer += 16384.0; if (timer >= 500000.0) { timer = 500000.0; leave = true; } }
     }
     void origDraw(App& a) {
-        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); preview(a); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); if (!a.uiLog) preview(a); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         static const int tm[48] = {0,1,2,3,4,4,4,4,5,6,7,8,9,10,4,4,11,12,4,4,13,14,4,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,4,4,4,33,34,35,36};   // tilemap resource 0x126 (HD ccrpad rec 880): 8 x 6 tiles of 128 px
         for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.ssBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
         a.rtexBox(a.ssHdr, 0, 208, 50);   // slot 0x454 frame a20 (0 = Puzzle)
-        a.rtex(a.ssPanel, 0, 208, 247, a.ssPanel.fr[0].w, a.ssPanel.fr[0].h); a.rtex(a.ssPanel, 1, 548, 361, a.ssPanel.fr[1].w, a.ssPanel.fr[1].h); a.rtex(a.ssPanel, 2, 508, 351, a.ssPanel.fr[2].w, a.ssPanel.fr[2].h);
+        a.rtex(a.ssPanel, 0, 208, 247, a.ssPanel.sz[0].x, a.ssPanel.sz[0].y); a.rtex(a.ssPanel, 1, 548, 361, a.ssPanel.sz[1].x, a.ssPanel.sz[1].y); a.rtex(a.ssPanel, 2, 508, 351, a.ssPanel.sz[2].x, a.ssPanel.sz[2].y);
         for (int i = 0; i < 25; i++) { Item t = item(a, i); a.rtexBox(a.ssCells, i == sel ? 1 : 0, (float)t.x, (float)t.y);
             char nb[16]; snprintf(nb, sizeof nb, "%d", i + 1); a.printString(nb, (float)(t.x + (a.ssCells.box[0].x) / 2), (float)t.y + 1.0f, 255, 255, 255, 255, 0.45f, 0, false, 1);
             if (a.isCleared(selPage * 25 + i)) a.rtexBox(a.ssCells, 4, (float)(t.x + (a.ssCells.box[0].x - 2) / 2 - (a.ssCells.box[4].x - 2) / 2), (float)(t.y + (a.ssCells.box[0].y - 2) / 2 - (a.ssCells.box[4].y - 2) / 2)); }
         a.rtexBox(a.ssTab, 0, 208, 443); { int l = selPage + 1; a.rtexBox(a.ssTab, l, (float)(208 + (a.ssTab.box[0].x - 2) / 2 - (a.ssTab.box[l].x - 2) / 2), (float)(443 + (a.ssTab.box[0].y - 2) / 2 - (a.ssTab.box[l].y - 2) / 2)); }
         a.rtexBox(a.ssBubble, 0, 548, 292);
         if (const std::string* nm = a.hdString(0x1e8 + sel + selPage * 25)) a.printString(*nm, 682.0f, 299.0f, 0, 0, 0, 255, 0.45f, 0, false, 1);
-        if (a.ssPrev) { SDL_Rect d{564, 367, 234, 188}; SDL_RenderCopy(a.ren, a.ssPrev, nullptr, &d); }
+        if (a.uiLog) a.logRT(564, 367, 234, 188); else if (a.ssPrev) { SDL_Rect d{564, 367, 234, 188}; SDL_RenderCopy(a.ren, a.ssPrev, nullptr, &d); }
         a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
-        if (timer > 0) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(timer / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
+        if (timer > 0) a.fillRect(0, 0, GW, GH, 0, 0, 0, (int)(timer / 500000.0 * 255.0));
     }
     void event(App& a, const SDL_Event& e) override {
         if (orig()) { origEvent(a, e); return; }
@@ -1025,6 +1025,7 @@ int main(int argc, char** argv) {
     };
     if (const char* bt = getenv("CCR_BUBBLE")) {   // development check: CCR_BUBBLE="x,y,w,flags,p6,alpha|text" prints the draw calls of Render::drawBubble (tools/bubble_diff.py compares them with the original)
         int x, y, w, fl, p6, al; int n = 0; if (sscanf(bt, "%d,%d,%d,%d,%d,%d|%n", &x, &y, &w, &fl, &p6, &al, &n) >= 6 && n > 0) { std::vector<std::string> lg; app.bubbleLog = &lg; app.drawBubble(x, y, w, bt + n, fl, p6, al); for (auto& s : lg) printf("%s\n", s.c_str()); } return 0; }
+    if (const char* sst = getenv("CCR_SSTEST")) { int pg, sl; unsigned b0; if (sscanf(sst, "%d,%d,%u", &pg, &sl, &b0) == 3) { std::vector<std::string> lg; app.uiLog = &lg; app.loadProgress(); for (int i = 0; i < 4; i++) app.clr[i] = 0; app.clr[0] = b0; StageSelectMode ss; ss.selPage = pg; ss.sel = sl; ss.phase = 0x21; ss.timer = 0; ss.origDraw(app); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* ht = getenv("CCR_HELPTEST")) { int tp, pg; if (sscanf(ht, "%d,%d", &tp, &pg) == 2) { std::vector<std::string> lg; app.uiLog = &lg; HelpMode hm; hm.phase = 0x15; hm.a20 = 0; if (tp < 0) hm.a34 = -1; else { hm.a34 = 1; hm.topic = tp; hm.page = pg; } hm.draw(app, 0); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jt = getenv("CCR_JUDGET")) { int s[2], r[2], wn[2], rw, df, wp, rc; if (sscanf(jt, "%d,%d;%d,%d;%d,%d;%d,%d,%d,%d", s, s + 1, r, r + 1, wn, wn + 1, &rw, &df, &wp, &rc) == 10) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWinTeam(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
