@@ -59,6 +59,10 @@ class IOSOracle:
                 src += c
                 if c == bytes(1): break
             self.write(r[0], src.ljust(r[2], bytes(1))); ret = r[0]
+        elif name == '_sprintf':
+            fmt = bytearray(); k = 0
+            while self.read(r[1] + k, 1) != bytes(1): fmt.append(self.read(r[1] + k, 1)[0]); k += 1
+            txt = fmt.decode('latin-1').replace('%%', chr(1)).replace('%d', str(s32(r[2]))).replace(chr(1), '%'); self.write(r[0], txt.encode('latin-1') + bytes(1)); ret = len(txt)
         elif name == '_malloc': ret = self.alloc(r[0])
         elif name == '_calloc': ret = self.alloc(r[0] * r[1])
         elif name == '_free': ret = 0

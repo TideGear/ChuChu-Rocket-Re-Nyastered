@@ -64,7 +64,7 @@ struct App {
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -123,7 +123,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -139,9 +139,10 @@ struct App {
         App* a = (App*)ud; int16_t* out = (int16_t*)stream; int n = len / 4; std::fill(out, out + n * 2, (int16_t)0);
         if (a->musOn && a->curTrack >= 0 && !a->songs[a->curTrack].pcm.empty()) {
             Song& sg = a->songs[a->curTrack]; const auto& m = sg.pcm;
-            for (int i = 0; i < n * 2; i++) { if (a->musPos >= sg.loopEnd) { if (!sg.loop) { a->musOn = false; break; } a->musPos = sg.loopStart; } out[i] = (int16_t)(m[a->musPos++] * 0.6f); }
+            for (int i = 0; i < n * 2; i++) { if (a->musPos >= sg.loopEnd) { if (!sg.loop) { a->musOn = false; break; } a->musPos = sg.loopStart; } out[i] = (int16_t)(m[a->musPos++] * ((float)a->musicVol / 255.0f)); }   // AppData::playSong: volume = +0x54 / 255
         }
-        for (auto& v : a->voices) for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (*v.d)[v.pos++]; out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
+        for (auto& v : a->voices) for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (int)((*v.d)[v.pos++] * ((float)a->sfxVol / 255.0f));   // playSFX: +0x58 / 255 (the per-sound base volume of the original is not applied)
+             out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
         a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [](const Voice& v) { return v.pos >= v.d->size(); }), a->voices.end());
     }
     static void toStereo44k(const short* pcm, int frames, int ch, int rate, std::vector<int16_t>& out) {
@@ -234,15 +235,16 @@ struct App {
     // Render::drawFrame type 5 (HD 1.0 0x1a60c): image 0x78 (frame table record 720: 58 px tiles), tile = 58 - 2; n = width / tile pieces centred on x: frames 0, 1..., 2 at y
     // HD 1.0 text (Render::printString 0x1a19c -> BHLib_PrintString 0x9dc0, Latin branch): font 0 = image 0 (texture ccrpad rec 0, frames rec 3, per-glyph advance = rec 874), glyph index = character code
     // Language packs (Latin languages of HD 1.0; locale index of the original: 0 en, 1 fr, 2 it, 3 de, 4 es, 5 ja = no pack in this build): language-pack sheets and the text table (tools/export_hd_locale.py)
-    int lang = 0; std::string retDir;
+    int lang = 0, musicVol = 75, sfxVol = 100; std::string retDir;   // AppData +0x54 / +0x58 (initializeOptionsData: 0x4b and 100), 0..255
     static const char* langDir(int l) { static const char* n[6] = {"en", "fr", "it", "de", "es", "ja"}; return n[l < 0 || l > 5 ? 0 : l]; }
     void freeSheet(Sheet& s) { if (s.tex) SDL_DestroyTexture(s.tex); s = Sheet(); }
     bool langAvailable(int l) { FILE* f = fopen((retDir + "loc_" + langDir(l) + "/hd_text.tsv").c_str(), "rb"); if (f) fclose(f); return f != nullptr; }
     void loadLocale(const std::string& ret) {
         retDir = ret; if (const char* e = getenv("CCR_LANG")) for (int i = 0; i < 6; i++) if (!strcmp(e, langDir(i))) lang = i;
-        if (FILE* f = fopen((root + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; fclose(f); }
+        if (FILE* f = fopen((root + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; unsigned char v[2]; if (fread(v, 1, 2, f) == 2) { musicVol = v[0]; sfxVol = v[1]; } fclose(f); }
         if (!langAvailable(lang)) lang = 0; applyLocale(); }
-    void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); if (FILE* f = fopen((root + "/options.bin").c_str(), "wb")) { unsigned char c = (unsigned char)l; fwrite(&c, 1, 1, f); fclose(f); } }
+    void saveOptions() { if (FILE* f = fopen((root + "/options.bin").c_str(), "wb")) { unsigned char c[3] = {(unsigned char)lang, (unsigned char)std::max(0, std::min(255, musicVol)), (unsigned char)std::max(0, std::min(255, sfxVol))}; fwrite(c, 1, 3, f); fclose(f); } }
+    void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); saveOptions(); }
     void applyLocale() {
         std::string d = retDir + "loc_" + langDir(lang) + "/"; Sheet* sh[5] = {&hdPhud, &hdPause, &ssHdr, &mnDeco, &opHdr}; const char* nm[5] = {"hd_phud5c", "hd_pause79", "hd_ss_hdr", "hd_mn_deco", "hd_op_hdr"};
         for (int i = 0; i < 5; i++) { freeSheet(*sh[i]); loadSheet(d + nm[i], *sh[i]); }
@@ -412,12 +414,22 @@ struct OptionsMode : Screen {
     static constexpr int px[N] = {145, 225, 305, 385, 465, 545, 625}, py[N] = {173, 263, 353, 433, 523, 613, 630};   // table at 0xe786c (initLanguageMenuItems uses its first six rows)
     static bool ok(App& a) { return a.opBg.tex && a.opHdr.tex && a.mnBars.tex && a.mnMasc.tex && a.ssArrows.tex && a.hdFont1.tex; }
     bool shown(int i) const { return sub == 2 ? i < 6 : (i != 3 && i != 6); }   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
-    int back() const { return sub == 2 ? 6 : 7; }
+    int back() const { return sub == 2 ? 6 : sub == 1 ? 2 : 7; }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
+    int drag = -1; static constexpr int SX = 303, SY0 = 245, SPITCH = 45, SW = 234;
+    int sliderX(App& a) { int w = 0; for (int i = 0; i < 2; i++) if (const std::string* s = a.hdString(0x164 + i)) w = std::max(w, a.hdTextWidth(*s, 0, 1.0f)); return SX + w; }   // initSoundMenuItems: item x = 303 + the widest label
     int music() override { return phase == 0x11 ? -1 : 5; }
-    int hitTest(App& a, float lx, float ly) { for (int i = 0; i < N; i++) if (shown(i)) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (px[i] <= lx && lx <= px[i] + w && py[i] <= ly && ly <= py[i] + h) return i; }
-        int bw = a.ssArrows.fr[0].w, bh = a.ssArrows.fr[0].h; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return back(); return -1; }
+    int hitTest(App& a, float lx, float ly) { if (sub == 1) { int sx = sliderX(a); for (int i = 0; i < 2; i++) if (sx <= lx && lx <= sx + SW && SY0 + SPITCH * i <= ly && ly <= SY0 + SPITCH * i + 40) return i; int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 2; return -1; }
+        for (int i = 0; i < N; i++) if (shown(i)) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (px[i] <= lx && lx <= px[i] + w && py[i] <= ly && ly <= py[i] + h) return i; }
+        int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return back(); return -1; }
+    void setVol(App& a, int which, float lx) { int v = (int)((lx - (float)sliderX(a)) * (255.0f / (float)SW)); v = std::max(0, std::min(255, v)); if (which == 0) a.musicVol = v; else a.sfxVol = v; }
     void event(App& a, const SDL_Event& e) override {
+        if (phase == 0x12 && sub == 1 && (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONUP) && drag >= 0) {   // handleInput param_3 == 1 (move) and 2 (release)
+            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, &lx, &ly);
+            if (e.type == SDL_MOUSEMOTION) setVol(a, drag, lx); else { if (drag == 1 && hitTest(a, lx, ly) == 1) a.playSfx(1); a.saveOptions(); drag = -1; } return; }
         if (phase != 0x12 || e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT) return;
+        if (sub == 1) {   // handleInput, state 1 (sounds)
+            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly);
+            if (hit == 0 || hit == 1) { drag = hit; setVol(a, hit, lx); a.saveOptions(); } else if (hit == 2) { a.playSfx(2); sub = 0; sel = 0; } return; }
         float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly); if (hit < 0) return;
         int before = sel; if (hit != back()) sel = hit;
         if (before != hit && hit != back()) { a.playSfx(0); return; }
@@ -426,8 +438,22 @@ struct OptionsMode : Screen {
             if (a.langAvailable(hit)) a.setLanguage(hit); else a.playSfx(0x13);   // HD 1.0 has no Japanese pack
             return; }
         if (hit == back()) { a.playSfx(2); chosen = 7; fade = 0; phase = 0x13; return; }
+        if (hit == 1) { a.playSfx(2); sub = 1; drag = -1; return; }   // Sounds
         if (hit == 2) { a.playSfx(2); sub = 2; sel = a.lang; return; }   // Language
-        a.playSfx(0x13); }   // How to Play, Sounds, Costumes, Credits are not ported yet (docs/roadmap.md)
+        a.playSfx(0x13); }   // How to Play, Costumes, Credits are not ported yet (docs/roadmap.md)
+    // renderSoundMenuItems 0x22dcc (checked against the original with tools/oracle/hd_options_probe.py, tools/options_diff.py); log != nullptr records the calls instead of drawing
+    void drawSounds(App& a, int music, int sfx, int dragState, std::vector<std::string>* log) {
+        auto rt = [&](Sheet& sh, int fr, float x, float y, int w, int h, int srcw) { if (log) { char t[120]; snprintf(t, sizeof t, "RT %.1f %.1f %d %d %.1f", x, y, w, h, fr == 1 && &sh == &a.opSld ? 0.5f : 0.0f); log->push_back(t); return; }
+            SDL_Rect s = sh.fr[fr]; if (srcw >= 0) s.w = srcw; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(a.ren, sh.tex, &s, &d); };
+        const int sx = sliderX(a); int vol[2] = {music, sfx};
+        for (int i = 0; i < 2; i++) rt(a.opSnd, 0, 283, (float)(SY0 + SPITCH * i), 460, 38, -1);
+        for (int i = 0; i < 2; i++) if (const std::string* s = a.hdString(0x164 + i)) { float y = (float)(SY0 + SPITCH * i) + ((float)40 - (float)a.hdFont.box[91].y) * 0.5f;
+            if (log) { char t[200]; snprintf(t, sizeof t, "PS %s %.1f %.1f %.1f %d", s->c_str(), (float)sx, y, 1.0f, 2); log->push_back(t); } else a.printString(*s, (float)sx, y, 255, 255, 255, 255, 1.0f, 2, false); }
+        for (int i = 0; i < 2; i++) { float y = (float)(SY0 + SPITCH * i + 7); int fw = (int)((float)vol[i] / 255.0f * (float)SW); rt(a.opSld, 0, (float)sx, y, SW, 23, -1); rt(a.opSld, 1, (float)sx, y, fw, 23, fw);
+            if (dragState == i) { char tx[16]; snprintf(tx, sizeof tx, "%d%%", (int)((float)vol[i] / 255.0f * 100.0f)); int tw = a.hdTextWidth(tx, 0, 0.5f); float kx = (float)(sx + fw); float rx = kx - (float)tw * 0.5f;
+                if (log) { char t[200]; snprintf(t, sizeof t, "FR %.1f %.1f %.1f %d", rx, y - 16, (float)tw + 2, 16); log->push_back(t); snprintf(t, sizeof t, "PS %s %.1f %.1f %.1f %d", tx, kx + 1, y - 16, 0.5f, 0); log->push_back(t); }
+                else { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 192); SDL_Rect r{(int)rx, (int)(y - 16), tw + 2, 16}; SDL_RenderFillRect(a.ren, &r); a.printString(tx, kx + 1, y - 16, 255, 255, 255, 255, 0.5f, 0, false); } } }
+        rt(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y, -1); }
     void tick(App& a) override {
         if (phase == 0x11) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0x12; } }
         else if (phase == 0x12) { t += 16384.0; if (t >= 166666.671875) { t -= 166666.671875; mascot = (mascot + 1) % 12; } }
@@ -438,11 +464,12 @@ struct OptionsMode : Screen {
         static const int tm[48] = {0,1,2,3,3,3,4,5,6,7,8,3,9,10,11,12,13,14,15,16,17,18,19,3,3,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,3,35,36,37,38,39,3,3};   // tilemap resource 0x125 (HD ccrpad rec 879)
         for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
         a.rtex(a.opHdr, 0, 208, 50, a.opHdr.fr[0].w, a.opHdr.fr[0].h);
+        if (sub == 1) { drawSounds(a, a.musicVol, a.sfxVol, drag, nullptr); if (phase != 0x12) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(fade / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); } return; }
         for (int i = 0; i < N; i++) { if (!shown(i)) continue; int w = a.mnBars.fr[0].w, h = a.mnBars.fr[0].h; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
             if (sub == 2 && i == 5 && a.langJa.tex) { const SDL_Rect& f = a.langJa.fr[0]; const SDL_Point& o = a.langJa.off[0]; a.rtex(a.langJa, 0, (float)(px[i] + w / 2 + o.x), (float)(py[i] + h / 2 + o.y), f.w, f.h); }   // the Japanese label is an image
             else if (const std::string* s = a.hdString(sub == 2 ? 0x1cd + i : key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
             if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); } }
-        a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.fr[0].h), a.ssArrows.fr[0].w, a.ssArrows.fr[0].h);
+        a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
         if (phase != 0x12) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(fade / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
     }
 };
@@ -634,7 +661,7 @@ struct StageSelectMode : Screen {
     int phase = 0x20, selPage = 0, sel = 0, lastItem = 0, chosen = 0, prevKey = -1; double timer = 500000.0; bool leave = false, leaveBack = false;
     bool orig() { return gApp && gApp->stageSet == 0 && gApp->ssBg.tex && gApp->ssCells.tex && gApp->hdFont1.tex && gApp->ssArrows.tex && gApp->ssPanel.tex && gApp->ssTab.tex && gApp->ssHdr.tex && gApp->ssBubble.tex && stages.list.size() >= 100; }
     struct Item { int x, y, w, h; };
-    Item item(App& a, int i) { if (i < 25) return {228 + 54 * (i % 5), 259 + 34 * (i / 5), 46, 30}; if (i == 25) return {208, 444, 40, 40}; if (i == 26) return {468, 444, 40, 40}; return {0, 768 - a.ssArrows.fr[0].h, a.ssArrows.fr[0].w, a.ssArrows.fr[0].h}; }   // MenuItems 0..0x1b from StageSelectScreen::init
+    Item item(App& a, int i) { if (i < 25) return {228 + 54 * (i % 5), 259 + 34 * (i / 5), 46, 30}; if (i == 25) return {208, 444, 40, 40}; if (i == 26) return {468, 444, 40, 40}; return {0, 768 - a.ssArrows.box[0].y, a.ssArrows.box[0].x, a.ssArrows.box[0].y}; }   // MenuItems 0..0x1b from StageSelectScreen::init
     void preview(App& a) {   // Render::createPlayfieldPreview(3, stage, 0x94): the field (floor colour (stage / 25 & 3) + 2, wall colour 2) at (32, 32) in an 832 x 640 texture
         int s = selPage * 25 + sel; if (s == prevKey && a.ssPrev) return; prevKey = s;
         if (!a.ssPrev) { a.ssPrev = SDL_CreateTexture(a.ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, 832, 640); SDL_SetTextureBlendMode(a.ssPrev, SDL_BLENDMODE_BLEND); }
@@ -670,7 +697,7 @@ struct StageSelectMode : Screen {
         a.rtexBox(a.ssBubble, 0, 548, 292);
         if (const std::string* nm = a.hdString(0x1e8 + sel + selPage * 25)) a.printString(*nm, 682.0f, 299.0f, 0, 0, 0, 255, 0.45f, 0, false, 1);
         if (a.ssPrev) { SDL_Rect d{564, 367, 234, 188}; SDL_RenderCopy(a.ren, a.ssPrev, nullptr, &d); }
-        a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.fr[0].h), a.ssArrows.fr[0].w, a.ssArrows.fr[0].h);
+        a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
         if (timer > 0) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(timer / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); }
     }
     void event(App& a, const SDL_Event& e) override {
@@ -809,6 +836,7 @@ int main(int argc, char** argv) {
     };
     if (const char* bt = getenv("CCR_BUBBLE")) {   // development check: CCR_BUBBLE="x,y,w,flags,p6,alpha|text" prints the draw calls of Render::drawBubble (tools/bubble_diff.py compares them with the original)
         int x, y, w, fl, p6, al; int n = 0; if (sscanf(bt, "%d,%d,%d,%d,%d,%d|%n", &x, &y, &w, &fl, &p6, &al, &n) >= 6 && n > 0) { std::vector<std::string> lg; app.bubbleLog = &lg; app.drawBubble(x, y, w, bt + n, fl, p6, al); for (auto& s : lg) printf("%s\n", s.c_str()); } return 0; }
+    if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
     if (!enter(start)) return 2;
     const double dt = 1.0 / 60.0; double acc = 0;
     if (const char* shot = getenv("CCR_SHOT")) {
