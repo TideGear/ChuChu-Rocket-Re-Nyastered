@@ -64,7 +64,7 @@ struct App {
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
@@ -123,7 +123,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_hlp_hdr", hlHdr); loadSheet(ret + "hd_hlp_tab", hlTab); loadSheet(ret + "hd_hlp_frm", hlFrm); loadSheet(ret + "hd_hlp_dia", hlDia); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_hlp_hdr", hlHdr); loadSheet(ret + "hd_hlp_tab", hlTab); loadSheet(ret + "hd_hlp_frm", hlFrm); loadSheet(ret + "hd_hlp_dia", hlDia); loadSheet(ret + "img/hd_35", plPanels); loadSheet(ret + "img/hd_36", plLabels); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
@@ -548,6 +548,27 @@ struct HelpMode : Screen {
             if (const std::string* f = a.hdString(0x17f)) { char tx[128]; snprintf(tx, sizeof tx, f->c_str(), page + 1, pagesN[topic]); a.printString(tx, 512, 735, 16, 16, 112, 255, 0.4f, 0, false, 1); } }
         a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
         if (!(phase == 0x15 && a34 == 1)) a.fillRect(0, 0, GW, GH, 0, 0, 0, (int)(a20 / 500000.0 * 255.0));
+    }
+};
+
+// ---------------------------------------------------------------- battle setup, players pane (HD 1.0 PlayerSelectScreen::renderPlayersPane 0x33514). Verified draw calls: panels, slot labels, player and CPU level texts.
+// Not ported yet (listed in docs/roadmap.md): the two bottom sheets, the Host / Join network buttons, the back button and the second corner button.
+struct PlayersPane {
+    // human[p] 1 = human, 0 = CPU; level[p] = CPU level index (0 Weak .. 3 Strong), shown as 'Weak' text in the level tag
+    static void draw(App& a, const int human[4], const int level[4], std::vector<std::string>* log) {
+        auto rt = [&](Sheet& sh, int sx, int sy, int sw, int sh_, float x, float y, int w, int h) {
+            if (log) { char t[120]; snprintf(t, sizeof t, "RT %.1f %.1f %d %d %d %d %d %d", x, y, w, h, sx, sy, sw, sh_); log->push_back(t); return; }
+            if (!sh.tex) return; SDL_Rect s{sx, sy, sw, sh_}; SDL_Rect d{(int)x, (int)y, w, h}; SDL_RenderCopy(a.ren, sh.tex, &s, &d); };
+        auto txt = [&](const std::string& s, float x, float y, float sc) {
+            if (log) { char t[200]; snprintf(t, sizeof t, "PS %s %.1f %.1f %.3f 0", s.c_str(), x, y, sc); log->push_back(t); return; }
+            a.printString(s, x, y, 255, 255, 255, 255, sc, 0, false, 0); };
+        for (int p = 0; p < 4; p++) rt(a.plPanels, 148 * p, 0, 148, 311, 15.0f + 153.0f * p, 50.0f, 148, 311);   // panels: sheet 35 frame strip, u = p / 4
+        for (int p = 0; p < 4; p++) { float sx = 31.0f + 153.0f * p;   // slot labels (sheet 36): 'Human' row at y 81 (lit when human), 'Computer' row at y 125
+            rt(a.plLabels, 107, human[p] ? 33 : 0, 105, 33, sx, 81.0f, 105, 33); rt(a.plLabels, 107, human[p] ? 0 : 33, 105, 33, sx, 125.0f, 105, 33); }
+        for (int p = 0; p < 4; p++) { float sx = 31.0f + 153.0f * p; txt("Human", sx + 52.0f, 88.7f, 0.5f); txt("Computer", sx + 52.0f, 132.7f, 0.5f); }
+        for (int p = 0; p < 4; p++) {   // level tags: 106 x 31 at y 151 (lit state not traced: drawn at the default frame)
+            float sx = 37.0f + 153.0f * p; rt(a.plLabels, 107, 66, 106, 31, sx, 151.0f, 106, 31);
+            /* level text: source not yet traced (the text 'Weak' is not in the en table keys 0x185..0x18e) */ }
     }
 };
 
@@ -1030,6 +1051,7 @@ int main(int argc, char** argv) {
     if (const char* jt = getenv("CCR_JUDGET")) { int s[2], r[2], wn[2], rw, df, wp, rc; if (sscanf(jt, "%d,%d;%d,%d;%d,%d;%d,%d,%d,%d", s, s + 1, r, r + 1, wn, wn + 1, &rw, &df, &wp, &rc) == 10) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWinTeam(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
+    if (const char* pp = getenv("CCR_PLAYERSTEST")) { int h[4] = {0, 1, 0, 1}, l[4] = {0, 0, 0, 0}; if (sscanf(pp, "%d,%d,%d,%d", h, h + 1, h + 2, h + 3) == 4) { std::vector<std::string> lg; PlayersPane::draw(app, h, l, &lg); for (auto& s : lg) printf("%s%c", s.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
     if (!enter(start)) return 2;
     const double dt = 1.0 / 60.0; double acc = 0;
