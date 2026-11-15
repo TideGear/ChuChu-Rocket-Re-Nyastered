@@ -347,6 +347,26 @@ struct App {
         float ft = (float)t; float y = 350.0f + ft * -0.21f;
         drawImage(109, 1, 570.0f + ft * -3.67f, y, 0, ft * 0.04f, 255);
         drawImage(95, (n / 10) % 10, 630.0f + ft * 0.33f, y, 0, ft * 0.08f, 255); drawImage(95, n % 10, 630.0f + ft * 2.4f, y, 0, ft * 0.08f, 255); }
+    // iPad layout struct of HD 1.0 (device layout selected in Core::settingsInit; local/cache/assets/hd10_layout.bin, 0x700 bytes)
+    std::vector<uint8_t> lay; bool layLoaded = false;
+    float layF(int off) { if (!layLoaded) { layLoaded = true; if (FILE* f = fopen((root + "/hd10_layout.bin").c_str(), "rb")) { lay.resize(0x700); size_t n = fread(lay.data(), 1, lay.size(), f); lay.resize(n); fclose(f); } } float v = 0; if (off + 4 <= (int)lay.size()) memcpy(&v, &lay[off], 4); return v; }
+    // JudgeWinPriority (HD 1.0 0x1c99c): the round / match result screen; scores, dense ranks (0 = best), wins shown (already minus the win of this round while it is being awarded), win point target, reach mask
+    // checked against the original with tools/oracle/hd_judge_probe.py (tools/judge_diff.py)
+    void judgeWin(const int score[4], const int rank[4], const int wins[4], int roundWinner, int drawFlag, int wp, int reach) {
+        int cnt = (1 - rank[0] < 0 ? 0 : 1 - rank[0]) + (rank[1] == 0) + (rank[2] == 0) + (rank[3] == 0); int w = rank[3] == 0 ? 3 : rank[2] == 0 ? 2 : rank[1] == 0 ? 1 : 0;   // the (last) player with rank 0
+        if (cnt == 1) { drawImage(0x87, 4, layF(0x148), layF(0x14c), 0, layF(0x144), 255); drawImage(0x87, w, layF(0x150), layF(0x154), 0, layF(0x144), 255); drawImage(0x88, 0, layF(0x158), layF(0x15c), 0, 1.0f, 255); drawImage(0x62, w, layF(0x160), layF(0x164), 0, 2.0f, 0xde); }
+        else drawImage(0x89, 0, layF(0x10c), layF(0x110), 0, 1.0f, 255);
+        for (int k = 0; k < 4; k++) drawImage(0x6a, 2 * k, layF(0x104) + (float)k * layF(0x108), layF(0xfc), 0, 1.0f, 255);
+        for (int k = 0; k < 4; k++) drawImage(0x6a, 2 * k + 1, layF(0x104) + (float)k * layF(0x108), layF(0x100), 0, 1.0f, 255);
+        float yd = (float)(int)layF(0x184);
+        for (int p = 0; p < 4; p++) { int sc = score[p]; float x = (float)(int)((float)p * layF(0x18c) + layF(0x188)); drawImage(0x5f, (sc / 100) % 10, x, yd, 0, layF(0x194), 255); x = (float)(int)(x + layF(0x190)); drawImage(0x5f, (sc / 10) % 10, x, yd, 0, layF(0x194), 255); x = (float)(int)(x + layF(0x190)); drawImage(0x5f, sc % 10, x, yd, 0, layF(0x194), 255); }
+        for (int p = 0; p < 4; p++) { float x = layF(0x104) + (float)p * layF(0x108), y = layF(0xfc);
+            drawImage(0x6a, p * 2, x, y, 0, 1.0f, 255);
+            int shown = wins[p];
+            if (p == roundWinner && drawFlag != 1) shown--;   // [0x2596c4 + 0x28] != 1: the round's win is not counted yet (flag [0x28] set when the round was a draw)
+            int lit = shown < 0 ? 0 : shown;
+            for (int k = 0; k <= wp; k++) drawImage(0x5d, p, x + layF(0x19c + wp * 0x14 + 4 * k), y + layF(0x198), 0, 1.0f, lit <= k ? 0x22 : 0xff);
+            if ((reach >> p) & 1) drawImage(0x91, 0, x + layF(0x200), y + layF(0x204), 0, 1.0f, 255); } }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
     void cursor(int cx, int cy, int player, int ticks, bool bracket) {
         int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
@@ -896,6 +916,7 @@ int main(int argc, char** argv) {
     };
     if (const char* bt = getenv("CCR_BUBBLE")) {   // development check: CCR_BUBBLE="x,y,w,flags,p6,alpha|text" prints the draw calls of Render::drawBubble (tools/bubble_diff.py compares them with the original)
         int x, y, w, fl, p6, al; int n = 0; if (sscanf(bt, "%d,%d,%d,%d,%d,%d|%n", &x, &y, &w, &fl, &p6, &al, &n) >= 6 && n > 0) { std::vector<std::string> lg; app.bubbleLog = &lg; app.drawBubble(x, y, w, bt + n, fl, p6, al); for (auto& s : lg) printf("%s\n", s.c_str()); } return 0; }
+    if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
     if (!enter(start)) return 2;
