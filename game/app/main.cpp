@@ -1104,6 +1104,46 @@ struct SettingsPaneItems {
 };
 
 // ---------------------------------------------------------------- settings pane: CPU level list rows (HD 1.0 renderSettingsPane 0x2fa70, default scroll 0 = pane +0xab0): 'Level 1'..'Level 24' then 'Random'; text x 61, scale 0.75, y = 115 + 24 k (+ the scroll offset); 'Random' at y 691
+struct LocalPlayersPaneInput {
+    PlayersInputLogic controls;
+    std::array<int, 4> levels{};
+
+    LocalPlayersPaneInput() {
+        controls.a7c = 1;
+        controls.d3c = controls.d40 = controls.d44 = 1;
+    }
+
+    void touch(int x, int y, int phase) {
+        controls.sfx.clear();
+        controls.openSettings = false;
+        controls.gameState38 = false;
+        if (phase != 0) return;
+        controls.a3c = 0;
+        using Rect = SettingsPaneItems::PaneRect;
+        if (controls.d58 != -1) {
+            Rect rows[6];
+            for (int row = 0; row < 6; ++row)
+                rows[row] = {244 + 151 * controls.d58, 314 + 28 * row, 104, 28};
+            int row = SettingsPaneItems::hit(rows, 6, x, y);
+            if (row >= 0) {
+                levels[controls.d58] = row;
+                controls.d58 = -1;
+                controls.play(1);
+                return;
+            }
+        }
+        // HD 1.0 initPlayersPaneMenuItems. The two connection overlays
+        // (items 10 and 11) are disabled in the local pane.
+        constexpr Rect items[] = {
+            {234, 219, 103, 31}, {234, 278, 103, 31}, {385, 219, 103, 31}, {385, 278, 103, 31},
+            {536, 219, 103, 31}, {536, 278, 103, 31}, {687, 219, 103, 31}, {687, 278, 103, 31},
+            {84, 560, 306, 60}, {634, 560, 306, 60}, {0, 0, -1, -1}, {0, 0, -1, -1},
+            {208, 50, 608, 56}, {0, 711, 57, 57}, {967, 711, 57, 57},
+        };
+        controls.press(SettingsPaneItems::hit(items, 15, x, y));
+    }
+};
+
 struct SettingsLevelList {
     struct Row { std::string text; float x, y, scale; };
     static void rows(float scroll, std::vector<Row>& out) {
@@ -1797,6 +1837,19 @@ int main(int argc, char** argv) {
         float dt = k == 0 ? 1.0f : 1.0f / 60.0f, f0 = k == 0 ? (st == 0x26 ? 499999.5f : 0.0f) : 0.5f; std::string ops; float fade = f0; int req = playersFlowStep(st, tim, a3c, a40, net, split, dt, fade, ops);
         printf("%#x t%d a3c%d a40=%d net%d split%d dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f%c", st, tim, a3c, a40, net, split, dt, f0, req, ops.c_str(), fade, 10); idx++; } return 0; }
     if (const char* pin = getenv("CCR_PLAYIN")) { PlayersInputLogic pil; for (int i = 0; i < 14; i++) { pil.sfx.clear(); pil.press(i); printf("%d d3c=%d d40=%d d44=%d d58=%d a40=%d a3c=%d a38=%d d20=%d\n", i, pil.d3c, pil.d40, pil.d44, pil.d58, pil.a40, pil.a3c, pil.a38, pil.d20); } return 0; }
+    if (getenv("CCR_PAD_PLAYERS_INPUT")) {
+        LocalPlayersPaneInput input;
+        int x, y, phase;
+        while (scanf("%d %d %d", &x, &y, &phase) == 3) {
+            input.touch(x, y, phase);
+            const auto& p = input.controls;
+            printf("%d %d %d %d %d %d %d %d %d %d", p.d3c, p.d40, p.d44, p.d58, p.a40,
+                   input.levels[1], input.levels[2], input.levels[3], p.openSettings, p.gameState38);
+            for (int sound : p.sfx) printf(" %d", sound);
+            puts("");
+        }
+        return 0;
+    }
     if (getenv("CCR_PLAY_SETTINGS")) {
         for (int connections : {0, 1})
             for (int host : {0, 1})
