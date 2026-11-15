@@ -7,6 +7,7 @@
 #include "../core/battle.hpp"
 #include "../core/angle.hpp"
 #include "battle_preview.hpp"
+#include "roulette_pose.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -1828,6 +1829,18 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 }
 
 int main(int argc, char** argv) {
+    if (getenv("CCR_ROULETTE_POSE_TRACE")) {
+        int rocketX, rocketY, outcome;
+        while (scanf("%d %d %d", &rocketX, &rocketY, &outcome) == 3) {
+            if (rocketX < 0 || rocketX >= kCols || rocketY < 0 || rocketY >= kRows ||
+                outcome < 0 || outcome >= 8) return 1;
+            for (int tick = 0; tick < 120; ++tick) {
+                const auto pose = battleRoulettePose(tick, rocketX, rocketY, outcome, OX, OY, CELL / kCell);
+                printf("%a %a %a %a\n", pose.x, pose.y, pose.degrees, pose.scale);
+            }
+        }
+        return 0;
+    }
     if (getenv("CCR_PSTEST23")) {
         PlayersTextureLoad load;
         int width, count;
