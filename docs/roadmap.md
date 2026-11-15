@@ -91,3 +91,6 @@ Open, with the sizes of the original code (all HD 1.0 addresses):
 - Render (0x21c20, 2.4 KB): a GL scissor window of the carousel, a lit preview (`bindTextureSpace` of the character's frame table at +0xa88 + 4 * skin, frame `scrollIndex`, scale 0.5 / 1.0), the selected name in font 0 scale 0.45 (+0xa70 scale), two alpha fills (0x80) at the carousel edges.
 - Input: `handleInput` sub-state 4 (0x2497c area): a drag scrolls the carousel (sound 1 when settled on a costume), a tap on an available costume sets +0xa44 and AppData +0x4f (saves options, sound 2), a locked one plays sound 0x13.
 - Not yet read: the GL draw (`_glScissor`, `_glPushMatrix`) is a 3D scissor not a texture blit; the skin textures per costume (which records); what `loadBattleGraphics` does with +0x4f (the cat / mouse graphics that change). These decide the port's effort; they belong to phase D (content).
+
+## Battle setup, players pane (started 2026-11-14)
+- `tools/oracle/hd_players_probe.py` runs `renderPlayersPane` (0x33514) under Unicorn with the generic screen environment. It draws the first items (the 4 large panels at x = 15 / 168 / 321 / 474, y = 50, 148 x 311, the 105 x 33 labels) and then faults on an unmapped read: the pane's menu lists are not initialised. Next step: run `initPlayersPaneMenuItems` (0x32194) and the pane's data setup first, then diff the render with the port.
