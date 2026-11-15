@@ -246,6 +246,7 @@ struct App {
     void saveOptions() { if (FILE* f = fopen((root + "/options.bin").c_str(), "wb")) { unsigned char c[3] = {(unsigned char)lang, (unsigned char)std::max(0, std::min(255, musicVol)), (unsigned char)std::max(0, std::min(255, sfxVol))}; fwrite(c, 1, 3, f); fclose(f); } }
     void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); saveOptions(); }
     void applyLocale() {
+        dropImages();
         std::string d = retDir + "loc_" + langDir(lang) + "/"; Sheet* sh[5] = {&hdPhud, &hdPause, &ssHdr, &mnDeco, &opHdr}; const char* nm[5] = {"hd_phud5c", "hd_pause79", "hd_ss_hdr", "hd_mn_deco", "hd_op_hdr"};
         for (int i = 0; i < 5; i++) { freeSheet(*sh[i]); loadSheet(d + nm[i], *sh[i]); }
         hdText.clear(); FILE* g = fopen((d + "hd_text.tsv").c_str(), "rb"); if (!g) return; std::string all; char bb[4096]; size_t n; while ((n = fread(bb, 1, sizeof bb, g)) > 0) all.append(bb, n); fclose(g);
@@ -326,6 +327,26 @@ struct App {
             ty += s22; }
         if (f & 1) { int lr = (f & 4) ? 2 : 0; int s10 = (f & 4) ? (int)(-tailW) : 0; if (mode58) s10 = (int)((float)s10 - tailW); imgDraw(11, p6, (float)s10 + s30, s28 + 0.0f, lr, tailScale, alpha); }
         else { int lr = (f & 4) ? 2 : 0; int hx = (int)(tailW * 0.5f); float tx = (float)((f & 4) ? -hx : hx) + s30; float tyy = (float)(int)(tailH * 0.5f) + s28; imgDraw(0x9c, 8, tx, tyy, lr, tailScale, alpha); } }
+    // ---- Render::drawImage(id, frame, x, y, flags, scale, alpha) for any HD image id (tools/export_hd_images.py): the frame is drawn centred on its anchor (+ record offsets) at frame size * scale; flags 2 / 4 mirror
+    std::map<int, Sheet> imgCache; std::vector<std::string>* imgLog = nullptr;
+    Sheet* imgSheet(int id) { auto it = imgCache.find(id); if (it != imgCache.end()) return it->second.tex ? &it->second : nullptr; Sheet& s = imgCache[id];
+        if (!loadSheet(retDir + "img/hd_" + std::to_string(id), s)) { freeSheet(s); loadSheet(retDir + "loc_" + langDir(lang) + "/img_" + std::to_string(id), s); } return s.tex ? &s : nullptr; }
+    void dropImages() { for (auto& kv : imgCache) freeSheet(kv.second); imgCache.clear(); }
+    void drawImage(int id, int frame, float x, float y, int flags, float scale, int alpha) {
+        if (imgLog) { char t[160]; snprintf(t, sizeof t, "drawImage %d %d %.2f %.2f %d %.3f %d", id, frame, x, y, flags, scale, alpha); imgLog->push_back(t); return; }
+        Sheet* sh = imgSheet(id); if (!sh || frame < 0 || frame >= (int)sh->fr.size()) return; const SDL_Rect& fr = sh->fr[frame]; const SDL_Point& of = sh->off[frame];
+        SDL_Rect dst{(int)std::lround(x + of.x * scale), (int)std::lround(y + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)};
+        SDL_SetTextureAlphaMod(sh->tex, (Uint8)alpha); SDL_RenderCopyEx(ren, sh->tex, &fr, &dst, 0.0, nullptr, (SDL_RendererFlip)((flags & 2 ? SDL_FLIP_HORIZONTAL : 0) | (flags & 4 ? SDL_FLIP_VERTICAL : 0))); SDL_SetTextureAlphaMod(sh->tex, 255); }
+    // Battle banner tasks (HD 1.0 BattleCountDrawPriority 0x1f580 and RoundCountDrawPriority 0x205fc; checked against the original with tools/oracle/hd_task_probe.py)
+    static int countLife(int m) { return m > 5 ? 45 : (m <= 2 ? 60 : 120); }
+    void battleCount(int m, int t) {
+        static const int tab[7][2] = {{107, 0}, {107, 1}, {107, 2}, {108, 2}, {108, 0}, {108, 1}, {109, 0}};   // table at 0xe76a4 (image id, frame); modes 0..2 = the big 3-2-1 digits, 3..5 = 30 seconds / 1 minute / 2 minutes left, 6 = Round START
+        float base = m > 5 ? (float)t * 0.09f : (m <= 2 ? 8.0f + (float)t * -0.13f : 4.0f + (float)t * -0.033f);
+        drawImage(tab[m][0], tab[m][1], 600.0f, 350.0f, 0, base * 2.0f, 255); }
+    void roundPanel(int n, int t) {   // RoundCountDrawPriority: the "Round" label and the two digits of the round number, moving and growing for 75 ticks
+        float ft = (float)t; float y = 350.0f + ft * -0.21f;
+        drawImage(109, 1, 570.0f + ft * -3.67f, y, 0, ft * 0.04f, 255);
+        drawImage(95, (n / 10) % 10, 630.0f + ft * 0.33f, y, 0, ft * 0.08f, 255); drawImage(95, n % 10, 630.0f + ft * 2.4f, y, 0, ft * 0.08f, 255); }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
     void cursor(int cx, int cy, int player, int ticks, bool bracket) {
         int ang = (player << 14) + 0x1000 * ticks; float ax = (cx + 0.5f) * CELL, ay = (cy + 0.5f) * CELL;
@@ -762,8 +783,10 @@ struct StageSelectMode : Screen {
 struct BattleMode : Screen {
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
     // 4-player local input: mouse = player 1; keyboard sets WASD+Q (P1), IJKL+U (P2), keypad 8456+0 (P3); gamepads in connection order (D-pad moves the cursor, DC buttons Y/A/X/B place up/down/left/right)
+    // FourBattleLoop (HD 1.0 0x1c2b8) mode 1: a 120-tick intro (the round panel from tick 1 for 75 ticks, the Round START banner at tick 90 for 45 ticks), then play starts
+    int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners; int lastLeftSec = -1;
     DragGesture drag; int lastCatSfx = -100; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
-    void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
+    void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
     void moveCur(int p, int dx, int dy) { curX[p] = std::max(0, std::min(11, curX[p] + dx)); curY[p] = std::max(0, std::min(8, curY[p] + dy)); }
     bool keyPlayer(SDL_Keycode k) {   // keyboard = player 1: arrows move the cursor, W/A/S/D place up/left/down/right (the Dreamcast face buttons Y/X/A/B); the mouse is player 1 too (drag gesture)
         if (lv[0] >= 0) return false;
@@ -785,7 +808,7 @@ struct BattleMode : Screen {
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
         restart(); return true;
     }
-    void restart() { game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
+    void restart() { intro = 0; banners.clear(); lastLeftSec = -1; game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
@@ -799,7 +822,11 @@ struct BattleMode : Screen {
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e);
         else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (d >= 0) place(0, cx, cy, d); }   // no drag = no arrow (Input::getArrowType returns 0)
     }
-    void tick(App& a) override { if (paused) return; for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } game.tick(); a.stepAngles(game.sim); }
+    void tick(App& a) override { if (paused) return;
+        for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
+        if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
+        { int left = game.roundFrames - game.clock; if (left >= 0 && left % 60 == 0 && left != lastLeftSec) { lastLeftSec = left; int sec = left / 60; int m = sec == 3 ? 2 : sec == 2 ? 1 : sec == 1 ? 0 : sec == 30 ? 3 : sec == 60 ? 4 : sec == 120 ? 5 : -1; if (m >= 0) banners.push_back({0, m, 0, App::countLife(m)}); } }   // FB_Exe_GAME: BCD 0x300 / 0x200 / 0x100, 0x3000, 0x10000, 0x20000
+        for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } game.tick(); a.stepAngles(game.sim); }
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren); { SDL_Rect vp{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp); }
@@ -831,6 +858,7 @@ struct BattleMode : Screen {
           const float y = 84.0f; float x = 78.0f; const float step = 14.0f;
           a.blit(a.hdTime, mm % 10, x, y, 0.8f); a.blit(a.hdTime, 10, x + step, y, 0.8f); float x2 = x + step + (float)((int)step / 2); a.blit(a.hdTime, ss / 10, x2, y, 0.8f); a.blit(a.hdTime, ss % 10, x2 + step, y, 0.8f);
           SDL_Rect vp3{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp3); }
+        SDL_RenderSetViewport(a.ren, nullptr); for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // banner tasks drawn over the HUD
         SDL_RenderSetViewport(a.ren, nullptr);
     }
 };
@@ -868,6 +896,7 @@ int main(int argc, char** argv) {
     };
     if (const char* bt = getenv("CCR_BUBBLE")) {   // development check: CCR_BUBBLE="x,y,w,flags,p6,alpha|text" prints the draw calls of Render::drawBubble (tools/bubble_diff.py compares them with the original)
         int x, y, w, fl, p6, al; int n = 0; if (sscanf(bt, "%d,%d,%d,%d,%d,%d|%n", &x, &y, &w, &fl, &p6, &al, &n) >= 6 && n > 0) { std::vector<std::string> lg; app.bubbleLog = &lg; app.drawBubble(x, y, w, bt + n, fl, p6, al); for (auto& s : lg) printf("%s\n", s.c_str()); } return 0; }
+    if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
     if (!enter(start)) return 2;
     const double dt = 1.0 / 60.0; double acc = 0;
