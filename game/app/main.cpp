@@ -119,6 +119,7 @@ struct App {
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
         gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); }
+        loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
         { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); dpressOk = loadSheet(ret2 + "dpress", dpress); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
@@ -495,6 +496,11 @@ struct BattleMode : Screen {
         for (int p = 0; p < 4; p++) { int v = std::min(game.score.player[p], 999); int dg[3] = {v / 100 % 10, v / 10 % 10, v % 10};
             for (int k = 0; k < 3; k++) a.blit(a.digits, dg[k] == 1 ? 1 : dg[k] == 0 ? 0 : dg[k], 250.0f + 192 * p + 30 * k, 691.0f); }
         SDL_Rect vp2{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp2);
+        { SDL_RenderSetViewport(a.ren, nullptr);   // rank crowns (HD 1.0 RankCrawnDrawPriority 0x209ac, free-for-all): shown while (task counter & 31) > 10 and the score total is non-zero;
+          // image 0x5e frame = rank at (+0x6c + 192 p, +0x70) = (324 + 192 p, 644) (+0x74/+0x78 step). The task counter is taken as the battle frame count (the task starts with the battle).
+          int tot = 0; for (int p = 0; p < 4; p++) tot += game.score.player[p];
+          if ((game.frame & 31) > 10 && tot != 0) for (int p = 0; p < 4; p++) a.blit(a.crowns, game.rankOf(p), 324.0f + 192.0f * p, 644.0f);
+          SDL_Rect vp4{OX, OY, GW - OX, GH - OY}; SDL_RenderSetViewport(a.ren, &vp4); }
         { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
           int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock); int secs = (left + 59) / 60; int mm = secs / 60, ss = secs % 60;
