@@ -553,6 +553,22 @@ struct HelpMode : Screen {
 
 // ---------------------------------------------------------------- battle setup, players pane (HD 1.0 PlayerSelectScreen::renderPlayersPane 0x33514). Verified draw calls: panels, slot labels, player and CPU level texts.
 // Not ported yet (listed in docs/roadmap.md): the two bottom sheets, the Host / Join network buttons, the back button and the second corner button.
+// PlayerSelectScreen::process, states 0x26 / 0x27 (HD 1.0 0x34de4; ground truth tools/oracle/players_state_probe.py, read in docs/roadmap.md 2026-11-14).
+// 0x26: the fade timer +0xa38 grows by dt; at >= 500000 it clamps and, when +0xa3c is set, requests Menu (4).
+// 0x27: acts only when (state timer & 7) > 4. Network flag: precalc(a40 == 1, 7) and screen 0x11.
+// Local: split flag +0xa7d gives remove(0x63) / put(0x64, 1); a40 == 1 -> screen 0x13 (split 0x14), else 0xf (split 0x10); precalc(a40 == 1, 7).
+static int playersFlowStep(int st, int tim, int a3c, int a40, int net, int split, float dt, float& fade, std::string& ops) {
+    ops.clear(); char b[64];
+    auto add = [&](const char* t) { if (!ops.empty()) ops += ';'; ops += t; };
+    if (st == 0x26) { fade = fade + dt; if (!(fade >= 500000.0f)) return 0; fade = 500000.0f; return a3c == 0 ? 0 : 4; }
+    if (st != 0x27 || (tim & 7) <= 4) return 0;
+    snprintf(b, sizeof b, "precalc(%d,7)", a40 == 1 ? 1 : 0);
+    if (net) { add(b); return 0x11; }
+    if (split) { add("remove(99,0)"); add("put(100,1)"); }
+    add(b);
+    if (a40 == 1) return split ? 0x14 : 0x13;
+    return split ? 0x10 : 0xf;
+}
 struct PlayersPane {
     // human[p] 1 = human, 0 = CPU; level[p] = CPU level index (0 Weak .. 3 Strong), shown as 'Weak' text in the level tag
     static void draw(App& a, const int human[4], const int level[4], std::vector<std::string>* log) {
@@ -1143,6 +1159,9 @@ int main(int argc, char** argv) {
     if (getenv("CCR_PANELS")) { SettingsListPanels::Draw d[4]; SettingsListPanels::draws(d); for (int i = 0; i < 4; i++) printf("%d %d %d %d %d %d %d %d\n", d[i].sx, d[i].sy, d[i].sw, d[i].sh, d[i].x, d[i].y, d[i].w, d[i].h); return 0; }
     if (getenv("CCR_LEVELROWS")) { std::vector<SettingsLevelList::Row> rw; SettingsLevelList::rows(0.0f, rw); for (auto& r : rw) printf("PS %s %.1f %.1f %.3f\n", r.text.c_str(), r.x, r.y, r.scale); return 0; }
     if (getenv("CCR_SETTINGSRECTS")) { SettingsPaneItems::PaneRect r[10]; SettingsPaneItems::layout(r); for (int i = 0; i < 10; i++) printf("%d %d %d %d %d\n", i, r[i].x, r[i].y, r[i].w, r[i].h); return 0; }
+    if (getenv("CCR_PSTEST")) { int idx = 0; for (int st : {0x26, 0x27}) for (int tim : {3, 5}) for (int a3c : {0, 1}) for (int a40 : {0, 1, 2}) for (int net : {0, 1}) for (int split : {0, 1}) for (int k = 0; k < 2; k++) {
+        float dt = k == 0 ? 1.0f : 1.0f / 60.0f, f0 = k == 0 ? (st == 0x26 ? 499999.5f : 0.0f) : 0.5f; std::string ops; float fade = f0; int req = playersFlowStep(st, tim, a3c, a40, net, split, dt, fade, ops);
+        printf("%#x t%d a3c%d a40=%d net%d split%d dt%.4f fade%.1f -> req=%d ops=[%s] fade=%.4f%c", st, tim, a3c, a40, net, split, dt, f0, req, ops.c_str(), fade, 10); idx++; } return 0; }
     if (const char* pin = getenv("CCR_PLAYIN")) { PlayersInputLogic pil; for (int i = 0; i < 14; i++) { pil.sfx.clear(); pil.press(i); printf("%d d3c=%d d40=%d d44=%d d58=%d a40=%d a3c=%d a38=%d d20=%d\n", i, pil.d3c, pil.d40, pil.d44, pil.d58, pil.a40, pil.a3c, pil.a38, pil.d20); } return 0; }
     if (const char* ph = getenv("CCR_PLAYHELP")) { int a, bb, v, x, y; int h[6] = {0,0,0,0,0,0}; if (sscanf(ph, "m:%d,%d,%d", &a, &bb, &v) == 3) { uint8_t lit[8] = {0,0,0,0,0,0,0,0}; if (a != 0 || bb != 1 || true) {} PlayersInputHelpers::mutexPlayer(lit, a, bb, v); printf("%d %d\n", lit[a], lit[bb]); return 0; } if (sscanf(ph, "r:%d,%d,%d,%d,%d,%d,%d", &x, &y, h, h + 1, h + 2, h + 3, h + 4) == 7) { PlayersInputHelpers::Row rows[6]; for (int i = 0; i < 5; i++) rows[i].h = h[i]; rows[5].h = 0; PlayersInputHelpers::reposition(x, y, rows); printf("%d %d\n", x, y); for (int i = 0; i < 5; i++) printf("%d %d\n", rows[i].x, rows[i].y); return 0; } return 0; }
     if (const char* pp = getenv("CCR_PLAYERSTEST")) { int h[4] = {0, 1, 0, 1}, l[4] = {0, 0, 0, 0}; if (sscanf(pp, "%d,%d,%d,%d;%d,%d,%d,%d", h, h + 1, h + 2, h + 3, l, l + 1, l + 2, l + 3) >= 4) { std::vector<std::string> lg; PlayersPane::draw(app, h, l, &lg); for (auto& s : lg) printf("%s%c", s.c_str(), 10); } return 0; }
