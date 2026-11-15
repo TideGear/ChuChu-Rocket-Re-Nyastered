@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 TABLES = {'hd_arrows': 567, 'hd_cursors': 654, 'hd_crowns': 648, 'hd_digits': 651,   # images 0x54, 0x60, 0x5e, 0x5f
           'hd_cat0': 345, 'hd_cat1': 354, 'hd_cat2': 363, 'hd_gold0': 392, 'hd_gold1': 396, 'hd_gold2': 400, 'hd_mouse0': 411, 'hd_mouse1': 415, 'hd_mouse2': 419}   # walk sheets side/back/front: HD images 0x28..0x2a, 0x2f..0x31, 0x33..0x35
 SHEETS = {'hd_time': (677, 679), 'hd_bhud65': (661, 664), 'hd_bhud68': (671, 676)}   # 0x65 player panels, 0x68 battle HUD pieces (renderFourBattleHud 0x21038)   # HD 1.0 image 0x69: in-play timer digits (clock2D 0x20e54)
+LOCALE_SHEETS = {'hd_phud5c': (27, 31)}   # HD 1.0 image 0x5c (puzzle HUD strip/panel), ccrpad_en records 912/916 - 885
 def main(pack, out):
     import struct, textures as T
     ts = {t['rec']: t for t in T.textures(pack)}
@@ -13,6 +14,13 @@ def main(pack, out):
         t = ts[tx]; im = T.to_image(t).convert('RGBA')
         with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', t['w'], t['h'])); f.write(im.tobytes())
         shutil.copyfile(os.path.join(pack, '%04d.bin' % fr), os.path.join(out, name + '.frames.bin')); print(name, tx, fr)
+    lp = pack + '_en'
+    if os.path.isdir(lp):
+        ls = {t['rec']: t for t in T.textures(lp)}
+        for name, (tx, fr) in LOCALE_SHEETS.items():
+            t = ls[tx]; im = T.to_image(t).convert('RGBA')
+            with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', t['w'], t['h'])); f.write(im.tobytes())
+            shutil.copyfile(os.path.join(lp, '%04d.bin' % fr), os.path.join(out, name + '.frames.bin')); print(name, 'locale', tx, fr)
     for name, rec in TABLES.items():
         shutil.copyfile(os.path.join(pack, '%04d.bin' % rec), os.path.join(out, name + '.frames.bin')); print(name, rec)
 if __name__ == '__main__': main(sys.argv[1], sys.argv[2])
