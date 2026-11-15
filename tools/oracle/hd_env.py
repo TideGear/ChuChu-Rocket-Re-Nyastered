@@ -63,3 +63,13 @@ def make(lang='en'):
     for a in HOOKS: o.uc.hook_add(UC_HOOK_CODE, hook, begin=a, end=a + 2)
     e.raw = {}; e.put = put; e.alloc = o.alloc
     return e
+
+def place_stage_select(e):
+    """Real texture spaces (0xb3f8, 11 of them as the device class has) and the stage-select placements of
+    StageSelectScreen (decompile 'StageSelectScreen @ 0x11c48', lines 15011..15022): slot 0x94, 0x26, 0x22, 0x1d, 0x20,
+    0x21, 0x11, 0x1e, 0x1f go into space 1, slot 0x1c into space 0. Each putTextureIntoTSpace (0xcff0) returns 1, and
+    the texture object's +8 is then the space index. Use instead of the slot-number write above."""
+    o = e.o; ad = e.appdata
+    for sp in range(11): o.write(ad + 0x3a0 + 4 * sp, struct.pack('<I', o.call(0xb3f8, 0x400)))
+    for slot, sp in {0x94: 1, 0x26: 1, 0x22: 1, 0x1d: 1, 0x20: 1, 0x21: 1, 0x11: 1, 0x1e: 1, 0x1f: 1, 0x1c: 0}.items():
+        assert o.call(0xcff0, ad, slot, sp) == 1, hex(slot)
