@@ -125,6 +125,7 @@ struct App {
     SDL_AudioDeviceID adev = 0; // Music: the 15 songs of the original (song n = mobile file Mnn = Dreamcast CD track n+4). Loaded on demand; loops from the end of the disc's 2 s lead-in over the length of the mobile file (the disc stores four repetitions of some songs).
     struct Song { std::vector<int16_t> pcm; size_t loopStart = 0, loopEnd = 0; bool loop = true, tried = false; }; Song songs[15]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
     std::vector<std::vector<int16_t>> sfx; struct Voice { const std::vector<int16_t>* d; size_t pos; }; std::vector<Voice> voices;
+    std::array<std::vector<int16_t>, 8> rouletteVoice, rouletteVoiceJapanese;
 
     // HD 1.0 frame table (int16 w at record offset 16): draw size of each frame on the original iPad
     void loadFit(const std::string& path, Sheet& s) {
@@ -196,13 +197,38 @@ struct App {
         std::string sfxDir; std::error_code ec;
         for (auto& e : fs::directory_iterator(root + "/ios", ec)) if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) sfxDir = (e.path() / "audio_sfx").string();
         sfx.resize(29);
-        for (int i = 0; i < 29 && !sfxDir.empty(); i++) { char nm[16]; snprintf(nm, sizeof nm, "%03d.ogg", i); int ch, rate; short* pcm; int fr = stb_vorbis_decode_filename((sfxDir + "/" + nm).c_str(), &ch, &rate, &pcm);
-            if (fr > 0) { toStereo44k(pcm, fr, ch, rate, sfx[i]); free(pcm); } }
+        if (!sfxDir.empty()) {
+            const auto loadClip = [&](int id, const char* prefix, std::vector<int16_t>& clip) {
+                char name[16];
+                snprintf(name, sizeof name, "%s%03d.ogg", prefix, id);
+                int ch, rate;
+                short* pcm;
+                const int frames = stb_vorbis_decode_filename((sfxDir + "/" + name).c_str(), &ch, &rate, &pcm);
+                if (frames > 0) { toStereo44k(pcm, frames, ch, rate, clip); free(pcm); }
+            };
+            for (int i = 0; i < static_cast<int>(sfx.size()); ++i) loadClip(i, "", sfx[i]);
+            for (int i = 0; i < static_cast<int>(rouletteVoice.size()); ++i) {
+                loadClip(117 + i, "", rouletteVoice[i]);
+                loadClip(117 + i, "J", rouletteVoiceJapanese[i]);
+            }
+        }
         if (headless && !getenv("CCR_AUDIO_TEST")) return;   // CCR_AUDIO_TEST=1: open the (dummy) audio device in headless runs to exercise the music code
         SDL_AudioSpec want{}; want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024; want.callback = audioCb; want.userdata = this; SDL_AudioSpec have;
         adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0); if (adev) SDL_PauseAudioDevice(adev, 0);
     }
-    void playSfx(int id) { if (!adev || id < 0 || id >= (int)sfx.size() || sfx[id].empty()) return; SDL_LockAudioDevice(adev); voices.push_back({&sfx[id], 0}); SDL_UnlockAudioDevice(adev); }
+    void playSfx(int id) {
+        if (!adev) return;
+        const std::vector<int16_t>* clip = nullptr;
+        if (id >= 0 && id < static_cast<int>(sfx.size())) clip = &sfx[id];
+        if (id >= 117 && id < 117 + static_cast<int>(rouletteVoice.size()))
+            clip = lang == 5 ? &rouletteVoiceJapanese[id - 117] : &rouletteVoice[id - 117];
+        if (!clip || clip->empty()) return;
+        if (headless && id >= 117 && getenv("CCR_ROULETTE_AUDIO_TRACE"))
+            printf("roulette clip %s%03d.ogg %zu samples\n", lang == 5 ? "J" : "", id, clip->size());
+        SDL_LockAudioDevice(adev);
+        voices.push_back({clip, 0});
+        SDL_UnlockAudioDevice(adev);
+    }
     void loadSong(int n) {
         Song& sg = songs[n]; if (sg.tried) return; sg.tried = true; namespace fs = std::filesystem; std::error_code ec;
         char nm[16]; snprintf(nm, sizeof nm, "M%02d.ogg", n); std::vector<int16_t> mobile; int mobileFrames = 0;
@@ -1719,7 +1745,15 @@ struct BattleMode : Screen {
         }
         if (localTeam < 0) if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
-        game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
+        game.sfx = [this](int id) {
+            if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; }
+            if (!gApp) return;
+            if (gApp->headless && (id == 10 || id == 11 || id == 13 || id >= 117) &&
+                getenv("CCR_ROULETTE_AUDIO_TRACE"))
+                printf("roulette cue %d %d\n", game.frame, id);
+            gApp->playSfx(id);
+        };
+        game.localPlayer = 0;
         restart(); return true;
     }
     void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }

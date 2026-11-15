@@ -45,6 +45,10 @@ Android 1.15 `ChuSECall(id, _)` (0x3d508) calls `AppData::playSFX(table[id].firs
 
 Scope: the current port's SFX call sites and dispatch, checked against the local original code for stage-page refusal and the countdown. The original tutorial-completion gate refuses Puzzle, Stage Challenge and Battle with SFX 3. The port currently bypasses that gate. Its Stage Challenge button still cannot enter the mode. iPod Music and Game Center are hidden by the Options hit test and cannot trigger 0x13 there.
 
+### iPad roulette cues
+
+HD 1.0 `RL_RouletteExec` plays `010.ogg` on the first visible tick and `011.ogg` 30 ticks later, when the drum stops. At tick 60 it plays the outcome voice. In outcome order, the file numbers are 119, 120, 117, 118, 122, 121, 123, and 124. `ChuSECall` maps the numbers 117–124 to AudioItem slots 32–39. The Japanese group uses the same files with a `J` prefix. Place Arrows Again also plays `013.ogg` on the event task's first tick. The port uses these original clips from the local iOS extraction. The original requests event music on the first visible roulette tick and passes a 60-tick transition to `BGM_Change` where applicable. The port's event music selection still follows the gameplay event state, and timed music transitions remain open.
+
 ## Localization source (2026-11-13)
 The Android resources already hold every UI string per language (`libccrjni/<lang>/NNNN.bin`, 414 files per language; text ones are small null-terminated strings). `tools/export_strings.py` exports them to one table: 6 languages (de, en, es, fr, it, ja); en/fr/de/es/it are UTF-8 or single-byte Latin-1 accented text, Japanese is stored as 16-bit glyph codes into the Japanese font sheet (not text). Example: resource 0125 "Puzzle", 0126 "Challenge"/"Défi"/"Herausforderung"/"Sfida"/"Desafío", 0127 "Battle", 0128 "Help & Options", 0129 the tutorial hint. Next: compare with the iOS and Dreamcast (ENGLISH/FRENCH/GERMAN/SPANISH/JAPANIESE) text, choose a best source per language, and map the glyph codes to Japanese text with the font sheet.
 

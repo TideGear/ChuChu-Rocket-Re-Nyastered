@@ -178,7 +178,6 @@ private:
         unsigned bcd = (unsigned)(((rem / 60) << 8) | (((rem % 60) / 10) << 4) | (rem % 10));   // minutes:seconds in BCD (TI_GetBCDTime layout still to be confirmed)
         int out = roulette->roll(rankOf(lastRoller_), fixedBcd >= 0 ? (unsigned)fixedBcd : (bcd << 8), fixedGameTime >= 0 ? fixedGameTime : frame + gtOff, -1); roulette->record(out);
         if (debug) printf("ROLL f%d player %d outcome %d\n", frame, p, out);
-        if (sfx) sfx(10);
         lastRoller_ = p; sim.releaseSlot(roll_.slot); roll_.slot = sim.allocSlot(-2); roll_.active = true; roll_.elapsed = -1; roll_.outcome = out; lastRoll.push_back(out);
     }
     float feverDuration() const { return 600.0f; }
@@ -241,7 +240,7 @@ private:
                 case 1: removeGroup(2); gen->flags = 0xC; gen->params().pSpawn = 0.125f; break;                    // Mouse Mania (GE_SetChu2Fever)
                 case 2: charaSpeed = 2.0f; gen->flags = 4; break;                                   // Speed Up
                 case 3: charaSpeed = 0.3f; break;                                                   // Speed Down
-                case 4: for (auto& a : sim.arrows) if (a.live) { a.live = false; sim.refreshCell(a.x, a.y); } gen->flags = 0xF; break;   // Place Arrows Again
+                case 4: if (sfx) sfx(0xd); for (auto& a : sim.arrows) if (a.live) { a.live = false; sim.refreshCell(a.x, a.y); } gen->flags = 0xF; break;   // Place Arrows Again
                 case 5: gen->flags = 0xF; cursorLock = 1 << 30; charaSpeed = 0.0f; shuffleRockets(); if (sfx) sfx(0xc); break;   // Everybody Move: RL_Eve_Hikkoshi: ChuSECall(0xc), prohibit 0xF, RO_ShuffleRockets, cursor lock, speed 0
                 case 6: gen->flags = 0xF; cursorLock = 1 << 30; charaSpeed = 0.0f; break;           // Cat Attack (cat presents NOT ported)
                 default: gen->flags = 4; gen->params().pSpawn = 0.125f; sim.monopoly = e.rollerPlayer; break;   // Mouse Monopoly (RL_Eve_Hitorijime): MO_StartHitorijime(roller), prohibit 4, Chu2 fever; mice convert to MO_MouseJimeExe at the end of their next normal step
@@ -272,7 +271,22 @@ private:
         size_t n = sim.gens.size(); if (n == 0) return;
         size_t idx = 0; for (int k = 0; k < 4; k++) { const auto& g = sim.gens[idx % n]; sim.spawn(false, 0, g.x, g.y, g.dir); idx++; }
     }
-    void updateEvent() { stepRoulette(); if (roll_.active && ++roll_.elapsed == 121) { roll_.active = false; startEvent(roll_.outcome); } }
+    void updateEvent() {
+        stepRoulette();
+        if (!roll_.active) return;
+        ++roll_.elapsed;
+        // HD 1.0 RL_RouletteExec. The task is registered on elapsed 0 and first executes on 1.
+        if (sfx) {
+            constexpr int voice[] = {119, 120, 117, 118, 122, 121, 123, 124};
+            if (roll_.elapsed == 1) sfx(10);
+            if (roll_.elapsed == 31) sfx(11);
+            if (roll_.elapsed == 61) sfx(voice[roll_.outcome]);
+        }
+        if (roll_.elapsed == 121) {
+            roll_.active = false;
+            startEvent(roll_.outcome);
+        }
+    }
 };
 inline void BattleGame::setCharaSpeed(float v) { charaSpeed = v; applySpeed(); }
 } // namespace ccr
