@@ -630,6 +630,10 @@ struct SettingsLevelList {
 };
 
 // ---------------------------------------------------------------- settings pane: list panels (HD 1.0 renderSettingsPane; sub-rects of image 28 in its 1024 x 1024 texture, drawn 1:1; measured with the oracle probe, see docs/roadmap.md)
+struct SettingsListFill {   // renderSettingsPane's _BHLib_RenderFilledRect(19, 63, 211, 128, 255, 255, 255, 255): an opaque white box behind the level list (checked in tools/fill_diff.py)
+    static constexpr int x = 19, y = 63, w = 211, h = 128;
+    static constexpr int r = 255, g = 255, bl = 255, a = 255;
+};
 struct SettingsListPanels {
     struct Draw { int sx, sy, sw, sh, x, y, w, h; };
     static void draws(Draw out[4]) {
@@ -1120,6 +1124,7 @@ int main(int argc, char** argv) {
     if (const char* jt = getenv("CCR_JUDGET")) { int s[2], r[2], wn[2], rw, df, wp, rc; if (sscanf(jt, "%d,%d;%d,%d;%d,%d;%d,%d,%d,%d", s, s + 1, r, r + 1, wn, wn + 1, &rw, &df, &wp, &rc) == 10) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWinTeam(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
+    if (getenv("CCR_FILL")) { printf("%d %d %d %d %d %d %d %d\n", SettingsListFill::x, SettingsListFill::y, SettingsListFill::w, SettingsListFill::h, SettingsListFill::r, SettingsListFill::g, SettingsListFill::bl, SettingsListFill::a); return 0; }
     if (getenv("CCR_PANELS")) { SettingsListPanels::Draw d[4]; SettingsListPanels::draws(d); for (int i = 0; i < 4; i++) printf("%d %d %d %d %d %d %d %d\n", d[i].sx, d[i].sy, d[i].sw, d[i].sh, d[i].x, d[i].y, d[i].w, d[i].h); return 0; }
     if (getenv("CCR_LEVELROWS")) { std::vector<SettingsLevelList::Row> rw; SettingsLevelList::rows(0.0f, rw); for (auto& r : rw) printf("PS %s %.1f %.1f %.3f\n", r.text.c_str(), r.x, r.y, r.scale); return 0; }
     if (getenv("CCR_SETTINGSRECTS")) { SettingsPaneItems::PaneRect r[10]; SettingsPaneItems::layout(r); for (int i = 0; i < 10; i++) printf("%d %d %d %d %d\n", i, r[i].x, r[i].y, r[i].w, r[i].h); return 0; }
