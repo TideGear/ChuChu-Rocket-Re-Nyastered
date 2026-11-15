@@ -1008,6 +1008,45 @@ struct SettingsPaneItems {
         bool highMice, split;
     };
 
+    // PlayerSelectScreen::handleSettingsPaneInput (HD 1.0, 0x32d24).
+    struct LocalPadInput {
+        enum class Action { None, Preview, Players, Launch };
+        struct Result { Action action = Action::None; int sound = -1; };
+
+        PadRules rules{2, 2, 2, false, false};
+        int stage = 0;
+        bool launching = false;
+
+        Result touch(int x, int y, int phase) {
+            if (launching || phase != 0) return {};
+            PaneRect items[37];
+            const int count = layoutPad(items, false);
+            const int item = hit(items, count, x, y);
+            if (item >= 0 && item < 25) {
+                stage = item;
+                return {Action::Preview, 0};
+            }
+            if (item == 25) return {Action::Players, 2};
+            if (item == 26 || (item == -1 && x >= 564 && x <= 798 && y >= 367 && y <= 555)) {
+                launching = true;
+                return {Action::Launch, 2};
+            }
+            if (item >= 27 && item <= 34) {
+                const int delta = (item & 1) ? -1 : 1;
+                if (item <= 28) rules.pointIndex = std::clamp(rules.pointIndex + delta, 0, 4);
+                else if (item <= 30) rules.speedIndex = std::clamp(rules.speedIndex + delta, 0, 4);
+                else if (item <= 32) rules.timeIndex = std::clamp(rules.timeIndex + delta, 0, 2);
+                else rules.highMice = std::clamp(static_cast<int>(rules.highMice) + delta, 0, 1) != 0;
+                return {Action::None, 1};
+            }
+            if (item == 35 || item == 36) {
+                rules.split = item == 36;
+                return {Action::None, 0};
+            }
+            return {};
+        }
+    };
+
     // Local iPad path following the stage grid. The preview texture is generated
     // separately and drawn at this point, before the two corner buttons.
     static void drawPadRules(App& app, const PadRules& rules, const std::function<void(const SDL_Rect&)>& preview,
@@ -1664,6 +1703,22 @@ int main(int argc, char** argv) {
         }
         output.close();
         return output.fail() ? 1 : 0;
+    }
+    if (getenv("CCR_PAD_SETTINGS_INPUT")) {
+        SettingsPaneItems::LocalPadInput input;
+        int x, y, phase, high, split, locked;
+        while (scanf("%d %d %d %d %d %d %d %d %d %d", &x, &y, &phase, &input.stage,
+                     &input.rules.pointIndex, &input.rules.speedIndex, &input.rules.timeIndex,
+                     &high, &split, &locked) == 10) {
+            input.rules.highMice = high != 0;
+            input.rules.split = split != 0;
+            input.launching = locked != 0;
+            const auto result = input.touch(x, y, phase);
+            printf("%d %d %d %d %d %d %d %d %d\n", static_cast<int>(result.action), result.sound,
+                   input.stage, input.rules.pointIndex, input.rules.speedIndex, input.rules.timeIndex,
+                   input.rules.highMice, input.rules.split, input.launching);
+        }
+        return 0;
     }
     if (const char* spec = getenv("CCR_PAD_SETTINGS_GRID")) {
         const int selected = atoi(spec);
