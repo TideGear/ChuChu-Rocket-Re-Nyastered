@@ -372,6 +372,7 @@ struct PuzzleMode : Screen {
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); }
             else if (state == 0) { if (k == SDLK_UP) curY = std::max(0, curY - 1); else if (k == SDLK_DOWN) curY = std::min(8, curY + 1); else if (k == SDLK_LEFT) curX = std::max(0, curX - 1); else if (k == SDLK_RIGHT) curX = std::min(11, curX + 1);   // keyboard: arrows move the cursor, W/A/S/D place up/left/down/right (the pad's face buttons)
                 else if (k == SDLK_w) putAt(curX, curY, 2); else if (k == SDLK_s) putAt(curX, curY, 0); else if (k == SDLK_a) putAt(curX, curY, 1); else if (k == SDLK_d) putAt(curX, curY, 3); } }
+        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && hudButton(a, e)) {}   // HD 1.0 PuzzleGameScreen::handleInput: rect 3 Start (flag 1), rect 4 Cancel (flag 2)
         else if (e.type == SDL_MOUSEBUTTONDOWN && state == 0 && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e);
         else if (e.type == SDL_MOUSEBUTTONUP && state == 0 && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); putAt(cx, cy, d); }   // a tap (d = -1) deletes the arrow on the cell
         else if (e.type == SDL_CONTROLLERDEVICEADDED && !pad) pad = SDL_GameControllerOpen(e.cdevice.which);
@@ -379,6 +380,15 @@ struct PuzzleMode : Screen {
             if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) curY = std::max(0, curY - 1); else if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) curY = std::min(8, curY + 1); else if (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT) curX = std::max(0, curX - 1); else if (b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) curX = std::min(11, curX + 1);
             else if (b == SDL_CONTROLLER_BUTTON_Y) putAt(curX, curY, 2); else if (b == SDL_CONTROLLER_BUTTON_A) putAt(curX, curY, 0); else if (b == SDL_CONTROLLER_BUTTON_X) putAt(curX, curY, 1); else if (b == SDL_CONTROLLER_BUTTON_B) putAt(curX, curY, 3);
             else if (b == SDL_CONTROLLER_BUTTON_START) { state = 1; running = true; } }
+    }
+    // Touch rects of the puzzle screen (HD 1.0 PuzzleGameScreen::process 0x12994 -> Input::addRect(i, x0, y0, x1, y1) from layout +0x4d0 + 16 i): rect 3 (18, 88)-(160, 190) Start/Dash, rect 4 (21, 229)-(159, 275) Cancel.
+    // In the placing mode, rect 3 sets input flag 1 (start) and rect 4 flag 2 (Cancel; the port maps it to its reset, the exact effect of flag 2 in PuzzleLoop is not read yet). The Dash use of flag 1 while running is not ported (its effect in PuzzleLoop not read yet).
+    bool hudButton(App& a, const SDL_Event& e) {
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
+        auto in = [&](float x0, float y0, float x1, float y1) { return lx >= x0 && lx < x1 && ly >= y0 && ly < y1; };
+        if (in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; } return true; }
+        if (in(21, 229, 159, 275)) { if (state != 0) reset(); return true; }
+        return false;
     }
     int cticks = 0;
     void tick(App& a) override {
