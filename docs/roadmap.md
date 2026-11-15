@@ -48,6 +48,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Verified the Dreamcast executable's SEGA → Sonic Team → Title startup in `tools/oracle/dc_startup.py` with the original SH-4 tasks, including all four controllers' Start paths and the six SEGA draw submissions. Also verified Dreamcast cat effects 7 and 27 dispatch to bank 0 and that the cue-7 cooldown refreshes on suppressed requests. The player still uses the iPad startup. Next, trace the Dreamcast logo transforms and audio source and continue the GBA cat cue audit.
 
+- Verified GBA cat cue selection and sequence lookup with `tools/oracle/gba_cat_audio.py`. Cue 42 plays when a catch crosses the large-cat threshold at 50 in an eligible mode. Rocket entry uses cue 36 or 43 according to cat size, and reaching 100 also plays 43. All 12 forced cases passed, including small catches, mode gates, and a rejected rocket arrival. Next, trace the GBA sequence playback and remaining cat and mouse-death callers.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
