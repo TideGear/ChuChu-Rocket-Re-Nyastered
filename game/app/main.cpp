@@ -613,6 +613,8 @@ struct PlayersInputLogic {
 // items: 0 back (0, 711, 57 x 57), 1 corner (967, 711, 57 x 57), 2..9 buttons 30 x 30. Values read from the original under Unicorn (tools/players_settings_diff.py).
 struct SettingsPaneItems {
     struct PaneRect { int x, y, w, h; };
+    // updateMenuItemFromTouchEvent (press, 0): the first item (in order 0..9) whose rect contains the point, edges inclusive; -1 if none
+    static int hit(int x, int y) { PaneRect r[10]; layout(r); for (int i = 0; i < 10; i++) if (r[i].x <= x && x <= r[i].x + r[i].w && r[i].y <= y && y <= r[i].y + r[i].h) return i; return -1; }
     static void layout(PaneRect out[10]) {
         out[0] = {0, 711, 57, 57}; out[1] = {967, 711, 57, 57};
         static const int bx[8] = {12, 207, 12, 207, 248, 443, 248, 443}, by[8] = {205, 205, 240, 240, 52, 52, 91, 91};
@@ -1136,6 +1138,7 @@ int main(int argc, char** argv) {
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* sc = getenv("CCR_SCROLL")) { int off0, ly, y; if (sscanf(sc, "%d,%d,%d", &off0, &ly, &y) == 3) { SettingsListScroll s; s.offset = (float)off0; s.press(ly); s.move(ly); s.move(y); int d = (int)s.offset; s.release(); printf("%d %d %d\n", d, (int)s.offset, s.selected); } return 0; }
+    if (const char* ht = getenv("CCR_HIT")) { int x, y; if (sscanf(ht, "%d,%d", &x, &y) == 2) printf("%d\n", SettingsPaneItems::hit(x, y)); return 0; }
     if (getenv("CCR_FILL")) { printf("%d %d %d %d %d %d %d %d\n", SettingsListFill::x, SettingsListFill::y, SettingsListFill::w, SettingsListFill::h, SettingsListFill::r, SettingsListFill::g, SettingsListFill::bl, SettingsListFill::a); return 0; }
     if (getenv("CCR_PANELS")) { SettingsListPanels::Draw d[4]; SettingsListPanels::draws(d); for (int i = 0; i < 4; i++) printf("%d %d %d %d %d %d %d %d\n", d[i].sx, d[i].sy, d[i].sw, d[i].sh, d[i].x, d[i].y, d[i].w, d[i].h); return 0; }
     if (getenv("CCR_LEVELROWS")) { std::vector<SettingsLevelList::Row> rw; SettingsLevelList::rows(0.0f, rw); for (auto& r : rw) printf("PS %s %.1f %.1f %.3f\n", r.text.c_str(), r.x, r.y, r.scale); return 0; }
