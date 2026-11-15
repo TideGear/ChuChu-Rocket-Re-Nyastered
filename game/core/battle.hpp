@@ -248,7 +248,11 @@ private:
                 applySpeed(); i++; continue;
             }
             e.count++;
-            if (e.kind == 0 && e.count < e.limit && e.count % 16 == 0) gen->rng().next();                                // cat sound roll: consumes one random number every 16 ticks
+            // HD 1.0 RL_Eve_NekoFever rolls once every 16 ticks before expiry.
+            if (e.kind == 0 && e.count < e.limit && e.count % 16 == 0) {
+                const float chance = gen->rng().next();
+                if (chance < 0.3f && sfx) sfx(0x1b);
+            }
             if (e.kind == 2 && e.count == 300) gen->flags = 0;
             if (e.kind == 0) done = e.count >= e.limit; else done = e.count > e.limit;
             if (done) {

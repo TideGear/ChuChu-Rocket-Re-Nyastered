@@ -38,6 +38,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Recorded missing presentation and verified the iPad eaten-mouse ghost creation threshold in [presentation_audit.md](presentation_audit.md). Mouse position now drives the Puzzle and Battle cursor, and WASD and the arrow keys place directions in the hovered cell. Controller face buttons follow the Dreamcast mapping, while stick and held D-pad move the cursor through intermediate positions using constants from `1ST_READ.BIN`. Controller behavior still needs a hardware comparison, including cell edges, simultaneous inputs, and trigger actions. Prioritize the eaten-mouse ghost and startup screen traces, then continue the wall redraw and launch integration.
 
+- Restored the Cat Mania cat call (iPad HD 1.0 effect 27) from the same RNG roll already consumed by the simulation. A 30-case Unicorn probe verified the rule, including the strict 0.3 cutoff. Next, trace the remaining cat and mouse-death call sites across versions and port the caught-mouse ghost.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
