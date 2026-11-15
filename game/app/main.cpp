@@ -805,7 +805,7 @@ struct BattleMode : Screen {
     // 4-player local input: mouse = player 1; keyboard sets WASD+Q (P1), IJKL+U (P2), keypad 8456+0 (P3); gamepads in connection order (D-pad moves the cursor, DC buttons Y/A/X/B place up/down/left/right)
     // FourBattleLoop (HD 1.0 0x1c2b8) mode 1: a 120-tick intro (the round panel from tick 1 for 75 ticks, the Round START banner at tick 90 for 45 ticks), then play starts
     // FourBattleLoop modes 3..5 (0x1c3c2..): 3 round end (60 ticks), 4 between rounds (result screen, next round after 240 ticks and a touch), 5 match over
-    int mode = 2, modeTick = 0, wins[4] = {0, 0, 0, 0}, winPoint = 2, roundWinner = 0, drawFlag = 0, gTime = 0, rank[4] = {0, 0, 0, 0}; bool tapped = false, matchOver = false;   // winPoint: GetWinPoint (initial data value 2)
+    int mode = 2, modeTick = 0, wins[4] = {0, 0, 0, 0}, winPoint = 2, roundWinner = 0, drawFlag = 0, gTime = 0, rank[4] = {0, 0, 0, 0}; bool tapped = false, matchOver = false, congra = false; int sub5 = 0, cnt5 = 0;   // winPoint: GetWinPoint (initial data value 2)
     // ResultRocket tasks (0x1fe24 Cons, 0x1ff58 Exec, 0x1fcf8 Draw; smoke 0x1fe10 / flash 0x1fdc8): the win icon rises from y = 620 (2 per tick) to 361, pulses (scale 1 -> 4 -> 1) and settles
     struct Rocket { int player, state; float x, y, tx, scale, dscale; }; std::vector<Rocket> rockets_; struct Smoke { float x, y; int n; }; std::vector<Smoke> smokes_; struct Flash { float x, y, scale, delta; }; std::vector<Flash> flashes_;
     int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners; int lastLeftSec = -1;
@@ -832,7 +832,7 @@ struct BattleMode : Screen {
         game.sfx = [this](int id) { if (id == 7) { if (game.frame - lastCatSfx < 3) return; lastCatSfx = game.frame; } if (gApp) gApp->playSfx(id); }; game.localPlayer = 0;   // ChuSECall(id) plays SFX index id (Android table at 0x63a00, ids 0..28 map to themselves); id 7 is dropped when it repeats within 3 ticks
         restart(); return true;
     }
-    void restart() { rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); lastLeftSec = -1; game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
+    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); lastLeftSec = -1; game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
@@ -850,13 +850,22 @@ struct BattleMode : Screen {
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
         if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
         { int left = game.roundFrames - game.clock; if (left >= 0 && left % 60 == 0 && left != lastLeftSec) { lastLeftSec = left; int sec = left / 60; int m = sec == 3 ? 2 : sec == 2 ? 1 : sec == 1 ? 0 : sec == 30 ? 3 : sec == 60 ? 4 : sec == 120 ? 5 : -1; if (m >= 0) banners.push_back({0, m, 0, App::countLife(m)}); } }   // FB_Exe_GAME: BCD 0x300 / 0x200 / 0x100, 0x3000, 0x10000, 0x20000
+        if (gTime == 0 && getenv("CCR_WINPOINT")) winPoint = atoi(getenv("CCR_WINPOINT"));   // test override of GetWinPoint
         gTime++;
         for (auto& rk : rockets_) { if (rk.state == 0) { rk.y -= 2.0f; if (rk.y > rk.tx) { if ((gTime & 7) == 0) smokes_.push_back({rk.x, rk.y, 0}); } else { rk.state = 1; rk.scale = 1.0f; rk.dscale = 0.4f; flashes_.push_back({rk.x + 17.0f, rk.tx + 32.0f, 0.1f, 0.4f}); rk.y = rk.tx; if (gApp) { gApp->playSfx(0x14); } } }
             else if (rk.state == 1) { if (rk.scale >= 1.0f) { rk.scale += rk.dscale; if (rk.scale >= 4.0f) rk.dscale = -rk.dscale; } else { rk.scale = 1.0f; rk.state = 2; } } }
         for (auto& s : smokes_) s.n++; smokes_.erase(std::remove_if(smokes_.begin(), smokes_.end(), [](const Smoke& s) { return s.n > 8; }), smokes_.end());
         for (auto& f : flashes_) { if (f.scale < 0.1f) { f.scale = -1.0f; continue; } f.scale += f.delta; if (f.scale >= 1.4f) f.delta = -f.delta; } flashes_.erase(std::remove_if(flashes_.begin(), flashes_.end(), [](const Flash& f) { return f.scale < 0.0f; }), flashes_.end());
         if (mode == 2 && game.over) { mode = 3; modeTick = 0; }
-        if (mode >= 4) { modeTick++; if (mode == 4 && modeTick > 0xf0 && tapped) { tapped = false; nextRound(); } else if (mode == 5 && (modeTick > 0x538 || (modeTick > 0xf0 && tapped))) back = true; return; }   // mode 4: JudgeWin until 0xf0 ticks and a touch; mode 5: until a touch (the original waits at most 0x538 ticks)
+        if (mode >= 4) { modeTick++;
+            if (mode == 4 && modeTick > 0xf0 && tapped) { tapped = false; nextRound(); }
+            else if (mode == 5) {   // FourBattleLoop mode 5 sub-states 0..3 (0x1c5c4): wait for the rocket, 30 ticks, 180 ticks (song 0x11), then the congratulations after 0xf0 ticks; a touch or 0x538 ticks ends
+                if (tapped && sub5 >= 1) { if (gApp) gApp->playSfx(3); back = true; }
+                else if (sub5 == 0) { for (auto& rk : rockets_) if (rk.state >= 2) { sub5 = 1; cnt5 = 0x1e; } }
+                else if (sub5 == 1) { if (--cnt5 < 0) { sub5 = 2; cnt5 = 0xb4; } }
+                else if (sub5 == 2) { if (--cnt5 < 0) { sub5 = 3; cnt5 = 0; } }
+                else { cnt5++; if (cnt5 == 0xf0) { congra = true; if (gApp) gApp->playSfx(0x14); } if (cnt5 <= 0x5f && (cnt5 & 0x1f) == 0 && gApp) gApp->playSfx(0x15); if (cnt5 > 0x538) { if (gApp) gApp->playSfx(3); back = true; } } }
+            return; }   // mode 4: JudgeWin until 0xf0 ticks and a touch   // mode 4: JudgeWin until 0xf0 ticks and a touch; mode 5: until a touch (the original waits at most 0x538 ticks)
         if (mode == 3) { modeTick++; if (modeTick > 0x3b) endRound(); }
         for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; } if (mode == 2 || mode == 3) game.tick(); a.stepAngles(game.sim); }
     void endRound() {   // FourBattleLoop mode 3 after 60 ticks (free-for-all): the only player with dense rank 0 wins the round
@@ -900,6 +909,7 @@ struct BattleMode : Screen {
             a.judgeWin(sc, rank, wins, roundWinner, drawFlag, winPoint, reach, true);
             for (auto& s : smokes_) a.drawImage(0x92, s.n, s.x, s.y - a.layF(0x230), 0, 1.0f, 255);
             for (auto& rk : rockets_) a.drawImage(0x5d, rk.player, rk.x, rk.y - a.layF(0x22c), 0, rk.scale, 255);
+            if (congra) { a.drawImage(0x90, 0, a.layF(0x208), a.layF(0x20c), 0, 1.0f, 255); a.drawImage(0x62, roundWinner, a.layF(0x214), a.layF(0x218), 0, 2.0f, 255); }   // DispCongraDrawPriority 0x1f990 (the congratulation rockets, CongraRocketCons, are not ported)
             for (auto& f : flashes_) a.drawImage(0x87, 4, f.x, f.y - a.layF(0x22c), 0, f.scale, 0x40); }
         SDL_RenderSetViewport(a.ren, nullptr);
     }
