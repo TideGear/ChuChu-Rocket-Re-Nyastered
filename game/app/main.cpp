@@ -10,6 +10,7 @@
 #include "roulette_pose.hpp"
 #include "roulette_draw.hpp"
 #include "rocket_lid.hpp"
+#include "rocket_launch.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -1876,6 +1877,39 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 }
 
 int main(int argc, char** argv) {
+    if (getenv("CCR_ROCKET_LAUNCH_TRACE")) {
+        int player, team, x, y;
+        unsigned globalTime;
+        while (scanf("%d %d %d %d %u", &player, &team, &x, &y, &globalTime) == 5) {
+            if (player < 0 || player >= 4 || x < 0 || x >= kCols || y < 0 || y >= kRows) return 1;
+            const float worldX = (x + 0.5f) * kCell, worldZ = (y + 0.5f) * kCell;
+            RocketLaunch launch;
+            RocketLid lid;
+            std::vector<std::pair<RocketLaunchImage, int>> images;
+            for (int tick = 0; tick < 240; ++tick) {
+                images.clear();
+                lid.tick(x, y, globalTime + tick);
+                launch.tick(globalTime + tick);
+                if (launch.visible())
+                    images.emplace_back(rocketLaunchImage(player, team != 0, worldX, worldZ, launch.height,
+                                                          CELL / kCell, OX, OY), 0);
+                const auto lidImage = rocketLidImage(player, team != 0, x, y, lid.openness,
+                                                     worldX, worldZ, CELL / kCell, OX, OY);
+                images.emplace_back(RocketLaunchImage{static_cast<int>(worldZ), lidImage.image, lidImage.frame,
+                    255, lidImage.x, lidImage.y, 0.8f}, lidImage.flags);
+                for (const auto& puff : launch.smoke)
+                    if (puff.visible())
+                        images.emplace_back(rocketSmokeImage(worldX, worldZ, puff, CELL / kCell, OX, OY), 0);
+                std::stable_sort(images.begin(), images.end(),
+                                 [](const auto& a, const auto& b) { return a.first.depth < b.first.depth; });
+                for (const auto& [image, flags] : images)
+                    printf("%d %d %d %d %d %d %a %a %a\n", tick, image.depth, image.image, image.frame,
+                           image.alpha, flags, image.x, image.y, image.scale);
+            }
+            puts("");
+        }
+        return 0;
+    }
     if (getenv("CCR_ROCKET_LID_TRACE")) {
         int player, team, x, y;
         unsigned globalTime;
