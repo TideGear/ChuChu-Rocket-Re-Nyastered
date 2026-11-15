@@ -569,7 +569,7 @@ struct PlayersPane {
         for (int p = 0; p < 4; p++) { float sx = 31.0f + 153.0f * p; txt("Human", sx + 52.0f, 88.7f, 0.5f); txt("Computer", sx + 52.0f, 132.7f, 0.5f); }
         for (int p = 0; p < 4; p++) {   // level tags: 106 x 31 at y 151 (lit state not traced: drawn at the default frame)
             float sx = 37.0f + 153.0f * p; rt(a.plLabels, 107, 66, 106, 31, sx, 151.0f, 106, 31);
-            /* level text: source not yet traced (the text 'Weak' is not in the en table keys 0x185..0x18e) */ }
+            if (const std::string* s = a.hdString(0x1e1 + (p == 0 ? 0 : level[p]))) txt(*s, sx + 53.0f, 158.5f, 0.5f); }   // player 0 uses the constant key 0x1e1; players 1..3 read their field (+0xd4c, +0xd50, +0xd54)   // level tag text = key 0x1e1 + the player's CPU type (0 Weak, 1 Hates Cats, 2 Loves Mice, 3 Tough, 4 Random, 5 None)
         rt(a.ssArrows, 0, 0, 59, 59, 0.0f, 709.0f, 59, 59); rt(a.ssArrows, 60, 0, 59, 59, 965.0f, 709.0f, 59, 59);   // back button (image 17 frame 0) and the corner button (frame 1), both 59 x 59
     }
 };
@@ -1053,7 +1053,7 @@ int main(int argc, char** argv) {
     if (const char* jt = getenv("CCR_JUDGET")) { int s[2], r[2], wn[2], rw, df, wp, rc; if (sscanf(jt, "%d,%d;%d,%d;%d,%d;%d,%d,%d,%d", s, s + 1, r, r + 1, wn, wn + 1, &rw, &df, &wp, &rc) == 10) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWinTeam(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* jw = getenv("CCR_JUDGE")) { int s[4], r[4], wn[4], rw, df, wp, rc; if (sscanf(jw, "%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d;%d,%d,%d,%d", s, s + 1, s + 2, s + 3, r, r + 1, r + 2, r + 3, wn, wn + 1, wn + 2, wn + 3, &rw, &df, &wp, &rc) == 16) { std::vector<std::string> lg; app.imgLog = &lg; app.judgeWin(s, r, wn, rw, df, wp, rc); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
     if (const char* bn = getenv("CCR_BANNER")) { int kind, m, t; if (sscanf(bn, "%d,%d,%d", &kind, &m, &t) == 3) { std::vector<std::string> lg; app.imgLog = &lg; if (kind == 1) app.roundPanel(m, t); else app.battleCount(m, t); for (auto& l : lg) printf("%s%c", l.c_str(), 10); } return 0; }
-    if (const char* pp = getenv("CCR_PLAYERSTEST")) { int h[4] = {0, 1, 0, 1}, l[4] = {0, 0, 0, 0}; if (sscanf(pp, "%d,%d,%d,%d", h, h + 1, h + 2, h + 3) == 4) { std::vector<std::string> lg; PlayersPane::draw(app, h, l, &lg); for (auto& s : lg) printf("%s%c", s.c_str(), 10); } return 0; }
+    if (const char* pp = getenv("CCR_PLAYERSTEST")) { int h[4] = {0, 1, 0, 1}, l[4] = {0, 0, 0, 0}; if (sscanf(pp, "%d,%d,%d,%d;%d,%d,%d,%d", h, h + 1, h + 2, h + 3, l, l + 1, l + 2, l + 3) >= 4) { std::vector<std::string> lg; PlayersPane::draw(app, h, l, &lg); for (auto& s : lg) printf("%s%c", s.c_str(), 10); } return 0; }
     if (const char* st = getenv("CCR_SNDTEST")) { int m, s2, d; if (sscanf(st, "%d,%d,%d", &m, &s2, &d) == 3) { OptionsMode om; std::vector<std::string> lg; om.drawSounds(app, m, s2, d, &lg); for (auto& l : lg) printf("%s\n", l.c_str()); } return 0; }
     if (!enter(start)) return 2;
     const double dt = 1.0 / 60.0; double acc = 0;
