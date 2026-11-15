@@ -8,6 +8,7 @@
 #include "../core/angle.hpp"
 #include "battle_preview.hpp"
 #include "roulette_pose.hpp"
+#include "roulette_mesh.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -1829,6 +1830,22 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 }
 
 int main(int argc, char** argv) {
+    if (getenv("CCR_ROULETTE_MESH_TRACE")) {
+        RoulettePose pose;
+        float u0, v0, u1, v1;
+        while (scanf("%f %f %f %f %f %f %f %f", &pose.x, &pose.y, &pose.degrees,
+                     &pose.scale, &u0, &v0, &u1, &v1) == 8) {
+            const auto mesh = makeRouletteMesh(u0, v0, u1, v1);
+            for (const auto index : mesh.indices) printf("%u ", static_cast<unsigned>(index));
+            puts("");
+            for (const auto& v : mesh.vertices) {
+                const auto p = projectRouletteVertex(v, pose);
+                printf("%a %a %a %a %a %a %a %a %a %a %a\n",
+                       v.nx, v.ny, v.nz, v.x, v.y, v.z, v.u, v.v, p.x, p.y, p.inverseDepth);
+            }
+        }
+        return 0;
+    }
     if (getenv("CCR_ROULETTE_POSE_TRACE")) {
         int rocketX, rocketY, outcome;
         while (scanf("%d %d %d", &rocketX, &rocketY, &outcome) == 3) {

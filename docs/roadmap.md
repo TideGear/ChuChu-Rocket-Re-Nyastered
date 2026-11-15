@@ -26,6 +26,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Ported the iPad roulette animation inputs from `RL_RouletteExec` and `RL_RouletteDrawPriority`. The drum starts at the scoring rocket with scale 1, eases toward world (87.5, 67.5), and rotates 22.5° each frame in the 30-tick fly-in. It snaps to the outcome angle and pulses during the next 90 ticks. `tools/roulette_pose_diff.py` matched all four `Render::drawRoulette` arguments exactly for all 3,840 frames across eight outcomes and four rocket cells. The original schedules this draw at priority `0x2e4`, after the cursor ring and round banners. Live wheel drawing remains open. Next, trace the texture-mapped drum geometry and the iPad 3D projection, then connect that renderer to this animation.
 
+- Ported the iPad roulette drum mesh and projection from `Render::createRouletteModel` and `Render::drawRoulette`. The open octagonal cylinder uses an 18-vertex seam and 16 triangles. `tools/roulette_mesh_diff.py` runs the original under Unicorn and replays its logged GL transforms for 432 poses and UV combinations, including edge positions, the largest pulse scale, and a second UV rectangle to exercise the atlas offsets. All 7,776 vertex records and all index lists matched exactly. The largest projected position error was 0.000189 pixels. The original uses front-face culling and perspective projection with depth testing disabled. Next, render image slot 99 with perspective-correct UVs and the original lighting and culling, then verify the live overlay at priority `0x2e4` over overlapping battle elements.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
