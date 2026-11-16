@@ -74,6 +74,12 @@ def run(stage, frames):
         o.uc.hook_add(_H, mcb, begin=BASE + 0x3501c - G, end=BASE + 0x3501c - G + 2)
     else:
         cur_frame = [0]
+    if os.environ.get('HOOKCLEAR'):   # log the arguments of Data::clearChallenge (0x3e894) and return
+        from unicorn import UC_HOOK_CODE as _HC
+        def hcb(uc, a_, sz, u):
+            print('CLEAR stage %d bcd %#x at frame %d' % (uc.reg_read(UC_ARM_REG_R0), uc.reg_read(UC_ARM_REG_R1), cur_frame[0]))
+            uc.reg_write(UC_ARM_REG_R0, 1); uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+        o.uc.hook_add(_HC, hcb, begin=BASE + 0x3e894 - G, end=BASE + 0x3e894 - G + 2)
     for f in range(frames):
         cur_frame[0] = f
         try:

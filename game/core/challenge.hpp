@@ -41,6 +41,9 @@ public:
         }
     }
     int counter() const { return type == 2 ? sim.killedByCat : sim.saved; }
+    // Data::clearChallenge(stage, BCD time left) stores limit - whole seconds left (30 s; 60 s for the last stage), the clock frozen at the tick the stage was cleared (measured: floor((1800 - tick) / 60) in the original's argument).
+    int secondsLeft() const { return (kLimitTicks - playTick) / 60; }
+    int clearSeconds() const { return (stage == 24 ? 60 : 30) - secondsLeft(); }
 private:
     void playFrame() {
         if (decided_) { phase = decidedPhase_; phaseFrame = 0; decided_ = false; return; }   // the outcome shows one frame after the check that found it

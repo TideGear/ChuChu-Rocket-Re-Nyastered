@@ -2078,11 +2078,19 @@ struct PuzzleMode : Screen {
 // ---------------------------------------------------------------- stage select (functional; the original's layout/art is not reproduced yet: docs/known_gaps.md)
 // ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
 struct ChallengeMode : Screen {
-    Stages stages; int cur = 0; ChallengeGame game; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0;
+    Stages stages; int cur = 0; ChallengeGame game; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
+    // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
+    struct Save { uint32_t mask = 0, best[25] = {}; };
+    static Save loadSave(const std::string& root) { Save s; if (FILE* f = fopen((root + "/challenge.bin").c_str(), "rb")) { if (fread(&s, sizeof s, 1, f) != 1) s = Save(); fclose(f); } return s; }
+    void saveResult(App& a) {   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
+        Save s = loadSave(a.root); const int t = game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
+        s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur];
+        if (FILE* f = fopen((a.root + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
+    }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false; begin(stage); return true; }
-    void begin(int stage) { cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); game.start(stages.list[cur].st, cur); prev.clear(); }
+    void begin(int stage) { saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); game.start(stages.list[cur].st, cur); prev.clear(); }
     int music() override { return 9; }
     void place(App& a, int dir) { if (game.phase != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if (game.placeArrow(aim.cellX(), aim.cellY(), dir)) a.playSfx(1); else a.playSfx(0x13); }
     void event(App& a, const SDL_Event& e) override {
@@ -2111,6 +2119,7 @@ struct ChallengeMode : Screen {
         for (size_t i = 0; i < game.sim.ents.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z};
         const int before = game.phase;
         game.tick();
+        if (game.phase == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
         if (game.phase != before) { if (game.phase == ChallengeGame::Success || game.phase == ChallengeGame::Result) a.playSfx(0x15); else if (game.phase == ChallengeGame::Failure) a.playSfx(0x1b); }
     }
     const char* next() override { if (!back) return nullptr; back = false; return "MENU"; }
@@ -2128,7 +2137,7 @@ struct ChallengeMode : Screen {
         else if (game.phase == ChallengeGame::Intro) line = "STAGE CHALLENGE " + std::to_string(cur + 1) + "  CLICK TO START";
         else if (game.phase == ChallengeGame::Countdown) line = std::to_string(1 + (ChallengeGame::kCountdownFrames - game.phaseFrame) / 36) + "...";
         else if (game.phase == ChallengeGame::Play) line = std::string(game.type == 2 ? "EATEN " : "SAVED ") + std::to_string(game.counter()) + " OF " + std::to_string(game.target) + "   TIME " + std::to_string(std::max(0, (ChallengeGame::kLimitTicks - game.playTick) / 60 + 1));
-        else if (game.phase == ChallengeGame::Success || game.phase == ChallengeGame::Result) line = game.phase == ChallengeGame::Result ? "CLEAR!  CLICK FOR NEXT STAGE" : "CLEAR!";
+        else if (game.phase == ChallengeGame::Success || game.phase == ChallengeGame::Result) line = game.phase == ChallengeGame::Result ? "CLEAR!  " + std::to_string(game.clearSeconds()) + " SEC  BEST " + std::to_string(bestSeconds) + (newBest ? " NEW" : "") + "  CLICK FOR NEXT" : "CLEAR!";
         else line = std::string("MISS: ") + (game.failReason ? game.failReason : "") + "   CLICK RETRY  ESC QUIT";
         a.text(line, 24, 14, 30);
     }

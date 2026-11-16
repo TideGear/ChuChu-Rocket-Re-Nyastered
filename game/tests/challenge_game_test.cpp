@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
         for (int fr = 1; fr <= frames; fr++) {
             if (arrows && fr >= 480 && (fr - 480) % 40 == 0) { const int k = (fr - 480) / 40; g.placeArrow((7 * k + 3) % 12, (5 * k + 1) % 9, k % 4); }
             g.tick();
+            if (g.phase != lastPhase && g.phase == ChallengeGame::Result) { printf("RESULT left %d clear %d", g.secondsLeft(), g.clearSeconds()); putchar(10); }
             if (g.phase != lastPhase) { printf("f%d phase %d", fr, g.phase); if (g.failReason) printf(" (%s)", g.failReason); putchar(10); lastPhase = g.phase; }
             if (g.sim.saved != lastR || g.sim.killedByCat != lastE) { printf("CNT f%d rocket %d eaten %d", fr, g.sim.saved, g.sim.killedByCat); putchar(10); lastR = g.sim.saved; lastE = g.sim.killedByCat; }
         }
