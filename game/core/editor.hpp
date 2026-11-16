@@ -46,4 +46,14 @@ inline EditorStage convertEditorField(const uint32_t cells[9][12], const uint8_t
     }
     return s;
 }
+// Editor::calculateCRC (0x2ce38) with the table of Editor::initializeCRC (0x2cde0): the standard reflected CRC-32 (polynomial 0x04c11db7, init 0xffffffff,
+// final complement); a zero length returns 0 (tools/oracle/editor_crc_diff.py: 300 random buffers equal zlib.crc32). sendLevel signs the 0x17c byte stage struct with it.
+inline uint32_t editorCrc(const uint8_t* data, int length) {
+    if (length == 0) return 0;
+    static uint32_t table[256]; static bool built = false;
+    if (!built) { for (uint32_t i = 0; i < 256; i++) { uint32_t c = i; for (int k = 0; k < 8; k++) c = (c & 1) ? 0xedb88320u ^ (c >> 1) : c >> 1; table[i] = c; } built = true; }
+    uint32_t crc = 0xffffffffu;
+    for (int i = 0; i < length; i++) crc = table[(crc & 0xff) ^ data[i]] ^ (crc >> 8);
+    return ~crc;
+}
 } // namespace ccr

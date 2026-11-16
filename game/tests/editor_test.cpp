@@ -16,6 +16,7 @@ int main(int argc, char** argv) {
         for (int k = 0; k < 0x175; k++) if (k < 0x159 || k >= 0x15c) if (got.bytes[k] != want[k]) same = false;
         if (same) ok++; else printf("MISMATCH case %u\n", i);
     }
-    printf("editor golden cases: %u, identical: %d\n", n, ok);
+    { const uint8_t k[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'}; if (editorCrc(k, 9) != 0xCBF43926u || editorCrc(k, 0) != 0) { printf("CRC known answer failed\n"); return 1; } }
+    printf("editor golden cases: %u, identical: %d (CRC-32 known answer ok)\n", n, ok);
     return ok == (int)n ? 0 : 1;
 }
