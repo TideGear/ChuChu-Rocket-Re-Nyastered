@@ -44,6 +44,8 @@ int main(int argc, char** argv) {
             if (f == 1 && getenv("NOARROWLAT")) b.arrowLatency = false;
             if (f == 1 && getenv("FIRSTEXEC")) b.sim.firstExecSkipsHit = true;
             if (f == 1 && getenv("RETRY")) b.sim.retryFull = true;
+            if (f == 1 && getenv("HOLELAG")) b.holeLag = atoi(getenv("HOLELAG"));
+            if (f == 1 && getenv("PAIRLAG")) b.pairLag = true;
             if (f == 1 && getenv("FREE")) b.decFromFree = true;
             if (f == 1 && getenv("SPAWNLAG") && b.gen) b.gen->spawnLag = atoi(getenv("SPAWNLAG"));
             if (getenv("RNGDUMP") && atoi(getenv("RNGDUMP")) == idx && seed == 1000 + idx * 17) { static unsigned long long last = 0; if (f == 1) last = ccr::g_rngDraws; b.tick(); if (ccr::g_rngDraws != last) { printf("RNG f%d %llu\n", f, ccr::g_rngDraws - last); last = ccr::g_rngDraws; } } else

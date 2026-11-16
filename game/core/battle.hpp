@@ -54,7 +54,8 @@ public:
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
-    bool inCpu_ = false; bool arrowLatency = true; std::vector<std::pair<int,int>> pendRefresh_;   // verification: the arrow task registers its collision flag one tick after the placement call (Challenge)
+    int holeLag = 31;   // a mouse that falls into a hole leaves the generator counter about 30 ticks after the event (measured: Mouse Mania stage 5, f1738 -> f1768)
+    bool pairLag = false; bool inCpu_ = false; bool arrowLatency = true; std::vector<std::pair<int,int>> pendRefresh_;   // verification: the arrow task registers its collision flag one tick after the placement call (Challenge)
     bool decFromFree = false;   // the generator counters drop when the mouse task is destroyed (one tick after the collision event), not at the event
     bool decDump = false; int forceOutcome = -1; int decLag = 2;   // verification: ticks between a mouse's collision event and the generator counter change
     void start(const Stage& st, uint32_t seed) {
@@ -109,6 +110,8 @@ public:
         prepareSpeedChange();
         sim.events.clear(); sim.tick();
         for (const Event& e : sim.events) handle(e);
+        if (pairLag && eatenTick_ >= 2) { pendMice_ -= eatenNormal_; extraMice_ += eatenNormal_; }   // hypothesis: a same-frame pair of eaten mice leaves the counter one tick later
+        eatenTick_ = eatenNormal_ = 0;
         if (decFromFree) for (int t : sim.freedMice) decMice(t, 4);
         sim.freedMice.clear();
         if (!cpuFirst) runCpu();
@@ -157,7 +160,10 @@ private:
     void decMice(int type, int kind = 0) { if (decDump && type == 0) { printf("DEC f%d k%d", frame, kind); putchar(10); } if (decLag == 0) { if (type == 0) gen->mice--; if (type == 1) gen->cnt1--; if (type == 2) gen->cnt2--; return; } if (type == 0) pendMice_++; if (type == 1) pendCnt1_++; if (type == 2) pendCnt2_++; }
     int pend3Mice_ = 0, pend3Cnt1_ = 0, pend3Cnt2_ = 0;
     int pend2Mice_ = 0, pend2Cnt1_ = 0, pend2Cnt2_ = 0;
+    int eatenTick_ = 0, eatenNormal_ = 0, extraMice_ = 0; std::vector<std::pair<int,int>> holeQueue_;   // (frame the counter drops, mouse type)
     void applyMiceDec() {
+        pendMice_ += extraMice_; extraMice_ = 0;
+        for (size_t i = 0; i < holeQueue_.size();) { if (holeQueue_[i].first <= frame) { const int t = holeQueue_[i].second; if (t == 0) gen->mice--; if (t == 1) gen->cnt1--; if (t == 2) gen->cnt2--; holeQueue_.erase(holeQueue_.begin() + i); } else i++; }
         if (decLag == 3) { gen->mice -= pend3Mice_; gen->cnt1 -= pend3Cnt1_; gen->cnt2 -= pend3Cnt2_; pend3Mice_ = pend2Mice_; pend3Cnt1_ = pend2Cnt1_; pend3Cnt2_ = pend2Cnt2_; pend2Mice_ = pendMice_; pend2Cnt1_ = pendCnt1_; pend2Cnt2_ = pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; return; }
         if (decLag == 1) { gen->mice -= pendMice_; gen->cnt1 -= pendCnt1_; gen->cnt2 -= pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; return; } gen->mice -= pend2Mice_; gen->cnt1 -= pend2Cnt1_; gen->cnt2 -= pend2Cnt2_; pend2Mice_ = pendMice_; pend2Cnt1_ = pendCnt1_; pend2Cnt2_ = pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; }
     void handle(const Event& e) {
@@ -172,7 +178,7 @@ private:
         case Event::MouseGone:   // MO_MouseJimeExe deletes the task directly (0x3db0c) when it is more than 180 from the field centre: the counter drops in the same frame
             if (e.type == 0) gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
         case Event::MouseEaten: case Event::MouseHole:
-            if (!decFromFree) decMice(e.type, e.kind == Event::MouseEaten ? 2 : 3); break;
+            if (e.kind == Event::MouseHole && holeLag > 0) holeQueue_.push_back({frame + holeLag, e.type}); else if (!decFromFree) decMice(e.type, e.kind == Event::MouseEaten ? 2 : 3); if (e.kind == Event::MouseEaten) { eatenTick_++; if (e.type == 0) eatenNormal_++; } break;
         case Event::CatRocket:
             if (e.player >= 0) { score.catHasCome(e.player); updateRanks(); if (sfx) sfx(7); }            // a cat in a rocket respawns at a generator: it stays 'out'
             // (hole: no score change; the cat respawns at a generator too, so it stays 'out')
