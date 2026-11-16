@@ -1,0 +1,31 @@
+// Challenge stage types 3 and 4 on the battle engine: runs BattleGame on a Challenge board with a fixed seed and logs the eaten-mouse counter changes
+// in the original's frame numbering (play tick 1 = frame 470), to diff against tools/oracle/challenge_probe.py (SEED=<seed> TRACKCNT=1).
+// usage: challenge_battle_test <battle_stages.bin> <stage> <seed> <ticks> [gen mask]
+#include "../core/battle.hpp"
+#include <cstdio>
+#include <cstdlib>
+using namespace ccr;
+int main(int argc, char** argv) {
+    if (argc < 5) { printf("usage: challenge_battle_test <battle_stages.bin> <stage> <seed> <ticks> [mask]\n"); return 2; }
+    FILE* f = fopen(argv[1], "rb"); if (!f) { printf("cannot open %s\n", argv[1]); return 2; }
+    const int want = atoi(argv[2]), seed = atoi(argv[3]), ticks = atoi(argv[4]), mask = argc > 5 ? atoi(argv[5]) : 6;
+    uint32_t n; fread(&n, 4, 1, f);
+    for (uint32_t i = 0; i < n; i++) {
+        uint8_t hdr[4]; fread(hdr, 1, 4, f); Stage st; uint8_t walls[237]; char title[32];
+        fread(st.tiles, 1, 108, f); fread(walls, 1, 237, f); fread(title, 1, 32, f);
+        for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) st.hw[r * 12 + c] = walls[25 * r + c];
+        for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) st.vw[r * 13 + c] = walls[25 * r + 12 + c];
+        if (hdr[0] != 3 || (hdr[2] | (hdr[3] << 8)) != want) continue;
+        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = 0.25f; b.rouletteEnabled = false; b.rouletteManager = false;
+        b.start(st, (uint32_t)seed); b.gen->flags = (uint32_t)mask; if (want % 5 == 3) b.gen->params().pSpawn = 0.075f;   // GE_StartGenerator4Manager in Challenge mode (0x34bf6): stage type 3 raises the spawn probability to 0.075
+        size_t shown = 0;
+        int last = -1;
+        for (int t = 1; t <= ticks; t++) {
+            b.tick();
+            if (getenv("SPAWNS")) for (; shown < b.gen->spawns.size(); shown++) { const auto& sp = b.gen->spawns[shown]; printf("UP f%d type %d%s", sp.frame + 469, sp.mouseType, sp.cat ? " cat" : ""); putchar(10); }
+            if (b.sim.killedByCat != last) { printf("CNT f%d rocket 0 eaten %d", t + 469, b.sim.killedByCat); putchar(10); last = b.sim.killedByCat; }
+        }
+        return 0;
+    }
+    printf("stage %d not found\n", want); return 1;
+}

@@ -48,7 +48,8 @@ def run(stage, frames):
     tiles, walls = ascii_stage(d[stage * 477:stage * 477 + 475])
     st = bytearray(380); st[0:108] = tiles; st[0x6c:0x6c + 237] = walls
     o.write(gcall(0x2ddd0, 2, stage), bytes(st))    # FI_GetFIPSptr(2, stage): the challenge stage array
-    gcall(0x2ed7c, stage, 0, 1)                     # GA_SetStageNum(level, stage, flag): stored at +4 / +8 of the game parameter block
+    gcall(0x2ed7c, stage, 0, 1)
+    if os.environ.get('SEED'): gcall(0x25660, int(os.environ['SEED']))   # BHLib_SeedRNG: a fixed random stream so a port run can be compared                     # GA_SetStageNum(level, stage, flag): stored at +4 / +8 of the game parameter block
     last = None
     if os.environ.get('CALLS'):   # log the named functions entered during frame 0 (the set-up phase)
         names = {a: n for a, n in FUNCS}
@@ -74,6 +75,10 @@ def run(stage, frames):
         o.uc.hook_add(_H, mcb, begin=BASE + 0x3501c - G, end=BASE + 0x3501c - G + 2)
     else:
         cur_frame = [0]
+    if os.environ.get('TRACKUP'):   # log GE_MouseCountUp (0x34a6c) calls: frame and mouse type (each call is seen twice)
+        from unicorn import UC_HOOK_CODE as _HU
+        def ucb(uc, a_, sz, u): print('UP f%d type %d' % (cur_frame[0], uc.reg_read(UC_ARM_REG_R0)))
+        o.uc.hook_add(_HU, ucb, begin=BASE + 0x34a6c - G, end=BASE + 0x34a6c - G + 2)
     if os.environ.get('HOOKCLEAR'):   # log the arguments of Data::clearChallenge (0x3e894) and return
         from unicorn import UC_HOOK_CODE as _HC
         def hcb(uc, a_, sz, u):
