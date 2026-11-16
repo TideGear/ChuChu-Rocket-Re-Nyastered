@@ -583,15 +583,20 @@ struct App {
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
     std::vector<int> angs; std::vector<float> cphase; int gtime = 0;   // cat walk phase (+0.45 per tick, wraps at 20.0: FUN_00028ffc), global tick for the mouse walk frame (TI_GetGlobalTime mod 11: FUN_000353e0)
-    void stepAngles(const Sim& sim) {
-        gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(0.0f);
-        for (size_t i = 0; i < sim.ents.size(); i++) if (!sim.ents[i].mouse && sim.ents[i].alive) { cphase[i] += 0.45f; if (cphase[i] >= 20.0f) cphase[i] -= 20.0f; }                       // original turn logic (core/angle.hpp), once per simulation tick
+    void stepAngles(const Sim& sim, bool effectsOnly = false) {
+        if (!effectsOnly) {
+            gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(0.0f);
+            for (size_t i = 0; i < sim.ents.size(); i++) if (!sim.ents[i].mouse && sim.ents[i].alive) { cphase[i] += 0.45f; if (cphase[i] >= 20.0f) cphase[i] -= 20.0f; }
+        }
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
         for (size_t i = 0; i < sim.ents.size(); i++) {
             const Entity& e = sim.ents[i];
-            if (!e.catHoleFall) angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed);
-            else if (!e.rocketIn) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
-            else if (e.rocketCounter < 1.0f) angs[i] = (angs[i] + 0x1000) & 0xffff;
+            if (e.drawsHoleFall()) {
+                if (e.rocketCounter < 1.0f) angs[i] = (angs[i] + 0x1000) & 0xffff;
+            } else if (!effectsOnly) {
+                if (e.catHoleFall && e.alive) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
+                else angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed);
+            }
         }
     }
     struct FieldObject {
@@ -630,11 +635,11 @@ struct App {
             }
             if (i == sim.ents.size()) break;
             const Entity& en = sim.ents[i];
-            if (!en.alive || en.done || (en.rocketIn && !en.catHoleFall)) continue;
-            if (en.rocketIn) {
+            if (en.drawsHoleFall()) {
                 fieldObjects.push_back({std::max(-64, static_cast<int>(en.z)), en.x, en.z, i, false});
                 continue;
             }
+            if (!en.alive || en.done || en.rocketIn) continue;
             float x = prev[i].first + (en.x - prev[i].first) * alpha;
             float z = prev[i].second + (en.z - prev[i].second) * alpha;
             if (std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
@@ -661,7 +666,7 @@ struct App {
             }
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
-            if (en.rocketIn && en.catHoleFall) {
+            if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter, 255);
                 if (headless && getenv("CCR_CAT_HOLE_TRACE"))
                     printf("cat hole %d %.3f %.3f %.6f\n", (ang & 0xffff) >> 11, x, z, en.rocketCounter);
@@ -1752,12 +1757,13 @@ struct PuzzleMode : Screen {
             curY = static_cast<int>(padAim.y / kCell);
         }
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
-        if (state == 3) {
-            // HD 1.0 PuzzleLoop handles the failure before continuing the task pass.
+        if (state == 2 || state == 3) {
+            // Keep character effects ticking while the result holds the board.
             if (pendingFailureCue) { a.playSfx(27); pendingFailureCue = false; }
             ++sim.now;
             sim.tickEffects();
-            if (dash) { ++sim.now; sim.tickEffects(); }
+            a.stepAngles(sim, true);
+            if (dash) { ++sim.now; sim.tickEffects(); a.stepAngles(sim, true); }
             return;
         }
         if (!running) return;

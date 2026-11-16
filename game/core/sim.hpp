@@ -39,7 +39,8 @@ struct Entity {
     bool mouse = true, alive = true, done = false, hit = false;   // hit: contact flag set by the collision pass, consumed at the start of the next tick
     float x = 0, z = 0;
     bool rocketIn = false; float rocketCounter = 1.0f;   // battle cat inside a rocket (30-tick animation, then respawn at a random generator)
-    bool catHoleFall = false;   // distinguishes the hole draw task through its respawn tick
+    bool catHoleFall = false;   // keeps the hole draw task visible after a Puzzle cat leaves gameplay
+    bool drawsHoleFall() const { return catHoleFall && (rocketIn || !alive) && rocketCounter > 0.0f; }
     bool reg = false;
     bool fresh = false;         // spawned before this tick's entity pass: first moves next tick, no contact this tick
     int slot = -1;              // task-pool slot (the collision entry stores the task pointer: a reused slot is read through the new occupant)
@@ -89,6 +90,13 @@ public:
         if (poolModel || effect) pendingFree.push_back({static_cast<int>(ent), when, effect});
     }
     void tickEffects() {
+        if (!battle) {
+            const float fallStep = 0.2f * bitsToFloat(kRocketStepBits);
+            for (auto& cat : ents) {
+                if (!cat.drawsHoleFall()) continue;
+                cat.rocketCounter = std::max(0.0f, cat.rocketCounter + fallStep);
+            }
+        }
         for (auto& e : effects) e.tick();
         for (size_t i = 0; i < effects.size();) { if (effects[i].age >= 48) { releaseSlot(effects[i].slot); effects.erase(effects.begin() + i); } else i++; }
         for (size_t i = 0; i < pendingFree.size();) {
@@ -284,7 +292,7 @@ private:
                 if (e.mouse || !rnd) e.alive = false;
                 else { e.rocketIn = true; e.catHoleFall = true; }
                 return; }   // cat lost in a hole: player -1, no score
-            if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; endTicks.push_back(now); if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); } e.alive = false; return; }
+            if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; endTicks.push_back(now); if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); } else e.catHoleFall = true; e.alive = false; return; }
             if (!e.mouse && (f & kArrow)) {                      // cat arriving head-on to an arrow strikes it
                 if (((e.heading + 2) & 3) == (int)(f & 3)) strikeArrow(e.gx, e.gy);   // note: the turn below still uses the flags read before the strike (as the original does)
             }
