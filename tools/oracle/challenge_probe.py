@@ -74,6 +74,14 @@ def run(stage, frames):
                 open(PATCHES, 'a').write('%x\n' % fn[0])
                 raise SystemExit(3)
             return
+        if os.environ.get('ARROWS') and f >= 480 and (f - 480) % 40 == 0:   # scripted arrows for player 0 (battle arrow manager, as battle_probe.py): k-th arrow at cell ((7k+3) mod 12, (5k+1) mod 9), direction k mod 4
+            k = (f - 480) // 40
+            pt = o.heap_ptr; o.heap_ptr += 16
+            o.write(pt, struct.pack('<hh', (7 * k + 3) % 12, (5 * k + 1) % 9)); gcall(0x286ac, 0, pt, k % 4)
+        if os.environ.get('ARRCELLS') and f >= 480 and (f - 480) % 40 == 1:   # cells whose collision word has the arrow bit
+            base = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff
+            words = struct.unpack('<108I', o.read(BASE + base, 432))
+            print('ARR t%d' % (f - 469), [(i % 12, i // 12, hex(w & 0xfff)) for i, w in enumerate(words) if w & 0x800])
         for spec in os.environ.get('POKE', '').split(';'):   # POKE="ghidra_addr,value,frame;..." writes a 32-bit value at that frame (rule checks)
             if spec:
                 ga, val, at = spec.split(',')
