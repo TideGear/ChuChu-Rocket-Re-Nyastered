@@ -69,7 +69,7 @@ Put whichever originals you have under `Original Game Files` beside `setup.cmd`,
 | **Dreamcast** | Numbered `.bin` tracks and their `.cue`, loose or in a ZIP | Provides the original 100 main puzzles, 25 Battle boards, stereo CD music and original Dreamcast art. |
 | **Dreamcast VMU DLC** | `.VMS` with its optional paired `.VMI`, loose or in a ZIP | `DEPuzzle` adds 25 playable Express puzzles. Setup also collects the `PuzzleP`, `Cartoony`, `DEChar` and `UFOCow` saves for future support. |
 
-For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu Rocket!** entry in [Redump.org](https://redump.org/) and contains **19 `.bin` files and one `.cue` file** is the tested layout. [Redump catalog listing](https://data.spludlow.co.uk/redump/redump/Sega%20-%20Dreamcast#:~:text=ChuChu%20Rocket!%20(USA))
+For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu Rocket!** entry in [Redump.org](https://redump.org/) and contains **19 `.bin` files and one `.cue` file** is the tested layout.
 
 ### What if I have fewer releases?
 
