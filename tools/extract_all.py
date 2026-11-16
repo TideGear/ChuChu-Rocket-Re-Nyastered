@@ -1,11 +1,12 @@
 """ChuChu Rocket! Re-Nyastered: one-shot asset extraction from the user's own game files.
 
-usage: py -3.12 tools/extract_all.py --game-files "<folder with iOS/Android/GBA/Dreamcast subfolders>" --cache "<output folder>"
+usage: py -3.12 tools/extract_all.py --game-files "<folder with original files>" --cache "<output folder>"
 
 Everything written to --cache is derived from the user's files and must never be committed or shared.
 Writes <cache>/manifest.json: input files with SHA-256, and what was extracted from each.
 """
-import argparse, glob, hashlib, json, os, re, shutil, struct, subprocess, sys, time, wave, zipfile
+import argparse, glob, hashlib, json, os, plistlib, re, shutil, struct, subprocess, sys, tempfile, time, wave, zipfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -23,9 +24,14 @@ def sha256(path, chunk=1 << 22):
 def unzip(src, dst):
     if os.path.isdir(dst) and os.listdir(dst):
         return dst
-    os.makedirs(dst, exist_ok=True)
-    with zipfile.ZipFile(src) as z:
-        z.extractall(dst)
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=dst.parent) as temporary:
+        unpacked = Path(temporary, 'input')
+        unpacked.mkdir()
+        with zipfile.ZipFile(src) as z:
+            z.extractall(unpacked)
+        unpacked.replace(dst)
     return dst
 
 
@@ -49,14 +55,20 @@ def do_ios(ipa, work, assets, entry):
     import extract_packs
     stem = os.path.splitext(os.path.basename(ipa))[0]
     safe = ''.join(c if c.isalnum() else '_' for c in stem)[:48]
-    root = unzip(ipa, os.path.join(work, 'ios', safe))
-    apps = glob.glob(os.path.join(root, 'Payload', '*.app'))
+    root = ipa if os.path.isdir(ipa) else unzip(ipa, os.path.join(work, 'ios', safe + '-' + entry['sha256'][:16]))
+    apps = [root] if str(root).lower().endswith('.app') else glob.glob(os.path.join(root, 'Payload', '*.app'))
     if not apps:
         entry['error'] = 'no .app in ipa'; return
     app = apps[0]
+    plist = Path(app, 'Info.plist')
+    if plist.is_file():
+        with plist.open('rb') as stream:
+            metadata = plistlib.load(stream)
+        entry['version'] = metadata.get('CFBundleShortVersionString') or metadata.get('CFBundleVersion')
     exe = os.path.join(app, 'CCR')
     if not os.path.exists(exe):
         entry['error'] = 'no CCR executable'; return
+    os.makedirs(os.path.join(work, 'ios'), exist_ok=True)
     thin = os.path.join(work, 'ios', safe + '.armv7')
     run_tool('thin.py', exe, thin)
     entry['packs'] = {}
@@ -66,6 +78,8 @@ def do_ios(ipa, work, assets, entry):
             r = extract_packs.extract(thin, app, pack, out)
             if r:
                 entry['packs'][pack] = {'records': r[0], 'failed': r[1], 'textures': export_pngs(out, os.path.join(assets, 'ios', safe, pack + '_png'))}
+                if pack == 'ccrret' and entry.get('version') == '1.1.2':
+                    entry['base_graphics'] = run_tool('export_sprites.py', out, os.path.join(assets, 'ret_all'), 'all').strip()
                 import extract_ios_locale                  # language packs: the HUD images with text are there (docs/ui_art.md, image id map)
                 for lg in ('en', 'fr', 'de', 'es', 'it', 'ja'):
                     if os.path.exists(os.path.join(app, '%s_%s' % (pack, lg))):
@@ -83,24 +97,21 @@ def do_ios(ipa, work, assets, entry):
 def do_apk(apk, work, assets, entry):
     stem = os.path.splitext(os.path.basename(apk))[0]
     safe = ''.join(c if c.isalnum() else '_' for c in stem)[:48]
-    root = unzip(apk, os.path.join(work, 'apk', safe))
+    root = apk if os.path.isdir(apk) else unzip(apk, os.path.join(work, 'apk', safe + '-' + entry['sha256'][:16]))
     out = os.path.join(assets, 'android', safe)
     entry['log'] = run_tool('extract_android.py', root, out).strip().splitlines()[-6:]
     entry['textures'] = 0
     main = os.path.join(out, 'libccrjni', 'main')
     if os.path.isdir(main):
         entry['textures'] = export_pngs(main, os.path.join(out, 'main_png'))
+        entry['phone_art'] = run_tool('export_android_ui.py', out, os.path.join(assets, 'ret_all')).strip().splitlines()
+        run_tool('export_strings.py', os.path.dirname(main), os.path.join(out, 'strings.json'),
+                 os.path.join(assets, 'strings'))
 
 
 def do_gba(src, work, assets, entry):
     import gba_stages
     rom_path = src
-    if src.lower().endswith('.zip'):
-        d = unzip(src, os.path.join(work, 'gba'))
-        roms = glob.glob(os.path.join(d, '*.gba'))
-        if not roms:
-            entry['error'] = 'no .gba in zip'; return
-        rom_path = roms[0]
     gba_stages.ROM = rom_path
     rom = open(rom_path, 'rb').read()
     entry['rom_sha256'] = sha256(rom_path)
@@ -113,7 +124,7 @@ def do_gba(src, work, assets, entry):
 
 
 def do_dreamcast(src, work, assets, entry):
-    d = unzip(src, os.path.join(work, 'dc'))
+    d = src
     files = os.path.join(assets, 'dreamcast', 'files')
     if not os.path.isdir(files):
         run_tool('gdi_extract.py', d, files, 0)
@@ -141,8 +152,11 @@ def do_dreamcast(src, work, assets, entry):
     # CD audio tracks 04..18 (raw 16-bit stereo 44.1 kHz) -> WAV
     audio = os.path.join(assets, 'dreamcast', 'audio'); os.makedirs(audio, exist_ok=True)
     wavs = []
-    for p in sorted(glob.glob(os.path.join(d, '*Track *.bin'))):
-        n = int(re.search(r'Track (\d+)', p).group(1))
+    for p in sorted(Path(d).glob('*')):
+        match = re.search(r'track\s*(\d+)\)?\.bin$', p.name, re.I)
+        if not match:
+            continue
+        n = int(match[1])
         if n == 1 or n == 3 or n == 19:
             continue                                              # data tracks
         out = os.path.join(audio, 'track%02d.wav' % n)
@@ -157,6 +171,104 @@ def do_dreamcast(src, work, assets, entry):
     entry['audio_tracks'] = wavs
 
 
+# These are the same two resources in the tested Dreamcast, Android and iOS
+# releases. Hashes distinguish Battle from Challenge without record numbers.
+BATTLE_MAPS = {
+    'BTSTAGE25.DAT': 'b782205539abbe9cb377d3dce230612e9be9bccba289eb1cdd30f9761396bf62',
+    'CHSTAGE25.DAT': 'f1736a8afaea5ba51ee425205e944734639115ddc6d8c42044791b28a42c6c5e',
+}
+
+
+def export_playable_stages(assets):
+    from export_battle import export_maps
+    root = Path(assets)
+    puzzle_digest = 'e9ce95921a415328c4e2f8b79b38b8bf47a0b95af0526b1b70ad1f89149991df'
+    candidates = [root / 'dreamcast' / 'files' / 'ENGLISH' / name for name in BATTLE_MAPS]
+    for parent, pattern in (('ios', '*/*/index.json'), ('android', '*/*/main/index.json')):
+        for index in sorted((root / parent).glob(pattern)):
+            with index.open(encoding='utf-8') as stream:
+                records = json.load(stream)['records']
+            candidates.extend(index.with_name(f"{record['i']:04d}.bin")
+                              for record in records if record['size'] in (11925, 38000))
+    by_digest = {}
+    for file in candidates:
+        if file.is_file() and file.stat().st_size in (11925, 38000):
+            by_digest.setdefault(sha256(file), file)
+    sources = {}
+    if puzzle_digest in by_digest:
+        path = by_digest[puzzle_digest]
+        data = path.read_bytes()
+        with (root / 'mobile_puzzles.bin').open('wb') as stream:
+            stream.write(struct.pack('<I', 100))
+            for stage in range(100):
+                record = data[stage * 380:(stage + 1) * 380]
+                stream.write(struct.pack('<BBH', 5, 0, stage))
+                stream.write(record[:108] + record[108:108 + 237])
+                stream.write(record[0x15c:0x160])
+                stream.write(record[0x160:0x175].ljust(32, b'\0'))
+        sources['mobile_puzzles'] = path.relative_to(root).as_posix()
+    if all(digest in by_digest for digest in BATTLE_MAPS.values()):
+        paths = [by_digest[digest] for digest in BATTLE_MAPS.values()]
+    # A Dreamcast release can have different maps. Preserve the original export
+    # path for named and well-formed files from that disc.
+    elif all(path.is_file() and path.stat().st_size == 11925 for path in candidates[:2]):
+        paths = candidates[:2]
+    else:
+        paths = []
+    if paths:
+        export_maps(*paths, root / 'battle_stages.bin')
+        sources['battle_stages'] = [p.relative_to(root).as_posix() for p in paths]
+    return sources
+
+
+def discover(root, work, prefix='', exclude=None):
+    """Yield (kind, local path, original label) for packages and loose input."""
+    for base, dirs, files in os.walk(root):
+        dirs[:] = sorted(name for name in dirs if (Path(base) / name).resolve() != exclude)
+        files.sort()
+        folder = Path(base)
+        label = prefix + folder.relative_to(root).as_posix()
+        if folder.suffix.lower() == '.app' and 'CCR' in files:
+            dirs.clear()
+            yield 'ios', folder, label
+            continue
+        if 'AndroidManifest.xml' in files and (folder / 'res' / 'raw' / 'ccr0.png').is_file():
+            dirs.clear()
+            yield 'android', folder, label
+            continue
+        if any(re.search(r'track\s*0?3\)?\.bin$', name, re.I) for name in files):
+            yield 'dreamcast', folder, label
+        for name in files:
+            path = folder / name
+            suffix = path.suffix.lower()
+            label = prefix + path.relative_to(root).as_posix()
+            kind = {'.ipa': 'ios', '.apk': 'android', '.gba': 'gba', '.vmi': 'dlc', '.vms': 'dlc'}.get(suffix)
+            if kind:
+                yield kind, path, label
+            elif suffix == '.zip':
+                expanded = Path(work, 'zip', sha256(path))
+                try:
+                    unzip(path, expanded)
+                except (OSError, ValueError, zipfile.BadZipFile, RuntimeError) as error:
+                    yield 'error', path, (label, str(error))
+                    continue
+                yield from discover(expanded, work, label + '!')
+
+
+def input_entry(kind, path, label):
+    entry = {'kind': kind, 'file': label}
+    if path.is_file():
+        entry.update(bytes=path.stat().st_size, sha256=sha256(path))
+    else:
+        def included(candidate):
+            if kind == 'dreamcast':
+                return candidate.suffix.lower() in ('.bin', '.cue', '.gdi')
+            return True
+        entry['files'] = [{'name': p.relative_to(path).as_posix(), 'bytes': p.stat().st_size, 'sha256': sha256(p)}
+                          for p in sorted(path.rglob('*')) if p.is_file() and included(p)]
+    return entry
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--game-files', required=True)
@@ -166,31 +278,40 @@ def main():
     work, assets = os.path.join(cache, 'work'), os.path.join(cache, 'assets')
     os.makedirs(work, exist_ok=True); os.makedirs(assets, exist_ok=True)
     manifest = {'created': time.strftime('%Y-%m-%d %H:%M:%S'), 'inputs': []}
-    jobs = []
-    for p in sorted(glob.glob(os.path.join(gf, '**', '*'), recursive=True)):
-        if not os.path.isfile(p): continue
-        low = p.lower()
-        if low.endswith('.ipa'): jobs.append(('ios', p, do_ios))
-        elif low.endswith('.apk'): jobs.append(('android', p, do_apk))
-        elif low.endswith('.gba') or ('game boy advance' in low and low.endswith('.zip')): jobs.append(('gba', p, do_gba))
-        elif 'dreamcast' in low and low.endswith('.zip'): jobs.append(('dreamcast', p, do_dreamcast))
-    dlc_dir = os.path.join(gf, 'Dreamcast', 'DLC')
-    for kind, p, fn in jobs:
-        entry = {'kind': kind, 'file': os.path.relpath(p, gf), 'bytes': os.path.getsize(p)}
+    actions = {'ios': do_ios, 'android': do_apk, 'gba': do_gba, 'dreamcast': do_dreamcast}
+    for kind, path, label in discover(Path(gf), work, exclude=Path(cache).resolve()):
+        if kind == 'error':
+            manifest['inputs'].append({'kind': 'zip', 'file': label[0], 'error': label[1]})
+            continue
+        entry = input_entry(kind, path, label)
         print('[%s] %s' % (kind, entry['file']), flush=True)
-        entry['sha256'] = sha256(p)
         try:
-            fn(p, work, assets, entry)
+            if kind == 'dlc':
+                dst = Path(assets, 'dlc')
+                dst.mkdir(exist_ok=True)
+                shutil.copy2(path, dst)
+            else:
+                actions[kind](str(path), work, assets, entry)
         except Exception as e:
             entry['error'] = str(e)
             print('   ERROR:', e, flush=True)
         manifest['inputs'].append(entry)
-    if os.path.isdir(dlc_dir):
-        dst = os.path.join(assets, 'dlc'); os.makedirs(dst, exist_ok=True)
-        e = {'kind': 'dlc', 'file': os.path.relpath(dlc_dir, gf), 'files': []}
-        for p in sorted(glob.glob(os.path.join(dlc_dir, '*'))):
-            shutil.copy2(p, dst); e['files'].append({'name': os.path.basename(p), 'sha256': sha256(p)})
-        manifest['inputs'].append(e)
+    manifest['stage_sources'] = export_playable_stages(assets)
+    dlc = Path(assets, 'dlc')
+    if dlc.is_dir() and any(path.name.lower() == 'depuzzle.vms' for path in dlc.iterdir()):
+        output = Path(assets, 'gba', 'dlc_stages.bin')
+        output.parent.mkdir(exist_ok=True)
+        try:
+            run_tool('export_dlc_stages.py', output, dlc)
+        except RuntimeError as error:
+            manifest['dlc_export_error'] = str(error)
+    sprites = ('r0930', 'r0447', 'r0503', 'r0484', 'r0729', 'r0726', 'r0749', 'r0023')
+    manifest['base_graphics_available'] = all(Path(assets, 'ret_all', sprite + suffix).is_file()
+                                              for sprite in sprites for suffix in ('.tex.bin', '.frames.bin'))
+    puzzle = any(Path(assets, path).is_file() for path in ('gba/gba_stages.bin', 'mobile_puzzles.bin'))
+    battle = Path(assets, 'battle_stages.bin').is_file()
+    manifest['playable_modes'] = [mode for mode, present in (('Puzzle', puzzle), ('Battle', battle))
+                                  if present and manifest['base_graphics_available']]
     with open(os.path.join(cache, 'manifest.json'), 'w') as f:
         json.dump(manifest, f, indent=1)
     print('manifest written:', os.path.join(cache, 'manifest.json'))

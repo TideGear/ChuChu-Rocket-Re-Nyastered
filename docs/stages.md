@@ -46,6 +46,8 @@ All in `ENGLISH|FRENCH|GERMAN|SPANISH|JAPANIESE/` on the disc (identical boards 
 Mobile therefore = Dreamcast built-ins (100 puzzle + 25 challenge + 25 battle) plus 424 extra puzzle stages
 (24 tutorial + 16 groups of 25 not present in the Dreamcast disc files).
 
+Setup finds the common mobile stage resources by SHA-256, independently of pack record numbers. The Battle and Challenge exports match the Dreamcast export byte for byte. The 100 mobile main puzzles match the Dreamcast boards and per-direction arrow stocks. `mobile_puzzles.bin` keeps those stock bytes in South, West, North, East order. Source tag 5 uses four stock bytes after the walls where the GBA and Dreamcast DLC record types store full solution triples. The game uses this export when the GBA main set is absent.
+
 Updated union: 595 unique boards (503 puzzle + 50 battle/challenge + 42 DLC-only). Still to add: GBA stages (the GBA is said to
 include 2,500 of the Dreamcast community puzzles), the 424 extra mobile stages' provenance, and any user-made stage formats.
 

@@ -1,12 +1,16 @@
-import sys, os, struct, glob, re
+import sys, os, struct, re
 # Extract ISO9660 files from a GD-ROM high-density area spread over tracks 03..N (2352-byte sectors).
 # usage: gdi_extract.py <dir with Track NN.bin> <outdir> [gap_between_tracks_sectors]
 d, out = sys.argv[1], sys.argv[2]
 gap = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 tracks = {}
-for p in glob.glob(os.path.join(d, '*Track *.bin')):
-    n = int(re.search(r'Track (\d+)', p).group(1))
-    if n >= 3: tracks[n] = p
+for name in sorted(os.listdir(d)):
+    match = re.search(r'track\s*(\d+)\)?\.bin$', name, re.I)
+    if match and int(match[1]) >= 3:
+        n = int(match[1])
+        if n in tracks:
+            raise ValueError('more than one file for track %d; put each dump in its own folder' % n)
+        tracks[n] = os.path.join(d, name)
 order = sorted(tracks)
 segs = []  # (start_lba, nsectors, path, is_data)
 lba = 45000

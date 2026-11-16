@@ -19,15 +19,18 @@ def records(path):
     d = open(path, 'rb').read()
     return [d[i:i + 475] for i in range(0, len(d) - 474, 477)]
 
-def main(eng, out):
+def export_maps(battle, challenge, out):
     recs = []
-    for src, name in ((2, 'BTSTAGE25.DAT'), (3, 'CHSTAGE25.DAT')):
-        for i, r in enumerate(records(os.path.join(eng, name))): recs.append((src, i, r))
+    for src, path in ((2, battle), (3, challenge)):
+        for i, r in enumerate(records(path)): recs.append((src, i, r))
     with open(out, 'wb') as f:
         f.write(struct.pack('<I', len(recs)))
         for src, i, r in recs:
             t, w = ascii_stage(r)
             f.write(struct.pack('<BBH', src, 0, i) + t + w + (b'Battle %d' % i if src == 2 else b'Challenge %d' % i).ljust(32, b'\0'))
     print(len(recs), 'stages ->', out)
+
+def main(eng, out):
+    export_maps(os.path.join(eng, 'BTSTAGE25.DAT'), os.path.join(eng, 'CHSTAGE25.DAT'), out)
 
 if __name__ == '__main__': main(sys.argv[1], sys.argv[2])

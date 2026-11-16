@@ -41,7 +41,7 @@ See the [roadmap and dated work log](docs/roadmap.md), [verification results](do
 1. Put your [original game files](#which-original-files-do-i-need) in `Original Game Files` beside `setup.cmd`, then run `setup.cmd` from the checkout. If that folder is absent, setup asks for the path. To specify both paths directly from PowerShell, run `.\setup.cmd -GameFiles 'D:\My Game Files' -Cache 'D:\ReNyastered'`.
 2. Setup uses Python 3.10 or later if it can import Pillow. Otherwise it downloads and verifies private copies of Python 3.12.10 and Pillow 12.2.0 and caches them in `local\tools\windows`. Setup extracts into `%APPDATA%\ReNyastered\assets` by default and writes `manifest.json` and `setup.log` beside `assets`.
 3. Setup builds `build\game\ccr.exe`. The first build downloads and verifies portable Zig 0.14.1, CMake 4.0.3, Ninja 1.12.1, SDL2 2.30.9 and `stb_vorbis.c`. It uses the checkout's `local\tools\windows` and `build\game-zig` folders. Visual Studio C++ Build Tools are unnecessary.
-4. Complete the [gameplay exports](#export-assets-for-play) for the modes you want, then launch `build\game\ccr.exe`. Pass the `assets` folder as the first argument or set `CCR_ASSETS` if you use a custom cache.
+4. Launch `build\game\ccr.exe`. Setup reports which modes are playable from the files in your cache. Pass the `assets` folder as the first argument or set `CCR_ASSETS` if you use a custom cache. See [optional art exports](#optional-art-exports) for the iPad presentation.
 
 Run `build.cmd --target ccr` to rebuild only the game. For an offline build, set `CCR_TOOL_ARCHIVES` to a folder containing `zig.zip`, `cmake.zip`, `ninja.zip`, `SDL2-2.30.9.tar.gz` and `stb_vorbis.c`. For offline extraction without an existing Python and Pillow installation, include `python-3.12.10-embed-amd64.zip` and `pillow-12.2.0-cp312-cp312-win_amd64.whl` too. The pinned URLs and hashes are in the [build script](tools/build-windows.ps1), [Python setup script](tools/setup-python.ps1), and [CMake configuration](game/CMakeLists.txt).
 
@@ -51,47 +51,39 @@ Other platforms: the core and tests cross-compile for Android arm64 (NDK) and bu
 
 ### Which original files do I need?
 
-Put the files you own under `Original Game Files` next to `setup.cmd`, or give setup the path to your own folder. Group the archives as shown below. One file per needed release is enough. In particular, choose one Android version and one copy of each iOS release you use.
+**The smallest playable setup is one file, the iOS 1.1.2 release.** It supplies the base graphics and audio, 100 main puzzles, and all 25 Battle boards. Setup exports these automatically. Without optional menu art, the game starts at a simple Puzzle and Battle menu.
 
-| To get | Original files | Why |
+Put whichever originals you have under `Original Game Files` beside `setup.cmd`, or pass your own folder to setup. Subfolders are optional. Setup searches recursively and accepts loose files or ZIPs, including an enclosing ZIP around a package. Keep the numbered files of each Dreamcast dump together in their own folder or ZIP. Use a fresh cache if you want to test a different file combination in isolation.
+
+| Original | Accepted input | What it adds |
 | --- | --- | --- |
-| Base playable graphics | **iOS 1.1.2** `.ipa` in `iOS\` | The `ccrret` pack supplies the board, character, digit and font sheets the current executable requires. The iOS archives also supply the mobile music, effects and voice clips. |
-| Puzzle | **iOS 1.1.2** plus the **GBA** ROM in `Game Boy Advance\` | Setup accepts a raw `.gba` or a `.zip` containing it at the archive root. The ROM provides 100 main puzzles and 2,466 additional puzzles. Use Tab in stage select to switch sets. Dreamcast Express needs its own export. |
-| Battle | **iOS 1.1.2** plus the **Dreamcast** disc in `Dreamcast\` | Use a `.zip` of a GDI dump with its numbered `Track NN.bin` files at the archive root. The tested dump is the multilingual US release. It supplies the 25 battle boards and the stereo CD soundtrack. `CCR_CPU=gba` selects code already built into the game and does not require the GBA ROM. |
-| iPad menus, HUD and localized artwork | Add **iOS ChuChu Rocket! HD 1.0** `.ipa` | Its `ccrpad` pack supplies the iPad-specific screens, fonts and layout data. Check for “HD” in the release name when selecting an iOS 1.0 archive. |
-| Title and phone-menu assets | Add **Android 1.14 or 1.15** `.apk` in `Android\` | Supplies the phone title sprites, phone menu art and fallback menu strings. The title currently needs this export to enter its title screen. The Dreamcast export supplies the preferred logo and prompt. |
-| Dreamcast Express puzzles | Add `DEPuzzle.VMS` and `PuzzleP.VMS` under `Dreamcast\DLC\` | The current DLC exporter reads both archives. Only the Express set is offered in play. Setup also copies any paired `.VMI` files. The skin saves and PuzzleP boards are reference material for now. |
+| **iOS 1.1.2** | `.ipa` or unpacked `.app`, loose or in a ZIP | Required base graphics for the current executable. Provides 100 main puzzles, 25 Battle boards, mobile music, effects and voices. |
+| **iOS ChuChu Rocket! HD 1.0** | `.ipa` or unpacked `.app`, loose or in a ZIP | iPad artwork, layouts, fonts and startup assets. Use the [optional art exports](#optional-art-exports) for these. |
+| **Android 1.14 or 1.15** | `.apk` or unpacked APK folder, loose or in a ZIP | Phone title and menu art, and another source for the same 100 main puzzles and 25 Battle boards. One Android release is enough. |
+| **Game Boy Advance** | `.gba`, loose or in a ZIP | 2,466 additional puzzles and the GBA versions of the 100 main puzzles, including two board variants. Setup uses the GBA main set when available. Tab in stage select cycles available sets. |
+| **Dreamcast** | Numbered `.bin` tracks and their `.cue`, loose or in a ZIP | Another source for the 25 Battle boards, plus stereo CD music and original Dreamcast art. |
+| **Dreamcast Express DLC** | `DEPuzzle.VMS` with its optional `.VMI`, loose or in a ZIP | Adds 25 Express puzzles. Setup also copies other VMS/VMI files it finds. PuzzleP and the skin saves are reference material for now. |
 
-For both Puzzle and Battle with the current iPad presentation, use **iOS 1.1.2 + iOS HD 1.0 + one Android APK + GBA + Dreamcast**. The other iOS builds (1.0, 1.0.2 and 1.1) are useful for version comparisons. They are not required for this combination.
+For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu Rocket!** entry in [Redump.org](https://redump.org/) and contains **19 `.bin` files and one `.cue` file** is the tested layout. [Redump catalog listing](https://data.spludlow.co.uk/redump/redump/Sega%20-%20Dreamcast#:~:text=ChuChu%20Rocket!%20(USA))
 
 ### What if I have fewer releases?
 
-- With the base iOS sprite export and GBA stages, you can launch Puzzle directly. Add the Dreamcast stage export to launch Battle. Each mode reports an error if its own stage data is missing.
-- Without the HD 1.0 exports, the available Android art supplies the phone-style menus. HD-specific overlays and screens that require those assets may be missing. Without the exported Android title sheets, the executable skips the title and tries the available menu. With neither menu art set, start a mode directly.
-- Without the Dreamcast CD tracks, music falls back to the mobile Ogg files from the extracted iOS archives. The mobile assets also supply the sound effects and voices.
-- Without the required base sprite sheets, the current executable stops at startup. Android, Dreamcast and GBA files alone can be extracted, but they cannot replace those sheets in the current build.
+- **iOS 1.1.2 only** plays the 100 main puzzles and all 25 Battle boards with mobile graphics and audio. Add any of the other originals independently for the features in the table.
+- **Only Dreamcast, only GBA, only Android, or any combination without iOS 1.1.2** can be extracted, but the current executable still requires the base sprite sheets from iOS 1.1.2. Standalone graphics paths for those releases remain open.
+- **All four platforms shipped Battle.** The old Dreamcast requirement came from the stage exporter. Setup now recognizes the byte-identical mobile Battle maps. The GBA Battle boards are still outside the stage importer. `CCR_CPU=gba` enables the port's GBA-style AI with any exported Battle boards and needs no GBA ROM. [Stage format notes](docs/stages.md)
+- **Missing optional files** reduce the available art, music or stage sets. Without Dreamcast CD tracks, the soundtrack uses the mobile Ogg files. Without Android title art, the game goes straight to the available menu. HD-only screens and overlays may be absent without the HD exports.
 
-### Export assets for play
+### Optional art exports
 
-Setup currently unpacks the original files and exports the GBA puzzles. Run the relevant exporters below to turn the remaining extracted resources into the sheets and stage files the game loads. These files stay in your local cache.
-
-From the repository root in PowerShell, set `$python` to the Python executable reported by setup. The example uses the private runtime. Prepare the base sheets and run Puzzle after setup has extracted the GBA ROM.
+The core gameplay exports are automatic. To refresh your cache, rerun setup. To launch a specific mode directly, pass the mode after the asset cache path.
 
 ```powershell
 $assets = Join-Path $env:APPDATA 'ReNyastered\assets'
-$python = '.\local\tools\windows\python-3.12.10-pillow-12.2.0\python.exe'
-$retina = Join-Path $assets 'ios\SEGA_ChuChu_Rocket_v1_1_2_iPad_iPhone_iPod_Touch\ccrret'
-& $python tools/export_sprites.py "$retina" "$assets/ret_all" all
 .\build\game\ccr.exe "$assets" puzzle
+.\build\game\ccr.exe "$assets" battle
 ```
 
-Use the extracted iOS 1.1.2 folder shown in `assets\ios` if its name differs. If setup used a custom cache, set `$assets` to that cache's `assets` subfolder.
-
-- **Battle:** run `& $python tools/export_battle.py "$assets/dreamcast/files/ENGLISH" "$assets/battle_stages.bin"`, then launch with `battle` in place of `puzzle`.
-
-- **Phone menus and title:** run `export_android_ui.py` with your extracted build folder under `assets/android` and `$assets/ret_all` as the output. To add menu strings, run `export_strings.py` with that build's `libccrjni` subfolder, a local JSON output path, and `$assets/strings` for the translated tables.
-- **iPad menus and HUD:** see the [UI art notes](docs/ui_art.md) for HD exporters and input packs. These use the HD 1.0 `ccrpad` resources under `assets/ios`, with the matching thinned `.armv7` executable under the cache's `work/ios` when required. Run `& $python tools/export_dc_ui.py "$assets/dreamcast/prs_png" "$assets/ret_all" "$assets/dreamcast/png"` to add the Dreamcast logo and prompt.
-- **Dreamcast Express:** export to `assets/gba/dlc_stages.bin` using [`tools/export_dlc_stages.py`](tools/export_dlc_stages.py) and see the [DLC notes](docs/dlc.md). The exporter currently expects the repository's original-files layout.
+For the iPad menus and HUD, follow the [UI art notes](docs/ui_art.md) using the HD 1.0 `ccrpad` resources under `assets/ios` and the matching thinned `.armv7` executable under the cache's `work/ios`. The build can also use the Dreamcast logo and prompt after running `tools/export_dc_ui.py` with `assets/dreamcast/prs_png`, `assets/ret_all`, and `assets/dreamcast/png` as arguments, in that order.
 
 In Puzzle and Battle, aim with the mouse and press **WASD** or the **arrow keys** to place an arrow in the hovered cell. Mouse dragging also places arrows. On a controller, move with the left stick or D-pad and use the four face buttons in their directional positions, as on Dreamcast.
 

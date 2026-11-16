@@ -9,7 +9,7 @@ Write-Host ""
 if (-not $GameFiles) {
     $guess = Join-Path $root "Original Game Files"
     if (Test-Path $guess) { $GameFiles = $guess }
-    else { $GameFiles = Read-Host "Folder containing your iOS (.ipa), Android (.apk), GBA (.gba/.zip) and Dreamcast (.zip) files" }
+    else { $GameFiles = Read-Host "Folder containing any of your original game files (loose or ZIP)" }
 }
 if (-not (Test-Path $GameFiles)) { throw "Game files folder not found: $GameFiles" }
 if (-not $Cache) { $Cache = Join-Path $env:APPDATA "ReNyastered" }
@@ -28,6 +28,14 @@ Write-Host "Extracting assets from your files (this can take several minutes). L
 }
 if ($LASTEXITCODE -ne 0) { Get-Content $log -Tail 20; throw "Extraction failed" }
 Write-Host "Extraction finished. Manifest: $Cache\manifest.json"
+$manifest = Get-Content (Join-Path $Cache 'manifest.json') -Raw | ConvertFrom-Json
+if ($manifest.playable_modes) {
+    Write-Host "Playable modes in this cache: $($manifest.playable_modes -join ', ')"
+} elseif (!$manifest.base_graphics_available) {
+    Write-Host "The game needs the base graphics from iOS 1.1.2. Other detected originals can still be extracted."
+} else {
+    Write-Host "No playable stage data was found. See the extraction log for any errors."
+}
 
 Write-Host "Preparing the portable Zig toolchain and building the game..."
 & (Join-Path $root 'build.cmd')

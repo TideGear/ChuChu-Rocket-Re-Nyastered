@@ -40,14 +40,24 @@ static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {250, 170, 30, 255}, {240
 
 struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; std::vector<SDL_Point> box; std::vector<SDL_Point> sz; };   // sz = frame record shorts 0, 1 (the size the panel calls use), box = shorts 2, 3   // box = frame record shorts 2, 3 (the draw box BHLib_RenderTexture callers use, minus 2)   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
 
-struct Stages { struct E { Stage st; std::vector<std::array<uint8_t, 3>> sol; char title[33]; int src, idx; }; std::vector<E> list; };
+static constexpr int kMobilePuzzleSource = 5;
+struct Stages { struct E { Stage st; std::array<uint8_t, 4> stock{}; char title[33]; int src, idx; }; std::vector<E> list; };
 static bool loadStages(const char* path, Stages& out, int onlySrc) {
     FILE* f = fopen(path, "rb"); if (!f) return false;
     uint32_t n; if (fread(&n, 4, 1, f) != 1) { fclose(f); return false; }
     for (uint32_t i = 0; i < n; i++) {
         uint8_t h[4], w[237]; Stages::E e;
         if (fread(h, 1, 4, f) != 4 || fread(e.st.tiles, 1, 108, f) != 108 || fread(w, 1, 237, f) != 237) break;
-        e.sol.resize(h[1]); bool bad = false; for (auto& s : e.sol) if (fread(s.data(), 1, 3, f) != 3) bad = true;
+        bool bad = false;
+        if (h[0] == kMobilePuzzleSource) {
+            bad = fread(e.stock.data(), 1, e.stock.size(), f) != e.stock.size();
+        } else {
+            for (int i = 0; i < h[1]; ++i) {
+                uint8_t arrow[3];
+                if (fread(arrow, 1, sizeof arrow, f) != sizeof arrow) { bad = true; break; }
+                ++e.stock[arrow[2] & 3];
+            }
+        }
         if (bad || fread(e.title, 1, 32, f) != 32) break;
         e.title[32] = 0; e.src = h[0]; e.idx = h[2] | (h[3] << 8);
         for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) e.st.hw[r * 12 + c] = w[25 * r + c];
@@ -59,7 +69,11 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 
 // Puzzle stage sets: 0 = the 100 main stages, 1 = the 2,466 further GBA stages, 2 = the Dreamcast Express DLC pack "DEPuzzle" (25 puzzles with the arrow stock decoded from the slot, docs/dlc.md; PuzzleP is left out until its stock is verified)
 static const int kStageSets = 3;
-static bool loadStageSet(const std::string& root, int set, Stages& out) { return set == 2 ? loadStages((root + "/gba/dlc_stages.bin").c_str(), out, 3) : loadStages((root + "/gba/gba_stages.bin").c_str(), out, set); }
+static bool loadStageSet(const std::string& root, int set, Stages& out) {
+    if (set == 2) return loadStages((root + "/gba/dlc_stages.bin").c_str(), out, 3);
+    if (loadStages((root + "/gba/gba_stages.bin").c_str(), out, set)) return true;
+    return set == 0 && loadStages((root + "/mobile_puzzles.bin").c_str(), out, kMobilePuzzleSource);
+}
 
 struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
@@ -1601,8 +1615,25 @@ struct MenuMode : Screen {
     static constexpr int pbx[N] = {35, 75, 115, 155, 195}, pby[N] = {50, 100, 150, 200, 250}, ibx[N] = {184, 264, 344, 424, 504}, iby[N] = {173, 263, 353, 443, 533};
     bool avail(int i) const { return i == 1 || i == 3; }
     int music() override { return 0; }
+    bool bare(const App& a) const { return !a.menuOk && !a.padOk; }
     void geom(App& a, int i, int& x, int& y, int& w, int& h) { if (a.padOk) { const SDL_Rect& f = a.pbtn.fr[0]; x = ibx[i]; y = iby[i]; w = f.w; h = f.h; } else { const SDL_Rect& f = a.mbtn.fr[0]; x = pbx[i]; y = pby[i]; w = f.w; h = f.h; } }
     void event(App& a, const SDL_Event& e) override {
+        if (bare(a)) {
+            if (e.type == SDL_KEYDOWN) {
+                const auto key = e.key.keysym.sym;
+                if (key == SDLK_DOWN || key == SDLK_UP) sel = sel == 1 ? 3 : 1;
+                else if (key == SDLK_RETURN || key == SDLK_SPACE) choose(a);
+            } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                SDL_RenderSetLogicalSize(a.ren, GW, GH);
+                float x, y;
+                SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+                if (x >= 340 && x < 684 && y >= 290 && y < 450) {
+                    sel = y < 370 ? 1 : 3;
+                    choose(a);
+                }
+            }
+            return;
+        }
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_DOWN) sel = (sel + 1) % N; else if (k == SDLK_UP) sel = (sel + N - 1) % N; else if (k == SDLK_RETURN || k == SDLK_SPACE) choose(a); else if (k == SDLK_ESCAPE) back = true; }
         else if (e.type == SDL_MOUSEMOTION || (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT)) {
@@ -1613,7 +1644,17 @@ struct MenuMode : Screen {
     void choose(App& a) { if (sel == 1) chosen = "STAGES"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
     const char* next() override { if (back) { back = false; return "TITLE"; } const char* c = chosen; chosen = nullptr; return c; }
     void draw(App& a, float) override {
-        if (!a.menuOk) { SDL_SetRenderDrawColor(a.ren, 24, 24, 60, 255); SDL_RenderClear(a.ren); return; }
+        if (bare(a)) {
+            SDL_RenderSetLogicalSize(a.ren, GW, GH);
+            SDL_SetRenderDrawColor(a.ren, 24, 24, 60, 255);
+            SDL_RenderClear(a.ren);
+            SDL_SetRenderDrawColor(a.ren, 66, 58, 130, 255);
+            SDL_Rect selection{340, sel == 1 ? 290 : 370, 344, 80};
+            SDL_RenderFillRect(a.ren, &selection);
+            a.text("PUZZLE", 370, 310, 36);
+            a.text("BATTLE", 370, 390, 36);
+            return;
+        }
         const bool pad = a.padOk; const int LW = pad ? 1024 : 480, LH = pad ? 768 : 320;
         SDL_RenderSetLogicalSize(a.ren, LW, LH); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         SDL_Rect bs{0, 0, LW, LH}; SDL_RenderCopy(a.ren, (pad ? a.pmbg : a.mbg).tex, nullptr, &bs);
@@ -1720,8 +1761,7 @@ struct PuzzleMode : Screen {
     void reset() {
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
-        for (int d = 0; d < 4; d++) stock[d] = 0;
-        for (auto& s : stages.list[cur].sol) stock[s[2] & 3]++;       // arrow stock from the reference solution (stage struct counts not exported yet)
+        for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
     int used(int d) const { int n = 0; for (auto& a : sim.arrows) if (a.live && a.dir == d) n++; return n; }
     ~PuzzleMode() override { if (pad) SDL_GameControllerClose(pad); }
@@ -1919,12 +1959,27 @@ struct StageSelectMode : Screen {
         if (timer > 0) a.fillRect(0, 0, GW, GH, 0, 0, 0, (int)(timer / 500000.0 * 255.0));
     }
     void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_TAB && gApp) {
+            if (orig() && phase != 0x21) return;
+            for (int offset = 1; offset < kStageSets; ++offset) {
+                const int set = (gApp->stageSet + offset) % kStageSets;
+                Stages candidate;
+                if (!loadStageSet(rootDir, set, candidate)) continue;
+                gApp->stageSet = set;
+                stages = std::move(candidate);
+                page = cur = sel = selPage = lastItem = 0;
+                prevKey = -1;
+                phase = 0x21;
+                timer = 0;
+                break;
+            }
+            return;
+        }
         if (orig()) { origEvent(a, e); return; }
         if (e.type != SDL_KEYDOWN) return; int n = (int)stages.list.size(); SDL_Keycode k = e.key.keysym.sym;
         if (k == SDLK_RIGHT) cur = (cur + 1) % n; else if (k == SDLK_LEFT) cur = (cur + n - 1) % n;
         else if (k == SDLK_DOWN) cur = std::min(n - 1, cur + COLS); else if (k == SDLK_UP) cur = std::max(0, cur - COLS);
         else if (k == SDLK_PAGEDOWN) cur = std::min(n - 1, cur + PER); else if (k == SDLK_PAGEUP) cur = std::max(0, cur - PER);
-        else if (k == SDLK_TAB && gApp) { gApp->stageSet = (gApp->stageSet + 1) % kStageSets; stages = Stages(); load(rootDir, 0); }
         else if (k == SDLK_RETURN || k == SDLK_SPACE) go = true; else if (k == SDLK_ESCAPE) back = true;
         page = cur / PER;
     }
@@ -1932,6 +1987,7 @@ struct StageSelectMode : Screen {
     const char* next() override { if (orig()) { if (!leave) return nullptr; leave = false; if (leaveBack) return "MENU"; int s = std::max(0, std::min(99, chosen + selPage * 25)); if (gApp) gApp->nextStage = s; return "PUZZLE"; } if (back) { back = false; return "MENU"; } if (go) { go = false; if (gApp) gApp->nextStage = cur; return "PUZZLE"; } return nullptr; }
     void draw(App& a, float) override {
         if (orig()) { origDraw(a); return; }
+        SDL_RenderSetLogicalSize(a.ren, W, H);
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
         a.text(gApp && gApp->stageSet == 2 ? "PUZZLE  DREAMCAST EXPRESS" : gApp && gApp->stageSet ? "PUZZLE  MORE STAGES" : "PUZZLE  STAGE SELECT", 24, 14, 34);
         const int cw = 140, ch = 78, x0 = (W - COLS * cw) / 2, y0 = 80;
