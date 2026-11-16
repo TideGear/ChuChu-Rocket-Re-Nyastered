@@ -2,11 +2,37 @@
 import argparse
 import pickle
 from pathlib import Path
+from struct import iter_unpack
 
+from PIL import ImageChops
 from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_WRITE
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 
 from gba_session import GBA, ROM, boot_to_menu, run
+from gba_render import render
+
+
+def verify_visible_marker(gba, stage, collision, keys):
+    oam_address = 0x07000000
+    bounds = {8: (26, 112, 74, 160), 14: (169, 0, 217, 32), 21: (24, 0, 72, 32)}
+    run(gba, collision, keys)
+    for tick in range(124):
+        gba.run_frames(1, 0)
+        oam = bytes(gba.uc.mem_read(oam_address, 0x400))
+        marker = [i for i, (a0, _, a2, _) in enumerate(iter_unpack('<4H', oam))
+                  if a0 & 255 != 160 and a2 in (0xd848, 0xd84c, 0xd84e)]
+        visible = 17 <= tick <= 122 and (tick - 17) % 32 < 16
+        assert marker == (list(range(8)) if visible else []), (stage, tick, marker)
+        if tick == 17 and stage in bounds:
+            original = render(gba)
+            try:
+                for index in marker:
+                    gba.uc.mem_write(oam_address + 8 * index, b'\xa0\x02')
+                actual = ImageChops.difference(original, render(gba)).getbbox()
+                assert actual == bounds[stage], (stage, actual)
+            finally:
+                gba.uc.mem_write(oam_address, oam)
+    run(gba, 800 - collision - 124, {})
 
 
 def probe(state, failure, after_start=None, followup=()):
@@ -121,14 +147,14 @@ def verify_natural_failures(gba, selection):
         directions = 'D' * ((stage - 1) // 5) + 'R' * ((stage - 1) % 5)
         keys = {10 + 20 * index: key for index, key in enumerate(directions)}
         keys.update({180: 'A', 380: 'r'})
-        run(gba, 800, keys)
+        verify_visible_marker(gba, stage, collision, keys)
         assert writes[-2:] == [(collision, 255, writer), (collision + 121, 0, 0x08000f00)], (stage, writes)
         assert updates == list(range(collision + 1, collision + 121)), (stage, updates)
         expected = [(collision, 62, 0x0800490b)]
         if stage == 21:
             expected.insert(0, (collision, 36, 0x080046a9))
         assert [event for event in sounds if event[0] >= collision] == expected, (stage, sounds)
-    print('8 natural GBA Puzzle failures matched: 3 holes, 4 catches, 1 cat rocket entry')
+    print('8 natural GBA Puzzle failures matched, including display OAM and 3 rendered bounds')
 
 
 def main():
