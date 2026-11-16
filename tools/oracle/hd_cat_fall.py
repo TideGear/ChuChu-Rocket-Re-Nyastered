@@ -26,21 +26,25 @@ def verify_handoff_and_respawn():
     oracle.write(field + (2 + 4 * 12) * 4, struct.pack('<I', 0x400))
     rng_calls = []
     sounds = []
+    walking_draws = []
     random_value = 0.0
 
     def trace(uc, address, size, data):
         if address == 0x152c4:
             rng_calls.append(random_value)
             uc.reg_write(UC_ARM_REG_R0, struct.unpack('<I', struct.pack('<f', random_value))[0])
-        else:
+        elif address == 0x17dd0:
             sounds.append(oracle._r(0))
+        elif address == 0x1a250:
+            flags, scale, alpha = struct.unpack('<IfI', oracle.read(uc.reg_read(UC_ARM_REG_SP), 12))
+            walking_draws.append((oracle._r(0), oracle._r(1), flags, scale, alpha))
         uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
 
-    for address in (0x152c4, 0x17dd0):
+    for address in (0x152c4, 0x17dd0, 0x1a250, 0x14cd0):
         oracle.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
     for random_value, index in ((0.0, 0), (0.25, 0), (0.26, 1), (0.51, 2), (0.99, 3)):
         position = (37.75, 0, 67.5)
-        oracle.write(task + 0x10, struct.pack('<2h3fii3f', 2, 4, *position, 0x3333, 0, 0, 1, 0))
+        oracle.write(task + 0x10, struct.pack('<2h3fii3f', 2, 4, *position, 0x3333, 0, 0, 1, 7.75))
         oracle.write(hole_flag + 4, bytes(4))
         rng_calls.clear()
         oracle.call(0x14524, task)
@@ -59,6 +63,23 @@ def verify_handoff_and_respawn():
         assert oracle.u32(task + 0x20) == (index << 14) + 0x1000
         assert oracle.u32(task + 0x24) == index << 14
         assert (oracle.u32(task + 0x40), oracle.u32(task + 0x44)) == (0x14525, 0x14911)
+        assert u2f(oracle.u32(task + 0x30)) == 7.75
+        scale = 0.0
+        for tick in range(11):
+            walking_draws.clear()
+            oracle.call(0x149c8, task)
+            angle = oracle.u32(task + 0x20)
+            image = 41 if 0x6001 <= angle <= 0xa000 else 40 if 0x2001 <= angle <= 0xe000 else 42
+            phase = u2f(oracle.u32(task + 0x30))
+            assert len(walking_draws) == 1
+            img, frame, flags, actual_scale, alpha = walking_draws[0]
+            assert (img, frame, alpha) == (image, int(phase), 255), walking_draws
+            assert flags == (2 if image == 40 and angle < 0x8000 else 0), walking_draws
+            assert abs(actual_scale - scale) < 0.000001, walking_draws
+            assert abs(phase - (7.75 + tick * 0.45)) < 0.00001
+            if tick < 10:
+                oracle.call(0x14524, task)
+                scale += 0.1
     print('5 iPad cat hole handoffs and generator selections matched')
 
 

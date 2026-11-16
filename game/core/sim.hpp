@@ -40,6 +40,7 @@ struct Entity {
     float x = 0, z = 0;
     bool rocketIn = false; float rocketCounter = 1.0f;   // battle cat inside a rocket (30-tick animation, then respawn at a random generator)
     bool catHoleFall = false;   // keeps the hole draw task visible after a Puzzle cat leaves gameplay
+    float catWalkScale = -1.0f;  // negative until the original scaled walking task is selected
     bool drawsHoleFall() const { return catHoleFall && (rocketIn || !alive) && rocketCounter > 0.0f; }
     bool reg = false;
     bool fresh = false;         // spawned before this tick's entity pass: first moves next tick, no contact this tick
@@ -304,6 +305,7 @@ private:
         e.z +=  speed * cosv[e.heading];
         warp(e);
         gridOf(e.x, e.z, e.gx, e.gy);
+        if (e.catWalkScale >= 0.0f) e.catWalkScale = std::min(1.0f, e.catWalkScale + 0.1f);
         e.reg = true;
         if (e.mouse && battle && monopoly >= 0) { e.jime = true; e.angle = e.heading << 14; }   // MO_MouseExe tail: ChangeExeFunction(MO_MouseJimeExe) while Mouse Monopoly runs (the collision entry of this tick is still made)
     }
@@ -319,6 +321,7 @@ private:
             if (trace) printf("t=%d cat respawn draw r=%.6f gen %d\n", now, r, i);
             e.gx = gens[i].x; e.gy = gens[i].y; e.heading = gens[i].dir & 3;
             e.x = (e.gx + 0.5f) * kCell; e.z = (e.gy + 0.5f) * kCell;
+            if (e.catHoleFall) e.catWalkScale = 0.0f;
         }
         e.rocketIn = false;
     }

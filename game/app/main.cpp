@@ -586,7 +586,12 @@ struct App {
     void stepAngles(const Sim& sim, bool effectsOnly = false) {
         if (!effectsOnly) {
             gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(0.0f);
-            for (size_t i = 0; i < sim.ents.size(); i++) if (!sim.ents[i].mouse && sim.ents[i].alive) { cphase[i] += 0.45f; if (cphase[i] >= 20.0f) cphase[i] -= 20.0f; }
+            for (size_t i = 0; i < sim.ents.size(); i++) {
+                const Entity& e = sim.ents[i];
+                if (e.mouse || !e.alive || e.catHoleFall || (e.catWalkScale >= 0.0f && !e.reg)) continue;
+                cphase[i] += 0.45f;
+                if (cphase[i] >= 20.0f) cphase[i] -= 20.0f;
+            }
         }
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
         for (size_t i = 0; i < sim.ents.size(); i++) {
@@ -642,7 +647,7 @@ struct App {
             if (!en.alive || en.done || en.rocketIn) continue;
             float x = prev[i].first + (en.x - prev[i].first) * alpha;
             float z = prev[i].second + (en.z - prev[i].second) * alpha;
-            if (std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
+            if (en.catHoleFall || std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
             fieldObjects.push_back({static_cast<int>(en.z), x, z, i, false});
         }
 
@@ -672,17 +677,32 @@ struct App {
                     printf("cat hole %d %.3f %.3f %.6f\n", (ang & 0xffff) >> 11, x, z, en.rocketCounter);
                 continue;
             }
+            if (en.catWalkScale >= 0.0f) {
+                const unsigned angle = static_cast<unsigned>(ang) & 0xffff;
+                const int image = angle >= 0x6001 && angle <= 0xa000 ? 41 :
+                                  angle >= 0x2001 && angle <= 0xe000 ? 40 : 42;
+                if (imgSheet(image)) {
+                    const int frame = i < cphase.size() ? static_cast<int>(cphase[i]) : 0;
+                    const int flags = image == 40 && angle < 0x8000 ? 2 : 0;
+                    if (en.catWalkScale > 0.0f) drawImage(image, frame, x, z, flags, en.catWalkScale, 255);
+                    if (headless && getenv("CCR_CAT_HOLE_TRACE") && en.catWalkScale < 1.0f)
+                        printf("cat return %d %d %.3f %.3f %.6f\n", image, frame, x, z, en.catWalkScale);
+                    continue;
+                }
+            }
+            if (en.catWalkScale == 0.0f) continue;
+            const float walkScale = en.catWalkScale < 0.0f ? 1.0f : en.catWalkScale;
             if (walkOk) {   // original view choice (CA_CatDrawSTPriority / FUN_0003582c, literals from the code): back view for angles in [0x6001, 0xA000], front outside [0x2001, 0xE000], side otherwise
                 unsigned a = (unsigned)ang & 0xffff; int view = (a >= 0x6001 && a <= 0xA000) ? 1 : ((a < 0x2001 || a > 0xE000) ? 2 : 0);
                 Sheet& sh = !en.mouse ? catV[view] : (en.type == 1 ? goldV[view] : mouseV[view]);
                 int frame = !en.mouse ? (i < cphase.size() ? (int)cphase[i] : 0) : gtime % 11; frame = std::min(frame, (int)sh.fr.size() - 1);
-                const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame]; float sc = CELL / 64.0f; if (frame < (int)sh.fit.size()) sc *= sh.fit[frame];   // drawn at the original iPad (HD 1.0) frame size
+                const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame]; float sc = walkScale * (CELL / 64.0f); if (frame < (int)sh.fit.size()) sc *= sh.fit[frame];   // drawn at the original iPad (HD 1.0) frame size
                 SDL_Rect dst{(int)std::lround(x + of.x * sc), (int)std::lround(z + of.y * sc), (int)std::lround(fr.w * sc), (int)std::lround(fr.h * sc)};
                 bool flip = view == 0 && a > 0x2000 && a < 0x8000;   // the side art faces east; west-facing is mirrored (unverified: the flag the original passes to drawImage is not in the decompile)
                 SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE); continue;
             }
             Sheet& sh = !en.mouse ? cat : (en.type == 1 ? gold : mouse);
-            const SDL_Rect& fr = sh.fr[(ang >> 11) & 31]; float sc = CELL * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
+            const SDL_Rect& fr = sh.fr[(ang >> 11) & 31]; float sc = walkScale * CELL * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
             SDL_Rect dst{(int)(x) - dw / 2, (int)(z) - dh * 2 / 3, dw, dh}; SDL_RenderCopy(ren, sh.tex, &fr, &dst);
         }
     }
