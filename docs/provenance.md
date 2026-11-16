@@ -27,14 +27,14 @@ Policy: where a mobile asset or text differs from the clean Dreamcast/GBA data, 
 
 ## Title / menu / HUD art: source comparison (2026-11-13)
 Measured on the extracted files (width x height of the same sprite in each set):
-| Piece | Android / iPhone (phone layout) | iPad HD (`ccrpad_png`, iOS HD 1.0 and 1.1.2) | Dreamcast |
+| Piece | Android / iPhone (phone layout) | iPad HD (`ccrpad_png`, iOS HD 1.0) | Dreamcast |
 |---|---|---|---|
 | "TAP THE SCREEN!" prompt | 152 x 26 | **204 x 34** | "PRESS START BUTTON!" texture (different text) |
 | Title rocket | 76 x 109 | **100 x 145** | rocket models/sprites in `ROCKET`/`TITLE` |
 | Two-cat decoration | 84 x 61 | **112 x 81** | - |
 | Menu bar atlas | 200 x 134 | **340 x 248** (bars 340 wide) | `MENU_selectmoji*`/`modeback*` tiles |
 | Player bars, "Challenge", "CLEARED!", "FAILED!", "Winner!", "Draw!", "3 2 1", crowns, rockets, scoreboard pieces | smaller | **present at about 1.3x the phone size** | different art |
-| Title logo and full-screen backgrounds | 484 x 322 images (logo = frame of a 1000 x 166 atlas) | no finished image: the tablet screens draw backgrounds from a **tile map** (resource 0x124 and the tile atlas), not decoded yet | 512 x 512 tiles of a 640 x 480 screen (`TITLE_newtitle*`, `MENU_modeback*`) that must be assembled |
+| Title logo and full-screen backgrounds | 484 x 322 images (logo = frame of a 1000 x 166 atlas) | **1024 x 768** backgrounds assembled from 128 x 128 tiles (no standalone title logo) | 512 x 512 tiles of a 640 x 480 screen (`TITLE_newtitle*`, `MENU_modeback*`) that must be assembled |
 Conclusion so far: the phone sprites I used for the title and menu are the **smallest** version of the art. The iPad HD sprites are about 1.3x larger and also hold the HUD/result art (the placeholder HUD should use them). Neither mobile set is large enough for 4K without scaling; the Dreamcast screens are 640 x 480 native with tiles up to 512 x 512, so the Dreamcast logo/background art is not clearly higher quality than the iPad's. A best-of-all-versions choice per piece (largest source, scaled with high-quality filtering) still has to be made: the sprites from iPad HD, the backgrounds from the iPad tile maps once decoded (otherwise the phone images or Dreamcast tiles).
 
 ### Title logo: Dreamcast chosen (2026-11-13)

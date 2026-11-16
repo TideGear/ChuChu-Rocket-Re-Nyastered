@@ -1747,6 +1747,26 @@ struct PadAim {
 // ---------------------------------------------------------------- puzzle
 struct PuzzleMode : Screen {
     static constexpr int kFailureHoldFrames = 120;
+    struct Star { float x, y, speed; int frame; };
+    struct Twinkle { float x, y; int period, remaining; };
+    std::array<Star, 322> stars;
+    std::array<Twinkle, 161> twinkles;
+    PuzzleMode() {
+        // Use the original generator on a separate stream so visuals cannot affect play.
+        Rng rng(1);
+        for (auto& star : stars) {
+            star.x = static_cast<float>(rng.u32() % GW);
+            star.y = static_cast<float>(rng.u32() % GH);
+            star.speed = (rng.u32() & 255) * (1.0f / 64) + 0.3f;
+            star.frame = rng.u32() & 31;
+        }
+        for (auto& star : twinkles) {
+            star.x = static_cast<float>(rng.u32() % GW);
+            star.y = static_cast<float>(rng.u32() % GH);
+            star.period = 3 + (rng.u32() & 63);
+            star.remaining = rng.u32() % star.period;
+        }
+    }
     MouseAim aim;
     bool mouseCursor = false;
     int failureFrames = 0;
@@ -1813,6 +1833,11 @@ struct PuzzleMode : Screen {
     }
     int cticks = 0;
     void tick(App& a) override {
+        for (auto& star : stars) {
+            star.x = static_cast<float>(star.x - 1.5 * star.speed);
+            if (star.x < 0.0f) star.x += GW;
+        }
+        for (auto& star : twinkles) if (--star.remaining < 0) star.remaining = star.period;
         if (paused) return; cticks++;
         if (pad && state == 0) {
             padAim.tick(pad);
@@ -1869,6 +1894,11 @@ struct PuzzleMode : Screen {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255);   // iPad Puzzle clear colour (blue 0.1)
         SDL_RenderClear(a.ren);
+        if (a.imgSheet(154)) {
+            for (const auto& star : stars) a.drawImage(154, star.frame, star.x, star.y, 0, 1.0f, 128);
+            for (const auto& star : twinkles)
+                if (star.remaining * 2 < star.period) a.drawImage(154, 11, star.x, star.y, 0, 1.0f, 128);
+        }
         if (hasBoardTasks) {
             const int set = gApp ? gApp->stageSet : 0;
             a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2);

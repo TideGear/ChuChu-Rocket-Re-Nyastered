@@ -1,5 +1,6 @@
 """Verify the original iPad Puzzle failure timer, task passes and automatic reset."""
 import struct
+from random import Random
 
 from unicorn import UC_HOOK_CODE
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0, UC_ARM_REG_SP
@@ -134,6 +135,52 @@ def verify_star_updates():
     print('iPad Puzzle updates stars horizontally once before the loop in all eight fixtures')
 
 
+def verify_star_motion():
+    oracle = hd_env.make().o
+    oracle.call(0x15188)
+    rng = Random(1)
+    seeded = []
+    draws = []
+
+    def f32(value):
+        return struct.unpack('<f', struct.pack('<f', value))[0]
+
+    def trace(uc, address, size, data):
+        result = 0
+        if address == 0xa568:
+            result = rng.getrandbits(32)
+            seeded.append(result)
+        elif address == 0xeadcc:
+            result = oracle._r(0) % oracle._r(1)
+        else:
+            flags, scale, alpha = struct.unpack('<IfI', oracle.read(uc.reg_read(UC_ARM_REG_SP), 12))
+            assert (oracle._r(0), flags, scale, alpha) == (154, 0, 1.0, 128)
+            draws.append((oracle._r(1), u2f(oracle._r(2)), u2f(oracle._r(3))))
+        uc.reg_write(UC_ARM_REG_R0, result)
+        uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+
+    for address in (0xa568, 0xeadcc, 0x1a250):
+        oracle.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
+    oracle.call(0x3cef0)
+    assert len(seeded) == (322 + 161) * 4
+    groups = list(zip(*(iter(seeded),) * 4))
+    stars = [(frame & 31, x % 1024, y % 768, f32((speed & 255) / 64 + 0.3))
+             for x, y, speed, frame in groups[:322]]
+    twinkles = [(x % 1024, y % 768, 3 + (period & 63), offset)
+                for x, y, period, offset in groups[322:]]
+    for tick in range(65):
+        draws.clear()
+        oracle.call(0x3ce2c, 0)
+        expected = [(frame, x, y) for frame, x, y, _ in stars]
+        expected.extend((11, x, y) for x, y, period, offset in twinkles
+                        if (offset % period - tick) % (period + 1) < period / 2)
+        assert draws == expected, (tick, len(draws), len(expected))
+        oracle.call(0x3cd38, 0)
+        moved = [(frame, f32(x - 1.5 * speed), y, speed) for frame, x, y, speed in stars]
+        stars = [(frame, f32(x + 1024) if x < 0 else x, y, speed) for frame, x, y, speed in moved]
+    print('iPad star initialization, wrap and twinkles matched across 65 frames')
+
+
 def main():
     oracle = hd_env.make().o
     state = oracle.u32(0x18684)
@@ -180,6 +227,7 @@ def main():
     verify_focus()
     verify_teardown_render()
     verify_star_updates()
+    verify_star_motion()
 
 
 if __name__ == '__main__':
