@@ -32,7 +32,7 @@ $manifest = Get-Content (Join-Path $Cache 'manifest.json') -Raw | ConvertFrom-Js
 if ($manifest.playable_modes) {
     Write-Host "Playable modes in this cache: $($manifest.playable_modes -join ', ')"
 } elseif (!$manifest.base_graphics_available) {
-    Write-Host "The game needs the base graphics from iOS 1.1.2. Other detected originals can still be extracted."
+    Write-Host "For playable graphics, provide any one of iPad HD 1.0, iPhone 1.1, or iOS 1.1.2. See the README for other supported exports."
 } else {
     Write-Host "No playable stage data was found. See the extraction log for any errors."
 }

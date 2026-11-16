@@ -71,6 +71,7 @@ def do_ios(ipa, work, assets, entry):
     os.makedirs(os.path.join(work, 'ios'), exist_ok=True)
     thin = os.path.join(work, 'ios', safe + '.armv7')
     run_tool('thin.py', exe, thin)
+    entry['extracted_assets'] = 'ios/' + safe
     entry['packs'] = {}
     for pack in ('ccrphn', 'ccrret', 'ccrpad'):
         if os.path.exists(os.path.join(app, pack)):
@@ -78,8 +79,6 @@ def do_ios(ipa, work, assets, entry):
             r = extract_packs.extract(thin, app, pack, out)
             if r:
                 entry['packs'][pack] = {'records': r[0], 'failed': r[1], 'textures': export_pngs(out, os.path.join(assets, 'ios', safe, pack + '_png'))}
-                if pack == 'ccrret' and entry.get('version') == '1.1.2':
-                    entry['base_graphics'] = run_tool('export_sprites.py', out, os.path.join(assets, 'ret_all'), 'all').strip()
                 import extract_ios_locale                  # language packs: the HUD images with text are there (docs/ui_art.md, image id map)
                 for lg in ('en', 'fr', 'de', 'es', 'it', 'ja'):
                     if os.path.exists(os.path.join(app, '%s_%s' % (pack, lg))):
@@ -181,6 +180,7 @@ BATTLE_MAPS = {
 
 def export_playable_stages(assets):
     from export_battle import export_maps
+    from export_dc_solutions import main_slots, write_record
     root = Path(assets)
     puzzle_digest = 'e9ce95921a415328c4e2f8b79b38b8bf47a0b95af0526b1b70ad1f89149991df'
     candidates = [root / 'dreamcast' / 'files' / 'ENGLISH' / name for name in BATTLE_MAPS]
@@ -195,6 +195,13 @@ def export_playable_stages(assets):
         if file.is_file() and file.stat().st_size in (11925, 38000):
             by_digest.setdefault(sha256(file), file)
     sources = {}
+    dc_puzzles = root / 'dreamcast' / 'files' / 'ENGLISH' / 'PZSTAGE100.DAT'
+    if dc_puzzles.is_file() and dc_puzzles.stat().st_size == 153600:
+        with (root / 'dreamcast_puzzles.bin').open('wb') as stream:
+            stream.write(struct.pack('<I', 100))
+            for stage, slot in enumerate(main_slots(dc_puzzles.read_bytes())):
+                write_record(stream, 4, stage, slot)
+        sources['dreamcast_puzzles'] = dc_puzzles.relative_to(root).as_posix()
     if puzzle_digest in by_digest:
         path = by_digest[puzzle_digest]
         data = path.read_bytes()
@@ -296,6 +303,24 @@ def main():
             entry['error'] = str(e)
             print('   ERROR:', e, flush=True)
         manifest['inputs'].append(entry)
+    from export_sprites import export_base
+    for layout, pack, version in (('retina_112', 'ccrret', '1.1.2'),
+                                  ('retina_11', 'ccrret', '1.1'),
+                                  ('ipad_hd10', 'ccrpad', '1.0')):
+        for entry in manifest['inputs']:
+            if entry.get('version') != version or pack not in entry.get('packs', {}):
+                continue
+            source = Path(assets, entry['extracted_assets'], pack)
+            try:
+                export_base(source, Path(assets, 'ret_all'), layout)
+            except (OSError, ValueError, KeyError, struct.error) as error:
+                entry['base_graphics_error'] = str(error)
+                print('   Base graphics export failed:', error, flush=True)
+                continue
+            manifest['base_graphics_source'] = source.relative_to(assets).as_posix()
+            break
+        if 'base_graphics_source' in manifest:
+            break
     manifest['stage_sources'] = export_playable_stages(assets)
     dlc = Path(assets, 'dlc')
     if dlc.is_dir() and any(path.name.lower() == 'depuzzle.vms' for path in dlc.iterdir()):
@@ -308,7 +333,8 @@ def main():
     sprites = ('r0930', 'r0447', 'r0503', 'r0484', 'r0729', 'r0726', 'r0749', 'r0023')
     manifest['base_graphics_available'] = all(Path(assets, 'ret_all', sprite + suffix).is_file()
                                               for sprite in sprites for suffix in ('.tex.bin', '.frames.bin'))
-    puzzle = any(Path(assets, path).is_file() for path in ('gba/gba_stages.bin', 'mobile_puzzles.bin'))
+    puzzle = any(Path(assets, path).is_file() for path in
+                 ('gba/gba_stages.bin', 'mobile_puzzles.bin', 'dreamcast_puzzles.bin'))
     battle = Path(assets, 'battle_stages.bin').is_file()
     manifest['playable_modes'] = [mode for mode, present in (('Puzzle', puzzle), ('Battle', battle))
                                   if present and manifest['base_graphics_available']]

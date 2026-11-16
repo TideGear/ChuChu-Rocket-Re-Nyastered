@@ -51,25 +51,27 @@ Other platforms: the core and tests cross-compile for Android arm64 (NDK) and bu
 
 ### Which original files do I need?
 
-**The smallest playable setup is one file, the iOS 1.1.2 release.** It supplies the base graphics and audio, 100 main puzzles, and all 25 Battle boards. Setup exports these automatically. Without optional menu art, the game starts at a simple Puzzle and Battle menu.
+**Start with any one of these releases: iPad HD 1.0, iPhone 1.1, or iOS 1.1.2.** Each supplies the base graphics and audio, 100 main puzzles, and all 25 Battle boards. Setup exports these automatically. Without optional menu art, the game starts at a simple Puzzle and Battle menu.
 
 Put whichever originals you have under `Original Game Files` beside `setup.cmd`, or pass your own folder to setup. Subfolders are optional. Setup searches recursively and accepts loose files or ZIPs, including an enclosing ZIP around a package. Keep the numbered files of each Dreamcast dump together in their own folder or ZIP. Use a fresh cache if you want to test a different file combination in isolation.
 
 | Original | Accepted input | What it adds |
 | --- | --- | --- |
-| **iOS 1.1.2** | `.ipa` or unpacked `.app`, loose or in a ZIP | Required base graphics for the current executable. Provides 100 main puzzles, 25 Battle boards, mobile music, effects and voices. |
-| **iOS ChuChu Rocket! HD 1.0** | `.ipa` or unpacked `.app`, loose or in a ZIP | iPad artwork, layouts, fonts and startup assets. Use the [optional art exports](#optional-art-exports) for these. |
+| **iOS 1.1 or 1.1.2** | `.ipa` or unpacked `.app`, loose or in a ZIP | Either release supplies Retina gameplay art, mobile audio and both playable modes on its own. |
+| **iPad ChuChu Rocket! HD 1.0** | `.ipa` or unpacked `.app`, loose or in a ZIP | Supplies iPad gameplay art, mobile audio and both playable modes on its own. The same release also supplies iPad menus, layouts, fonts and startup artwork for the [optional art exports](#optional-art-exports). |
+| **iPhone iOS 1.0 or 1.0.2** | `.ipa` or unpacked `.app`, loose or in a ZIP | Setup extracts the phone assets and audio. The phone gameplay graphics path is still needed for either release to work on its own. |
 | **Android 1.14 or 1.15** | `.apk` or unpacked APK folder, loose or in a ZIP | Phone title and menu art, and another source for the same 100 main puzzles and 25 Battle boards. One Android release is enough. |
 | **Game Boy Advance** | `.gba`, loose or in a ZIP | 2,466 additional puzzles and the GBA versions of the 100 main puzzles, including two board variants. Setup uses the GBA main set when available. Tab in stage select cycles available sets. |
-| **Dreamcast** | Numbered `.bin` tracks and their `.cue`, loose or in a ZIP | Another source for the 25 Battle boards, plus stereo CD music and original Dreamcast art. |
+| **Dreamcast** | Numbered `.bin` tracks and their `.cue`, loose or in a ZIP | Provides the original 100 main puzzles, 25 Battle boards, stereo CD music and original Dreamcast art. |
 | **Dreamcast Express DLC** | `DEPuzzle.VMS` with its optional `.VMI`, loose or in a ZIP | Adds 25 Express puzzles. Setup also copies other VMS/VMI files it finds. PuzzleP and the skin saves are reference material for now. |
 
 For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu Rocket!** entry in [Redump.org](https://redump.org/) and contains **19 `.bin` files and one `.cue` file** is the tested layout. [Redump catalog listing](https://data.spludlow.co.uk/redump/redump/Sega%20-%20Dreamcast#:~:text=ChuChu%20Rocket!%20(USA))
 
 ### What if I have fewer releases?
 
-- **iOS 1.1.2 only** plays the 100 main puzzles and all 25 Battle boards with mobile graphics and audio. Add any of the other originals independently for the features in the table.
-- **Only Dreamcast, only GBA, only Android, or any combination without iOS 1.1.2** can be extracted, but the current executable still requires the base sprite sheets from iOS 1.1.2. Standalone graphics paths for those releases remain open.
+- **Android 1.14 and 1.15** already export the phone title, menus and gameplay boards. Android-only play needs the remaining exporter for the playfield, character, and HUD graphics in its resource pack.
+- **Dreamcast only** supplies both sets of boards and the original models, textures and music. Setup can extract these and compile the executable. To launch with just that disc, the port needs to render the Dreamcast gameplay assets, including the field, characters and HUD. Dreamcast-only play remains planned.
+- **Game Boy Advance only** supplies puzzles. A GBA graphics path is still needed for standalone play.
 - **All four platforms shipped Battle.** The old Dreamcast requirement came from the stage exporter. Setup now recognizes the byte-identical mobile Battle maps. The GBA Battle boards are still outside the stage importer. `CCR_CPU=gba` enables the port's GBA-style AI with any exported Battle boards and needs no GBA ROM. [Stage format notes](docs/stages.md)
 - **Missing optional files** reduce the available art, music or stage sets. Without Dreamcast CD tracks, the soundtrack uses the mobile Ogg files. Without Android title art, the game goes straight to the available menu. HD-only screens and overlays may be absent without the HD exports.
 

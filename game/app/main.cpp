@@ -72,7 +72,9 @@ static const int kStageSets = 3;
 static bool loadStageSet(const std::string& root, int set, Stages& out) {
     if (set == 2) return loadStages((root + "/gba/dlc_stages.bin").c_str(), out, 3);
     if (loadStages((root + "/gba/gba_stages.bin").c_str(), out, set)) return true;
-    return set == 0 && loadStages((root + "/mobile_puzzles.bin").c_str(), out, kMobilePuzzleSource);
+    if (set != 0) return false;
+    return loadStages((root + "/mobile_puzzles.bin").c_str(), out, kMobilePuzzleSource) ||
+           loadStages((root + "/dreamcast_puzzles.bin").c_str(), out, 4);
 }
 
 struct App;

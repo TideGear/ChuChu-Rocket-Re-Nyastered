@@ -90,6 +90,8 @@ Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = n
 5. Android arm64 and WebAssembly builds; remaining version comparisons (iOS movement via oracle, GBA ARM7, Dreamcast SH-4).
 
 ## Dreamcast models (see docs/dreamcast_models.md)
+
+- Setup now exports playable gameplay sheets from any one of iPad HD 1.0, iPhone 1.1, and iOS 1.1.2. Fresh single-release caches provided all 100 main puzzles and 25 Battle boards. Headless runs covered the default launch and both modes from the two newly supported releases. The Dreamcast disc now exports its 100 main puzzles too. All 100 stored solutions replayed successfully, and a headless run loaded the disc's boards with existing mobile graphics. Standalone Dreamcast still needs a gameplay renderer and HUD from disc assets. Android and the older iPhone phone packs need gameplay sheet mappings. GBA remains an optional content source.
 Located baked vertex data in 1ST_READ.BIN (morph-frame tables, pos+normal arrays); DPMODEL is empty on disc. Mesh topology/UVs not decoded yet.
 Update: models decoded and exported (tools/dc_models.py, 128 OBJ models from 1ST_READ.BIN, wired into extract_all); hierarchy, texture mapping and morph animation remain.
 
