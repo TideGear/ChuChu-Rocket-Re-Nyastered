@@ -224,17 +224,52 @@ def verify_clock_scheduler(binary):
     for address in (0x8c018320, 0x8c01f8f4, 0x8c01a174, 0x8c01909c,
                     0x8c01575a, 0x8c020816, 0x8c011e08, 0x8c016e94, 0x8c01a0d2):
         sh.hooks[address & 0x1fffffff] = lambda m: m.r.__setitem__(0, 0)
-    sh.hooks[0x0c016848] = lambda m: m.r.__setitem__(0, blocked)
+    status_reads = []
+
+    def read_status(machine):
+        status_reads.append(status)
+        machine.r[0] = status
+
+    sh.hooks[0x0c0ef8ac] = read_status
+    sh.hooks[0x0c0ef8c4] = lambda m: status_reads.append('service')
     sh.hooks[0x0c0190cc] = lambda m: m.r.__setitem__(0, state)
-    sh.hooks[0x0c016a3c] = lambda m: m.r.__setitem__(0, running)
     sh.hooks[0x0c01efd2] = lambda m: ticks.append(m.rd32(0x8c1ae8d8))
     sh.call(0x8c016cc0)
+    status = 0
     for blocked, state, running in ((0, 0, 1), (1, 0, 1), (0, 3, 1),
                                      (0, 0, 0), (0, 0, 1)):
+        sh.call(0x8c0167e0)
+        if blocked:
+            sh.call(0x8c0167e8, 0, -23)
+        sh.call(0x8c016a42, running)
+        status_reads.clear()
         sh.call(0x8c018426)
+        assert status_reads == ([] if blocked else [0, 'service'])
     assert ticks == [0, 1]
     assert sh.call(0x8c016cd2) == 2
-    print('Dreamcast task pass precedes the clock increment and three scheduler gates hold it')
+
+    sh.hooks[0x0c0ef852] = lambda m: m.r.__setitem__(0, 0)
+    sh.hooks[0x0c0ef4c4] = lambda m: m.r.__setitem__(0, device_mode)
+    for device_mode in (0, 4):
+        for status in (0, 1, 6, 7, 9):
+            sh.call(0x8c0167e0)
+            status_reads.clear()
+            sh.call(0x8c0167fe)
+            latched = device_mode != 4 and status in (6, 7, 9)
+            assert sh.rd32(0x8c1ae8b0) == latched
+            if device_mode == 4:
+                assert not status_reads
+            else:
+                assert status_reads == ([status] if latched else [status, 'service'])
+            if latched:
+                status_reads.clear()
+                assert sh.call(0x8c016848) == 1
+                assert not status_reads
+    for error in (-34, -33, -23, -22):
+        sh.call(0x8c0167e0)
+        sh.call(0x8c0167e8, 0, error)
+        assert sh.rd32(0x8c1ae8b0) == (error in (-33, -23))
+    print('Dreamcast task clock gates matched the run flag, device latch, and controlled transition return')
 
 
 if __name__ == '__main__':

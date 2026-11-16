@@ -91,6 +91,7 @@ Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = n
 
 ## Dreamcast models (see docs/dreamcast_models.md)
 
+- Executed the original Dreamcast animation-clock gates with controlled device and transition inputs. Verified the sticky device error latch and the separate run flag. Next, trace the controller pause task and transition callbacks.
 - Verified that gameplay mice sample a shared eight-frame clock, and that a collision branch can hold an individual mouse's last pose. The task pass samples before the clock increments. The SH-4 scheduler probe exercised three controlled hold paths and resumption. The next audit should connect the run-state inputs to those gates and trace the cat animation phase.
 - Verified 333 Dreamcast mouse draw-task snapshots. The gameplay wrapper consumes a stored frame. Two other callers calculate the frame from task age and wrap through eight prepared models. Next, trace the writer of the gameplay frame and how it advances across pause and reset.
 - Verified the Dreamcast cat model dispatcher across 100 phase, costume and heading combinations, including the sprite-costume branch. Verified all 24 mouse model preparation calls and the explicit texture ordering from the disc executable. Next, trace the per-tick animation selection and original camera and layering before the live renderer uses these models.
