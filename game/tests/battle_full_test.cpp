@@ -35,6 +35,7 @@ int main(int argc, char** argv) {
             std::vector<std::pair<float,float>> before; if (dump) for (auto& e : b.sim.ents) before.push_back({e.x, e.z});
             if (getenv("POSDUMP") && atoi(getenv("POSDUMP")) == idx && seed == (getenv("POSSEED") ? atoi(getenv("POSSEED")) : seed)) { static FILE* pf = fopen(getenv("POSFILE") ? getenv("POSFILE") : "posdump.txt", "w"); fprintf(pf, "F %d\n", f); for (auto& e : b.sim.ents) if (e.mouse && e.alive && !e.done && !e.fresh) fprintf(pf, "M %.6f %.6f\n", e.x, e.z); }
             b.tick();
+            if (getenv("MICEDUMP") && atoi(getenv("MICEDUMP")) == idx && f >= (getenv("MFROM") ? atoi(getenv("MFROM")) : 0) && f <= (getenv("MTO") ? atoi(getenv("MTO")) : 0)) printf("MICE f%d %d cnt1 %d cnt2 %d\n", f, b.gen->mice, b.gen->cnt1, b.gen->cnt2);
             if (b.debug && f >= 1410 && f <= 1449) printf("C f%d coll(3,1)=%x\n", f, b.sim.coll[1][3]);
             if (dump) for (size_t k = 0; k < b.sim.ents.size(); k++) { auto& e = b.sim.ents[k]; if (k < before.size() && e.alive && !e.done && !e.rocketIn && (e.x != before[k].first || e.z != before[k].second)) fprintf(dump, "%d %zu %.3f %.3f\n", f, k, e.x, e.z); }
             if (b.debug && f == 682) for (size_t k = 0; k < b.sim.ents.size(); k++) { auto& e = b.sim.ents[k]; if (e.alive && !e.done) printf("ENT %zu m%d %.2f %.2f\n", k, (int)e.mouse, e.x, e.z); }

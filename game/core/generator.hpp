@@ -13,8 +13,9 @@ class Generator {
 public:
     Generator(std::vector<GenCell> cells, uint32_t seed, GenParams p = {}) : cells_(std::move(cells)), rng_(seed), p_(p) {}
     uint32_t flags = 0;                  // GE_SetProhibitGenerator mask: 1 no normal mice, 2 no special 1, 4 no special 2, 8 no cats
-    int mice = 0, cnt1 = 0, cnt2 = 0;    // alive counts (the game updates them as mice leave: GE_MouseCountUp/Down)
+    int mice = 0, cnt1 = 0, cnt2 = 0;    // alive counts per mouse type (GE_MouseCountUp/Down index word type + 6 of the manager block): mice = normal mice only, the one the cap check reads
     bool catOut = false;                 // cleared by GE_CatIsLost
+    int lagA_ = 0, lagB_ = 0;            // mice spawned this frame / last frame: GE_MouseCountUp runs when the new mouse task first executes, after the generator task of the frame that created it, so the cap check does not see them yet (measured: the count block lags the spawns by one frame)
     int timer = 0;                       // frames since the last cat was lost
     std::vector<Spawn> spawns;
     GenParams& params() { return p_; }
@@ -22,18 +23,19 @@ public:
     void frame(int f) {
         if (lock2_ > 0) lock2_--;
         if (lock1_ > 0) lock1_--;
+        lagB_ = lagA_; lagA_ = 0;
         for (const GenCell& g : cells_) {
             if (!(flags & 8) && !catOut && timer > 299) { put(f, true, g, 0); catOut = true; continue; }
-            if (mice >= p_.capMice) break;
+            if (mice - lagA_ - lagB_ >= p_.capMice) break;
             float r = rng_.next();
             if (!(r < p_.pSpawn)) continue;
             float r2 = rng_.next(); float thr = p_.pSpecial1;
-            if (!(flags & 2) && lock1_ == 0 && cnt1 < p_.capSpecial1 && r2 < thr) { lock1_ = 15; put(f, false, g, 1); mice++; cnt1++; continue; }
+            if (!(flags & 2) && lock1_ == 0 && cnt1 < p_.capSpecial1 && r2 < thr) { lock1_ = 15; put(f, false, g, 1); cnt1++; continue; }
             thr = thr + p_.pSpecial2;
-            if (!(flags & 4) && lock2_ == 0 && cnt2 < p_.capSpecial2 && r2 < thr) { lock2_ = 15; put(f, false, g, 2); mice++; cnt2++; continue; }
+            if (!(flags & 4) && lock2_ == 0 && cnt2 < p_.capSpecial2 && r2 < thr) { lock2_ = 15; put(f, false, g, 2); cnt2++; continue; }
             if (!(flags & 8) && !catOut && r2 < thr + p_.pCat) { put(f, true, g, 0); catOut = true; continue; }
             if (flags & 1) continue;
-            put(f, false, g, 0); mice++;
+            put(f, false, g, 0); mice++; lagA_++;
         }
         timer = catOut ? 0 : timer + 1;
     }

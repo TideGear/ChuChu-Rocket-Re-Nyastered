@@ -98,6 +98,7 @@ public:
         if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr, pendingRollSlot_); }
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
+        applyMiceDec();
         if (genFirst) { gen->frame(frame); spawnPending(true); }
         if (cpuFirst) runCpu();
         prepareSpeedChange();
@@ -144,17 +145,21 @@ private:
         for (int i = 0; i < e.nPlaced; i++) { const auto& pl = e.placed[i]; int d = toDir[pl.dir & 15]; placeArrow(pl.p, pl.x, pl.y, d); }
     }
     void runCpu() { if (gbaCpu) { gbaRun(); return; } if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
+    int pendMice_ = 0, pendCnt1_ = 0, pendCnt2_ = 0;   // GE_MouseCountDown runs when the mouse task is destroyed, one tick after the collision event
+    void decMice(int type) { if (type == 0) pendMice_++; if (type == 1) pendCnt1_++; if (type == 2) pendCnt2_++; }
+    int pend2Mice_ = 0, pend2Cnt1_ = 0, pend2Cnt2_ = 0;
+    void applyMiceDec() { gen->mice -= pend2Mice_; gen->cnt1 -= pend2Cnt1_; gen->cnt2 -= pend2Cnt2_; pend2Mice_ = pendMice_; pend2Cnt1_ = pendCnt1_; pend2Cnt2_ = pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; }
     void handle(const Event& e) {
         if (debug) printf("f%d event kind %d player %d type %d\n", frame, (int)e.kind, e.player, e.type);
         switch (e.kind) {
         case Event::MouseRocket: {
             { float& q = puku[e.player & 3]; q += 0.2f; if (q > 1.5f) q = 1.5f; }
             static const int value[3] = {1, 50, 1};
-            score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); gen->mice--; if (e.type == 1) gen->cnt1--;
-            if (e.type == 2) { gen->cnt2--; if (rouletteEnabled) { pendingRoll_ = e.player; pendingRollSlot_ = e.slot; } }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
+            score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); decMice(e.type);
+            if (e.type == 2) { if (rouletteEnabled) { pendingRoll_ = e.player; pendingRollSlot_ = e.slot; } }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
             break; }
         case Event::MouseEaten: case Event::MouseHole: case Event::MouseGone:
-            gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
+            decMice(e.type); break;
         case Event::CatRocket:
             if (e.player >= 0) { score.catHasCome(e.player); updateRanks(); if (sfx) sfx(7); }            // a cat in a rocket respawns at a generator: it stays 'out'
             // (hole: no score change; the cat respawns at a generator too, so it stays 'out')
@@ -268,7 +273,7 @@ private:
     void removeGroup(int mask, bool unregister = false) {                                          // 0x3db58: delete tasks by group (1 = mice, 2 = cats); mice decrement the generator counters
         for (auto& e : sim.ents) {
             if (!e.alive || e.done) continue;
-            if (e.mouse && (mask & 1)) { e.alive = false; sim.releaseSlot(e.slot); gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; }
+            if (e.mouse && (mask & 1)) { e.alive = false; sim.releaseSlot(e.slot); if (e.type == 0) gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; }
             else if (!e.mouse && (mask & 2)) { e.alive = false; sim.releaseSlot(e.slot); }
             if (unregister && !e.alive) e.reg = false;       // measured: tasks deleted by an event's destructor no longer feed the heat map that frame
         }
