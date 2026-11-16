@@ -588,7 +588,7 @@ struct App {
             gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(0.0f);
             for (size_t i = 0; i < sim.ents.size(); i++) {
                 const Entity& e = sim.ents[i];
-                if (e.mouse || !e.alive || e.catHoleFall || (e.catWalkScale >= 0.0f && !e.reg)) continue;
+                if (e.mouse || !e.alive || e.catHoleFallTick >= 0 || (e.catWalkScale >= 0.0f && !e.reg)) continue;
                 cphase[i] += 0.45f;
                 if (cphase[i] >= 20.0f) cphase[i] -= 20.0f;
             }
@@ -596,10 +596,10 @@ struct App {
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
         for (size_t i = 0; i < sim.ents.size(); i++) {
             const Entity& e = sim.ents[i];
-            if (e.drawsHoleFall()) {
-                if (e.rocketCounter < 1.0f) angs[i] = (angs[i] + 0x1000) & 0xffff;
+            if (e.fallingInHole()) {
+                if (e.drawsHoleFall() && sim.now > e.catHoleFallTick) angs[i] = (angs[i] + 0x1000) & 0xffff;
             } else if (!effectsOnly) {
-                if (e.catHoleFall && e.alive) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
+                if (e.catHoleFallTick >= 0 && e.alive) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
                 else angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed);
             }
         }
@@ -647,7 +647,7 @@ struct App {
             if (!en.alive || en.done || en.rocketIn) continue;
             float x = prev[i].first + (en.x - prev[i].first) * alpha;
             float z = prev[i].second + (en.z - prev[i].second) * alpha;
-            if (en.catHoleFall || std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
+            if (en.catHoleFallTick >= 0 || std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
             fieldObjects.push_back({static_cast<int>(en.z), x, z, i, false});
         }
 

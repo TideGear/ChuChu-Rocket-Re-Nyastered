@@ -80,7 +80,18 @@ def verify_handoff_and_respawn():
             if tick < 10:
                 oracle.call(0x14524, task)
                 scale += 0.1
-    print('5 iPad cat hole handoffs and generator selections matched')
+    for scale, duration in ((0.0, 1), (0.1, 3), (0.4, 13), (0.9, 27)):
+        oracle.write(task + 0x10, struct.pack('<2h3fii3f', 2, 4, *position, 0x3333, 0, 0, scale, 7.75))
+        oracle.call(0x14524, task)
+        assert oracle.u32(task + 0x44) == 0x148e5
+        assert oracle.u32(task + 0x20) == 0x3333
+        assert abs(u2f(oracle.u32(task + 0x2c)) - scale) < 0.000001
+        rng_calls.clear()
+        for tick in range(1, duration + 1):
+            oracle.call(0x147b4, task)
+            assert len(rng_calls) == (tick == duration), (scale, tick, rng_calls)
+        assert rng_calls == [random_value] and not sounds
+    print('5 iPad cat respawns and 4 interrupted grow-ins matched')
 
 
 def verify_overlap():
