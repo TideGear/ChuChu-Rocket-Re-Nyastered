@@ -587,7 +587,12 @@ struct App {
         gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(0.0f);
         for (size_t i = 0; i < sim.ents.size(); i++) if (!sim.ents[i].mouse && sim.ents[i].alive) { cphase[i] += 0.45f; if (cphase[i] >= 20.0f) cphase[i] -= 20.0f; }                       // original turn logic (core/angle.hpp), once per simulation tick
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
-        for (size_t i = 0; i < sim.ents.size(); i++) { const Entity& e = sim.ents[i]; angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed); }
+        for (size_t i = 0; i < sim.ents.size(); i++) {
+            const Entity& e = sim.ents[i];
+            if (!e.catHoleFall) angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed);
+            else if (!e.rocketIn) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
+            else if (e.rocketCounter < 1.0f) angs[i] = (angs[i] + 0x1000) & 0xffff;
+        }
     }
     struct FieldObject {
         int depth;
@@ -625,7 +630,11 @@ struct App {
             }
             if (i == sim.ents.size()) break;
             const Entity& en = sim.ents[i];
-            if (!en.alive || en.done || en.rocketIn) continue;
+            if (!en.alive || en.done || (en.rocketIn && !en.catHoleFall)) continue;
+            if (en.rocketIn) {
+                fieldObjects.push_back({std::max(-64, static_cast<int>(en.z)), en.x, en.z, i, false});
+                continue;
+            }
             float x = prev[i].first + (en.x - prev[i].first) * alpha;
             float z = prev[i].second + (en.z - prev[i].second) * alpha;
             if (std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
@@ -652,6 +661,12 @@ struct App {
             }
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
+            if (en.rocketIn && en.catHoleFall) {
+                drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter, 255);
+                if (headless && getenv("CCR_CAT_HOLE_TRACE"))
+                    printf("cat hole %d %.3f %.3f %.6f\n", (ang & 0xffff) >> 11, x, z, en.rocketCounter);
+                continue;
+            }
             if (walkOk) {   // original view choice (CA_CatDrawSTPriority / FUN_0003582c, literals from the code): back view for angles in [0x6001, 0xA000], front outside [0x2001, 0xE000], side otherwise
                 unsigned a = (unsigned)ang & 0xffff; int view = (a >= 0x6001 && a <= 0xA000) ? 1 : ((a < 0x2001 || a > 0xE000) ? 2 : 0);
                 Sheet& sh = !en.mouse ? catV[view] : (en.type == 1 ? goldV[view] : mouseV[view]);

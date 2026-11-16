@@ -39,6 +39,7 @@ struct Entity {
     bool mouse = true, alive = true, done = false, hit = false;   // hit: contact flag set by the collision pass, consumed at the start of the next tick
     float x = 0, z = 0;
     bool rocketIn = false; float rocketCounter = 1.0f;   // battle cat inside a rocket (30-tick animation, then respawn at a random generator)
+    bool catHoleFall = false;   // distinguishes the hole draw task through its respawn tick
     bool reg = false;
     bool fresh = false;         // spawned before this tick's entity pass: first moves next tick, no contact this tick
     int slot = -1;              // task-pool slot (the collision entry stores the task pointer: a reused slot is read through the new occupant)
@@ -262,6 +263,7 @@ private:
         e.x += njSin(e.angle) * -2.5f; e.z += njCos(e.angle) * 2.5f; gridOf(e.x, e.z, e.gx, e.gy); e.reg = false;
     }
     void step(Entity& e) {
+        e.catHoleFall = false;
         if (e.mouse && e.jime) { jimeStep(e); return; }
         const float speed = e.mouse ? mouseSpeed : catSpeed;
         float thr = speed * (e.mouse ? 0.52f : 0.51f);
@@ -279,7 +281,8 @@ private:
             }
             if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
             if (battle && (f & kHole)) { events.push_back(e.mouse ? Event{Event::MouseHole, 0, e.type} : Event{Event::CatRocket, -1, 0});
-                if (e.mouse || !rnd) e.alive = false; else e.rocketIn = true;      // a cat falling into a hole also ends in the rocket-in/respawn function
+                if (e.mouse || !rnd) e.alive = false;
+                else { e.rocketIn = true; e.catHoleFall = true; }
                 return; }   // cat lost in a hole: player -1, no score
             if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; endTicks.push_back(now); if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); } e.alive = false; return; }
             if (!e.mouse && (f & kArrow)) {                      // cat arriving head-on to an arrow strikes it

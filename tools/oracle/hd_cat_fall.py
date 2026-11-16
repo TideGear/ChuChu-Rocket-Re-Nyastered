@@ -62,6 +62,36 @@ def verify_handoff_and_respawn():
     print('5 iPad cat hole handoffs and generator selections matched')
 
 
+def verify_overlap():
+    oracle = hd_env.make().o
+    oracle.call(0x15188)
+    oracle.call(0x1a060)
+    cat, rocket, mouse = [oracle.alloc(0x58) for _ in range(3)]
+    order = []
+
+    def record(uc, address, size, data):
+        order.append(address)
+        uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+
+    field, objects, cat_draw, rocket_draw, mouse_draw = (
+        oracle.u32(ptr) & ~1 for ptr in (0x156c0, 0x156c8, 0x1490c, 0x16e50, 0x16afc))
+    for address in (field, objects, cat_draw, rocket_draw, mouse_draw):
+        oracle.uc.hook_add(UC_HOOK_CODE, record, begin=address, end=address)
+    for z in (65.9, 66.8, 67.6, 68.1):
+        for task, depth in ((cat, z), (rocket, 67.5), (mouse, z)):
+            oracle.write(task + 0x14, struct.pack('<3f', 37.5, 0, depth))
+        oracle.call(0x156a0)
+        oracle.call(0x148e4, cat)
+        oracle.call(0x16e28, rocket)
+        oracle.call(0x16ab0, mouse)
+        oracle.call(0x1a008)
+        sprites = ([cat_draw, mouse_draw, rocket_draw] if z < 67 else
+                   [cat_draw, rocket_draw, mouse_draw] if z < 68 else [rocket_draw, cat_draw, mouse_draw])
+        assert order == [field, objects, *sprites], order
+        order.clear()
+    print('4 iPad cat fall overlaps matched the field and sprite draw order')
+
+
 def main():
     oracle = hd_env.make().o
     oracle.call(0x15188)
@@ -115,6 +145,7 @@ def main():
                     assert oracle.u32(task + 0x20) == angle + 0x1000
     print('30 iPad cat fall cases matched across mode, stage, and position')
     verify_handoff_and_respawn()
+    verify_overlap()
 
 
 if __name__ == '__main__':
