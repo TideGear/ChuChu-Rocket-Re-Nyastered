@@ -1,4 +1,4 @@
-"""Check the cat cues in the original GBA mixer, without physical audio output."""
+"""Check the cat and death-marker cues in the GBA mixer without audio output."""
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_R0, UC_ARM_REG_SP
 
 from gba_oracle import STOPADDR
@@ -50,6 +50,7 @@ def main():
         (36, (0, 0x0803a9bc, 60), 105),
         (42, (3, 0x08029818, 65), 46),
         (43, (0, 0x080621f4, 60), 38),
+        (62, (0, 0x08059768, 60), 85),
     ]
     for cue, voice, duration in cases:
         output, voices, active_frames = run(cue)
