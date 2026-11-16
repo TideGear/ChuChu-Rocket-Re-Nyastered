@@ -4,7 +4,9 @@
 // (nibble 1 cat, 2 mouse with colour 1..4 in the high nibble, 3 rocket, 4 hole), bits 12 / 13 north / south wall, bits 14 / 15 west / east wall.
 #pragma once
 #include <cstdint>
+#include <array>
 #include <cstring>
+#include <string>
 #include <vector>
 namespace ccr {
 struct EditorArrow { uint16_t x, y; uint32_t type; };
@@ -55,5 +57,13 @@ inline uint32_t editorCrc(const uint8_t* data, int length) {
     uint32_t crc = 0xffffffffu;
     for (int i = 0; i < length; i++) crc = table[(crc & 0xff) ^ data[i]] ^ (crc >> 8);
     return ~crc;
+}
+// Editor::sendLevel (0x2cf80): the solution moves go out as lowercase hex, three bytes per move (the low bytes of the three fields of each 8 byte record,
+// high nibble first), after "crc=%.8x&arw=" in the request "http://www.binaryhammer.com/ccrlvls/ccr_lvlup.php?crc=%.8x&arw=%s&lvl=" (the original's server, not used by the port).
+inline std::string editorSolutionHex(const std::vector<std::array<uint8_t, 3>>& moves) {
+    static const char* digits = "0123456789abcdef";
+    std::string out;
+    for (const auto& m : moves) for (uint8_t v : m) { out += digits[(v >> 4) & 0xf]; out += digits[v & 0xf]; }
+    return out;
 }
 } // namespace ccr
