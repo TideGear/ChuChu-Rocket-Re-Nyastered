@@ -167,6 +167,7 @@ struct App {
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
+    Sheet phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
     const std::string& str(int id) { static const std::string none; auto it = strs.find(id); return it == strs.end() ? none : it->second; }
     void loadStrings() {
@@ -237,6 +238,11 @@ struct App {
                 loadSheet(ret + "pdeco", pdeco) && loadSheet(ret + "pbtn", pbtn) && loadSheet(ret + "bg0879", pmbg);
         titleOk = titleOk || padOk;
         loadStrings();
+        const char* phoneLocale = getenv("CCR_LANG");
+        const std::string phoneArt = ret + "phone_" + (phoneLocale ? phoneLocale : "en") + "/";
+        loadSheet(phoneArt + "pause_button", phonePauseButton);
+        loadSheet(phoneArt + "pause_title", phonePauseTitle);
+        loadSheet(ret + "phone_pause_panel", phonePausePanel);
         { static const char* cv[3] = {"r0420", "r0429", "r0438"}, *mv[3] = {"r0491", "r0495", "r0499"}, *gv[3] = {"r0472", "r0476", "r0480"}; walkOk = true;
           for (int k = 0; k < 3; k++) { walkOk = loadSheet(ret + cv[k], catV[k]) && loadSheet(ret + mv[k], mouseV[k]) && loadSheet(ret + gv[k], goldV[k]) && walkOk;
             loadFit(ret + "hd_cat" + std::to_string(k) + ".frames.bin", catV[k]); loadFit(ret + "hd_mouse" + std::to_string(k) + ".frames.bin", mouseV[k]); loadFit(ret + "hd_gold" + std::to_string(k) + ".frames.bin", goldV[k]); } }
@@ -1884,18 +1890,45 @@ struct PuzzleMode : Screen {
     }
     // Touch rects of the puzzle screen (HD 1.0 PuzzleGameScreen::process 0x12994 -> Input::addRect(i, x0, y0, x1, y1) from layout +0x4d0 + 16 i): rect 3 (18, 88)-(160, 190) Start/Dash, rect 4 (21, 229)-(159, 275) Cancel.
     // In the placing mode, rect 3 sets input flag 1 (start) and rect 4 flag 2 (Cancel). Effects read from Android PuzzleLoop (0x33bbc): placing: flag 1 = start, flag 2 = delete all arrows; running: flag 1 = Dash, flag 2 = restart with the arrows kept.
-    bool pauseAvailable(const App& a) const {
+    bool ipadPauseAvailable(const App& a) const {
         return a.hdHud68.fr.size() > 5 && a.hdPause.fr.size() > 3 && a.hdFont.tex;
+    }
+    bool phonePauseAvailable(App& a) const {
+        return !ipadPauseAvailable(a) && a.phonePauseButton.fr.size() > 5 &&
+               !a.phonePauseTitle.fr.empty() && a.phonePausePanel.fr.size() > 2 &&
+               !a.str(217).empty() && !a.str(218).empty();
+    }
+    // Fit the 480 × 320 handset UI at integer scale on the shared gameplay canvas.
+    static constexpr int phoneX = (GW - 960) / 2, phoneY = (GH - 640) / 2;
+    void drawPhonePause(App& a) const {
+        auto art = [&](Sheet& sheet, int frame, int x, int y, bool mirror = false) {
+            a.blitFlip(sheet, frame, phoneX + 2 * x, phoneY + 2 * y, 2.0f, mirror);
+        };
+        art(a.phonePauseTitle, 0, 240, 200);
+        art(a.phonePausePanel, 0, 235, 199, pconf);
+        art(a.phonePausePanel, pconf ? 2 : 1, 129, 183);
+        art(a.phonePausePanel, pconf ? 1 : 2, 341, 183, true);
+        const int height = 28;
+        for (int i = 0; i < 2; ++i) {
+            const std::string& text = a.str(217 + i);
+            const int x = phoneX + 2 * (i == 0 ? 114 : 359);
+            a.text(text, x - a.textWidth(text, height) / 2, phoneY + 2 * 183 - height / 2, height);
+        }
     }
     bool hudButton(App& a, const SDL_Event& e) {
         float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
         auto in = [&](float x0, float y0, float x1, float y1) { return lx >= x0 && lx < x1 && ly >= y0 && ly < y1; };
-        if (paused) {   // PuzzleGameScreen::handleInput while PA_IsPaused (0x1299c..): rects 1 (128, 313)-(403, 413) and 2 (590, 314)-(881, 414), transcribed literally
-            if (in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; } }
-            if (in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }   // Input::setData(10, 1) = leave the screen; BGM_Release (not read yet) not reproduced
+        const bool phone = phonePauseAvailable(a);
+        auto handset = [&](int x0, int y0, int x1, int y1) {
+            const float x = (lx - phoneX) / 2, y = (ly - phoneY) / 2;
+            return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+        };
+        if (paused) {
+            if (phone ? handset(33, 148, 204, 215) : in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; } }
+            if (phone ? handset(265, 148, 440, 215) : in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }
             return true; }
         if (state == 3) return true;   // PuzzleLoop disables pause and ignores HUD input during the failure phase.
-        if (pauseAvailable(a) && in(10, 669, 173, 711)) { paused = true; a.playSfx(4); return true; }   // rect 0 = the pause button: Input::setData(0xb, 1) -> PA_PauseController, sound 4 (BGM_Pause not reproduced)
+        if (phone ? handset(0, 295, 60, 320) : ipadPauseAvailable(a) && in(10, 669, 173, 711)) { paused = true; if (phone) pconf = false; a.playSfx(4); return true; }
         if (in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
         if (in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
@@ -1985,10 +2018,16 @@ struct PuzzleMode : Screen {
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
             const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, 720.0f, 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }
-        if (pauseAvailable(a)) a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // end of renderPuzzleHudiPad: drawImage(0x68, 5, 92, 690) = the pause button (rect 0)
+        const bool phonePause = phonePauseAvailable(a);
+        if (phonePause) a.blit(a.phonePauseButton, 5, phoneX + 58, phoneY + 616, 2.0f);
+        else if (ipadPauseAvailable(a)) a.blit(a.hdHud68, 5, 92.0f, 690.0f);
         drawFailureFocus(a);
         if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
             SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0xc0); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all);
+            if (phonePause) {
+                drawPhonePause(a);
+                return;
+            }
             const float bx = 512.0f, by = 400.0f, sc = 2.0f;   // layout +0x520 = 400, +0x568 = 2.0
             a.blitFlip(a.hdPause, 0, bx, by, sc, false); a.blitFlip(a.hdPause, 1, bx - 10.0f, by - 2.0f, sc, pconf);
             if (pconf) { a.blitFlip(a.hdPause, 3, bx - 226.0f, by - 32.0f, sc, false); a.blitFlip(a.hdPause, 2, bx + 206.0f, by - 32.0f, sc, true); }
