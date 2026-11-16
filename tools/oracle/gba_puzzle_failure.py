@@ -9,7 +9,7 @@ from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 from gba_session import GBA, ROM, run
 
 
-def probe(state, force_catch, retry):
+def probe(state, force_catch, after_start=None, followup=()):
     gba = GBA(ROM)
     gba.load_state(state)
     uc = gba.uc
@@ -41,8 +41,9 @@ def probe(state, force_catch, retry):
     uc.hook_add(UC_HOOK_MEM_WRITE, pending_write, begin=pending, end=pending)
 
     keys = {10: 'r'}
-    if retry:
-        keys[260] = retry
+    if after_start:
+        frame, key = after_start
+        keys[frame] = key
     run(gba, 300, keys)
 
     expected_sounds = [(11, 5, 0x0800b13d)]
@@ -51,8 +52,7 @@ def probe(state, force_catch, retry):
         assert catches == [12]
         assert marker_updates == list(range(13, 133))
         assert writes == [(12, 255, 0x08002e7c), (133, 0, 0x08000f00)]
-        if retry:
-            expected_sounds.append((261, 6, 0x0800c0b3))
+        expected_sounds.extend(followup)
     else:
         assert not marker_updates and not writes
         expected_sounds.extend((frame, 37, 0x08003079)
@@ -66,9 +66,19 @@ def main():
     args = parser.parse_args()
     with args.snapshot.open('rb') as stream:
         state = pickle.load(stream)
-    for force_catch, retry in ((False, None), (True, None), (True, 'A'), (True, 'B')):
-        probe(state, force_catch, retry)
-    print('GBA Puzzle: natural control plus forced catch with no input, A, and B matched')
+    probe(state, False)
+    probe(state, True)
+    for key in ('A', 'B', 'T', 'r'):
+        probe(state, True, (20, key))
+    for frame in (125, 131, 132):
+        probe(state, True, (frame, 'A'))
+    for frame, response in ((133, 135), (134, 135), (135, 136), (260, 261)):
+        for key in ('A', 'B'):
+            probe(state, True, (frame, key), [(response, 6, 0x0800c0b3)])
+    probe(state, True, (133, 'T'), [(136, 35, 0x08001b0f)])
+    rescue = [(frame, 37, 0x08003079) for frame in range(196, 237, 10)]
+    probe(state, True, (133, 'r'), [(135, 5, 0x0800b13d), *rescue])
+    print('19 GBA Puzzle cases matched, including input around the failure transition')
 
 
 if __name__ == '__main__':
