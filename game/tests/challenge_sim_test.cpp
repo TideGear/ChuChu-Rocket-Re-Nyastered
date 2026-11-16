@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
         Sim sim; sim.load(st); if (getenv("BREAKAT")) sim.breakAt = atoi(getenv("BREAKAT")); if (getenv("BREAKAT")) sim.breakAt = atoi(getenv("BREAKAT")); if (getenv("BREAKAT")) sim.breakAt = atoi(getenv("BREAKAT")); if (getenv("BREAKAT")) sim.breakAt = atoi(getenv("BREAKAT"));
         int mice = 0; for (auto& e : sim.ents) if (e.mouse) mice++;
         printf("stage %d: %d mice, %d cats\n", want, mice, (int)sim.ents.size() - mice);
-        int lastSaved = -1, lastEaten = -1;
+        int lastSaved = -1, lastEaten = -1; bool failed = false;
         const bool arrows = argc > 4;   // scripted arrows of challenge_probe.py (ARROWS=1): battle arrow rules, one player, 3 slots in a ring, lifetime 600 ticks
         int ring = 0, slot[3] = {-1, -1, -1};
         for (int t = 1; t <= ticks; t++) {
@@ -37,6 +37,12 @@ int main(int argc, char** argv) {
             if (arrows && t >= 12 && (t - 12) % 40 == 0) { printf("ARR t%d [", t); for (int yy = 0; yy < 9; yy++) for (int xx = 0; xx < 12; xx++) if (sim.coll[yy][xx] & kArrow) printf("(%d,%d,0x%x) ", xx, yy, (unsigned)(sim.coll[yy][xx] & 0xfff)); printf("]\n"); }
             if (getenv("MPOS") && t >= atoi(getenv("MPOS"))) for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) { printf("MPOS t%d %.3f %.3f", t, e.x, e.z); putchar(10); }
             sim.tick();
+            if (!failed) {   // failure triggers of ChallengeLoop: types 0 and 1 a killed mouse or a cat in a rocket, type 2 a mouse or cat falling into a hole
+                const int type = want % 5; const char* why = nullptr;
+                if (type <= 1 && (sim.killed > 0 || sim.catsInRocket > 0)) why = sim.killed > 0 ? "mouse killed" : "cat in rocket";
+                if (type == 2) { if (sim.killedByHole > 0) why = "mouse in hole"; for (auto& e : sim.ents) if (!e.mouse && e.catHoleFallTick >= 0) why = "cat in hole"; }
+                if (why) { printf("FAIL t%d %s", t, why); putchar(10); failed = true; }
+            }
             if (sim.saved != lastSaved || sim.killedByCat != lastEaten) { printf("CNT t%d rocket %d eaten %d\n", t, sim.saved, sim.killedByCat); lastSaved = sim.saved; lastEaten = sim.killedByCat; }
         }
         return 0;
