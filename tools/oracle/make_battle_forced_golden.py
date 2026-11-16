@@ -30,6 +30,8 @@ for idx, seed, use_arrows in cases[first:first + count]:
     tiles, walls = ascii_stage(d[idx * 477:idx * 477 + 475])
     B.spawns.clear(); rl.clear(); setup_battle(tiles, walls, seed)
     gcall(0x3d2bc)                                              # SC_InitScoreBoard
+    for ga in (0x184c8c, 0x184ca0, 0x184ca8, 0x17518c): o.write(BASE + ga - G, struct.pack('<I', 0))   # roulette globals left over from the previous case
+    o.write(BASE + 0x17b604 - G, struct.pack('<I', 0)); o.write(BASE + 0x17b600 - G, struct.pack('<I', 0))   # game time and BCD time = 0, as battle_full_test GT=0 assumes
     hook_force(0x3c2bc)
     arr = o.u32(BASE + pa)
     sc = []; prev = None
