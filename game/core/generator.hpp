@@ -16,7 +16,7 @@ public:
     int mice = 0, cnt1 = 0, cnt2 = 0;    // alive counts per mouse type (GE_MouseCountUp/Down index word type + 6 of the manager block): mice = normal mice only, the one the cap check reads
     bool catOut = false;                 // cleared by GE_CatIsLost
     int spawnLag = 2;   // frames of spawns the cap check does not see (this frame included)
-    int lagA_ = 0, lagB_ = 0;            // mice spawned this frame / last frame: GE_MouseCountUp runs when the new mouse task first executes, after the generator task of the frame that created it, so the cap check does not see them yet (measured: the count block lags the spawns by one frame)
+    int lagA_ = 0, lagB_ = 0, lagC_ = 0;            // mice spawned this frame / last frame: GE_MouseCountUp runs when the new mouse task first executes, after the generator task of the frame that created it, so the cap check does not see them yet (measured: the count block lags the spawns by one frame)
     int timer = 0;                       // frames since the last cat was lost
     std::vector<Spawn> spawns;
     GenParams& params() { return p_; }
@@ -24,10 +24,10 @@ public:
     void frame(int f) {
         if (lock2_ > 0) lock2_--;
         if (lock1_ > 0) lock1_--;
-        lagB_ = lagA_; lagA_ = 0;
+        lagC_ = lagB_; lagB_ = lagA_; lagA_ = 0;
         for (const GenCell& g : cells_) {
             if (!(flags & 8) && !catOut && timer > 299) { put(f, true, g, 0); catOut = true; continue; }
-            if (mice - lagA_ - (spawnLag >= 2 ? lagB_ : 0) >= p_.capMice) break;
+            if (mice - lagA_ - (spawnLag >= 2 ? lagB_ : 0) - (spawnLag >= 3 ? lagC_ : 0) >= p_.capMice) break;
             float r = rng_.next();
             if (!(r < p_.pSpawn)) continue;
             float r2 = rng_.next(); float thr = p_.pSpecial1;
