@@ -180,11 +180,9 @@ public:
             if (battle) events.push_back({Event::MouseEaten, 0, m.type});
             if (trace) printf("t=%d mouse eaten at (%.1f,%.1f) cell (%d,%d)\n", now, m.x, m.z, m.gx, m.gy);
         }
-        if (order == 0 && spdSlot >= 0) {   // a roulette event task changes the character speed this frame: tasks run in pool-slot order, so entities after the event's slot already see the new speed (SmpTskExeServer)
-            std::vector<size_t> idx(ents.size()); for (size_t i = 0; i < idx.size(); i++) idx[i] = i;
-            std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) { return ents[a].slot < ents[b].slot; });
+        if (order == 0 && spdSlot >= 0) {   // a roulette event task changes the character speed this frame. SmpTskEntry appends every new task to a linked list and SmpTskExeServer walks it, so tasks run in creation order (not pool-slot order): entities created at or after index spdSlot (the event task's creation point) already see the new speed
             bool applied = false;
-            for (size_t i : idx) { Entity& e = ents[i]; if (!applied && e.slot > spdSlot) { mouseSpeed = spdMouse; catSpeed = spdCat; applied = true; }
+            for (size_t i = 0; i < ents.size(); i++) { Entity& e = ents[i]; if (!applied && (int)i >= spdSlot) { mouseSpeed = spdMouse; catSpeed = spdCat; applied = true; }
                 if (e.alive && !e.done && !e.fresh) { if (e.rocketIn) rocketInTick(e); else step(e); } }
             if (!applied) { mouseSpeed = spdMouse; catSpeed = spdCat; }
             spdSlot = -1;

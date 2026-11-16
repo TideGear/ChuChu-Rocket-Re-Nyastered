@@ -170,7 +170,7 @@ private:
     struct Roll { bool active = false; int elapsed = 0, outcome = 0, slot = -1; } roll_;
     struct PCat { int x, y, dir; }; std::vector<PCat> pendingCats_;
     int lastRoller_ = 0, pendingRoll_ = -1;
-    struct Ev { int kind, state, count, limit; int rollerPlayer; int slot; };
+    struct Ev { int kind, state, count, limit; int rollerPlayer; int slot; int ord = 0; };   // ord: number of entities created before the event task (its place in the task list)
     std::vector<Ev> evs_;
     void startRoulette(int p, int rollSlot = -1) {
         if (roll_.active) return;
@@ -188,7 +188,7 @@ private:
                        case 5: case 6: lim = 59; break; default: lim = 239; }   // RL_Eve_Hikkoshi and RL_Eve_NekoPresent end when their counter exceeds 0x3b; RL_Eve_Hitorijime when it exceeds 0xef
         int es = sim.allocSlot(-2);                                       // the event task is created first, then the roulette task deletes itself (0x3c6e0..0x3c6f2)
         sim.releaseSlot(roll_.slot); roll_.slot = -1;
-        evs_.push_back({out, 0, 0, lim, lastRoller_, es}); event = out;
+        evs_.push_back({out, 0, 0, lim, lastRoller_, es, (int)sim.ents.size()}); event = out;
     }
     bool nekoCheck(int roller, int p) const { return roller != p && (!teamMode || ((roller ^ p) & 1)); }   // RL_ENP_CheckNekoire (iOS 0x1d02c) = FUN_0003c9cc (Android)
     // RO_ShuffleRockets (iOS 0x158a0, Android 0x3b490), local battle path: a permutation chosen by the game time (TI_GetGameTime = frame count): free-for-all table[(t & 0x3f) mod 9], team table[(t & 0xf) mod 5];
@@ -207,7 +207,7 @@ private:
             float v = -1.0f;
             if (e.state == 0) v = -1.0f;   // the start (state 0) takes effect from the next frame (measured)
             else if (e.count + 1 > e.limit && e.kind != 0 && e.kind != 1 && e.kind != 4 && e.kind != 7) v = 1.0f;
-            if (v >= 0.0f && e.slot >= 0) { sim.spdSlot = e.slot; sim.spdMouse = mouseSpeed(v); sim.spdCat = baseScale * v; }
+            if (v >= 0.0f && e.slot >= 0) { sim.spdSlot = e.ord; sim.spdMouse = mouseSpeed(v); sim.spdCat = baseScale * v; }
         }
     }
     // The destructors of the event tasks (RL_Eve_*Dest): run when the task ends and also when a new roll deletes the running event (RL_RollRoulette4 deletes the task stored in its global).
@@ -228,7 +228,8 @@ private:
         float before = charaSpeed;
         for (const Ev& e : evs_) { eventDest(e.kind); sim.releaseSlot(e.slot); }
         evs_.clear(); event = -1;
-        if (charaSpeed != before) { sim.spdSlot = atSlot >= 0 ? atSlot : -1; sim.spdMouse = mouseSpeed(charaSpeed); sim.spdCat = baseScale * charaSpeed; if (atSlot < 0) applySpeed(); }
+        int atOrd = -1; if (atSlot >= 0) for (int k = (int)sim.ents.size() - 1; k >= 0; k--) if (sim.ents[k].slot == atSlot) { atOrd = k + 1; break; }   // the rolling mouse's place in the task list
+        if (charaSpeed != before) { sim.spdSlot = atOrd; sim.spdMouse = mouseSpeed(charaSpeed); sim.spdCat = baseScale * charaSpeed; if (atOrd < 0) applySpeed(); }
         else applySpeed();
     }
     void stepRoulette() {
