@@ -1825,13 +1825,19 @@ struct PuzzleMode : Screen {
         }
     }
     void draw(App& a, float alpha) override {
-        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
-        { const int set = gApp ? gApp->stageSet : 0; a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2); }   // puzzle colours (createPlayfieldPreview): floor (level & 3) + 2, wall 2; the extra levels (type 200) floor 1, wall 1
-        for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
+        const bool hasBoardTasks = failureFrames <= kFailureHoldFrames;
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
+        SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255);   // iPad Puzzle clear colour (blue 0.1)
+        SDL_RenderClear(a.ren);
+        if (hasBoardTasks) {
+            const int set = gApp ? gApp->stageSet : 0;
+            a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2);
+            for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
+        }
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
         const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
         if (showCursor && (sim.coll[aimY][aimX] & 0xF00)) a.cursor(aimX, aimY, 0, cticks, true);
-        if (failureFrames <= kFailureHoldFrames) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
+        if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
         if (showCursor) {
             if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks);
             else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha);

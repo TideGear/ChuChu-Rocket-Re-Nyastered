@@ -62,6 +62,51 @@ def verify_focus():
     print('iPad focus layers, ring history, and Dash expiry matched at two positions')
 
 
+def verify_teardown_render():
+    env = hd_env.make()
+    oracle = env.o
+    for address in (0x15188, 0x1a060, 0x17e0c):
+        oracle.call(address)
+    screen = oracle.alloc(0xb00)
+    state = oracle.u32(0x18684)
+    oracle.write(env.appdata + 0x668, struct.pack('<I', 0x2d))
+    order = []
+
+    def trace(uc, address, size, data):
+        order.append(address)
+        if address == 0xeae60:
+            assert tuple(oracle._r(index) for index in range(4)) == (0, 0, 0x3dcccccd, 0)
+        elif address == 0xeae5c:
+            assert oracle._r(0) == 0x4000
+        uc.reg_write(UC_ARM_REG_R0, 0)
+        uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+
+    background_and_hud = [0xeae60, 0xeae5c, 0x3ce2c, 0x137c4]
+    board = [0x156d0, 0x1591c]
+    focus = [0x18ef4]
+    for address in background_and_hud + board + focus + [0x3bb70]:
+        oracle.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
+
+    def check(phase, expected):
+        oracle.write(state + 4, struct.pack('<I', phase))
+        order.clear()
+        oracle.call(0x13278, screen)
+        assert order == background_and_hud + expected + [0x3bb70], (phase, order)
+
+    oracle.call(0x18084, 0x18239, 0x18285, 0, 0)
+    oracle.call(0x18e48, 0, 0, 0)
+    oracle.call(0x17f24)
+    check(6, board + focus)
+    oracle.call(0x17e38)
+    check(1, [])
+    oracle.call(0x17e0c)
+    oracle.call(0x18084, 0x18239, 0x18285, 0, 0)
+    oracle.call(0x17f24)
+    check(2, board)
+    oracle.call(0x17e38)
+    print('iPad Puzzle teardown leaves clear colour, stars and HUD before the board returns')
+
+
 def main():
     oracle = hd_env.make().o
     state = oracle.u32(0x18684)
@@ -106,6 +151,7 @@ def main():
                     assert addresses == (rebuild if frame == 121 else []) + task_pass, calls
     print('4 iPad Puzzle cases matched, including Dash, task teardown and automatic arrow-preserving reset')
     verify_focus()
+    verify_teardown_render()
 
 
 if __name__ == '__main__':
