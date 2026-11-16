@@ -74,6 +74,21 @@ def run(stage, frames):
                 open(PATCHES, 'a').write('%x\n' % fn[0])
                 raise SystemExit(3)
             return
+        for spec in os.environ.get('POKE', '').split(';'):   # POKE="ghidra_addr,value,frame;..." writes a 32-bit value at that frame (rule checks)
+            if spec:
+                ga, val, at = spec.split(',')
+                if f == int(at): o.write(BASE + int(ga, 16) - G, struct.pack('<i', int(val)))
+        for spec in os.environ.get('POKEARR', '').split(';'):   # POKEARR="word_index,value,frame": writes into the score array (SC_InitScoreBoard's object) at that frame
+            if spec:
+                wi, val, at = spec.split(',')
+                if f == int(at):
+                    pa = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
+                    arr = o.u32(BASE + pa)
+                    o.write(arr + 4 * int(wi), struct.pack('<i', int(val)))
+                    print('poked score array at %#x word %s' % (arr, wi))
+        if os.environ.get('DUMPARR') and f in [int(x) for x in os.environ['DUMPARR'].split(',')]:
+            pa = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
+            print('ARR f%d' % f, struct.unpack('<24i', o.read(o.u32(BASE + pa), 96)))
         b = block()
         if b[3] != last:
             print('f%d phase %d block %s' % (f, b[3], b))
