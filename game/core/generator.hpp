@@ -27,7 +27,7 @@ public:
         lagC_ = lagB_; lagB_ = lagA_; lagA_ = 0;
         for (const GenCell& g : cells_) {
             if (!(flags & 8) && !catOut && timer > 299) { put(f, true, g, 0); catOut = true; continue; }
-            if (mice - lagA_ - (spawnLag >= 2 ? lagB_ : 0) - (spawnLag >= 3 ? lagC_ : 0) >= p_.capMice) break;
+            if (mice - (spawnLag >= 1 ? lagA_ : 0) - (spawnLag >= 2 ? lagB_ : 0) - (spawnLag >= 3 ? lagC_ : 0) >= p_.capMice) break;
             float r = rng_.next();
             if (!(r < p_.pSpawn)) continue;
             float r2 = rng_.next(); float thr = p_.pSpecial1;

@@ -40,6 +40,10 @@ int main(int argc, char** argv) {
             std::vector<std::pair<float,float>> before; if (dump) for (auto& e : b.sim.ents) before.push_back({e.x, e.z});
             if (getenv("POSDUMP") && atoi(getenv("POSDUMP")) == idx && seed == (getenv("POSSEED") ? atoi(getenv("POSSEED")) : seed)) { static FILE* pf = fopen(getenv("POSFILE") ? getenv("POSFILE") : "posdump.txt", "w"); fprintf(pf, "F %d\n", f); for (auto& e : b.sim.ents) if (e.mouse && e.alive && !e.done && !e.fresh) fprintf(pf, "M %.6f %.6f\n", e.x, e.z); }
             if (getenv("JIMEDUMP") && atoi(getenv("JIMEDUMP")) == idx && f >= (getenv("JLO") ? atoi(getenv("JLO")) : 1500) && f <= (getenv("JHI") ? atoi(getenv("JHI")) : 1552)) for (auto& e : b.sim.ents) if (e.mouse && e.jime && e.alive && !e.done) printf("POS f%d %.4f %.4f %d\n", f, e.x, e.z, e.angle);
+            if (f == 1 && getenv("DECDUMP") && atoi(getenv("DECDUMP")) == idx && seed == 1000 + idx * 17) b.decDump = true;
+            if (f == 1 && getenv("FIRSTEXEC")) b.sim.firstExecSkipsHit = true;
+            if (f == 1 && getenv("RETRY")) b.sim.retryFull = true;
+            if (f == 1 && getenv("FREE")) b.decFromFree = true;
             if (f == 1 && getenv("SPAWNLAG") && b.gen) b.gen->spawnLag = atoi(getenv("SPAWNLAG"));
             if (getenv("RNGDUMP") && atoi(getenv("RNGDUMP")) == idx && seed == 1000 + idx * 17) { static unsigned long long last = 0; if (f == 1) last = ccr::g_rngDraws; b.tick(); if (ccr::g_rngDraws != last) { printf("RNG f%d %llu\n", f, ccr::g_rngDraws - last); last = ccr::g_rngDraws; } } else
             b.tick();

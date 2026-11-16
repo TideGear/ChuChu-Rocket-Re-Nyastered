@@ -54,7 +54,8 @@ public:
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
-    int forceOutcome = -1; int decLag = 2;   // verification: ticks between a mouse's collision event and the generator counter change
+    bool decFromFree = false;   // the generator counters drop when the mouse task is destroyed (one tick after the collision event), not at the event
+    bool decDump = false; int forceOutcome = -1; int decLag = 2;   // verification: ticks between a mouse's collision event and the generator counter change
     void start(const Stage& st, uint32_t seed) {
         for (float& q : puku) q = 1.0f;
         sim.battle = true; sim.trace = debug; sim.load(st);
@@ -105,6 +106,8 @@ public:
         prepareSpeedChange();
         sim.events.clear(); sim.tick();
         for (const Event& e : sim.events) handle(e);
+        if (decFromFree) for (int t : sim.freedMice) decMice(t, 4);
+        sim.freedMice.clear();
         if (!cpuFirst) runCpu();
         updateEvent();                                                     // roulette/event tasks run after the mouse and cat tasks
         sim.buildHeat();                                                   // SmpColAnalyze: heat map seen by the CPU players next frame
@@ -147,7 +150,7 @@ private:
     }
     void runCpu() { if (gbaCpu) { gbaRun(); return; } if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
     int pendMice_ = 0, pendCnt1_ = 0, pendCnt2_ = 0;   // GE_MouseCountDown runs when the mouse task is destroyed, one tick after the collision event
-    void decMice(int type) { if (type == 0) pendMice_++; if (type == 1) pendCnt1_++; if (type == 2) pendCnt2_++; }
+    void decMice(int type, int kind = 0) { if (decDump && type == 0) { printf("DEC f%d k%d", frame, kind); putchar(10); } if (decLag == 0) { if (type == 0) gen->mice--; if (type == 1) gen->cnt1--; if (type == 2) gen->cnt2--; return; } if (type == 0) pendMice_++; if (type == 1) pendCnt1_++; if (type == 2) pendCnt2_++; }
     int pend3Mice_ = 0, pend3Cnt1_ = 0, pend3Cnt2_ = 0;
     int pend2Mice_ = 0, pend2Cnt1_ = 0, pend2Cnt2_ = 0;
     void applyMiceDec() {
@@ -159,13 +162,13 @@ private:
         case Event::MouseRocket: {
             { float& q = puku[e.player & 3]; q += 0.2f; if (q > 1.5f) q = 1.5f; }
             static const int value[3] = {1, 50, 1};
-            score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); decMice(e.type);
+            score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); if (!decFromFree) decMice(e.type, 1);
             if (e.type == 2) { if (rouletteEnabled) { pendingRoll_ = e.player; pendingRollSlot_ = e.slot; } }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
             break; }
         case Event::MouseGone:   // MO_MouseJimeExe deletes the task directly (0x3db0c) when it is more than 180 from the field centre: the counter drops in the same frame
             if (e.type == 0) gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
         case Event::MouseEaten: case Event::MouseHole:
-            decMice(e.type); break;
+            if (!decFromFree) decMice(e.type, e.kind == Event::MouseEaten ? 2 : 3); break;
         case Event::CatRocket:
             if (e.player >= 0) { score.catHasCome(e.player); updateRanks(); if (sfx) sfx(7); }            // a cat in a rocket respawns at a generator: it stays 'out'
             // (hole: no score change; the cat respawns at a generator too, so it stays 'out')

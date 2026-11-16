@@ -52,6 +52,7 @@ struct Entity {
     int type = 0;               // battle mouse type: 0 normal, 1 golden (50 points), 2 roulette
     int heading = 0;            // Dir
     int gx = 0, gy = 0;         // clamped grid cell
+    int execs = 0;   // executions of the mouse task so far (the first one is its initialisation and does not read the contact flag; verification switch Sim::firstExecSkipsHit)
     bool jime = false; int angle = 0;   // Mouse Monopoly (MO_MouseJimeExe): the mouse flies toward the roller's rocket; angle = the task's +0x24 heading angle (16-bit circle)
 };
 
@@ -87,7 +88,9 @@ public:
     void releaseSlot(int s) { if (s >= 0) freeSlot_[s] = true; }
     // Deferred task deletion (original: eaten mouse -> state 0x354f8 runs next tick, creates a 48-tick effect task (if < 12 alive) then deletes the mouse;
     // mouse in rocket -> 0x35488 runs next tick and deletes). Slots matter because collision entries keep task pointers.
-    struct PendingFree { int ent, when; bool effect; };
+    struct PendingFree { int ent, when; bool effect; bool count = true; };   // count: the freed mouse task calls GE_MouseCountDown (not the 180-unit deletion, which counts down when it runs)
+    bool retryFull = false, firstExecSkipsHit = false;
+    std::vector<int> freedMice;   // types of the mouse tasks destroyed this tick (battle): the generator counters drop
     std::vector<PendingFree> pendingFree;
     std::vector<MouseGhost> effects;
     bool poolModel = false;                                                              // battle mode only
@@ -107,12 +110,14 @@ public:
         for (size_t i = 0; i < pendingFree.size();) {
             PendingFree& p = pendingFree[i];
             if (p.when <= now) {
+                if (retryFull && p.effect && effects.size() >= 12) { p.when = now + 1; i++; continue; }   // hypothesis (verification): the eaten mouse task waits while 12 effect tasks are alive
                 if (p.effect && effects.size() < 12) {
                     const int slot = poolModel ? allocSlot(-2) : -1;
                     const auto& mouse = ents[p.ent];
                     if (!poolModel || slot >= 0)
                         effects.push_back({slot, ents.size(), mouse.x, mouse.z, mouse.heading << 14});
                 }
+                if (battle && p.count && ents[p.ent].mouse) freedMice.push_back(ents[p.ent].type);
                 releaseSlot(ents[p.ent].slot); pendingFree.erase(pendingFree.begin() + i);
             } else i++;
         }
@@ -175,7 +180,8 @@ public:
         now++;
         for (auto& e : ents) e.reg = false;
         tickEffects();
-        for (auto& m : ents) if (m.mouse && m.alive && !m.done && m.hit) {      // mouse tick: if (flags & 1) -> eaten state, no movement
+        if (firstExecSkipsHit) for (auto& m : ents) if (m.mouse && m.alive && !m.done && !m.fresh) m.execs++;
+        for (auto& m : ents) if (m.mouse && m.alive && !m.done && m.hit && (!firstExecSkipsHit || m.execs >= 2)) {      // mouse tick: if (flags & 1) -> eaten state, no movement
             m.alive = false; m.hit = false; killed++; killedByCat++; endTicks.push_back(now); scheduleFree(&m - ents.data(), now + 1, true);
             if (!battle) lastKilledMouse = static_cast<int>(&m - ents.data());
             if (battle) events.push_back({Event::MouseEaten, 0, m.type});
@@ -268,7 +274,7 @@ private:
     static float njCos(int a) { return njSin(a + 0x4000); }   // cos table from njCosOrg: cosf of the same argument; cos(x) = sin(x + pi/2) to within the table's rounding (not verified bit for bit)
     void jimeStep(Entity& e) {   // MO_MouseJimeExe (iOS 0x1497c)
         float tx = 90.0f, tz = 67.5f;
-        if (monopoly < 0) { float dx = e.x - tx, dz = e.z - tz; if (180.0f < std::sqrt(dx * dx + dz * dz)) { e.alive = false; e.reg = false; events.push_back({Event::MouseGone, 0, e.type}); scheduleFree(&e - ents.data(), now + 1, false); return; } }
+        if (monopoly < 0) { float dx = e.x - tx, dz = e.z - tz; if (180.0f < std::sqrt(dx * dx + dz * dz)) { e.alive = false; e.reg = false; events.push_back({Event::MouseGone, 0, e.type}); scheduleFree(&e - ents.data(), now + 1, false); pendingFree.back().count = false; return; } }
         else {
             tx = (rocketPos[monopoly][0] + 0.5f) * kCell; tz = (rocketPos[monopoly][1] + 0.5f) * kCell;
             float dx = e.x - tx, dz = e.z - tz; float d = std::sqrt(dx * dx + dz * dz);
