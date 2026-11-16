@@ -1884,6 +1884,9 @@ struct PuzzleMode : Screen {
     }
     // Touch rects of the puzzle screen (HD 1.0 PuzzleGameScreen::process 0x12994 -> Input::addRect(i, x0, y0, x1, y1) from layout +0x4d0 + 16 i): rect 3 (18, 88)-(160, 190) Start/Dash, rect 4 (21, 229)-(159, 275) Cancel.
     // In the placing mode, rect 3 sets input flag 1 (start) and rect 4 flag 2 (Cancel). Effects read from Android PuzzleLoop (0x33bbc): placing: flag 1 = start, flag 2 = delete all arrows; running: flag 1 = Dash, flag 2 = restart with the arrows kept.
+    bool pauseAvailable(const App& a) const {
+        return a.hdHud68.fr.size() > 5 && a.hdPause.fr.size() > 3 && a.hdFont.tex;
+    }
     bool hudButton(App& a, const SDL_Event& e) {
         float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
         auto in = [&](float x0, float y0, float x1, float y1) { return lx >= x0 && lx < x1 && ly >= y0 && ly < y1; };
@@ -1892,7 +1895,7 @@ struct PuzzleMode : Screen {
             if (in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }   // Input::setData(10, 1) = leave the screen; BGM_Release (not read yet) not reproduced
             return true; }
         if (state == 3) return true;   // PuzzleLoop disables pause and ignores HUD input during the failure phase.
-        if (in(10, 669, 173, 711)) { paused = true; a.playSfx(4); return true; }   // rect 0 = the pause button: Input::setData(0xb, 1) -> PA_PauseController, sound 4 (BGM_Pause not reproduced)
+        if (pauseAvailable(a) && in(10, 669, 173, 711)) { paused = true; a.playSfx(4); return true; }   // rect 0 = the pause button: Input::setData(0xb, 1) -> PA_PauseController, sound 4 (BGM_Pause not reproduced)
         if (in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
         if (in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
@@ -1982,7 +1985,7 @@ struct PuzzleMode : Screen {
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
             const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, 720.0f, 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }
-        a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // end of renderPuzzleHudiPad: drawImage(0x68, 5, 92, 690) = the pause button (rect 0)
+        if (pauseAvailable(a)) a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // end of renderPuzzleHudiPad: drawImage(0x68, 5, 92, 690) = the pause button (rect 0)
         drawFailureFocus(a);
         if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
             SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0xc0); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all);
