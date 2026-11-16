@@ -1705,9 +1705,10 @@ struct PadAim {
 
 // ---------------------------------------------------------------- puzzle
 struct PuzzleMode : Screen {
+    static constexpr int kFailureHoldFrames = 120;
     MouseAim aim;
     bool mouseCursor = false;
-    bool pendingFailureCue = false;
+    int failureFrames = 0;
     PadAim padAim{82.5f, 67.5f};
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 5, curY = 4; SDL_GameController* pad = nullptr;
@@ -1717,7 +1718,7 @@ struct PuzzleMode : Screen {
     bool dash = false; bool paused = false, pconf = false;   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
-        sim.load(stages.list[cur].st); prev.clear(); dash = false; pendingFailureCue = false; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
+        sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = 0;
         for (auto& s : stages.list[cur].sol) stock[s[2] & 3]++;       // arrow stock from the reference solution (stage struct counts not exported yet)
@@ -1732,8 +1733,7 @@ struct PuzzleMode : Screen {
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0);
-            if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); }   /* a cleared stage leads to the next one */
-                else if (state >= 3) reset(); }
+            if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); }
             else if (state == 0 && !paused && !e.key.repeat && aim.inside && arrowKey(k) >= 0) {
@@ -1764,6 +1764,7 @@ struct PuzzleMode : Screen {
             if (in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; } }
             if (in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }   // Input::setData(10, 1) = leave the screen; BGM_Release (not read yet) not reproduced
             return true; }
+        if (state == 3) return true;   // PuzzleLoop disables pause and ignores HUD input during the failure phase.
         if (in(10, 669, 173, 711)) { paused = true; a.playSfx(4); return true; }   // rect 0 = the pause button: Input::setData(0xb, 1) -> PA_PauseController, sound 4 (BGM_Pause not reproduced)
         if (in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
         if (in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
@@ -1780,9 +1781,16 @@ struct PuzzleMode : Screen {
             curY = static_cast<int>(padAim.y / kCell);
         }
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
+        if (state == 3) {
+            if (failureFrames == 0) a.playSfx(27);
+            if (failureFrames > kFailureHoldFrames) {
+                restartRun();
+                return;
+            }
+            if (failureFrames++ == kFailureHoldFrames) return;   // clear the task pass before rebuilding
+        }
         if (state == 2 || state == 3) {
             // Keep character effects ticking while the result holds the board.
-            if (pendingFailureCue) { a.playSfx(27); pendingFailureCue = false; }
             ++sim.now;
             sim.tickEffects();
             a.stepAngles(sim, true);
@@ -1793,7 +1801,7 @@ struct PuzzleMode : Screen {
         sim.tick(); a.stepAngles(sim);
         if (dash) { sim.tick(); a.stepAngles(sim); }   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
-        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; pendingFailureCue = true; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur); }
+        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur); }
     }
     const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void draw(App& a, float alpha) override {
@@ -1803,7 +1811,7 @@ struct PuzzleMode : Screen {
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
         const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
         if (showCursor && (sim.coll[aimY][aimX] & 0xF00)) a.cursor(aimX, aimY, 0, cticks, true);
-        a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
+        if (failureFrames <= kFailureHoldFrames) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
         if (showCursor) {
             if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks);
             else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha);
