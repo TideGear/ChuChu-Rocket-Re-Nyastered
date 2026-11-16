@@ -91,7 +91,27 @@ def verify_handoff_and_respawn():
             oracle.call(0x147b4, task)
             assert len(rng_calls) == (tick == duration), (scale, tick, rng_calls)
         assert rng_calls == [random_value] and not sounds
-    print('5 iPad cat respawns and 4 interrupted grow-ins matched')
+    oracle.write(field + (2 + 4 * 12) * 4, struct.pack('<I', 0x100))
+    for scale, duration in ((0.0, 1), (0.1, 3), (0.4, 13), (0.9, 27), (1.0, 30)):
+        oracle.write(task + 0x10, struct.pack('<2h3fii3f', 2, 4, *position, 0x3333, 0, 0, scale, 7.75))
+        oracle.call(0x14524, task)
+        assert (oracle.u32(task + 0x40), oracle.u32(task + 0x44)) == (0x147b5, 0x14911)
+        assert oracle.u32(hole_flag) == 1
+        assert abs(u2f(oracle.u32(task + 0x2c)) - scale) < 0.000001
+        rng_calls.clear()
+        for tick in range(1, duration + 1):
+            walking_draws.clear()
+            oracle.call(0x149c8, task)
+            angle = 0x3333 + (tick - 1) * 0x1000
+            image = 41 if 0x6001 <= angle <= 0xa000 else 40 if 0x2001 <= angle <= 0xe000 else 42
+            img, frame, flags, draw_scale, alpha = walking_draws[0]
+            assert (img, frame, flags, alpha) == (image, 7, 2 if image == 40 and angle < 0x8000 else 0, 255)
+            assert draw_scale == u2f(oracle.u32(task + 0x2c))
+            oracle.call(0x147b4, task)
+            assert len(rng_calls) == (tick == duration), (scale, tick, rng_calls)
+            assert u2f(oracle.u32(task + 0x30)) == 7.75
+        assert rng_calls == [random_value] and not sounds
+    print('5 iPad cat respawns, 4 interrupted hole falls, and 5 rocket entry lifetimes matched')
 
 
 def verify_overlap():
@@ -107,7 +127,8 @@ def verify_overlap():
 
     field, objects, cat_draw, rocket_draw, mouse_draw = (
         oracle.u32(ptr) & ~1 for ptr in (0x156c0, 0x156c8, 0x1490c, 0x16e50, 0x16afc))
-    for address in (field, objects, cat_draw, rocket_draw, mouse_draw):
+    cat_rocket_draw = oracle.u32(0x14938) & ~1
+    for address in (field, objects, cat_draw, cat_rocket_draw, rocket_draw, mouse_draw):
         oracle.uc.hook_add(UC_HOOK_CODE, record, begin=address, end=address)
     for z in (65.9, 66.8, 67.6, 68.1):
         for task, depth in ((cat, z), (rocket, 67.5), (mouse, z)):
@@ -121,7 +142,17 @@ def verify_overlap():
                    [cat_draw, rocket_draw, mouse_draw] if z < 68 else [rocket_draw, cat_draw, mouse_draw])
         assert order == [field, objects, *sprites], order
         order.clear()
-    print('4 iPad cat fall overlaps matched the field and sprite draw order')
+    for cat_first in (False, True):
+        oracle.write(cat + 0x1c, struct.pack('<f', 67.5))
+        oracle.call(0x156a0)
+        calls = ((0x14910, cat), (0x16e28, rocket))
+        for address, task in (calls if cat_first else reversed(calls)):
+            oracle.call(address, task)
+        oracle.call(0x1a008)
+        sprites = [cat_rocket_draw, rocket_draw] if cat_first else [rocket_draw, cat_rocket_draw]
+        assert order == [field, objects, *sprites], order
+        order.clear()
+    print('6 iPad cat overlaps matched, including both rocket entry depth ties')
 
 
 def main():

@@ -588,7 +588,7 @@ struct App {
             gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(0.0f);
             for (size_t i = 0; i < sim.ents.size(); i++) {
                 const Entity& e = sim.ents[i];
-                if (e.mouse || !e.alive || e.catHoleFallTick >= 0 || (e.catWalkScale >= 0.0f && !e.reg)) continue;
+                if (e.mouse || !e.alive || e.rocketIn || e.catRespawned || (e.catWalkScale >= 0.0f && !e.reg)) continue;
                 cphase[i] += 0.45f;
                 if (cphase[i] >= 20.0f) cphase[i] -= 20.0f;
             }
@@ -599,7 +599,11 @@ struct App {
             if (e.fallingInHole()) {
                 if (e.drawsHoleFall() && sim.now > e.catHoleFallTick) angs[i] = (angs[i] + 0x1000) & 0xffff;
             } else if (!effectsOnly) {
-                if (e.catHoleFallTick >= 0 && e.alive) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
+                if (e.rocketIn) {
+                    const float entryScale = e.catWalkScale < 0.0f ? 1.0f : e.catWalkScale;
+                    if (e.rocketCounter < entryScale) angs[i] += 0x1000;
+                }
+                else if (e.catRespawned) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
                 else angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed);
             }
         }
@@ -640,14 +644,14 @@ struct App {
             }
             if (i == sim.ents.size()) break;
             const Entity& en = sim.ents[i];
-            if (en.drawsHoleFall()) {
+            if (en.drawsHoleFall() || (en.rocketIn && !en.fallingInHole() && en.rocketCounter > 0.0f)) {
                 fieldObjects.push_back({std::max(-64, static_cast<int>(en.z)), en.x, en.z, i, false});
                 continue;
             }
             if (!en.alive || en.done || en.rocketIn) continue;
             float x = prev[i].first + (en.x - prev[i].first) * alpha;
             float z = prev[i].second + (en.z - prev[i].second) * alpha;
-            if (en.catHoleFallTick >= 0 || std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
+            if (en.catRespawned || std::fabs(en.x - prev[i].first) > 100 || std::fabs(en.z - prev[i].second) > 100) { x = en.x; z = en.z; }
             fieldObjects.push_back({static_cast<int>(en.z), x, z, i, false});
         }
 
@@ -677,21 +681,21 @@ struct App {
                     printf("cat hole %d %.3f %.3f %.6f\n", (ang & 0xffff) >> 11, x, z, en.rocketCounter);
                 continue;
             }
-            if (en.catWalkScale >= 0.0f) {
-                const unsigned angle = static_cast<unsigned>(ang) & 0xffff;
+            const float walkScale = en.rocketIn ? en.rocketCounter : (en.catWalkScale < 0.0f ? 1.0f : en.catWalkScale);
+            if (en.rocketIn || en.catWalkScale >= 0.0f) {
+                const unsigned angle = static_cast<unsigned>(ang);
                 const int image = angle >= 0x6001 && angle <= 0xa000 ? 41 :
                                   angle >= 0x2001 && angle <= 0xe000 ? 40 : 42;
                 if (imgSheet(image)) {
                     const int frame = i < cphase.size() ? static_cast<int>(cphase[i]) : 0;
                     const int flags = image == 40 && angle < 0x8000 ? 2 : 0;
-                    if (en.catWalkScale > 0.0f) drawImage(image, frame, x, z, flags, en.catWalkScale, 255);
-                    if (headless && getenv("CCR_CAT_HOLE_TRACE") && en.catWalkScale < 1.0f)
-                        printf("cat return %d %d %.3f %.3f %.6f\n", image, frame, x, z, en.catWalkScale);
+                    if (walkScale > 0.0f) drawImage(image, frame, x, z, flags, walkScale, 255);
+                    if (headless && getenv("CCR_CAT_HOLE_TRACE") && (en.rocketIn || walkScale < 1.0f))
+                        printf("cat %s %d %d %.3f %.3f %.6f\n", en.rocketIn ? "rocket" : "return", image, frame, x, z, walkScale);
                     continue;
                 }
             }
-            if (en.catWalkScale == 0.0f) continue;
-            const float walkScale = en.catWalkScale < 0.0f ? 1.0f : en.catWalkScale;
+            if (walkScale == 0.0f) continue;
             if (walkOk) {   // original view choice (CA_CatDrawSTPriority / FUN_0003582c, literals from the code): back view for angles in [0x6001, 0xA000], front outside [0x2001, 0xE000], side otherwise
                 unsigned a = (unsigned)ang & 0xffff; int view = (a >= 0x6001 && a <= 0xA000) ? 1 : ((a < 0x2001 || a > 0xE000) ? 2 : 0);
                 Sheet& sh = !en.mouse ? catV[view] : (en.type == 1 ? goldV[view] : mouseV[view]);

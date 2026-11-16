@@ -39,7 +39,8 @@ struct Entity {
     bool mouse = true, alive = true, done = false, hit = false;   // hit: contact flag set by the collision pass, consumed at the start of the next tick
     float x = 0, z = 0;
     bool rocketIn = false; float rocketCounter = 1.0f;   // battle cat inside a rocket (30-tick animation, then respawn at a random generator)
-    int catHoleFallTick = -1;   // retained through the Battle respawn tick
+    int catHoleFallTick = -1;
+    bool catRespawned = false;  // the generator snap happened on this tick
     float catWalkScale = -1.0f;  // negative until the original scaled walking task is selected
     bool fallingInHole() const { return catHoleFallTick >= 0 && (rocketIn || !alive); }
     bool drawsHoleFall() const { return fallingInHole() && rocketCounter > 0.0f; }
@@ -274,6 +275,7 @@ private:
     }
     void step(Entity& e) {
         e.catHoleFallTick = -1;
+        e.catRespawned = false;
         if (e.mouse && e.jime) { jimeStep(e); return; }
         const float speed = e.mouse ? mouseSpeed : catSpeed;
         float thr = speed * (e.mouse ? 0.52f : 0.51f);
@@ -285,7 +287,11 @@ private:
             uint32_t f = coll[e.gy][e.gx];
             if (battle && (f & kRocket)) {
                 events.push_back({e.mouse ? Event::MouseRocket : Event::CatRocket, rocketOwner[e.gy][e.gx], e.type, e.slot});
-                if (e.mouse || !rnd) e.done = true; else e.rocketIn = true;
+                if (e.mouse || !rnd) e.done = true;
+                else {
+                    e.rocketIn = true;
+                    e.rocketCounter = e.catWalkScale < 0.0f ? 1.0f : e.catWalkScale;
+                }
                 if (e.mouse) scheduleFree(&e - ents.data(), now + 1, false);       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
                 return;
             }
@@ -326,7 +332,9 @@ private:
             if (trace) printf("t=%d cat respawn draw r=%.6f gen %d\n", now, r, i);
             e.gx = gens[i].x; e.gy = gens[i].y; e.heading = gens[i].dir & 3;
             e.x = (e.gx + 0.5f) * kCell; e.z = (e.gy + 0.5f) * kCell;
-            if (e.catHoleFallTick >= 0) e.catWalkScale = 0.0f;
+            e.catHoleFallTick = -1;
+            e.catRespawned = true;
+            e.catWalkScale = 0.0f;
         }
         e.rocketIn = false;
     }
