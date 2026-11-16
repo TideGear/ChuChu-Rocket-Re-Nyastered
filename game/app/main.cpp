@@ -1804,6 +1804,26 @@ struct PuzzleMode : Screen {
         if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur); }
     }
     const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
+    void drawFailureFocus(App& a) const {
+        if (failureFrames <= 0 || failureFrames > kFailureHoldFrames) return;
+        const int passes = dash ? 2 : 1;
+        if (failureFrames * passes >= 180) return;   // FocusControll retires the task at age 180.
+        const int target = sim.lastKilledMouse >= 0 ? sim.lastKilledMouse : sim.lastCatInRocket;
+        if (target < 0) return;
+        const auto& entity = sim.ents[target];
+        const float x = OX + entity.x * (CELL / kCell), y = OY + entity.z * (CELL / kCell);
+        const int opacity[] = {200, 120, 60};
+        float previous = 0.0f;
+        for (int age = 0; age < 3 && age < failureFrames; ++age) {
+            const int updates = (failureFrames - age) * passes;
+            const float scale = updates < 30 ? (16.0f - 0.5f * updates) * 0.8f * 0.8f : 0.8f;
+            if (scale == previous) continue;
+            a.drawImage(149, 0, x, y, 0, scale, opacity[age]);
+            if (a.headless && getenv("CCR_PUZZLE_FOCUS_TRACE"))
+                printf("puzzle focus %a %a %a %d\n", x, y, scale, opacity[age]);
+            previous = scale;
+        }
+    }
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
         { const int set = gApp ? gApp->stageSet : 0; a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2); }   // puzzle colours (createPlayfieldPreview): floor (level & 3) + 2, wall 2; the extra levels (type 200) floor 1, wall 1
@@ -1828,6 +1848,7 @@ struct PuzzleMode : Screen {
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
             const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, 720.0f, 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }
         a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // end of renderPuzzleHudiPad: drawImage(0x68, 5, 92, 690) = the pause button (rect 0)
+        drawFailureFocus(a);
         if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
             SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0xc0); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all);
             const float bx = 512.0f, by = 400.0f, sc = 2.0f;   // layout +0x520 = 400, +0x568 = 2.0

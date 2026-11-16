@@ -71,6 +71,7 @@ public:
     int catRot = 0;                               // experiment: rotate cat start headings
     float eatRadius = 7.5f;                       // cat-mouse contact distance (original compares against 5.0 in SmpColAnalyze)     // GA_GetMouseSpeed / GA_GetCatSpeed defaults
     bool battle = false;                          // battle stage coding: tiles 1..4 rockets (owner = code-1), 5..8 generators
+    int lastKilledMouse = -1, lastCatInRocket = -1;
     struct Gen { int x, y, dir; };
     std::vector<Gen> gens;
     std::vector<Event> events;
@@ -130,6 +131,7 @@ public:
 
     void load(const Stage& s) {
         ents.clear(); endTicks.clear(); resetPool(); pendingFree.clear(); effects.clear(); poolModel = battle; arrows.clear(); gens.clear(); events.clear(); saveTicks.clear(); now = 0; saved = killed = killedByCat = killedByHole = catsInRocket = arrowsBroken = 0;
+        lastKilledMouse = lastCatInRocket = -1;
         for (int r = 0; r < kRows; r++)
             for (int c = 0; c < kCols; c++) {
                 uint32_t f = 0;
@@ -174,6 +176,7 @@ public:
         tickEffects();
         for (auto& m : ents) if (m.mouse && m.alive && !m.done && m.hit) {      // mouse tick: if (flags & 1) -> eaten state, no movement
             m.alive = false; m.hit = false; killed++; killedByCat++; endTicks.push_back(now); scheduleFree(&m - ents.data(), now + 1, true);
+            if (!battle) lastKilledMouse = static_cast<int>(&m - ents.data());
             if (battle) events.push_back({Event::MouseEaten, 0, m.type});
             if (trace) printf("t=%d mouse eaten at (%.1f,%.1f) cell (%d,%d)\n", now, m.x, m.z, m.gx, m.gy);
         }
@@ -296,7 +299,7 @@ private:
                 if (e.mouse) scheduleFree(&e - ents.data(), now + 1, false);       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
                 return;
             }
-            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; e.rocketIn = true; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
+            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; lastCatInRocket = static_cast<int>(&e - ents.data()); e.rocketIn = true; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
             if (battle && (f & kHole)) { events.push_back(e.mouse ? Event{Event::MouseHole, 0, e.type} : Event{Event::CatRocket, -1, 0});
                 if (e.mouse || !rnd) e.alive = false;
                 else {
@@ -305,7 +308,7 @@ private:
                     e.rocketCounter = e.catWalkScale < 0.0f ? 1.0f : e.catWalkScale;
                 }
                 return; }   // cat lost in a hole: player -1, no score
-            if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; endTicks.push_back(now); if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); } else e.catHoleFallTick = now; e.alive = false; return; }
+            if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; lastKilledMouse = static_cast<int>(&e - ents.data()); endTicks.push_back(now); if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); } else e.catHoleFallTick = now; e.alive = false; return; }
             if (!e.mouse && (f & kArrow)) {                      // cat arriving head-on to an arrow strikes it
                 if (((e.heading + 2) & 3) == (int)(f & 3)) strikeArrow(e.gx, e.gy);   // note: the turn below still uses the flags read before the strike (as the original does)
             }

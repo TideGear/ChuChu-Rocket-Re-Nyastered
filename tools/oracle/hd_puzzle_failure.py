@@ -2,9 +2,64 @@
 import struct
 
 from unicorn import UC_HOOK_CODE
-from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
+from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0, UC_ARM_REG_SP
 
 import hd_env
+from ios_oracle import u2f
+
+
+def verify_focus():
+    oracle = hd_env.make().o
+    oracle.call(0x15188)
+    oracle.call(0x1a060)
+    cat = oracle.alloc(0x58)
+    renders = []
+    order = []
+
+    def trace(uc, address, size, data):
+        order.append(address)
+        if address == 0x1a250:
+            flags, scale, alpha = struct.unpack('<IfI', oracle.read(uc.reg_read(UC_ARM_REG_SP), 12))
+            renders.append((oracle._r(0), oracle._r(1), u2f(oracle._r(2)), u2f(oracle._r(3)), flags, scale, alpha))
+        uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+
+    hud = 0x137c4
+    cat_draw = oracle.u32(0x1490c) & ~1
+    for address in (0x1a250, cat_draw, hud):
+        oracle.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
+    for passes in (1, 2):
+        for x, z in ((37.5, 67.5), (172.5, 127.5)):
+            oracle.call(0x17e0c)
+            oracle.call(0x18e48, *struct.unpack('<3I', struct.pack('<3f', x, 0, z)))
+            oracle.write(cat + 0x14, struct.pack('<3f', x, 0, z))
+            for frame in range(1, 122):
+                order.clear()
+                renders.clear()
+                for _ in range(passes):
+                    oracle.call(0x17f24)
+                oracle.call(0x17f34)
+                oracle.call(0x148e4, cat)
+                oracle.call(0x191cc, hud | 1, 0, 0xfffffcec, 15)
+                oracle.call(0x1a008)
+                expected = []
+                if frame * passes < 180:
+                    previous = 0
+                    for age, opacity in enumerate((200, 120, 60)):
+                        if age >= frame:
+                            break
+                        updates = (frame - age) * passes
+                        scale = (16 - 0.5 * updates) * .8 * .8 if updates < 30 else .8
+                        if scale != previous:
+                            expected.append((scale, opacity))
+                        previous = scale
+                assert order == [hud, cat_draw] + [0x1a250] * len(expected), order
+                for draw, (scale, opacity) in zip(renders, expected):
+                    assert draw[:2] == (149, 0) and draw[4] == 0, draw
+                    assert abs(draw[2] - (184 + x * 64 / 15)) < 0.001
+                    assert abs(draw[3] - (32 + z * 64 / 15)) < 0.001
+                    assert abs(draw[5] - scale) < 0.000002 and draw[6] == opacity, draw
+            oracle.call(0x17e38)
+    print('iPad focus layers, ring history, and Dash expiry matched at two positions')
 
 
 def main():
@@ -50,6 +105,7 @@ def main():
                     assert phase == (frame - 120, 2, 0)
                     assert addresses == (rebuild if frame == 121 else []) + task_pass, calls
     print('4 iPad Puzzle cases matched, including Dash, task teardown and automatic arrow-preserving reset')
+    verify_focus()
 
 
 if __name__ == '__main__':
