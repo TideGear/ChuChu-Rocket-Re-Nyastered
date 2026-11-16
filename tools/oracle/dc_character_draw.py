@@ -152,8 +152,40 @@ def verify_mouse_draw(binary):
     print('Dreamcast mouse draw matched 256 costume, type, frame, and heading cases')
 
 
+def verify_mouse_frame_callers(binary):
+    sh = SH4()
+    sh.load(BASE, binary)
+    calls = []
+    task = 0x8cfe0000
+    # Capture the transform wrapper boundary. The model dispatcher itself is
+    # executed separately by verify_mouse_draw.
+    sh.hooks[0x0c0193e0] = lambda m: calls.append(tuple(m.r[4:8]))
+    sh.hooks[0x0c060810] = lambda m: m.r.__setitem__(0, 0)
+
+    for frame in range(8):
+        sh.wr32(task + 8, 2)
+        sh.wr32(task + 32, 0x8000)
+        sh.wr32(task + 52, frame)
+        sh.call(0x8c01946c, task)
+        assert calls.pop() == (task + 20, 0x8000, 2, frame)
+
+    for tick in range(65):
+        sh.wr32(task + 4, tick)
+        sh.call(0x8c051a76, task)
+        assert calls.pop() == (task + 20, 0, 0, (tick // 4) & 7)
+
+    for rate in (0, 1, 4, 8):
+        sh.load(task + 45, bytes((rate, 0, 0)))
+        for tick in range(65):
+            sh.wr32(task + 4, tick)
+            sh.call(0x8c05144c, task)
+            assert calls.pop() == (task + 20, 0, 0, (tick * rate // 8) & 7)
+    print('Dreamcast mouse frame callers matched 333 task snapshots, including wrap')
+
+
 if __name__ == '__main__':
     binary = (ROOT / 'local/cache/assets/dreamcast/files/1ST_READ.BIN').read_bytes()
     verify_cat(binary)
     verify_mouse_models(binary)
     verify_mouse_draw(binary)
+    verify_mouse_frame_callers(binary)
