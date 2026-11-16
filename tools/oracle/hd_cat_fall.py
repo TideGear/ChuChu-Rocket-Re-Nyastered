@@ -8,6 +8,60 @@ import hd_env
 from ios_oracle import u2f
 
 
+def verify_handoff_and_respawn():
+    oracle = hd_env.make().o
+    oracle.call(0x15188)
+    task = oracle.alloc(0x58)
+    field = oracle.u32(0x153e8)
+    generators = oracle.u32(0x15b50)
+    hole_flag = oracle.u32(0x147a0)
+    game = oracle.u32(0x15b24)
+    oracle.write(game, struct.pack('<I', 0))
+    oracle.write(game + 12, struct.pack('<2f', 1, 1.5))
+    cells = ((0, 0), (11, 8), (5, 3), (4, 7))
+    oracle.write(generators, struct.pack('<I', len(cells)))
+    for index, (x, y) in enumerate(cells):
+        oracle.write(generators + 40 + index * 8, struct.pack('<2h', x, y))
+        oracle.write(field + (x + y * 12) * 4, struct.pack('<I', index))
+    oracle.write(field + (2 + 4 * 12) * 4, struct.pack('<I', 0x400))
+    rng_calls = []
+    sounds = []
+    random_value = 0.0
+
+    def trace(uc, address, size, data):
+        if address == 0x152c4:
+            rng_calls.append(random_value)
+            uc.reg_write(UC_ARM_REG_R0, struct.unpack('<I', struct.pack('<f', random_value))[0])
+        else:
+            sounds.append(oracle._r(0))
+        uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+
+    for address in (0x152c4, 0x17dd0):
+        oracle.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
+    for random_value, index in ((0.0, 0), (0.25, 0), (0.26, 1), (0.51, 2), (0.99, 3)):
+        position = (37.75, 0, 67.5)
+        oracle.write(task + 0x10, struct.pack('<2h3fii3f', 2, 4, *position, 0x3333, 0, 0, 1, 0))
+        oracle.write(hole_flag + 4, bytes(4))
+        rng_calls.clear()
+        oracle.call(0x14524, task)
+        assert (oracle.u32(task + 0x40), oracle.u32(task + 0x44)) == (0x147b5, 0x148e5)
+        assert oracle.u32(hole_flag + 4) == 1
+        assert struct.unpack('<3f', oracle.read(hole_flag + 20, 12)) == position
+        assert oracle.u32(task + 0x20) == 0x3333
+        for _ in range(29):
+            oracle.call(0x147b4, task)
+        assert not rng_calls
+        oracle.call(0x147b4, task)
+        assert rng_calls == [random_value] and not sounds
+        x, y = cells[index]
+        actual = struct.unpack('<2h3f', oracle.read(task + 0x10, 16))
+        assert actual == (x, y, (x + 0.5) * 15, 0, (y + 0.5) * 15), (random_value, index, actual)
+        assert oracle.u32(task + 0x20) == (index << 14) + 0x1000
+        assert oracle.u32(task + 0x24) == index << 14
+        assert (oracle.u32(task + 0x40), oracle.u32(task + 0x44)) == (0x14525, 0x14911)
+    print('5 iPad cat hole handoffs and generator selections matched')
+
+
 def main():
     oracle = hd_env.make().o
     oracle.call(0x15188)
@@ -60,6 +114,7 @@ def main():
                 if tick != duration - 1:
                     assert oracle.u32(task + 0x20) == angle + 0x1000
     print('30 iPad cat fall cases matched across mode, stage, and position')
+    verify_handoff_and_respawn()
 
 
 if __name__ == '__main__':
