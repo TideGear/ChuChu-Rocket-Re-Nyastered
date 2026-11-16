@@ -56,3 +56,15 @@ State 0x23 now has a standalone port and a headless differential test. The origi
 `PlayersFrame` ports the iPad drawing around the panes in states 0x23–0x27. `tools/players_render_diff.py` compares it with the original render at 0x35154, recording which pane the original calls. In state 0x23, the cat uses frame +0xa60 and x +0xa4c. The costume mascot uses frame +0xa78 and x +0xa64. The app's HD image exporter includes the six image slots used by the renderer.
 
 On Windows, run `build.cmd --target ccr` from Command Prompt or `.\build.cmd --target ccr` from PowerShell. The script downloads pinned Zig, CMake and Ninja into `local/tools/windows` on first use. Its CMake cache is `build/game-zig`, with executables in `build/game`. Python is `py -3`.
+
+## Update 2026-11-16 — whole-battle roulette verification, Challenge trace
+Done and verified this session (details in docs/roadmap.md entries dated 2026-11-16 and docs/modes.md):
+- Android handset Puzzle arrow-stock panel (`renderPuzzleHudiPhone`, `tools/oracle/android_puzzle_hud_calls.py`); `puzzlestage_endflag` trace (label and number branch unreachable in 1.15).
+- Whole-battle forced roulette outcomes against the original, 26 battles x 8 outcomes: `tools/oracle/make_battle_forced_golden.py <0-7>` (env `TEAM=1`, `GT=<t>`) and `FULL=1 FORCE=<k> GT=<t> [TEAM=1] battle_full_test.exe ../local/testdata/battle_[team_]forced_<k>[_gt<t>].txt`, run from `game/`. Identical: 26 for every outcome except Mouse Mania (25, stage 5 seed 1085). Team Battle: outcomes 0, 5, 6, 7 and Everybody Move at game times 1/3/4/7. Natural selector: `make_battle_natural_golden.py` and `NATURAL=1 FULL=1`, 26/26 free-for-all and team. The goldens live in `local/testdata` (git-ignored); regenerate with the recorders (about 25 minutes for eight in parallel; never run two recorders with the same output name, one overwrote four files once).
+- Root causes found: the original runs tasks in creation order (linked list in `SmpTskEntry`), not pool-slot order (`Ev::ord`, `Sim::spdSlot`/`monoEnd` are entity indices); the generator's mouse counter is per type and lags spawns by a frame and removals by two ticks; rolls run after the generator task; recorded arrow placements bypass the event cursor lock.
+- Stage Challenge: `tools/oracle/challenge_probe.py` runs the original phase machine for all 25 stages (docs/modes.md, "runtime trace").
+Open next, in order:
+1. Stage Challenge: scripted arrows per type to confirm the win rules, Android's own challenge boards (the probe uses Dreamcast `CHSTAGE25.DAT`), then port the loop and result path; Puzzle Edit; Mouse Mania stage 5; team score display and end-of-round result.
+2. Phase A leftovers: phone name frame (0x73 frame 5), A800/Retina layouts, tutorial highlights, split-screen, roulette wheel art, celebration rockets, Costumes.
+3. Phases C-G as listed in docs/roadmap.md; no final audit has been done.
+Environment notes: tests run from `game/` (`../build/game/<test>.exe`); in Python edit scripts a `\n` inside a C++ string becomes a real newline (fix with `chr(92)`); Unicorn caches translated blocks, so memory patches must be applied before execution.
