@@ -5,7 +5,7 @@ from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 from gba_session import GBA, ROM, boot_to_menu, run
 
 
-def verify(selection, column, failure, button=None, row=0, natural_frame=None):
+def verify(selection, column, failure, row=0, natural_frame=None, input_at=None, retry_at=None):
     gba = GBA(ROM)
     gba.load_state(selection)
     uc = gba.uc
@@ -52,25 +52,28 @@ def verify(selection, column, failure, button=None, row=0, natural_frame=None):
     directions = 'D' * row + 'R' * column
     keys = {10 + 20 * index: key for index, key in enumerate(directions)}
     keys[180] = 'A'
-    if button:
-        keys[800] = button
+    if input_at:
+        offset, button = input_at
+        keys[collision_frame + offset] = button
     run(gba, collision_frame + 251, keys)
 
     writer = {'catch': 0x08002e7c, 'mouse hole': 0x08002eac,
               'cat hole': 0x080033e0, 'cat rocket': 0x080035fe}[failure]
-    retry = button in ('A', 'T')
     expected_writes = [(collision_frame, 255, writer), (collision_frame + 120, 255, 0x0800823a)]
     expected_sounds = [(collision_frame, 62, 0x0800490b)]
     if failure == 'cat rocket':
         expected_sounds.insert(0, (collision_frame, 36, 0x080046a9))
-    if retry:
-        expected_writes.append((802, 0, 0x08000f00))
-        expected_sounds.extend([(801, 5, 0x080082d3), (803, 59, 0x08007e95)])
+    last_update = collision_frame + 192
+    if retry_at is not None:
+        retry_frame = collision_frame + retry_at
+        expected_writes.append((retry_frame + 1, 0, 0x08000f00))
+        expected_sounds.extend([(retry_frame, 5, 0x080082d3), (retry_frame + 2, 59, 0x08007e95)])
+        last_update = min(last_update, retry_frame)
     assert injected == ([collision_frame] if natural_frame is None else []), injected
-    assert updates == list(range(collision_frame + 1, 802 if retry else collision_frame + 193)), updates
+    assert updates == list(range(collision_frame + 1, last_update + 1)), updates
     assert writes == expected_writes, writes
     assert sounds == expected_sounds, sounds
-    assert gba.r8(pending) == (0 if retry else 255)
+    assert gba.r8(pending) == (0 if retry_at is not None else 255)
 
 
 def main():
@@ -79,11 +82,19 @@ def main():
     selection = gba.save_state()
     for column, failure in ((0, 'catch'), (1, 'catch'), (2, 'mouse hole'), (2, 'cat hole')):
         verify(selection, column, failure)
-    for button in ('A', 'B', 'T'):
-        verify(selection, 2, 'cat hole', button)
+    for button in ('A', 'T'):
+        for offset in (11, 119, 120, 134):
+            verify(selection, 2, 'cat hole', input_at=(offset, button))
+        for offset in (135, 151, 193):
+            verify(selection, 2, 'cat hole', input_at=(offset, button), retry_at=offset + 1)
+    for offset in (135, 151, 193):
+        verify(selection, 2, 'cat hole', input_at=(offset, 'B'))
     verify(selection, 0, 'mouse hole', row=3, natural_frame=792)
     verify(selection, 1, 'cat rocket', row=4, natural_frame=820)
-    print('9 GBA Stage Challenge failure cases matched, including natural failures on A4 and B5')
+    for column, failure, row, frame in ((0, 'mouse hole', 3, 792), (1, 'cat rocket', 4, 820)):
+        verify(selection, column, failure, row, frame, input_at=(134, 'A'))
+        verify(selection, column, failure, row, frame, input_at=(135, 'A'), retry_at=136)
+    print('27 GBA Stage Challenge cases matched, including natural failures and retry boundaries')
 
 
 if __name__ == '__main__':
