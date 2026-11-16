@@ -1865,6 +1865,7 @@ struct PuzzleMode : Screen {
             mouseCursor = true;
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
+            if (paused && k != SDLK_ESCAPE) return;
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0);
             if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
@@ -1928,7 +1929,13 @@ struct PuzzleMode : Screen {
             if (phone ? handset(265, 148, 440, 215) : in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }
             return true; }
         if (state == 3) return true;   // PuzzleLoop disables pause and ignores HUD input during the failure phase.
-        if (phone ? handset(0, 295, 60, 320) : ipadPauseAvailable(a) && in(10, 669, 173, 711)) { paused = true; if (phone) pconf = false; a.playSfx(4); return true; }
+        if (phone ? handset(0, 295, 60, 320) : ipadPauseAvailable(a) && in(10, 669, 173, 711)) {
+            paused = true;
+            drag.on = false;
+            if (phone) pconf = false;
+            a.playSfx(4);
+            return true;
+        }
         if (in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
         if (in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
@@ -2774,22 +2781,30 @@ int main(int argc, char** argv) {
             e.type = SDL_MOUSEMOTION;
             if (sscanf(aim, "%d,%d", &e.motion.x, &e.motion.y) == 2) mode->event(app, e);
         }
-        if (const char* keys = getenv("CCR_KEYS")) for (const char* p = keys; *p; p++) {
-            SDL_Event e{};
-            e.type = SDL_KEYDOWN;
-            switch (*p) {
-            case 'D': e.key.keysym.sym = SDLK_DOWN; break;
-            case 'U': e.key.keysym.sym = SDLK_UP; break;
-            case 'L': e.key.keysym.sym = SDLK_LEFT; break;
-            case 'R': e.key.keysym.sym = SDLK_RIGHT; break;
-            case 'E': e.key.keysym.sym = SDLK_RETURN; break;
-            default: e.key.keysym.sym = *p; break;
+        auto sendKeys = [&]() {
+            const char* keys = getenv("CCR_KEYS");
+            if (!keys) return;
+            for (const char* p = keys; *p; p++) {
+                SDL_Event e{};
+                e.type = SDL_KEYDOWN;
+                switch (*p) {
+                case 'D': e.key.keysym.sym = SDLK_DOWN; break;
+                case 'U': e.key.keysym.sym = SDLK_UP; break;
+                case 'L': e.key.keysym.sym = SDLK_LEFT; break;
+                case 'R': e.key.keysym.sym = SDLK_RIGHT; break;
+                case 'E': e.key.keysym.sym = SDLK_RETURN; break;
+                default: e.key.keysym.sym = *p; break;
+                }
+                mode->event(app, e);
+                if (const char* nx = mode->next()) enter(nx);
             }
-            mode->event(app, e);
-            if (const char* nx = mode->next()) enter(nx);
-        }
+        };
+        const char* keyTickOption = getenv("CCR_KEY_TICK");
+        const int keyTick = keyTickOption ? atoi(keyTickOption) : -1;
+        if (keyTick < 0) sendKeys();
         std::vector<std::array<int, 3>> clicks; if (const char* c = getenv("CCR_CLICKS")) { int t, x, y, n; const char* p = c; while (sscanf(p, "%d:%d,%d%n", &t, &x, &y, &n) == 3) { clicks.push_back({t, x, y}); p += n; if (*p == ';') p++; else break; } }   // headless test input: tick:x,y;... (window pixels)
         int lastSong = -2; for (int i = 0; i < ticks; i++) {
+            if (i == keyTick) sendKeys();
             for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
         mode->draw(app, 1.0f);
         const int result = saveFrame(app.ren, shot);
