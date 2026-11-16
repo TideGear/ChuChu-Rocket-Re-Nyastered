@@ -122,6 +122,7 @@ public:
     std::function<float()> rnd;                   // njRandom (battle): cat respawn picks generator floor(n*0.99*r)
     uint8_t rocketOwner[kRows][kCols] = {};
     int rocketPos[4][2] = {};                     // battle: rocket cell of each player (RO_GetRocketFieldGrid)
+    int monoEnd = -1;                  // the Mouse Monopoly task ends this frame: entities created at or after this index already read monopoly = -1 (the destructor runs at the task's place in the creation-ordered list)
     int spdSlot = -1; float spdMouse = 0, spdCat = 0;   // pending mid-frame speed change (see tick)
     int monopoly = -1;                 // MO_StartHitorijime(player) / -1: the global read by MO_MouseExe's tail and MO_MouseJimeExe
     std::vector<Entity> ents;
@@ -180,11 +181,13 @@ public:
             if (battle) events.push_back({Event::MouseEaten, 0, m.type});
             if (trace) printf("t=%d mouse eaten at (%.1f,%.1f) cell (%d,%d)\n", now, m.x, m.z, m.gx, m.gy);
         }
-        if (order == 0 && spdSlot >= 0) {   // a roulette event task changes the character speed this frame. SmpTskEntry appends every new task to a linked list and SmpTskExeServer walks it, so tasks run in creation order (not pool-slot order): entities created at or after index spdSlot (the event task's creation point) already see the new speed
+        if (order == 0 && (spdSlot >= 0 || monoEnd >= 0)) {   // a roulette event task changes the character speed this frame. SmpTskEntry appends every new task to a linked list and SmpTskExeServer walks it, so tasks run in creation order (not pool-slot order): entities created at or after index spdSlot (the event task's creation point) already see the new speed
             bool applied = false;
-            for (size_t i = 0; i < ents.size(); i++) { Entity& e = ents[i]; if (!applied && (int)i >= spdSlot) { mouseSpeed = spdMouse; catSpeed = spdCat; applied = true; }
+            for (size_t i = 0; i < ents.size(); i++) { Entity& e = ents[i]; if (monoEnd >= 0 && (int)i >= monoEnd) { monopoly = -1; monoEnd = -1; }
+                if (spdSlot >= 0 && !applied && (int)i >= spdSlot) { mouseSpeed = spdMouse; catSpeed = spdCat; applied = true; }
                 if (e.alive && !e.done && !e.fresh) { if (e.rocketIn) rocketInTick(e); else step(e); } }
-            if (!applied) { mouseSpeed = spdMouse; catSpeed = spdCat; }
+            if (spdSlot >= 0 && !applied) { mouseSpeed = spdMouse; catSpeed = spdCat; }
+            if (monoEnd >= 0) { monopoly = -1; monoEnd = -1; }
             spdSlot = -1;
         }
         else if (order == 0) { for (auto& e : ents) if (e.alive && !e.done && !e.fresh) { if (e.rocketIn) rocketInTick(e); else step(e); } }

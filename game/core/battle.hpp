@@ -158,7 +158,9 @@ private:
             score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); decMice(e.type);
             if (e.type == 2) { if (rouletteEnabled) { pendingRoll_ = e.player; pendingRollSlot_ = e.slot; } }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
             break; }
-        case Event::MouseEaten: case Event::MouseHole: case Event::MouseGone:
+        case Event::MouseGone:   // MO_MouseJimeExe deletes the task directly (0x3db0c) when it is more than 180 from the field centre: the counter drops in the same frame
+            if (e.type == 0) gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
+        case Event::MouseEaten: case Event::MouseHole:
             decMice(e.type); break;
         case Event::CatRocket:
             if (e.player >= 0) { score.catHasCome(e.player); updateRanks(); if (sfx) sfx(7); }            // a cat in a rocket respawns at a generator: it stays 'out'
@@ -212,6 +214,7 @@ private:
             float v = -1.0f;
             if (e.state == 0) v = -1.0f;   // the start (state 0) takes effect from the next frame (measured)
             else if (e.count + 1 > e.limit && e.kind != 0 && e.kind != 1 && e.kind != 4 && e.kind != 7) v = 1.0f;
+            if (e.kind == 7 && e.state == 1 && e.count + 1 > e.limit) sim.monoEnd = e.ord;
             if (v >= 0.0f && e.slot >= 0) { sim.spdSlot = e.ord; sim.spdMouse = mouseSpeed(v); sim.spdCat = baseScale * v; }
         }
     }
