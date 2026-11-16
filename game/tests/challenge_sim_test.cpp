@@ -25,8 +25,9 @@ int main(int argc, char** argv) {
         int ring = 0, slot[3] = {-1, -1, -1};
         for (int t = 1; t <= ticks; t++) {
             for (size_t i = 0; i < sim.arrows.size(); i++) { auto& a = sim.arrows[i]; if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); } }
-            if (arrows && t >= 11 && (t - 11) % 40 == 0) {   // original frame 480 = tick 11
-                const int k = (t - 11) / 40, x = (7 * k + 3) % 12, y = (5 * k + 1) % 9, d = k % 4;
+            const int delay = getenv("ARROWDELAY") ? atoi(getenv("ARROWDELAY")) : 0;   // verification: ticks between the original's placement call and the collision flag
+            if (arrows && t >= 11 + delay && (t - 11 - delay) % 40 == 0) {   // original frame 480 = tick 11
+                const int k = (t - 11 - delay) / 40, x = (7 * k + 3) % 12, y = (5 * k + 1) % 9, d = k % 4;
                 const uint32_t fl = sim.coll[y][x];
                 if (!(fl & (kArrow | kRocket | kHole))) {
                     int old = slot[ring]; if (old >= 0 && sim.arrows[old].live) { sim.arrows[old].live = false; sim.refreshCell(sim.arrows[old].x, sim.arrows[old].y); }
@@ -34,6 +35,7 @@ int main(int argc, char** argv) {
                 }
             }
             if (arrows && t >= 12 && (t - 12) % 40 == 0) { printf("ARR t%d [", t); for (int yy = 0; yy < 9; yy++) for (int xx = 0; xx < 12; xx++) if (sim.coll[yy][xx] & kArrow) printf("(%d,%d,0x%x) ", xx, yy, (unsigned)(sim.coll[yy][xx] & 0xfff)); printf("]\n"); }
+            if (getenv("MPOS") && t >= atoi(getenv("MPOS"))) for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) { printf("MPOS t%d %.3f %.3f", t, e.x, e.z); putchar(10); }
             sim.tick();
             if (sim.saved != lastSaved || sim.killedByCat != lastEaten) { printf("CNT t%d rocket %d eaten %d\n", t, sim.saved, sim.killedByCat); lastSaved = sim.saved; lastEaten = sim.killedByCat; }
         }

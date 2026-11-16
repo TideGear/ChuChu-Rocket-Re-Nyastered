@@ -63,7 +63,19 @@ def run(stage, frames):
         gcall(0x30388)
         print('CALLS', ' > '.join(seen))
         return
+    if os.environ.get('MPOS'):   # MPOS=lo,hi (ticks): positions of every mouse task at the entry of MO_MouseExe (0x3501c), tick = frame - 469
+        mlo, mhi = [int(v) for v in os.environ['MPOS'].split(',')]
+        from unicorn import UC_HOOK_CODE as _H
+        def mcb(uc, a_, sz, u):
+            t = cur_frame[0] - 469
+            if mlo <= t <= mhi:
+                pr = uc.reg_read(UC_ARM_REG_R0); x, z = struct.unpack('<ff', o.read(pr + 0x14, 4) + o.read(pr + 0x1c, 4)); print('MPOS t%d %.3f %.3f' % (t, x, z))
+        cur_frame = [0]
+        o.uc.hook_add(_H, mcb, begin=BASE + 0x3501c - G, end=BASE + 0x3501c - G + 2)
+    else:
+        cur_frame = [0]
     for f in range(frames):
+        cur_frame[0] = f
         try:
             gcall(0x30388)                          # ChallengeLoop
         except Exception as e:
