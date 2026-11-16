@@ -10,6 +10,7 @@
 #include "roulette_pose.hpp"
 #include "roulette_draw.hpp"
 #include "rocket_lid.hpp"
+#include "../core/challenge.hpp"
 #include "rocket_launch.hpp"
 #include "startup.hpp"
 #include <array>
@@ -76,6 +77,8 @@ static bool loadStageSet(const std::string& root, int set, Stages& out) {
     return loadStages((root + "/mobile_puzzles.bin").c_str(), out, kMobilePuzzleSource) ||
            loadStages((root + "/dreamcast_puzzles.bin").c_str(), out, 4);
 }
+
+static bool challengeBoardsAvailable(const std::string& root) { Stages s; return loadStages((root + "/battle_stages.bin").c_str(), s, 3) && s.list.size() >= 25; }
 
 struct App;
 struct StarBackground {
@@ -1677,13 +1680,13 @@ struct HdMenuMode : Screen {
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_DOWN) { sel = (sel + 1) % N; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + N - 1) % N; a.playSfx(0); } else if (k == SDLK_RETURN || k == SDLK_SPACE) act(a, sel); } }
     void act(App& a, int i) {
         if (!tutorialCleared() && i >= 1 && i <= 3) { a.playSfx(3); return; }
-        if (i == 0 || i == 2 || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics and Stage Challenge are not ported yet (docs/roadmap.md)
+        if (i == 0 || (i == 2 && !challengeBoardsAvailable(a.root)) || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics is not ported yet; Stage Challenge needs the Challenge boards (docs/roadmap.md)
         a.playSfx(2); chosen = i; fade = 0; phase = 0x10; }
     void tick(App& a) override {
         if (phase == 0xe) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0xf; } }
         else if (phase == 0xf) { t1 += 16384.0; if (t1 >= 500000.0) { t1 -= 500000.0; bubbleFrame = (bubbleFrame + 1) & 1; } t2 += 16384.0; if (t2 >= 166666.671875) { t2 -= 166666.671875; mascot = (mascot + 1) % 12; } }
         else if (phase == 0x10) { fade += 16384.0; if (fade >= 500000.0) { fade = 500000.0; leave = true; } } }
-    const char* next() override { if (!leave) return nullptr; leave = false; static const char* to[N] = {nullptr, "STAGES", nullptr, "BATTLE", "OPTIONS"}; return to[chosen]; }
+    const char* next() override { if (!leave) return nullptr; leave = false; static const char* to[N] = {nullptr, "STAGES", "CHALLENGE", "BATTLE", "OPTIONS"}; return to[chosen]; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         static const int tm[48] = {0,1,2,3,0,0,0,4,5,6,7,8,9,10,11,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,28,28,29,30,31,32,33,34,35,34,34,36,37,38,39};   // tilemap resource 0x124 (HD ccrpad rec 878)
@@ -1735,7 +1738,7 @@ struct MenuMode : Screen {
             SDL_RenderSetLogicalSize(a.ren, a.padOk ? 1024 : 480, a.padOk ? 768 : 320); float lx, ly; SDL_RenderWindowToLogical(a.ren, mx, my, &lx, &ly); SDL_RenderSetLogicalSize(a.ren, W, H);
             for (int i = 0; i < N; i++) { int x, y, w, h; geom(a, i, x, y, w, h); if (lx >= x && lx < x + w && ly >= y && ly < y + h) { sel = i; if (e.type == SDL_MOUSEBUTTONDOWN) choose(a); } } }
     }
-    void choose(App& a) { if (sel == 1) chosen = "STAGES"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
+    void choose(App& a) { if (sel == 1) chosen = "STAGES"; else if (sel == 2 && challengeBoardsAvailable(a.root)) chosen = "CHALLENGE"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
     const char* next() override { if (back) { back = false; return "TITLE"; } const char* c = chosen; chosen = nullptr; return c; }
     void draw(App& a, float) override {
         if (bare(a)) {
@@ -2073,6 +2076,64 @@ struct PuzzleMode : Screen {
 };
 
 // ---------------------------------------------------------------- stage select (functional; the original's layout/art is not reproduced yet: docs/known_gaps.md)
+// ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
+struct ChallengeMode : Screen {
+    Stages stages; int cur = 0; ChallengeGame game; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0;
+    std::vector<std::pair<float, float>> prev;
+    static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
+    bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false; begin(stage); return true; }
+    void begin(int stage) { cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); game.start(stages.list[cur].st, cur); prev.clear(); }
+    int music() override { return 9; }
+    void place(App& a, int dir) { if (game.phase != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if (game.placeArrow(aim.cellX(), aim.cellY(), dir)) a.playSfx(1); else a.playSfx(0x13); }
+    void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN) { aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y); mouseCursor = true; }
+        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (game.phase == ChallengeGame::Intro) game.skipIntro();                                   // flag 1: a tap skips the intro
+            else if (game.phase == ChallengeGame::Failure) { begin(cur); a.playSfx(2); }              // flag 8: restart the stage
+            else if (game.phase == ChallengeGame::Result) nextStageRequested = true;
+            else if (!game.supported()) back = true;
+            else place(a, lastDir);
+        }
+        if (e.type == SDL_KEYDOWN && !e.key.repeat) {
+            const SDL_Keycode k = e.key.keysym.sym;
+            if (k == SDLK_ESCAPE) { back = true; return; }                                             // flag 2: quit
+            if (game.phase == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) game.skipIntro();
+            else if (game.phase == ChallengeGame::Failure && (k == SDLK_RETURN || k == SDLK_r)) { begin(cur); a.playSfx(2); }
+            else if (game.phase == ChallengeGame::Result && (k == SDLK_RETURN || k == SDLK_SPACE)) nextStageRequested = true;
+            else if (arrowKey(k) >= 0) { if (!a.headless) aim.update(a, 0, 0); place(a, arrowKey(k)); }
+        }
+    }
+    void tick(App& a) override {
+        if (nextStageRequested) { nextStageRequested = false; begin(cur + 1); return; }
+        if (!game.supported()) return;
+        ++cticks;
+        prev.resize(game.sim.ents.size());
+        for (size_t i = 0; i < game.sim.ents.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z};
+        const int before = game.phase;
+        game.tick();
+        if (game.phase != before) { if (game.phase == ChallengeGame::Success || game.phase == ChallengeGame::Result) a.playSfx(0x15); else if (game.phase == ChallengeGame::Failure) a.playSfx(0x1b); }
+    }
+    const char* next() override { if (!back) return nullptr; back = false; return "MENU"; }
+    void draw(App& a, float alpha) override {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
+        SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255); SDL_RenderClear(a.ren);
+        a.stars.draw(a);
+        a.board(stages.list[cur].st, 1, 1);                                                          // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
+        for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
+        a.drawFieldObjects(game.sim, prev, game.phase == ChallengeGame::Play ? alpha : 1.0f);
+        if (game.supported() && game.phase == ChallengeGame::Play && mouseCursor && aim.inside) a.cursorAt(aim.x, aim.y, 0, cticks);
+        SDL_RenderSetViewport(a.ren, nullptr);
+        std::string line;
+        if (!game.supported()) line = "THIS CHALLENGE TYPE IS NOT PORTED YET  ESC BACK";
+        else if (game.phase == ChallengeGame::Intro) line = "STAGE CHALLENGE " + std::to_string(cur + 1) + "  CLICK TO START";
+        else if (game.phase == ChallengeGame::Countdown) line = std::to_string(1 + (ChallengeGame::kCountdownFrames - game.phaseFrame) / 36) + "...";
+        else if (game.phase == ChallengeGame::Play) line = std::string(game.type == 2 ? "EATEN " : "SAVED ") + std::to_string(game.counter()) + " OF " + std::to_string(game.target) + "   TIME " + std::to_string(std::max(0, (ChallengeGame::kLimitTicks - game.playTick) / 60 + 1));
+        else if (game.phase == ChallengeGame::Success || game.phase == ChallengeGame::Result) line = game.phase == ChallengeGame::Result ? "CLEAR!  CLICK FOR NEXT STAGE" : "CLEAR!";
+        else line = std::string("MISS: ") + (game.failReason ? game.failReason : "") + "   CLICK RETRY  ESC QUIT";
+        a.text(line, 24, 14, 30);
+    }
+};
+
 struct StageSelectMode : Screen {
     Stages stages; int cur = 0, page = 0; bool go = false, back = false; static constexpr int COLS = 5, ROWS = 4, PER = COLS * ROWS;
     int music() override { return orig() ? (phase == 0x20 ? -1 : 5) : 0; }
@@ -2547,6 +2608,7 @@ int main(int argc, char** argv) {
         if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
         else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
+        else if (name == "CHALLENGE" || name == "challenge") { auto m = std::make_unique<ChallengeMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load challenge stages\n"); return false; } app.nextStage = -1; mode = std::move(m); }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
         else if (name == "BATTLE" || name == "battle" || name == "BATTLE_MATCH") {
