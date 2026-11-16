@@ -87,6 +87,50 @@ def verify_stage(state, panel_placed):
     print(f'37 GBA Puzzle cases matched with the panel {"placed" if panel_placed else "in stock"}')
 
 
+def verify_natural_failures(gba, selection):
+    cases = (
+        (8, 502, 0x08002eac), (13, 432, 0x08002eac), (18, 502, 0x08002eac),
+        (14, 604, 0x08002e7c), (17, 411, 0x08002e7c),
+        (20, 591, 0x08002e7c), (22, 526, 0x08002e7c),
+        (21, 412, 0x080035fe),
+    )
+    start = gba.frame
+    pending = gba.r32(0x08002ed4)
+    sounds, updates, writes = [], [], []
+
+    def trace(uc, address, size, data):
+        frame = gba.frame - start
+        if address == 0x0800488c:
+            updates.append(frame)
+        else:
+            sounds.append((frame, uc.reg_read(UC_ARM_REG_R0), uc.reg_read(UC_ARM_REG_LR)))
+
+    def pending_write(uc, access, address, size, value, data):
+        writes.append((gba.frame - start, value, uc.reg_read(UC_ARM_REG_PC)))
+
+    for address in (0x08024930, 0x0802495c, 0x0800488c):
+        gba.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
+    gba.uc.hook_add(UC_HOOK_MEM_WRITE, pending_write, begin=pending, end=pending)
+
+    for stage, collision, writer in cases:
+        gba.load_state(selection)
+        sounds.clear()
+        updates.clear()
+        writes.clear()
+        # Select the stage in the 5x5 grid and start without placing a panel.
+        directions = 'D' * ((stage - 1) // 5) + 'R' * ((stage - 1) % 5)
+        keys = {10 + 20 * index: key for index, key in enumerate(directions)}
+        keys.update({180: 'A', 380: 'r'})
+        run(gba, 800, keys)
+        assert writes[-2:] == [(collision, 255, writer), (collision + 121, 0, 0x08000f00)], (stage, writes)
+        assert updates == list(range(collision + 1, collision + 121)), (stage, updates)
+        expected = [(collision, 62, 0x0800490b)]
+        if stage == 21:
+            expected.insert(0, (collision, 36, 0x080046a9))
+        assert [event for event in sounds if event[0] >= collision] == expected, (stage, sounds)
+    print('8 natural GBA Puzzle failures matched: 3 holes, 4 catches, 1 cat rocket entry')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('snapshot', type=Path, nargs='?', help='optional trusted local fixture with a panel placed')
@@ -106,6 +150,8 @@ def main():
             keys[220] = 'A'
         run(gba, 300, keys)
         verify_stage(gba.save_state(), panel_placed)
+    gba.load_state(selection)
+    verify_natural_failures(gba, selection)
 
 
 if __name__ == '__main__':
