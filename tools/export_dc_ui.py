@@ -6,6 +6,8 @@ def main(prs_png, out, png=None):
     for src, name, src_dir in (('TITLE_newtitle0.png', 'dlogo', prs_png), ('ENGLISH__PRESSSTART.png', 'dpress', png)):
         if not src_dir: continue
         p = os.path.join(src_dir, src)
+        if name == 'dlogo' and not os.path.exists(p):
+            p = os.path.join(src_dir, '.__' + src)
         if not os.path.exists(p): continue
         im = Image.open(p).convert('RGBA'); bb = im.getbbox(); im = im.crop(bb); w, h = im.size           # crop the empty border
         with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', w, h)); f.write(im.tobytes())

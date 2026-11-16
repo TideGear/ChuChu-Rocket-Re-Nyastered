@@ -227,7 +227,16 @@ struct App {
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
-        { std::string ret2 = root + "/ret_all/"; titleOk = loadSheet(ret2 + "a0090", tbg) && loadSheet(ret2 + "a0097", tprompt) && loadSheet(ret2 + "a0100", trocket) && loadSheet(ret2 + "a0042", tlogo); menuOk = loadSheet(ret2 + "a0134", mbg) && loadSheet(ret2 + "a0113", mbtn) && loadSheet(ret2 + "a0110", mdeco); dlogoOk = loadSheet(ret2 + "dlogo", dlogo); dpressOk = loadSheet(ret2 + "dpress", dpress); padOk = dlogoOk && loadSheet(ret2 + "bg0877", pbg) && loadSheet(ret2 + "pprompt", pprompt) && loadSheet(ret2 + "procket", procket) && loadSheet(ret2 + "pdeco", pdeco) && loadSheet(ret2 + "pbtn", pbtn) && loadSheet(ret2 + "bg0879", pmbg); loadStrings(); }
+        titleOk = loadSheet(ret + "a0090", tbg) && loadSheet(ret + "a0097", tprompt) &&
+                  loadSheet(ret + "a0100", trocket) && loadSheet(ret + "a0042", tlogo);
+        menuOk = loadSheet(ret + "a0134", mbg) && loadSheet(ret + "a0113", mbtn) && loadSheet(ret + "a0110", mdeco);
+        dlogoOk = loadSheet(ret + "dlogo", dlogo);
+        dpressOk = loadSheet(ret + "dpress", dpress);
+        padOk = (dlogoOk || imgSheet(7)) && loadSheet(ret + "bg0877", pbg) &&
+                loadSheet(ret + "pprompt", pprompt) && loadSheet(ret + "procket", procket) &&
+                loadSheet(ret + "pdeco", pdeco) && loadSheet(ret + "pbtn", pbtn) && loadSheet(ret + "bg0879", pmbg);
+        titleOk = titleOk || padOk;
+        loadStrings();
         { static const char* cv[3] = {"r0420", "r0429", "r0438"}, *mv[3] = {"r0491", "r0495", "r0499"}, *gv[3] = {"r0472", "r0476", "r0480"}; walkOk = true;
           for (int k = 0; k < 3; k++) { walkOk = loadSheet(ret + cv[k], catV[k]) && loadSheet(ret + mv[k], mouseV[k]) && loadSheet(ret + gv[k], goldV[k]) && walkOk;
             loadFit(ret + "hd_cat" + std::to_string(k) + ".frames.bin", catV[k]); loadFit(ret + "hd_mouse" + std::to_string(k) + ".frames.bin", mouseV[k]); loadFit(ret + "hd_gold" + std::to_string(k) + ".frames.bin", goldV[k]); } }
@@ -840,7 +849,13 @@ struct TitleMode : Screen {
         SDL_Rect rd{(int)std::lround(ocx + std::cos(ang * rad) * orad - rf.w / 2.0), (int)std::lround(ocy + std::sin(ang * rad) * orad - rf.h / 2.0), rf.w, rf.h};
         SDL_RenderCopyEx(a.ren, rk.tex, &rf, &rd, ang + 180.0, nullptr, SDL_FLIP_NONE);
         if (a.dlogoOk) { int lw = pad ? 337 : 190, lx = pad ? 208 : 8, ly = pad ? 208 : 24; SDL_Rect ld{lx, ly, lw, lw * a.dlogo.h / a.dlogo.w}; SDL_RenderCopy(a.ren, a.dlogo.tex, nullptr, &ld); }   // best source: the Dreamcast logo
-        else { const SDL_Rect& lf = a.tlogo.fr[0]; SDL_Rect ld{12, 28, lf.w, lf.h}; SDL_RenderCopy(a.ren, a.tlogo.tex, &lf, &ld); }
+        else if (pad) {
+            if (const Sheet* logo = a.imgSheet(7)) {
+                const SDL_Rect& frame = logo->fr[0];
+                SDL_Rect dst{208, 208, frame.w, frame.h};
+                SDL_RenderCopy(a.ren, logo->tex, &frame, &dst);
+            }
+        } else { const SDL_Rect& lf = a.tlogo.fr[0]; SDL_Rect ld{12, 28, lf.w, lf.h}; SDL_RenderCopy(a.ren, a.tlogo.tex, &lf, &ld); }
         if (state == 0xC && blink <= 333333.0) { Sheet& pr = pad ? a.pprompt : a.tprompt; const SDL_Rect& pf = pr.fr[0];
 #if defined(__ANDROID__)
             const bool dcPrompt = false;   // phones keep "TAP THE SCREEN!"

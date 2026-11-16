@@ -92,6 +92,31 @@ def do_ios(ipa, work, assets, entry):
                 shutil.copytree(d, dst)
             entry.setdefault('audio', {})[sub] = len(os.listdir(dst))
 
+    if entry.get('version') == '1.0' and 'ccrpad' in entry['packs']:
+        export_ipad_presentation(thin, Path(assets) / 'ios' / safe, Path(assets))
+
+
+def export_ipad_presentation(thin, extracted, assets):
+    from macho import Macho
+    out = assets / 'ret_all'
+    out.mkdir(exist_ok=True)
+    pack = extracted / 'ccrpad'
+    mach = Macho(thin)
+    # CoreSettingsInit selects this 0x700-byte table for the iPad layout.
+    address, size = 0xe81f8, 0x700
+    for name, vm, _, offset, file_size in mach.segs:
+        if name == '__TEXT' and vm <= address and address + size <= vm + file_size:
+            start = offset + address - vm
+            (assets / 'hd10_layout.bin').write_bytes(mach.d[start:start + size])
+            break
+    else:
+        raise ValueError('iPad layout table is outside the executable text segment')
+    run_tool('export_hd_geometry.py', pack, out, thin)
+    run_tool('export_hd_images.py', thin, pack, out)
+    run_tool('export_hd_locale.py', '', thin, pack, out)
+    run_tool('export_tilemaps.py', pack, out)
+    run_tool('export_pad_ui.py', extracted, out)
+
 
 def do_apk(apk, work, assets, entry):
     stem = os.path.splitext(os.path.basename(apk))[0]
@@ -138,6 +163,8 @@ def do_dreamcast(src, work, assets, entry):
         for f in sorted(glob.glob(os.path.join(files, 'ENGLISH', '*.PRS'))): _prs.main(f, prs_out)
         run_tool('pvr2png.py', prs_out, os.path.join(assets, 'dreamcast', 'prs_png'))
     entry['prs_textures'] = len(glob.glob(os.path.join(prs_out, '*.pvr')))
+    run_tool('export_dc_ui.py', os.path.join(assets, 'dreamcast', 'prs_png'),
+             os.path.join(assets, 'ret_all'), png)
     models = os.path.join(assets, 'dreamcast', 'models')
     if not os.path.isdir(models):
         import dc_models
