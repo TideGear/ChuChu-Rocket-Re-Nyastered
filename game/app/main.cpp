@@ -2277,7 +2277,17 @@ struct BattleMode : Screen {
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
           int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock); int secs = (left + 59) / 60; int mm = secs / 60, ss = secs % 60;
           const float y = 84.0f; float x = 78.0f; const float step = 14.0f;
-          a.blit(a.hdTime, mm % 10, x, y, 0.8f); a.blit(a.hdTime, 10, x + step, y, 0.8f); float x2 = x + step + (float)((int)step / 2); a.blit(a.hdTime, ss / 10, x2, y, 0.8f); a.blit(a.hdTime, ss % 10, x2 + step, y, 0.8f); }
+          if (a.hdTime.tex) {
+              a.blit(a.hdTime, mm % 10, x, y, 0.8f);
+              a.blit(a.hdTime, 10, x + step, y, 0.8f);
+              const float x2 = x + step + static_cast<int>(step) / 2;
+              a.blit(a.hdTime, ss / 10, x2, y, 0.8f);
+              a.blit(a.hdTime, ss % 10, x2 + step, y, 0.8f);
+          } else if (a.timefont.fr.size() > 10 && a.timefont.fr[0].w > 0) {
+              const float scale = 14.0f / a.timefont.fr[0].w;
+              const int frames[] = {mm % 10, 10, ss / 10, ss % 10};
+              for (int i = 0; i < 4; ++i) a.blit(a.timefont, frames[i], 65.0f + i * 19.0f, y, scale);
+          } }
         SDL_RenderSetViewport(a.ren, nullptr); for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // banner tasks drawn over the HUD
         int rollTick, roller, outcome;
         if (game.rouletteDrawState(rollTick, roller, outcome)) {
