@@ -127,10 +127,22 @@ def do_apk(apk, work, assets, entry):
     entry['textures'] = 0
     main = os.path.join(out, 'libccrjni', 'main')
     if os.path.isdir(main):
+        entry['extracted_assets'] = Path(main).relative_to(assets).as_posix()
         entry['textures'] = export_pngs(main, os.path.join(out, 'main_png'))
         entry['phone_art'] = run_tool('export_android_ui.py', out, os.path.join(assets, 'ret_all')).strip().splitlines()
         run_tool('export_strings.py', os.path.dirname(main), os.path.join(out, 'strings.json'),
                  os.path.join(assets, 'strings'))
+    for clip in sorted(Path(root, 'res', 'raw').glob('*.ogg')):
+        if re.fullmatch(r'm\d{3}', clip.stem):
+            name, directory = f'M{int(clip.stem[1:]):02d}.ogg', 'audio_song'
+        elif re.fullmatch(r'[sj]\d{3}', clip.stem):
+            prefix = 'J' if clip.stem[0] == 'j' else ''
+            name, directory = prefix + clip.stem[1:] + '.ogg', 'audio_sfx'
+        else:
+            continue
+        dst = Path(out, directory)
+        dst.mkdir(exist_ok=True)
+        shutil.copyfile(clip, dst / name)
 
 
 def do_gba(src, work, assets, entry):
@@ -333,11 +345,18 @@ def main():
     from export_sprites import export_base
     for layout, pack, version in (('retina_112', 'ccrret', '1.1.2'),
                                   ('retina_11', 'ccrret', '1.1'),
-                                  ('ipad_hd10', 'ccrpad', '1.0')):
+                                  ('ipad_hd10', 'ccrpad', '1.0'),
+                                  ('iphone_102', 'ccrphn', '1.0.2'),
+                                  ('iphone_10', 'ccrphn', '1.0'),
+                                  ('android_phone', None, None)):
         for entry in manifest['inputs']:
-            if entry.get('version') != version or pack not in entry.get('packs', {}):
+            if pack and (entry.get('version') != version or pack not in entry.get('packs', {})):
                 continue
-            source = Path(assets, entry['extracted_assets'], pack)
+            if not pack and (entry['kind'] != 'android' or 'extracted_assets' not in entry):
+                continue
+            source = Path(assets, entry['extracted_assets'])
+            if pack:
+                source /= pack
             try:
                 export_base(source, Path(assets, 'ret_all'), layout)
             except (OSError, ValueError, KeyError, struct.error) as error:

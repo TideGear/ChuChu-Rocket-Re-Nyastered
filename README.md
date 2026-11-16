@@ -51,7 +51,7 @@ Other platforms: the core and tests cross-compile for Android arm64 (NDK) and bu
 
 ### Which original files do I need?
 
-**Start with any one of these releases: iPad HD 1.0, iPhone 1.1, or iOS 1.1.2.** Each supplies the base graphics and audio, 100 main puzzles, and all 25 Battle boards. Setup exports these automatically. The iPad release also supplies the original startup screens, title, menus and HUD.
+**Start with one mobile release.** iPad HD 1.0, iPhone 1.0, 1.0.2, 1.1, iOS 1.1.2, and Android 1.14 or 1.15 each supply the base graphics and audio, 100 main puzzles, and all 25 Battle boards. Setup exports these automatically. The iPad release also supplies the original startup screens, title, menus and HUD.
 
 Put whichever originals you have under `Original Game Files` beside `setup.cmd`, or pass your own folder to setup. Subfolders are optional. Setup searches recursively and accepts loose files or ZIPs, including an enclosing ZIP around a package. Keep the numbered files of each Dreamcast dump together in their own folder or ZIP. Use a fresh cache if you want to test a different file combination in isolation.
 
@@ -59,8 +59,8 @@ Put whichever originals you have under `Original Game Files` beside `setup.cmd`,
 | --- | --- | --- |
 | **iOS 1.1 or 1.1.2** | `.ipa` or unpacked `.app`, loose or in a ZIP | Either release supplies Retina gameplay art, mobile audio and both playable modes on its own. |
 | **iPad ChuChu Rocket! HD 1.0** | `.ipa` or unpacked `.app`, loose or in a ZIP | Supplies both playable modes, iPad gameplay art, mobile audio, menus, layouts, fonts and startup artwork. |
-| **iPhone iOS 1.0 or 1.0.2** | `.ipa` or unpacked `.app`, loose or in a ZIP | Setup extracts the phone assets and audio. The phone gameplay graphics path is still needed for either release to work on its own. |
-| **Android 1.14 or 1.15** | `.apk` or unpacked APK folder, loose or in a ZIP | Phone title and menu art, and another source for the same 100 main puzzles and 25 Battle boards. One Android release is enough. |
+| **iPhone iOS 1.0 or 1.0.2** | `.ipa` or unpacked `.app`, loose or in a ZIP | Either release supplies phone gameplay art, mobile audio and both playable modes on its own. |
+| **Android 1.14 or 1.15** | `.apk` or unpacked APK folder, loose or in a ZIP | Either release supplies phone gameplay art, title and menu art, mobile audio and both playable modes on its own. |
 | **Game Boy Advance** | `.gba`, loose or in a ZIP | 2,466 additional puzzles and the GBA versions of the 100 main puzzles, including two board variants. Setup uses the GBA main set when available. Tab in stage select cycles available sets. |
 | **Dreamcast** | Numbered `.bin` tracks and their `.cue`, loose or in a ZIP | Provides the original 100 main puzzles, 25 Battle boards, stereo CD music and original Dreamcast art. |
 | **Dreamcast Express DLC** | `DEPuzzle.VMS` with its optional `.VMI`, loose or in a ZIP | Adds 25 Express puzzles. Setup also copies other VMS/VMI files it finds. PuzzleP and the skin saves are reference material for now. |
@@ -69,7 +69,7 @@ For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu 
 
 ### What if I have fewer releases?
 
-- **Android 1.14 and 1.15** already export the phone title, menus and gameplay boards. Android-only play needs the remaining exporter for the playfield, character, and HUD graphics in its resource pack.
+- **Phone-only setups** use the available menu and gameplay art. Some HUD panels and effects still require the iPad assets. In Puzzle, use Space or the controller's Start button to run the puzzle.
 - **Dreamcast only** supplies both sets of boards and the original models, textures and music. Setup can extract these and compile the executable. To launch with just that disc, the port needs to render the Dreamcast gameplay assets, including the field, characters and HUD. Dreamcast-only play remains planned.
 - **Game Boy Advance only** supplies puzzles. A GBA graphics path is still needed for standalone play.
 - **All four platforms shipped Battle.** The old Dreamcast requirement came from the stage exporter. Setup now recognizes the byte-identical mobile Battle maps. The GBA Battle boards are still outside the stage importer. `CCR_CPU=gba` enables the port's GBA-style AI with any exported Battle boards and needs no GBA ROM. [Stage format notes](docs/stages.md)

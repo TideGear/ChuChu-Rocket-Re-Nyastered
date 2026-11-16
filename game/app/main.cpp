@@ -240,6 +240,15 @@ struct App {
         { static const char* cv[3] = {"r0420", "r0429", "r0438"}, *mv[3] = {"r0491", "r0495", "r0499"}, *gv[3] = {"r0472", "r0476", "r0480"}; walkOk = true;
           for (int k = 0; k < 3; k++) { walkOk = loadSheet(ret + cv[k], catV[k]) && loadSheet(ret + mv[k], mouseV[k]) && loadSheet(ret + gv[k], goldV[k]) && walkOk;
             loadFit(ret + "hd_cat" + std::to_string(k) + ".frames.bin", catV[k]); loadFit(ret + "hd_mouse" + std::to_string(k) + ".frames.bin", mouseV[k]); loadFit(ret + "hd_gold" + std::to_string(k) + ".frames.bin", goldV[k]); } }
+        if (atlas.fr.size() >= 35 && atlas.fr[8].w == 37) {
+            // Phone boards use 37px tiles, including the edge pixels the field builder crops.
+            atlas.fit.assign(atlas.fr.size(), (CELL + 2.0f) / 37.0f);
+            if (arw.fit.empty()) arw.fit.assign(arw.fr.size(), 66.0f / 37.0f);
+            for (auto& rocket : rk) rocket.fit.assign(rocket.fr.size(), 1.8f);
+            for (auto* views : {catV, mouseV, goldV})
+                for (int view = 0; view < 3; ++view)
+                    if (views[view].fit.empty()) views[view].fit.assign(views[view].fr.size(), 1.8f);
+        }
         loadFontMetrics();
         loadAudio();
         return true;
@@ -262,6 +271,9 @@ struct App {
         namespace fs = std::filesystem;
         std::string sfxDir; std::error_code ec;
         for (auto& e : fs::directory_iterator(root + "/ios", ec)) if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) sfxDir = (e.path() / "audio_sfx").string();
+        if (sfxDir.empty())
+            for (auto& e : fs::directory_iterator(root + "/android", ec))
+                if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) { sfxDir = (e.path() / "audio_sfx").string(); break; }
         sfx.resize(29);
         if (!sfxDir.empty()) {
             const auto loadClip = [&](int id, const char* prefix, std::vector<int16_t>& clip) {
@@ -302,8 +314,21 @@ struct App {
     void loadSong(int n) {
         Song& sg = songs[n]; if (sg.tried) return; sg.tried = true; namespace fs = std::filesystem; std::error_code ec;
         char nm[16]; snprintf(nm, sizeof nm, "M%02d.ogg", n); std::vector<int16_t> mobile; int mobileFrames = 0;
-        for (auto& e : fs::directory_iterator(root + "/ios", ec)) { std::string pth = (e.path() / "audio_song" / nm).string(); if (!fs::exists(pth)) continue;
-            int ch, rate; short* pcm; int fr = stb_vorbis_decode_filename(pth.c_str(), &ch, &rate, &pcm); if (fr > 0) { toStereo44k(pcm, fr, ch, rate, mobile); free(pcm); mobileFrames = fr; break; } }
+        for (const char* platform : {"ios", "android"}) {
+            for (auto& e : fs::directory_iterator(root + "/" + platform, ec)) {
+                const auto path = (e.path() / "audio_song" / nm).string();
+                if (!fs::exists(path)) continue;
+                int ch, rate;
+                short* pcm;
+                int frames = stb_vorbis_decode_filename(path.c_str(), &ch, &rate, &pcm);
+                if (frames <= 0) continue;
+                toStereo44k(pcm, frames, ch, rate, mobile);
+                free(pcm);
+                mobileFrames = frames;
+                break;
+            }
+            if (mobileFrames > 0) break;
+        }
         char wp[512]; snprintf(wp, sizeof wp, "%s/dreamcast/audio/track%02d.wav", root.c_str(), n + 4); SDL_AudioSpec sp; Uint8* buf; Uint32 len;
         if (n != 14 && SDL_LoadWAV(wp, &sp, &buf, &len)) {                       // best source: the lossless Dreamcast CD track
             if (sp.format == AUDIO_S16LSB && sp.channels == 2 && sp.freq == 44100) { sg.pcm.assign((int16_t*)buf, (int16_t*)(buf + len)); sg.loopStart = (size_t)(2.0 * 44100) * 2;
