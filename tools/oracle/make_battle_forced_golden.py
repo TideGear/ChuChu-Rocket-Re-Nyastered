@@ -11,12 +11,13 @@ from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_PC, UC_ARM_REG_LR
 
 import os
 TEAM = os.environ.get('TEAM') == '1'   # TEAM=1: Team Battle (GA game type 1, mode 0xd); output battle_team_forced_<k>.txt
+GT = int(os.environ.get('GT', '0'))   # fixed game time (TI_GetGameTime); with GT set the output is battle_[team_]forced_<k>_gt<GT>.txt
 force = int(sys.argv[1])
 frames = int(sys.argv[2]) if len(sys.argv) > 2 else 3000
 first = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 count = int(sys.argv[4]) if len(sys.argv) > 4 else 26
 d = open(r'C:\Dev\ChuChu Rocket\analysis\extracted\dc_files\ENGLISH\BTSTAGE25.DAT', 'rb').read()
-out = open(r'C:\Dev\ChuChu Rocket\local\testdata\battle_%sforced_%d.txt' % ('team_' if TEAM else '', force), 'w' if first == 0 else 'a')
+out = open(r'C:\Dev\ChuChu Rocket\local\testdata\battle_%sforced_%d%s.txt' % ('team_' if TEAM else '', force, '_gt%d' % GT if GT else ''), 'w' if first == 0 else 'a')
 rl = []
 def hook_rl(ga):
     def cb(uc, a, s, u): rl.append(B.frame_no[0])
@@ -33,7 +34,7 @@ for idx, seed, use_arrows in cases[first:first + count]:
     B.spawns.clear(); rl.clear(); setup_battle(tiles, walls, seed, 0xd, 1) if TEAM else setup_battle(tiles, walls, seed)
     gcall(0x3d2bc)                                              # SC_InitScoreBoard
     for ga in (0x184c8c, 0x184ca0, 0x184ca8, 0x17518c): o.write(BASE + ga - G, struct.pack('<I', 0))   # roulette globals left over from the previous case
-    o.write(BASE + 0x17b604 - G, struct.pack('<I', 0)); o.write(BASE + 0x17b600 - G, struct.pack('<I', 0))   # game time and BCD time = 0, as battle_full_test GT=0 assumes
+    o.write(BASE + 0x17b604 - G, struct.pack('<I', GT)); o.write(BASE + 0x17b600 - G, struct.pack('<I', 0))   # game time and BCD time = 0, as battle_full_test GT=0 assumes
     hook_force(0x3c2bc)
     arr = o.u32(BASE + pa)
     sc = []; prev = None
