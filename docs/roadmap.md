@@ -52,6 +52,8 @@ See the [current phase summary](../README.md#status-and-plan) for what is in pla
 
 - Followed the three GBA cat sequences through the original player and mixer with `tools/oracle/gba_cat_playback.py`. The two rocket cues use digital PCM, while the growth cue uses the hardware wave channel. Verified voice addresses, active frame counts, and which mixer buffers or registers change. The port still uses the verified mobile effects. Next, trace remaining cat and mouse-death call sites and compare the underlying assets across releases.
 
+- Traced the GBA mouse catch and hole paths with `tools/oracle/gba_mouse_death.py`. Verified 20 handoff cases across the nine internal modes and the already-pending focus gate. In the mode-0 fixture the caught and falling mouse tasks submitted 83 and 54 sprite updates respectively before deletion, without direct sound requests. Next, trace the focus task's own effects and the mode-level failure cues.
+
 ## Initial baseline (2026-11-12)
 
 Legend: DONE = built and verified; PARTIAL = built or measured in part; TODO = not started.
