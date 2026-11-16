@@ -598,12 +598,11 @@ struct App {
             const Entity& e = sim.ents[i];
             if (e.fallingInHole()) {
                 if (e.drawsHoleFall() && sim.now > e.catHoleFallTick) angs[i] = (angs[i] + 0x1000) & 0xffff;
+            } else if (e.rocketIn) {
+                const float entryScale = e.catWalkScale < 0.0f ? 1.0f : e.catWalkScale;
+                if (e.rocketCounter > 0.0f && e.rocketCounter < entryScale) angs[i] += 0x1000;
             } else if (!effectsOnly) {
-                if (e.rocketIn) {
-                    const float entryScale = e.catWalkScale < 0.0f ? 1.0f : e.catWalkScale;
-                    if (e.rocketCounter < entryScale) angs[i] += 0x1000;
-                }
-                else if (e.catRespawned) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
+                if (e.catRespawned) angs[i] = ((e.heading << 14) + 0x1000) & 0xffff;
                 else angs[i] = stepAngle(angs[i], e.heading, e.mouse ? sim.mouseSpeed : sim.catSpeed);
             }
         }
@@ -644,7 +643,7 @@ struct App {
             }
             if (i == sim.ents.size()) break;
             const Entity& en = sim.ents[i];
-            if (en.drawsHoleFall() || (en.rocketIn && !en.fallingInHole() && en.rocketCounter > 0.0f)) {
+            if (en.drawsHoleFall() || en.drawsRocketEntry()) {
                 fieldObjects.push_back({std::max(-64, static_cast<int>(en.z)), en.x, en.z, i, false});
                 continue;
             }

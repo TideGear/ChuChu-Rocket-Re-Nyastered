@@ -38,12 +38,13 @@ struct Arrow { int x, y, dir, hits; bool live; int owner = 0, ttl = -1; };   // 
 struct Entity {
     bool mouse = true, alive = true, done = false, hit = false;   // hit: contact flag set by the collision pass, consumed at the start of the next tick
     float x = 0, z = 0;
-    bool rocketIn = false; float rocketCounter = 1.0f;   // battle cat inside a rocket (30-tick animation, then respawn at a random generator)
+    bool rocketIn = false; float rocketCounter = 1.0f;   // cat exit animation scale; Battle respawns when it reaches zero
     int catHoleFallTick = -1;
     bool catRespawned = false;  // the generator snap happened on this tick
     float catWalkScale = -1.0f;  // negative until the original scaled walking task is selected
     bool fallingInHole() const { return catHoleFallTick >= 0 && (rocketIn || !alive); }
     bool drawsHoleFall() const { return fallingInHole() && rocketCounter > 0.0f; }
+    bool drawsRocketEntry() const { return rocketIn && !fallingInHole() && rocketCounter > 0.0f; }
     bool reg = false;
     bool fresh = false;         // spawned before this tick's entity pass: first moves next tick, no contact this tick
     int slot = -1;              // task-pool slot (the collision entry stores the task pointer: a reused slot is read through the new occupant)
@@ -96,7 +97,7 @@ public:
         if (!battle) {
             const float fallStep = 0.2f * bitsToFloat(kRocketStepBits);
             for (auto& cat : ents) {
-                if (!cat.drawsHoleFall()) continue;
+                if (!(cat.drawsHoleFall() || cat.drawsRocketEntry())) continue;
                 cat.rocketCounter = std::max(0.0f, cat.rocketCounter + fallStep);
             }
         }
@@ -295,7 +296,7 @@ private:
                 if (e.mouse) scheduleFree(&e - ents.data(), now + 1, false);       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
                 return;
             }
-            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
+            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; e.rocketIn = true; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
             if (battle && (f & kHole)) { events.push_back(e.mouse ? Event{Event::MouseHole, 0, e.type} : Event{Event::CatRocket, -1, 0});
                 if (e.mouse || !rnd) e.alive = false;
                 else {

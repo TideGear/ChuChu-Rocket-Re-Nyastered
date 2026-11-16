@@ -27,6 +27,7 @@ def verify_handoff_and_respawn():
     rng_calls = []
     sounds = []
     walking_draws = []
+    deleted = []
     random_value = 0.0
 
     def trace(uc, address, size, data):
@@ -38,9 +39,11 @@ def verify_handoff_and_respawn():
         elif address == 0x1a250:
             flags, scale, alpha = struct.unpack('<IfI', oracle.read(uc.reg_read(UC_ARM_REG_SP), 12))
             walking_draws.append((oracle._r(0), oracle._r(1), flags, scale, alpha))
+        elif address == 0x17fb8:
+            deleted.append(oracle._r(0))
         uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
 
-    for address in (0x152c4, 0x17dd0, 0x1a250, 0x14cd0):
+    for address in (0x152c4, 0x17dd0, 0x1a250, 0x14cd0, 0x17fb8):
         oracle.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
     for random_value, index in ((0.0, 0), (0.25, 0), (0.26, 1), (0.51, 2), (0.99, 3)):
         position = (37.75, 0, 67.5)
@@ -112,6 +115,18 @@ def verify_handoff_and_respawn():
             assert u2f(oracle.u32(task + 0x30)) == 7.75
         assert rng_calls == [random_value] and not sounds
     print('5 iPad cat respawns, 4 interrupted hole falls, and 5 rocket entry lifetimes matched')
+    oracle.write(game, struct.pack('<I', 3))
+    oracle.write(hole_flag, bytes(4))
+    oracle.write(task + 0x10, struct.pack('<2h3fii3f', 2, 4, *position, 0x3333, 0, 0, 1, 7.75))
+    oracle.call(0x14524, task)
+    assert (oracle.u32(task + 0x40), oracle.u32(task + 0x44)) == (0x147b5, 0x14911)
+    assert oracle.u32(hole_flag) == 1
+    rng_calls.clear()
+    for tick in range(1, 152):
+        oracle.call(0x147b4, task)
+        assert deleted == ([task] if tick == 151 else []), tick
+    assert not rng_calls and not sounds
+    print('iPad Puzzle cat rocket entry retired after 151 updates without respawning')
 
 
 def verify_overlap():
