@@ -1,7 +1,7 @@
 """Trace model, animation and texture submissions from the Dreamcast executable."""
 from pathlib import Path
 
-from sh4 import SH4
+from sh4 import SENTINEL, SH4
 
 BASE = 0x8c010000
 ROOT = Path(__file__).resolve().parents[2]
@@ -183,9 +183,65 @@ def verify_mouse_frame_callers(binary):
     print('Dreamcast mouse frame callers matched 333 task snapshots, including wrap')
 
 
+def verify_gameplay_frame_clock(binary):
+    sh = SH4()
+    sh.load(BASE, binary)
+    tasks = (0x8cfe0000, 0x8cfe0100)
+
+    def stop_at_boundary(machine):
+        machine.pr = SENTINEL | 0x80000000
+
+    sh.hooks.update({
+        0x0c019b16: stop_at_boundary,
+        0x0c019b2e: stop_at_boundary,
+        0x0c016512: lambda m: m.r.__setitem__(0, 1),
+    })
+    for start in (0, 7, 15):
+        for tick in range(start):
+            sh.call(0x8c016cc8)
+        sh.call(0x8c016cc0)
+        assert sh.call(0x8c016cd2) == 0
+        for tick in range(18):
+            assert sh.call(0x8c016cd2) == tick
+            for task in tasks:
+                sh.r[14] = task
+                sh.call(0x8c019b0c)
+                assert sh.rd32(task + 0x34) == tick & 7
+            # A collision response can turn the mouse and skip the frame write.
+            sh.r[14] = tasks[1]
+            sh.wr32(tasks[1] + 0x34, (tick + 1) & 7)
+            sh.call(0x8c019a00)
+            assert sh.rd32(tasks[1] + 0x34) == (tick + 1) & 7
+            sh.call(0x8c016cc8)
+        sh.call(0x8c016cc0)
+    print('Dreamcast gameplay mouse frames matched shared clock, reset, and collision skip')
+
+
+def verify_clock_scheduler(binary):
+    sh = SH4()
+    sh.load(BASE, binary)
+    ticks = []
+    for address in (0x8c018320, 0x8c01f8f4, 0x8c01a174, 0x8c01909c,
+                    0x8c01575a, 0x8c020816, 0x8c011e08, 0x8c016e94, 0x8c01a0d2):
+        sh.hooks[address & 0x1fffffff] = lambda m: m.r.__setitem__(0, 0)
+    sh.hooks[0x0c016848] = lambda m: m.r.__setitem__(0, blocked)
+    sh.hooks[0x0c0190cc] = lambda m: m.r.__setitem__(0, state)
+    sh.hooks[0x0c016a3c] = lambda m: m.r.__setitem__(0, running)
+    sh.hooks[0x0c01efd2] = lambda m: ticks.append(m.rd32(0x8c1ae8d8))
+    sh.call(0x8c016cc0)
+    for blocked, state, running in ((0, 0, 1), (1, 0, 1), (0, 3, 1),
+                                     (0, 0, 0), (0, 0, 1)):
+        sh.call(0x8c018426)
+    assert ticks == [0, 1]
+    assert sh.call(0x8c016cd2) == 2
+    print('Dreamcast task pass precedes the clock increment and three scheduler gates hold it')
+
+
 if __name__ == '__main__':
     binary = (ROOT / 'local/cache/assets/dreamcast/files/1ST_READ.BIN').read_bytes()
     verify_cat(binary)
     verify_mouse_models(binary)
     verify_mouse_draw(binary)
     verify_mouse_frame_callers(binary)
+    verify_gameplay_frame_clock(binary)
+    verify_clock_scheduler(binary)
