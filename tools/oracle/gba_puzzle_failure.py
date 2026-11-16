@@ -1,4 +1,4 @@
-"""Trace a forced catch and retry from a local GBA Puzzle planning snapshot."""
+"""Trace a forced catch and post-failure controls in GBA Puzzle."""
 import argparse
 import pickle
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_WRITE
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 
-from gba_session import GBA, ROM, run
+from gba_session import GBA, ROM, boot_to_menu, run
 
 
 def probe(state, force_catch, after_start=None, followup=()):
@@ -52,33 +52,49 @@ def probe(state, force_catch, after_start=None, followup=()):
         assert catches == [12]
         assert marker_updates == list(range(13, 133))
         assert writes == [(12, 255, 0x08002e7c), (133, 0, 0x08000f00)]
-        expected_sounds.extend(followup)
     else:
         assert not marker_updates and not writes
-        expected_sounds.extend((frame, 37, 0x08003079)
-                               for frame in (72, 82, 92, 102, 112, 192, 202, 212, 222, 232))
+    expected_sounds.extend(followup)
     assert sounds == expected_sounds, sounds
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('snapshot', type=Path, help='local gba_session Puzzle planning fixture')
-    args = parser.parse_args()
-    with args.snapshot.open('rb') as stream:
-        state = pickle.load(stream)
-    probe(state, False)
+def verify_stage(state, panel_placed):
+    rescue_frames = (72, 82, 92, 102, 112, 192, 202, 212, 222, 232) if panel_placed else ()
+    probe(state, False, followup=[(frame, 37, 0x08003079) for frame in rescue_frames])
     probe(state, True)
     for key in ('A', 'B', 'T', 'r'):
         probe(state, True, (20, key))
     for frame in (125, 131, 132):
         probe(state, True, (frame, 'A'))
+    panel_cue = (6, 0x0800c0b3) if panel_placed else (4, 0x0800c12f)
     for frame, response in ((133, 135), (134, 135), (135, 136), (260, 261)):
         for key in ('A', 'B'):
-            probe(state, True, (frame, key), [(response, 6, 0x0800c0b3)])
+            probe(state, True, (frame, key), [(response, *panel_cue)])
     probe(state, True, (133, 'T'), [(136, 35, 0x08001b0f)])
-    rescue = [(frame, 37, 0x08003079) for frame in range(196, 237, 10)]
+    rescue = [(frame + 124, 37, 0x08003079) for frame in rescue_frames if frame < 120]
     probe(state, True, (133, 'r'), [(135, 5, 0x0800b13d), *rescue])
-    print('19 GBA Puzzle cases matched, including input around the failure transition')
+    print(f'19 GBA Puzzle cases matched with the panel {"placed" if panel_placed else "in stock"}')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('snapshot', type=Path, nargs='?', help='optional trusted local fixture with a panel placed')
+    args = parser.parse_args()
+    if args.snapshot:
+        with args.snapshot.open('rb') as stream:
+            verify_stage(pickle.load(stream), panel_placed=True)
+        return
+
+    gba = boot_to_menu(cache=False)
+    run(gba, 240, {10: 'U', 30: 'R', 60: 'A'})
+    selection = gba.save_state()
+    for panel_placed in (False, True):
+        gba.load_state(selection)
+        keys = {30: 'A'}
+        if panel_placed:
+            keys[220] = 'A'
+        run(gba, 300, keys)
+        verify_stage(gba.save_state(), panel_placed)
 
 
 if __name__ == '__main__':

@@ -7,13 +7,20 @@ from gba_render import render
 from PIL import Image
 ROM = r'C:\Dev\ChuChu Rocket\analysis\gba\ccr.gba'; SNAPDIR = r'C:\Dev\ChuChu Rocket\local\gba_snaps'
 KMAP = {'A': 1, 'B': 2, 'S': 4, 'T': 8, 'R': 16, 'L': 32, 'U': 64, 'D': 128, 'r': 256, 'l': 512}
-def boot_to_menu():
+def boot_to_menu(cache=True):
     p = os.path.join(SNAPDIR, 'menu.pkl')
     g = GBA(ROM)
-    if os.path.exists(p): g.load_state(pickle.load(open(p, 'rb'))); return g
+    if cache and os.path.exists(p):
+        with open(p, 'rb') as stream:
+            g.load_state(pickle.load(stream))
+        return g
     script = {420: 'A', 520: 'A', 1200: 'A', 1300: 'A', 1400: 'A', 1620: 'T'}
     run(g, 1760, script)
-    os.makedirs(SNAPDIR, exist_ok=True); pickle.dump(g.save_state(), open(p, 'wb')); return g
+    if cache:
+        os.makedirs(SNAPDIR, exist_ok=True)
+        with open(p, 'wb') as stream:
+            pickle.dump(g.save_state(), stream)
+    return g
 def run(g, frames, script, snaps=(), prefix=None, base=0):
     keys = 0; hold = 0
     for f in range(frames):
