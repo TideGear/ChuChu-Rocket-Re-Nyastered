@@ -54,6 +54,7 @@ public:
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
+    int forceOutcome = -1;
     void start(const Stage& st, uint32_t seed) {
         for (float& q : puku) q = 1.0f;
         sim.battle = true; sim.trace = debug; sim.load(st);
@@ -176,7 +177,7 @@ private:
         cancelEvents(rollSlot);   // a new roll deletes the running event task (measured: GA_SetCharaSpeed(1.0) at the roll frame in the original)
         int rem = std::max(0, (roundFrames - clock) / 60);
         unsigned bcd = (unsigned)(((rem / 60) << 8) | (((rem % 60) / 10) << 4) | (rem % 10));   // minutes:seconds in BCD (TI_GetBCDTime layout still to be confirmed)
-        int out = roulette->roll(rankOf(lastRoller_), fixedBcd >= 0 ? (unsigned)fixedBcd : (bcd << 8), fixedGameTime >= 0 ? fixedGameTime : frame + gtOff, -1); roulette->record(out);
+        int out = roulette->roll(rankOf(lastRoller_), fixedBcd >= 0 ? (unsigned)fixedBcd : (bcd << 8), fixedGameTime >= 0 ? fixedGameTime : frame + gtOff, -1); if (forceOutcome >= 0) out = forceOutcome; roulette->record(out);   // forceOutcome: verification only (the original's selector replaced by a constant)
         if (debug) printf("ROLL f%d player %d outcome %d\n", frame, p, out);
         lastRoller_ = p; sim.releaseSlot(roll_.slot); roll_.slot = sim.allocSlot(-2); roll_.active = true; roll_.elapsed = -1; roll_.outcome = out; lastRoll.push_back(out);
     }
