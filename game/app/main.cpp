@@ -2024,13 +2024,27 @@ struct PuzzleMode : Screen {
         if (phonePuzzleHudAvailable(a)) {
             // Android renderPuzzleHudLeft subtracts the caller's 4px inset from (30, 40).
             a.blit(a.phonePuzzleHud, 0, phoneX + 2 * 26, phoneY + 2 * 40, 2.0f);
+            // renderPuzzleHudiPhone (Android 0x5f95c): arrow slot panel frames 2, 3 (three times, 32 apart) and 4 at x 29 from y 101, then each
+            // remaining arrow direction in AR_GetArrowdataPuzzle order east, west, north, south: image 0x5f frame 0 at (24, y) scale 0.8 rotated
+            // 4/12/0/8 sixteenths, count text at (48, y) scale 0.6, y from 112 in steps of 36. tools/oracle/android_puzzle_hud_calls.py records these calls.
+            // Not drawn yet: the name frame (0x73 frame 5 at 29,308) and the "stage" label and number shown while puzzlestage_endflag is 1.
+            auto phoneHudAt = [&](int frame, float y) { a.blit(a.phonePuzzleHud, frame, phoneX + 2 * 29.0f, phoneY + 2 * y, 2.0f); };
+            phoneHudAt(2, 101.0f);
+            for (int k = 0; k < 3; k++) phoneHudAt(3, 133.0f + 32.0f * k);
+            phoneHudAt(4, 229.0f);
+            { static const int ord[4] = {3, 1, 2, 0}; static const int rot16[4] = {4, 12, 0, 8}; float y = 112.0f;
+              for (int k = 0; k < 4; k++) { const int d = ord[k], left = stock[d] - used(d); if (left <= 0) continue;
+                  a.blit(a.arw, 0, phoneX + 2 * 24.0f, phoneY + 2 * y, 0.8f, rot16[k] * 22.5);   // the port arrow art is already twice the handset resolution
+                  { const int h = 47; const std::string t = std::to_string(left); SDL_SetTextureColorMod(a.font.tex, 0, 0, 0); a.text(t, (int)(phoneX + 2 * 48.0f) - a.textWidth(t, h) / 2, (int)(phoneY + 2 * y) - h / 2, h); SDL_SetTextureColorMod(a.font.tex, 255, 255, 255); } y += 36.0f; } }
         } else {
             a.blit(a.hdPhud, 0, 85.0f, 190.0f);
         }
+        if (!phonePuzzleHudAvailable(a)) {
         { float x = (float)OX + 40.0f; a.blit(a.hdPhud, 2, x, 690.0f); for (int k = 0; k < 10; k++) { x += 64.0f; a.blit(a.hdPhud, 3, x, 690.0f); } x += 64.0f; a.blit(a.hdPhud, 4, x, 690.0f); }
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
         { static const int ord[4] = {3, 1, 2, 0}; static const int rot16[4] = {4, 12, 0, 8}; float x = (float)OX + 64.0f;
           for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.blit(a.arw, 0, x, 706.0f, 0.6f, rot16[k] * 22.5); x += 60.0f; } } }
+        }
         a.drawFrame5(90, 410, 180); a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
