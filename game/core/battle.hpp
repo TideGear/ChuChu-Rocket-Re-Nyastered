@@ -54,7 +54,7 @@ public:
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
-    int forceOutcome = -1;
+    int forceOutcome = -1; int decLag = 2;   // verification: ticks between a mouse's collision event and the generator counter change
     void start(const Stage& st, uint32_t seed) {
         for (float& q : puku) q = 1.0f;
         sim.battle = true; sim.trace = debug; sim.load(st);
@@ -148,8 +148,11 @@ private:
     void runCpu() { if (gbaCpu) { gbaRun(); return; } if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
     int pendMice_ = 0, pendCnt1_ = 0, pendCnt2_ = 0;   // GE_MouseCountDown runs when the mouse task is destroyed, one tick after the collision event
     void decMice(int type) { if (type == 0) pendMice_++; if (type == 1) pendCnt1_++; if (type == 2) pendCnt2_++; }
+    int pend3Mice_ = 0, pend3Cnt1_ = 0, pend3Cnt2_ = 0;
     int pend2Mice_ = 0, pend2Cnt1_ = 0, pend2Cnt2_ = 0;
-    void applyMiceDec() { gen->mice -= pend2Mice_; gen->cnt1 -= pend2Cnt1_; gen->cnt2 -= pend2Cnt2_; pend2Mice_ = pendMice_; pend2Cnt1_ = pendCnt1_; pend2Cnt2_ = pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; }
+    void applyMiceDec() {
+        if (decLag == 3) { gen->mice -= pend3Mice_; gen->cnt1 -= pend3Cnt1_; gen->cnt2 -= pend3Cnt2_; pend3Mice_ = pend2Mice_; pend3Cnt1_ = pend2Cnt1_; pend3Cnt2_ = pend2Cnt2_; pend2Mice_ = pendMice_; pend2Cnt1_ = pendCnt1_; pend2Cnt2_ = pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; return; }
+        if (decLag == 1) { gen->mice -= pendMice_; gen->cnt1 -= pendCnt1_; gen->cnt2 -= pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; return; } gen->mice -= pend2Mice_; gen->cnt1 -= pend2Cnt1_; gen->cnt2 -= pend2Cnt2_; pend2Mice_ = pendMice_; pend2Cnt1_ = pendCnt1_; pend2Cnt2_ = pendCnt2_; pendMice_ = pendCnt1_ = pendCnt2_ = 0; }
     void handle(const Event& e) {
         if (debug) printf("f%d event kind %d player %d type %d\n", frame, (int)e.kind, e.player, e.type);
         switch (e.kind) {
@@ -284,7 +287,7 @@ private:
     }
     void spawnCatFever() {                                                // GE_SetCatFever: four cats, generator slots in rotation
         size_t n = sim.gens.size(); if (n == 0) return;
-        size_t idx = 0; for (int k = 0; k < 4; k++) { const auto& g = sim.gens[idx % n]; sim.spawn(false, 0, g.x, g.y, g.dir); idx++; }
+        size_t idx = 0; for (int k = 0; k < 4; k++) { const auto& g = sim.gens[idx % n]; sim.spawn(false, 0, g.x, g.y, g.dir); gen->spawns.push_back({frame, true, g.x, g.y, g.dir, 0}); spawned_ = gen->spawns.size(); idx++; }   // recorded like the original's spawn log; already spawned here
     }
     void updateEvent() {
         stepRoulette();
