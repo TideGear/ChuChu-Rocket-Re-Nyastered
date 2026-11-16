@@ -167,7 +167,7 @@ struct App {
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
-    Sheet phonePauseButton, phonePauseTitle, phonePausePanel;
+    Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
     const std::string& str(int id) { static const std::string none; auto it = strs.find(id); return it == strs.end() ? none : it->second; }
     void loadStrings() {
@@ -240,6 +240,7 @@ struct App {
         loadStrings();
         const char* phoneLocale = getenv("CCR_LANG");
         const std::string phoneArt = ret + "phone_" + (phoneLocale ? phoneLocale : "en") + "/";
+        loadSheet(phoneArt + "puzzle_hud", phonePuzzleHud);
         loadSheet(phoneArt + "pause_button", phonePauseButton);
         loadSheet(phoneArt + "pause_title", phonePauseTitle);
         loadSheet(ret + "phone_pause_panel", phonePausePanel);
@@ -1899,6 +1900,9 @@ struct PuzzleMode : Screen {
                !a.phonePauseTitle.fr.empty() && a.phonePausePanel.fr.size() > 2 &&
                !a.str(217).empty() && !a.str(218).empty();
     }
+    bool phonePuzzleHudAvailable(const App& a) const {
+        return a.hdPhud.fr.empty() && !a.phonePuzzleHud.fr.empty();
+    }
     // Fit the 480 × 320 handset UI at integer scale on the shared gameplay canvas.
     static constexpr int phoneX = (GW - 960) / 2, phoneY = (GH - 640) / 2;
     void drawPhonePause(App& a) const {
@@ -1936,8 +1940,9 @@ struct PuzzleMode : Screen {
             a.playSfx(4);
             return true;
         }
-        if (in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
-        if (in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
+        const bool phoneHud = phonePuzzleHudAvailable(a);
+        if (phoneHud ? handset(0, 0, 56, 40) : in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
+        if (phoneHud ? handset(0, 39, 56, 84) : in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
         return false;
     }
@@ -2016,7 +2021,12 @@ struct PuzzleMode : Screen {
         }
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
         { int n = cur % 25 + 1; a.blit(a.hdPhud, 1, 90.0f, 520.0f, 1.3f); a.blit(a.hdStageNum, n / 10, 70.0f, 584.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 120.0f, 584.0f, 1.3f); }   // renderPuzzleHudiPad: "stage" label (0x5c frame 1) at (90, 520) and the number (image 0x84, (stage mod 25) + 1, tens at (70, 584), ones at (120, 584)), all at scale 1.3; the stage-name frame and text are not drawn yet
-        a.blit(a.hdPhud, 0, 85.0f, 190.0f);   // renderHudLeft (0x11e18): image 0x5c frame 0 (Start/Dash, Cancel panel) at layout (+0x64, +0x68) = (85, 190); its glow highlights (image 0x9d frames 4/5/6) and button hit rects are not done yet
+        if (phonePuzzleHudAvailable(a)) {
+            // Android renderPuzzleHudLeft subtracts the caller's 4px inset from (30, 40).
+            a.blit(a.phonePuzzleHud, 0, phoneX + 2 * 26, phoneY + 2 * 40, 2.0f);
+        } else {
+            a.blit(a.hdPhud, 0, 85.0f, 190.0f);
+        }
         { float x = (float)OX + 40.0f; a.blit(a.hdPhud, 2, x, 690.0f); for (int k = 0; k < 10; k++) { x += 64.0f; a.blit(a.hdPhud, 3, x, 690.0f); } x += 64.0f; a.blit(a.hdPhud, 4, x, 690.0f); }
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
         { static const int ord[4] = {3, 1, 2, 0}; static const int rot16[4] = {4, 12, 0, 8}; float x = (float)OX + 64.0f;
