@@ -107,6 +107,33 @@ def verify_teardown_render():
     print('iPad Puzzle teardown leaves clear colour, stars and HUD before the board returns')
 
 
+def verify_star_updates():
+    env = hd_env.make()
+    oracle = env.o
+    oracle.call(0x15188)
+    screen = oracle.alloc(0xb00)
+    oracle.write(env.appdata + 0x668, struct.pack('<I', 0x2d))
+    calls = []
+
+    def trace(uc, address, size, data):
+        if address in (0x3cd38, 0x18294):
+            calls.append((address, oracle._r(0)))
+        uc.reg_write(UC_ARM_REG_R0, 0)
+        uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+
+    for address in (0x3cd38, 0x18294, 0x3bcb4):
+        oracle.uc.hook_add(UC_HOOK_CODE, trace, begin=address, end=address)
+    state = oracle.u32(0x18684)
+    for phase in (1, 2, 3, 6):
+        for dash in (0, 1):
+            calls.clear()
+            oracle.write(state + 4, struct.pack('<2I', phase, dash))
+            oracle.call(0x12994, screen)
+            assert [address for address, _ in calls] == [0x3cd38, 0x18294], (phase, dash, calls)
+            assert calls[0][1] == 0, (phase, dash, calls)
+    print('iPad Puzzle updates stars horizontally once before the loop in all eight fixtures')
+
+
 def main():
     oracle = hd_env.make().o
     state = oracle.u32(0x18684)
@@ -152,6 +179,7 @@ def main():
     print('4 iPad Puzzle cases matched, including Dash, task teardown and automatic arrow-preserving reset')
     verify_focus()
     verify_teardown_render()
+    verify_star_updates()
 
 
 if __name__ == '__main__':
