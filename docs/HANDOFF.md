@@ -1,4 +1,16 @@
-# Handoff (2026-11-13)
+# Handoff
+
+## Resume here (2026-11-15)
+
+The [README status table](../README.md#status-and-plan) summarizes the project goal, and the [roadmap](roadmap.md) records the evidence. The previous conversation used the full objective at `C:/Users/Tideg/.codex/attachments/615441e7-65bf-4203-92e3-0f9f11e4c08e/goal-objective.md`. Its final goal was to prepare this handoff. Use the file's project objective if it is available in the next conversation.
+
+- A single supported mobile archive supplies Puzzle and Battle. iPad HD 1.0 is the most complete single source for presentation. Add the Dreamcast disc for CD music and title art, the GBA ROM for extra puzzles, and `DEPuzzle.VMS` for the 25 playable Express puzzles. The other VMU saves are collected locally for future support. [Setup details](../README.md#which-original-files-do-i-need)
+- Standalone Dreamcast setup extracts the 100 main puzzles, 25 Battle boards, music and original art. Loading the Dreamcast boards with mobile art and replaying all 100 stored puzzle solutions have been verified. Dreamcast-only play and live Dreamcast model rendering remain open.
+- The latest headless probe executes the original Dreamcast cat dispatcher, mouse preparation, and mouse draw dispatcher. It verifies 100 cat cases, 24 prepared mouse models, and 256 mouse draws. Use `python tools/oracle/dc_character_draw.py` with Python 3.12 and the extracted US disc executable in `local/cache/assets/dreamcast/files/1ST_READ.BIN`. The probe records draw commands and uses controlled inputs. [Model details](dreamcast_models.md)
+- Resume the model audit at the callers of mouse draw `0x8c019e26`. Find the task field that supplies frame 0–7 and verify progression and wrap. Then trace camera transforms, depth and occlusion before integrating the extracted meshes. The normal renderer still uses mobile sprites. Cross-check [known gaps](known_gaps.md) against the dated roadmap entries before relying on older status notes.
+- Build with `build.cmd --target ccr`. The offline archive cache for this workspace is `local/tools/archives`. Keep tests headless and silent, keep original files and derived assets local, and commit verified changes without AI attribution.
+
+## Historical handoff (2026-11-13)
 
 Goal text: `local/goal.txt` (not committed) / the 9-item goal pasted via /goal. Working rules: no AI attribution in commits (user CLAUDE.md); headless tests only; never claim "verified" without a measured diff; audit per-frame screen loops, not just the sim (memory: audit-screen-loops).
 

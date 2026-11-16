@@ -9,6 +9,8 @@ CAT_DRAW = 0x8c0119fe
 TEXTURE = 0x8c0df1f8
 MORPH_DRAW = 0x8c0e673e
 QUAD_DRAW = 0x8c0e4328
+MOUSE_DRAW = 0x8c019e26
+MOUSE_SLOTS = 0x8c1af10c
 
 
 def texture_names(sh, binary, table):
@@ -59,7 +61,7 @@ def verify_mouse_models(binary):
     sh = SH4()
     sh.load(BASE, binary)
     calls = []
-    slots = 0x8c1af10c
+    slots = MOUSE_SLOTS
     sh.hooks.update({
         0x8c016bd4 & 0x1fffffff: lambda m: m.r.__setitem__(0, costume),
         0x8c018d9c & 0x1fffffff: lambda m: calls.append(('prepare',)),
@@ -90,7 +92,68 @@ def verify_mouse_models(binary):
     print('Dreamcast mouse preparation matched all 24 model submissions and skips the sprite costume')
 
 
+def verify_mouse_draw(binary):
+    sh = SH4()
+    sh.load(BASE, binary)
+    calls = []
+    costume = 0
+
+    def attachment(machine):
+        calls.append(('attachment', *machine.r[4:7]))
+        machine.r[0] = machine.r[4] + 4
+
+    hooks = {
+        0x8c016bd4: lambda m: m.r.__setitem__(0, costume),
+        TEXTURE: lambda m: calls.append(('textures', m.r[4])),
+        QUAD_DRAW: lambda m: calls.append(('quad', *m.r[4:7])),
+        0x8c0e0a1c: lambda m: calls.append(('material', m.r[4])),
+        0x8c0e8574: lambda m: calls.append(('prepare',)),
+        0x8c0e9056: lambda m: calls.append(('model', m.r[4])),
+        0x8c0e6e56: lambda m: calls.append(('motion', *m.r[4:6], float(m.fget(4)))),
+        0x8c0e65fe: lambda m: calls.append(('shape', *m.r[4:6], float(m.fget(4)))),
+        0x8c018c80: attachment,
+        0x8c018d54: lambda m: calls.append(('draw attachment', *m.r[4:7])),
+    }
+    sh.hooks.update({addr & 0x1fffffff: cb for addr, cb in hooks.items()})
+    slots = [0x8cfe0000 + i * 0x100 for i in range(8)]
+    for i, address in enumerate(slots):
+        sh.wr32(MOUSE_SLOTS + 4 * i, address)
+
+    lists = (0x8c085d18, 0x8c085d8c, 0x8c085e2c, 0x8c0b4c24)
+    for costume, textures in enumerate(lists):
+        for mouse_type in range(4):
+            for frame, model in enumerate(slots):
+                for heading in (0x7fff, 0x8000):
+                    calls.clear()
+                    sh.call(MOUSE_DRAW, mouse_type, frame, heading)
+                    expected = [('textures', textures)]
+                    if costume in (1, 2):
+                        expected.append(('material', 0x8c0b4c18))
+                    if costume == 3:
+                        expected.append(('quad', 0x8c0b4ccc, frame >> 1,
+                                         52 if heading & 0x8000 else 48))
+                    elif mouse_type == 0 or (costume == 2 and mouse_type < 3):
+                        expected.extend([('prepare',), ('model', model)])
+                    elif mouse_type == 1:
+                        obj, motion = ((0x8c0960ec, 0x8c09661c) if costume == 0
+                                       else (0x8c09962c, 0x8c0a26cc))
+                        expected.append(('motion', obj, motion, frame))
+                    elif mouse_type == 2 and costume == 0:
+                        expected.extend([
+                            ('attachment', 0x8c076568, 0x8c076574, textures),
+                            ('attachment', 0x8c076580, 0x8c07658c, textures),
+                            ('shape', 0x8c08e138, 0x8c0963d0, frame),
+                            ('draw attachment', 0x8c076568, 0x8c07656c, textures),
+                            ('draw attachment', 0x8c076580, 0x8c076584, textures),
+                        ])
+                    elif mouse_type == 2:
+                        expected.append(('shape', 0x8c09a59c, 0x8c0a20c0, frame))
+                    assert calls == expected, (costume, mouse_type, frame, heading, calls)
+    print('Dreamcast mouse draw matched 256 costume, type, frame, and heading cases')
+
+
 if __name__ == '__main__':
     binary = (ROOT / 'local/cache/assets/dreamcast/files/1ST_READ.BIN').read_bytes()
     verify_cat(binary)
     verify_mouse_models(binary)
+    verify_mouse_draw(binary)
