@@ -40,18 +40,21 @@ def main(root, out):
         if p:
             with Image.open(p) as image:
                 write_atlas(root, out, 'main', rec, nxt, name, image)
-    # Slot 0x86 resolves to resources 665 and 669 in both verified Android builds.
-    # The 576 base records precede the per-language resources.
+    # Both Android builds put 576 base records before the localized resources.
+    # The Puzzle HUD uses slots 0x67 and 0x73. The pause overlay uses 0x86.
+    localized = ((40, 42, 'puzzle_hud'), (62, 64, 'pause_button'), (89, 93, 'pause_title'))
     import textures
     for locale in ('en', 'fr', 'de', 'es', 'it', 'ja'):
         pack = os.path.join(root, 'libccrjni', locale)
         if not os.path.isfile(os.path.join(pack, 'index.json')):
             continue
-        title = next((t for t in textures.textures(pack) if t['rec'] == 89), None)
-        if title and title['next'] == 93:
-            dest = os.path.join(out, 'phone_' + locale)
-            os.makedirs(dest, exist_ok=True)
-            write_atlas(root, dest, locale, 89, 93, 'pause_title', textures.to_image(title))
+        sheets = {t['rec']: t for t in textures.textures(pack)}
+        dest = os.path.join(out, 'phone_' + locale)
+        os.makedirs(dest, exist_ok=True)
+        for rec, frames, name in localized:
+            sheet = sheets.get(rec)
+            if sheet and sheet['next'] == frames:
+                write_atlas(root, dest, locale, rec, frames, name, textures.to_image(sheet))
 
 if __name__ == '__main__':
     main(sys.argv[1], sys.argv[2])
