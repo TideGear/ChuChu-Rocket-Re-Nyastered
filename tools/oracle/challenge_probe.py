@@ -89,6 +89,10 @@ def run(stage, frames):
         if os.environ.get('DUMPARR') and f in [int(x) for x in os.environ['DUMPARR'].split(',')]:
             pa = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
             print('ARR f%d' % f, struct.unpack('<24i', o.read(o.u32(BASE + pa), 96)))
+        if os.environ.get('TRACKCNT'):   # log every change of the rocket / eaten counters (frame, value)
+            cur = (struct.unpack('<i', o.read(BASE + 0x17bbb4 - G, 4))[0], struct.unpack('<i', o.read(BASE + 0x17bbc0 - G, 4))[0])
+            if cur != globals().get('_lastcnt'):
+                print('CNT f%d rocket %d eaten %d' % (f, cur[0], cur[1])); globals()['_lastcnt'] = cur
         b = block()
         if b[3] != last:
             print('f%d phase %d block %s' % (f, b[3], b))
