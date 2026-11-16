@@ -22,6 +22,7 @@ public:
         }
         return idx;
     }
+    void setTable(const float* t) { for (int i = 0; i < 128; i++) table_[i] = t[i]; }   // test harness: the same table as written into the emulated original
     void fillTable(float v) { for (float& t : table_) t = v; }   // test harness: constant thresholds (the emulated original's table can be written directly)
     void record(int outcome) { lastB = lastA; lastA = outcome; }
 private:
