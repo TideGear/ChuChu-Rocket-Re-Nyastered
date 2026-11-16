@@ -75,7 +75,45 @@ static bool loadStageSet(const std::string& root, int set, Stages& out) {
     return set == 0 && loadStages((root + "/mobile_puzzles.bin").c_str(), out, kMobilePuzzleSource);
 }
 
+struct App;
+struct StarBackground {
+    struct Star { float x, y, speed; int frame; };
+    struct Twinkle { float x, y; int period, remaining; };
+    std::array<Star, 322> stars;
+    std::array<Twinkle, 161> twinkles;
+    StarBackground() {
+        // Use the original generator on a separate stream so visuals cannot affect play.
+        Rng rng(1);
+        for (auto& star : stars) {
+            star.x = static_cast<float>(rng.u32() % GW);
+            star.y = static_cast<float>(rng.u32() % GH);
+            star.speed = (rng.u32() & 255) * (1.0f / 64) + 0.3f;
+            star.frame = rng.u32() & 31;
+        }
+        for (auto& star : twinkles) {
+            star.x = static_cast<float>(rng.u32() % GW);
+            star.y = static_cast<float>(rng.u32() % GH);
+            star.period = 3 + (rng.u32() & 63);
+            star.remaining = rng.u32() % star.period;
+        }
+    }
+    void tick(bool vertical) {
+        for (auto& star : stars) {
+            if (vertical) {
+                star.y += 2.0f * star.speed;
+                if (star.y > GH) star.y -= GH;
+            } else {
+                star.x = static_cast<float>(star.x - 1.5 * star.speed);
+                if (star.x < 0.0f) star.x += GW;
+            }
+        }
+        for (auto& star : twinkles) if (--star.remaining < 0) star.remaining = star.period;
+    }
+    void draw(App& a) const;
+};
+
 struct App {
+    StarBackground stars;
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
@@ -724,6 +762,13 @@ struct App {
         }
     }
 };
+
+void StarBackground::draw(App& a) const {
+    if (!a.imgSheet(154)) return;
+    for (const auto& star : stars) a.drawImage(154, star.frame, star.x, star.y, 0, 1.0f, 128);
+    for (const auto& star : twinkles)
+        if (star.remaining * 2 < star.period) a.drawImage(154, 11, star.x, star.y, 0, 1.0f, 128);
+}
 
 static App* gApp = nullptr;   // for sound hooks
 struct Screen { virtual ~Screen() {} virtual void event(App&, const SDL_Event&) {} virtual void tick(App&) {} virtual void draw(App&, float) {} virtual int music() { return -1; } virtual const char* next() { return nullptr; } };
@@ -1747,26 +1792,6 @@ struct PadAim {
 // ---------------------------------------------------------------- puzzle
 struct PuzzleMode : Screen {
     static constexpr int kFailureHoldFrames = 120;
-    struct Star { float x, y, speed; int frame; };
-    struct Twinkle { float x, y; int period, remaining; };
-    std::array<Star, 322> stars;
-    std::array<Twinkle, 161> twinkles;
-    PuzzleMode() {
-        // Use the original generator on a separate stream so visuals cannot affect play.
-        Rng rng(1);
-        for (auto& star : stars) {
-            star.x = static_cast<float>(rng.u32() % GW);
-            star.y = static_cast<float>(rng.u32() % GH);
-            star.speed = (rng.u32() & 255) * (1.0f / 64) + 0.3f;
-            star.frame = rng.u32() & 31;
-        }
-        for (auto& star : twinkles) {
-            star.x = static_cast<float>(rng.u32() % GW);
-            star.y = static_cast<float>(rng.u32() % GH);
-            star.period = 3 + (rng.u32() & 63);
-            star.remaining = rng.u32() % star.period;
-        }
-    }
     MouseAim aim;
     bool mouseCursor = false;
     int failureFrames = 0;
@@ -1833,11 +1858,7 @@ struct PuzzleMode : Screen {
     }
     int cticks = 0;
     void tick(App& a) override {
-        for (auto& star : stars) {
-            star.x = static_cast<float>(star.x - 1.5 * star.speed);
-            if (star.x < 0.0f) star.x += GW;
-        }
-        for (auto& star : twinkles) if (--star.remaining < 0) star.remaining = star.period;
+        a.stars.tick(false);
         if (paused) return; cticks++;
         if (pad && state == 0) {
             padAim.tick(pad);
@@ -1894,11 +1915,7 @@ struct PuzzleMode : Screen {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255);   // iPad Puzzle clear colour (blue 0.1)
         SDL_RenderClear(a.ren);
-        if (a.imgSheet(154)) {
-            for (const auto& star : stars) a.drawImage(154, star.frame, star.x, star.y, 0, 1.0f, 128);
-            for (const auto& star : twinkles)
-                if (star.remaining * 2 < star.period) a.drawImage(154, 11, star.x, star.y, 0, 1.0f, 128);
-        }
+        a.stars.draw(a);
         if (hasBoardTasks) {
             const int set = gApp ? gApp->stageSet : 0;
             a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2);
@@ -2132,7 +2149,13 @@ struct BattleMode : Screen {
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) { tapped = true; drag.begin(a, e); }
         else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (d >= 0) place(0, cx, cy, d); }   // no drag = no arrow (Input::getArrowType returns 0)
     }
-    void tick(App& a) override { if (paused) return;
+    void tick(App& a) override {
+        if (back) return;
+        tickBattle(a);
+        // The iPad camera task switches StarsExec when the final win starts its rocket parade.
+        a.stars.tick(mode == 5 && sub5 == 3);
+    }
+    void tickBattle(App& a) { if (paused) return;
         if (intro >= 120 && mode == 2 && !game.rollPending()) {
             for (int p = 0; p < 4; ++p) {
                 if (!pads[p] || lv[p] >= 0) continue;
@@ -2186,7 +2209,8 @@ struct BattleMode : Screen {
     void nextRound() { roundNo++; cur = (cur + 1) % (int)stages.list.size(); restart(); mode = 2; }   // GA_SetStageNumber(stage + 1, wrapping to 0)
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
-        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        a.stars.draw(a);
         a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);

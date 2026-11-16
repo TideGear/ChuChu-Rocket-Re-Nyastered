@@ -168,17 +168,22 @@ def verify_star_motion():
              for x, y, speed, frame in groups[:322]]
     twinkles = [(x % 1024, y % 768, 3 + (period & 63), offset)
                 for x, y, period, offset in groups[322:]]
-    for tick in range(65):
+    for tick in range(131):
         draws.clear()
         oracle.call(0x3ce2c, 0)
         expected = [(frame, x, y) for frame, x, y, _ in stars]
         expected.extend((11, x, y) for x, y, period, offset in twinkles
                         if (offset % period - tick) % (period + 1) < period / 2)
         assert draws == expected, (tick, len(draws), len(expected))
-        oracle.call(0x3cd38, 0)
-        moved = [(frame, f32(x - 1.5 * speed), y, speed) for frame, x, y, speed in stars]
-        stars = [(frame, f32(x + 1024) if x < 0 else x, y, speed) for frame, x, y, speed in moved]
-    print('iPad star initialization, wrap and twinkles matched across 65 frames')
+        vertical = 65 <= tick < 130
+        oracle.call(0x3cd38, int(vertical))
+        if vertical:
+            moved = [(frame, x, f32(y + 2 * speed), speed) for frame, x, y, speed in stars]
+            stars = [(frame, x, f32(y - 768) if y > 768 else y, speed) for frame, x, y, speed in moved]
+        else:
+            moved = [(frame, f32(x - 1.5 * speed), y, speed) for frame, x, y, speed in stars]
+            stars = [(frame, f32(x + 1024) if x < 0 else x, y, speed) for frame, x, y, speed in moved]
+    print('iPad star initialization, horizontal and vertical wrap, and twinkles matched across 131 frames')
 
 
 def main():
