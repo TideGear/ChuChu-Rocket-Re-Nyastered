@@ -54,6 +54,7 @@ public:
     bool debug = false;
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
+    bool inCpu_ = false; bool arrowLatency = true; std::vector<std::pair<int,int>> pendRefresh_;   // verification: the arrow task registers its collision flag one tick after the placement call (Challenge)
     bool decFromFree = false;   // the generator counters drop when the mouse task is destroyed (one tick after the collision event), not at the event
     bool decDump = false; int forceOutcome = -1; int decLag = 2;   // verification: ticks between a mouse's collision event and the generator counter change
     void start(const Stage& st, uint32_t seed) {
@@ -87,7 +88,7 @@ public:
         if (f & (kRocket | kHole | kGenerator)) { if (sfx && player == localPlayer) sfx(0x13); return false; }
         int k = ring_[player]; int old = slot_[player][k];
         if (old >= 0 && sim.arrows[old].live) { sim.arrows[old].live = false; sim.refreshCell(sim.arrows[old].x, sim.arrows[old].y); }
-        sim.arrows.push_back({x, y, dir, 0, true, player, kArrowTtl}); sim.refreshCell(x, y);
+        sim.arrows.push_back({x, y, dir, 0, true, player, kArrowTtl}); if (arrowLatency && !inCpu_) pendRefresh_.push_back({x, y}); else sim.refreshCell(x, y);   // placements by the player (before the frame) register a tick later; the CPU task places inside the task pass and registers at once (cpu_test 10/10)
         slot_[player][k] = (int)sim.arrows.size() - 1; ring_[player] = (k + 1) % kArrowSlots;
         if (sfx && player == localPlayer) sfx(1);
         return true;
@@ -98,6 +99,8 @@ public:
         if (!roll_.active) { clock++; int left = roundFrames - clock; if (sfx && left >= 0 && left % 60 == 0 && left / 60 <= 5) sfx(0x13 - left / 60); }   // FourBattleLoop: ChuSECall(0x13 - seconds) as the BCD countdown (mm:ss:ff, ff = 60 Hz frames) reaches 5, 4, 3, 2, 1, 0 s
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
+        for (auto& c : pendRefresh_) sim.refreshCell(c.first, c.second);
+        pendRefresh_.clear();
         applyMiceDec();
         if (genFirst) { gen->frame(frame); spawnPending(true); }
         if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr, pendingRollSlot_); }   // the roll runs in the rolling mouse's destroy step, after the generator task (created first) of the same frame
@@ -148,7 +151,8 @@ private:
         static const int toDir[16] = {3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0};   // ROM arrow direction code (0 east, 4 south, 8 west, 12 north: the wall classifier returns the direction away from the wall) -> port direction (0 south, 1 west, 2 north, 3 east)
         for (int i = 0; i < e.nPlaced; i++) { const auto& pl = e.placed[i]; int d = toDir[pl.dir & 15]; placeArrow(pl.p, pl.x, pl.y, d); }
     }
-    void runCpu() { if (gbaCpu) { gbaRun(); return; } if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
+    void runCpu() { inCpu_ = true; runCpuBody(); inCpu_ = false; }
+    void runCpuBody() { if (gbaCpu) { gbaRun(); return; } if (cpuReverse) { for (int p = 3; p >= 0; p--) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); } else for (int p = 0; p < 4; p++) if (cpuLevel[p] >= 0) cpu[p].step(cpuEnv, cpuLcg); }
     int pendMice_ = 0, pendCnt1_ = 0, pendCnt2_ = 0;   // GE_MouseCountDown runs when the mouse task is destroyed, one tick after the collision event
     void decMice(int type, int kind = 0) { if (decDump && type == 0) { printf("DEC f%d k%d", frame, kind); putchar(10); } if (decLag == 0) { if (type == 0) gen->mice--; if (type == 1) gen->cnt1--; if (type == 2) gen->cnt2--; return; } if (type == 0) pendMice_++; if (type == 1) pendCnt1_++; if (type == 2) pendCnt2_++; }
     int pend3Mice_ = 0, pend3Cnt1_ = 0, pend3Cnt2_ = 0;
