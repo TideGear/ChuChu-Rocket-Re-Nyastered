@@ -6,7 +6,7 @@ import battle_probe as B
 from battle_probe import *
 from unicorn import UC_HOOK_CODE
 from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_PC, UC_ARM_REG_LR
-case, lo, hi = (int(a) for a in sys.argv[1:4])
+case, lo, hi = (int(a) for a in sys.argv[1:4]); LO, HI = (int(sys.argv[4]), int(sys.argv[5])) if len(sys.argv) > 5 else (1500, 1552)
 d = open(r'C:\Dev\ChuChu Rocket\analysis\extracted\dc_files\ENGLISH\BTSTAGE25.DAT', 'rb').read()
 idx, seed = (case, 1000 + case * 17) if case < 25 else (5, 2024)
 tiles, walls = ascii_stage(d[idx * 477:idx * 477 + 475])
@@ -30,7 +30,7 @@ def dist(uc, a, s, u):
         if dv < 12: print('DIST f%d r4task %x d %.5f' % (f, uc.reg_read(4), dv))
 def pos(uc, a, s, u):
     f = B.frame_no[0]
-    if 1500 <= f <= 1552:
+    if LO <= f <= HI:
         t = uc.reg_read(UC_ARM_REG_R0); x, y, z = struct.unpack('<3f', o.read(t + 0x14, 12)); ang, = struct.unpack('<i', o.read(t + 0x24, 4))
         print('POS f%d %.4f %.4f %d' % (f, x, z, ang))
 o.uc.hook_add(UC_HOOK_CODE, pos, begin=BASE + 0x352a0 - G, end=BASE + 0x352a0 - G + 2)

@@ -2,6 +2,7 @@
 #pragma once
 #include <cstdint>
 namespace ccr {
+inline unsigned long long g_rngDraws = 0;   // verification only: total BHLib_GetRandomNumber-equivalent draws
 class Rng {
 public:
     explicit Rng(uint32_t seed = 1) { seedWith(seed); }
@@ -11,6 +12,7 @@ public:
         idx_ = 624;
     }
     uint32_t u32() {
+        g_rngDraws++;
         if (idx_ >= 624) twist();
         uint32_t y = mt_[idx_++];
         y ^= y >> 11; y ^= (y << 7) & 0x9d2c5680u; y ^= (y << 15) & 0xefc60000u; y ^= y >> 18;

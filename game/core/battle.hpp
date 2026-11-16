@@ -95,11 +95,12 @@ public:
         if (over) return;
         frame++;
         if (!roll_.active) { clock++; int left = roundFrames - clock; if (sfx && left >= 0 && left % 60 == 0 && left / 60 <= 5) sfx(0x13 - left / 60); }   // FourBattleLoop: ChuSECall(0x13 - seconds) as the BCD countdown (mm:ss:ff, ff = 60 Hz frames) reaches 5, 4, 3, 2, 1, 0 s
-        if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr, pendingRollSlot_); }
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
         applyMiceDec();
         if (genFirst) { gen->frame(frame); spawnPending(true); }
+        if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr, pendingRollSlot_); }   // the roll runs in the rolling mouse's destroy step, after the generator task (created first) of the same frame
+
         if (cpuFirst) runCpu();
         prepareSpeedChange();
         sim.events.clear(); sim.tick();
@@ -234,9 +235,9 @@ private:
     void cancelEvents(int atSlot) {   // the roll runs in the RideOn task of the mouse that entered the rocket: the speed restore applies from that task's pool slot on
         if (evs_.empty()) return;
         float before = charaSpeed;
-        for (const Ev& e : evs_) { eventDest(e.kind); sim.releaseSlot(e.slot); }
-        evs_.clear(); event = -1;
         int atOrd = -1; if (atSlot >= 0) for (int k = (int)sim.ents.size() - 1; k >= 0; k--) if (sim.ents[k].slot == atSlot) { atOrd = k + 1; break; }   // the rolling mouse's place in the task list
+        for (const Ev& e : evs_) { const int keep = sim.monopoly; eventDest(e.kind); sim.releaseSlot(e.slot); if (e.kind == 7 && atOrd >= 0 && keep >= 0) { sim.monopoly = keep; sim.monoEnd = atOrd; } }   // the Monopoly global is cleared from the rolling mouse's task on
+        evs_.clear(); event = -1;
         if (charaSpeed != before) { sim.spdSlot = atOrd; sim.spdMouse = mouseSpeed(charaSpeed); sim.spdCat = baseScale * charaSpeed; if (atOrd < 0) applySpeed(); }
         else applySpeed();
     }
