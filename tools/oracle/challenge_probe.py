@@ -93,6 +93,7 @@ def run(stage, frames):
         if b[3] != last:
             print('f%d phase %d block %s' % (f, b[3], b))
             last = b[3]
+    print('counters rocket %d eaten %d' % (struct.unpack('<i', o.read(BASE + 0x17bbb4 - G, 4))[0], struct.unpack('<i', o.read(BASE + 0x17bbc0 - G, 4))[0]))
     print('end block', block(), 'unhandled', o.unhandled)
 
 
