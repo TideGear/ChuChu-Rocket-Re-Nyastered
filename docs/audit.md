@@ -7,9 +7,9 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Settings page and controller remap: **done** (screenshot read; pad remap untested on hardware).
 - Pad prompts in the HUD: **open** (`padButtonLabel` exists).
 ## B. Rules and modes
-- 26 whole-battle cases per forced roulette outcome: **done in the harness** (26/26 for outcomes 0-7, natural, Team); **open** against the real loop: the original freezes the action while the wheel spins (task mask 0x1f / 0x13), the harness never did; the port applies it only in Challenge stage 24 and the battle screen, not in the recorded goldens.
+- 26 whole-battle cases per forced roulette outcome: **done in the harness** (26/26 for outcomes 0-7, natural, Team); **done** against the real loop too: the original freezes the action while the wheel spins (task mask 0x1f / 0x13); recordings through the mask (`MASK=1`) are 26/26 for all eight outcomes.
 - Rank thresholds: **partial** (covered by the 26 cases; no separate check).
-- Team Battle: **done** in the harness; end-of-round result and score screens: **open**.
+- Team Battle: **done** through the real loop (26/26 for all eight forced outcomes; Everybody Move at other game times being re-recorded); end-of-round result and score screens: **open**.
 - Stage Challenge: types 0-4 (24 stages) **done** (stage types 3/4: 8 of 8 runs identical); stage 24 **partial** (seed 1000 identical; seed 2000 identical to f1540; seed 3000 identical to f1286, computer players then place one arrow a frame early).
 - Puzzle Edit: conversion and CRC **done**; screen, save format, validity rules, VMS/VMI export **open**.
 ## C. Version differences
