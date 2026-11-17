@@ -1,0 +1,15 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "ChuChu Rocket!",
+  "system": ["Dreamcast", "GBA", "iOS", "Android"],
+  "type": "port",
+  "project": "ChuChu Rocket! Re-Nyastered",
+  "status": "released",
+  "targets": ["Windows"],
+  "toolchain": "SDL2",
+  "approach": "Native C++ and SDL2 reimplementation informed by reverse engineering and comparisons with the original releases.",
+  "maintainers": [
+    { "name": "TideGear", "link": "https://github.com/TideGear" }
+  ],
+  "notes": "The Windows release supports Puzzle and local Battle with up to four players and CPU opponents. A supported iOS or Android copy supplies the base assets. Optional Dreamcast and GBA copies add music, artwork and boards. Android and browser builds are in development."
+}
