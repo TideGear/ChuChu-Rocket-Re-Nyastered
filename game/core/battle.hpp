@@ -105,6 +105,7 @@ public:
         bool replaced = false;
         if (old >= 0 && sim.arrows[old].live) { replaced = true; sim.arrows[old].live = false; if (heatArrowLag && !inCpu_) lateNext_.push_back({sim.arrows[old].x, sim.arrows[old].y}); else sim.refreshCell(sim.arrows[old].x, sim.arrows[old].y); }
         sim.arrows.push_back({x, y, dir, 0, true, player, kArrowTtl}); if (arrowLatency && !inCpu_) { if (replaced && heatArrowLag) pendRefresh2_.push_back({x, y}); else pendRefresh_.push_back({x, y}); } else sim.refreshCell(x, y);   // placements by the player (before the frame) register a tick later; the CPU task places inside the task pass and registers at once (cpu_test 10/10)
+        if (debug) printf("PUT f%d p%d cell %d,%d ring %d replaced %s %d,%d\n", frame, player, x, y, k, replaced ? "yes" : "no", replaced ? sim.arrows[old].x : -1, replaced ? sim.arrows[old].y : -1);
         slot_[player][k] = (int)sim.arrows.size() - 1; ring_[player] = (k + 1) % kArrowSlots;
         if (sfx && player == localPlayer) sfx(1);
         return true;

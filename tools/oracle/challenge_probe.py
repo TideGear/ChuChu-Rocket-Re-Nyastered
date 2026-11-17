@@ -173,6 +173,12 @@ def run(stage, frames):
                 h_ = ((int(os.environ['ARROWS']) * 1000003 + k * 7919) * 2654435761) & 0xffffffff
                 x_, y_, d_ = h_ % 12, (h_ >> 8) % 9, (h_ >> 16) % 4
             o.write(pt, struct.pack('<hh', x_, y_)); gcall(0x286ac, 0, pt, d_)
+        if os.environ.get('ARRSLOTS') and int(os.environ['ARRSLOTS'].split(',')[0]) <= f <= int(os.environ['ARRSLOTS'].split(',')[1]):   # ARRSLOTS=lo,hi: the arrow ring of players 0..3 (FUN_0002859c): ring index and per slot (ttl, x, y)
+            t_ = (lit(0x286a8) + 0x28614 - G) & 0xffffffff
+            for pl_ in range(4):
+                P_ = BASE + t_ + pl_ * 0x4c; ring_ = o.read(P_ + 0x2d, 1)[0]
+                sl_ = [(struct.unpack('<i', o.read(P_ + i * 0x18 + 0x34, 4))[0], struct.unpack('<hh', o.read(P_ + i * 0x18 + 0x38, 4))) for i in range(3)]
+                print('RING f%d p%d idx %d %s' % (f, pl_, ring_, sl_))
         if os.environ.get('COLLROW') and int(os.environ['COLLROW'].split(',')[0]) <= f <= int(os.environ['COLLROW'].split(',')[1]):   # COLLROW=lo,hi[,row]: the collision words of one row (12 cells) after the frame
             base_ = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff; row_ = int((os.environ['COLLROW'].split(',') + ['1'])[2])
             ws_ = struct.unpack('<12I', o.read(BASE + base_ + 48 * row_, 48)); print('COLL f%d row%d' % (f, row_), ' '.join('%x' % w for w in ws_))
@@ -226,6 +232,7 @@ def run(stage, frames):
         if os.environ.get('HEATW'):   # HEATW=lo,hi: the CPU heat map (108 int16, 12 columns) at the end of each frame; 'HEAT f<frame> <row 5 cols 3..7>' plus the nonzero count
             hlo, hhi = [int(v) for v in os.environ['HEATW'].split(',')]
             if hlo <= f <= hhi:
+                if os.environ.get('HEATFULL'): print('HFULL f%d' % f, ' '.join(str(v) for v in struct.unpack('<108h', o.read(o.u32(BASE + 0x79498 + 0x564 - G), 216))))
                 hp = o.u32(BASE + 0x79498 + 0x564 - G); hh = struct.unpack('<108h', o.read(hp, 216))
                 print('HEAT f%d' % f + ''.join(' (%d,5)=%d' % (x, hh[5 * 12 + x]) for x in range(3, 8)) + ' nz=%d sum=%d' % (sum(1 for v in hh if v), sum(hh)))
         b = block()
