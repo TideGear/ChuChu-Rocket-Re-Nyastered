@@ -122,6 +122,14 @@ def run(stage, frames):
                 r0 = uc.reg_read(UC_ARM_REG_R0); raw = o.read(r0, 0x34)
                 print('CPU f%d p%d state %d timer %d flags %#x cur %d,%d tgt %d,%d dir %d' % (f_, raw[0x2c], struct.unpack_from('<i', raw, 0)[0] & 0xff, struct.unpack_from('<i', raw, 4)[0], struct.unpack_from('<I', raw, 8)[0], struct.unpack_from('<h', raw, 0x10)[0], struct.unpack_from('<h', raw, 0x12)[0], raw[0x2d], raw[0x2e], raw[0x2f]))
         o.uc.hook_add(_HK, kcb, begin=BASE + 0x29fa8 - G, end=BASE + 0x29fa8 - G + 2)
+    if os.environ.get('ATTACKDBG'):   # ATTACKDBG=lo,hi: which think-task branches run (labels inside FUN_00029fa8: 0x2a0e4 defend, 0x2a02e own-rocket attack, 0x2a1d6 enemy-rocket attack, 0x2a290 random target, 0x2a1b6 target accepted)
+        alo_, ahi_ = [int(v) for v in os.environ['ATTACKDBG'].split(',')]
+        from unicorn import UC_HOOK_CODE as _HA
+        names_ = {0x2a0e4: 'defend', 0x2a02e: 'own', 0x2a1d6: 'enemy', 0x2a290: 'random', 0x2a1b6: 'accepted'}
+        def acb(uc, a_, sz, u):
+            f_ = globals().get('_curf', 0)
+            if alo_ <= f_ <= ahi_: print('BRANCH f%d %s r0=%#x' % (f_, names_[(a_ - BASE + G) & ~1], uc.reg_read(UC_ARM_REG_R0)))
+        for ga_ in names_: o.uc.hook_add(_HA, acb, begin=BASE + ga_ - G, end=BASE + ga_ - G + 2)
     if os.environ.get('TASKFLAGS'):   # the char ID byte (task + 2) and the exec function of every task the server visits, for the frame window lo,hi
         tlo, thi = [int(v) for v in os.environ['TASKFLAGS'].split(',')]
         from unicorn import UC_HOOK_CODE as _HT
@@ -179,6 +187,10 @@ def run(stage, frames):
                 P_ = BASE + t_ + pl_ * 0x4c; ring_ = o.read(P_ + 0x2d, 1)[0]
                 sl_ = [(struct.unpack('<i', o.read(P_ + i * 0x18 + 0x34, 4))[0], struct.unpack('<hh', o.read(P_ + i * 0x18 + 0x38, 4))) for i in range(3)]
                 print('RING f%d p%d idx %d %s' % (f, pl_, ring_, sl_))
+        if os.environ.get('PATHTEST') and f == int(os.environ['PATHTEST'].split(',')[0]):   # PATHTEST=frame,owner,x,y,dir: the original's FUN_00029f44 (target path check) on one candidate; prints its return value (non-zero: the arrow does NOT lead to the owner's rocket)
+            _, ow_, px_, py_, pd_ = [int(v) for v in os.environ['PATHTEST'].split(',')]
+            ptr_ = o.heap_ptr; o.heap_ptr += 16; o.write(ptr_, struct.pack('<hh', px_, py_))
+            print('PATHTEST f%d owner %d cell %d,%d dir %d -> %d' % (f, ow_, px_, py_, pd_, gcall(0x29f44, ow_, ptr_, pd_) & 0xff))
         if os.environ.get('COLLROW') and int(os.environ['COLLROW'].split(',')[0]) <= f <= int(os.environ['COLLROW'].split(',')[1]):   # COLLROW=lo,hi[,row]: the collision words of one row (12 cells) after the frame
             base_ = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff; row_ = int((os.environ['COLLROW'].split(',') + ['1'])[2])
             ws_ = struct.unpack('<12I', o.read(BASE + base_ + 48 * row_, 48)); print('COLL f%d row%d' % (f, row_), ' '.join('%x' % w for w in ws_))
