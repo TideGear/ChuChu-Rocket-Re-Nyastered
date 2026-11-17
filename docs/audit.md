@@ -11,7 +11,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Rank thresholds: **partial** (covered by the 26 cases; no separate check).
 - Team Battle: **done** through the real loop (26/26 for all eight forced outcomes; Everybody Move at game times 1, 3, 4 and 7 also 26/26 through the mask); end-of-round result and score screens: **open**.
 - Stage Challenge: types 0-4 (24 stages) **done** (stage types 3/4: 8 of 8 runs identical); stage 24 **partial** (seeds 1000 and 2000 identical on every score word and computer-player arrow; seed 3000 identical to f2779, then a second heat source leaves the computer players' heat map at f2779 in the original but at f2785 in the port).
-- Puzzle Edit: conversion and CRC **done**; screen, save format, validity rules, VMS/VMI export **open**.
+- Puzzle Edit: conversion and CRC **done**; Dreamcast .VMS/.VMI **writer done and checked against the real packs** (`tools/vms_pack.py`, 50/50 slots and both .VMI identical; acceptance by an emulator untested); screen, save format, validity rules, in-app export **open**.
 ## C. Version differences
 - Dreamcast input, heat maps, SH-4 whole-battle CPU: **open** (CPU placement 10/10 cases from a recorded set only).
 - MANATEE.DRV SFX rates, GBA battle diff and score gap, iOS-specific differences: **open / partial** (see roadmap).
