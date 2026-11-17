@@ -89,7 +89,7 @@ public:
     // Deferred task deletion (original: eaten mouse -> state 0x354f8 runs next tick, creates a 48-tick effect task (if < 12 alive) then deletes the mouse;
     // mouse in rocket -> 0x35488 runs next tick and deletes). Slots matter because collision entries keep task pointers.
     struct PendingFree { int ent, when; bool effect; bool count = true; };   // count: the freed mouse task calls GE_MouseCountDown (not the 180-unit deletion, which counts down when it runs)
-    bool retryFull = false, firstExecSkipsHit = false;
+    bool retryFull = false, firstExecSkipsHit = false, catRespawnNoContact = true;
     std::vector<int> freedMice;   // types of the mouse tasks destroyed this tick (battle): the generator counters drop
     std::vector<PendingFree> pendingFree;
     std::vector<MouseGhost> effects;
@@ -357,7 +357,7 @@ public:
                 float ax = c.x - m.x, az = c.z - m.z; if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true; } }
     }
     void resolveCats() {                               // SmpColAnalyze: cat and mouse closer than 5.0 (registered end-of-tick positions)
-        for (auto& c : ents) if (!c.mouse && c.alive && !c.done && !c.rocketIn && !c.fresh)
+        for (auto& c : ents) if (!c.mouse && c.alive && !c.done && !c.rocketIn && !c.fresh && !(catRespawnNoContact && c.catRespawned))   // a cat respawned this tick runs the rocket-in state function, which does not register contact
             for (auto& m : ents) if (m.mouse && m.alive && !m.done && !m.fresh && !m.jime) {
                 float ax = c.x - m.x, az = c.z - m.z;
                 if (std::sqrt(ax * ax + az * az) < 5.0f) m.hit = true;

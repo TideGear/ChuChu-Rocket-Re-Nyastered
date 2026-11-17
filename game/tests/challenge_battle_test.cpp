@@ -21,7 +21,8 @@ int main(int argc, char** argv) {
         size_t shown = 0;
         int last = -1;
         for (int t = 1; t <= ticks; t++) {
-            if (getenv("MPOS")) for (auto& e : b.sim.ents) if (e.mouse && e.alive && !e.done && !e.fresh) { printf("MPOS t%d %.3f %.3f", t, e.x, e.z); putchar(10); }
+            if (getenv("MPOS") && t >= atoi(getenv("MPOS"))) for (auto& e : b.sim.ents) if (e.mouse && e.alive && !e.done && !e.fresh) { printf("MPOS t%d %.3f %.3f", t, e.x, e.z); putchar(10); }
+            if (getenv("CPOS") && t >= atoi(getenv("CPOS"))) for (auto& e : b.sim.ents) if (!e.mouse && e.alive && !e.done && !e.fresh && !e.rocketIn) { printf("CPOS t%d %.3f %.3f", t, e.x, e.z); putchar(10); }
             b.tick();
             if (getenv("SPAWNS")) for (; shown < b.gen->spawns.size(); shown++) { const auto& sp = b.gen->spawns[shown]; printf("UP f%d type %d%s", sp.frame + 469, sp.mouseType, sp.cat ? " cat" : ""); putchar(10); }
             if (b.sim.killedByCat != last) { printf("CNT f%d rocket 0 eaten %d", t + 469, b.sim.killedByCat); putchar(10); last = b.sim.killedByCat; }

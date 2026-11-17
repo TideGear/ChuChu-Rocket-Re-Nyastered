@@ -75,6 +75,22 @@ def run(stage, frames):
         o.uc.hook_add(_H, mcb, begin=BASE + 0x3501c - G, end=BASE + 0x3501c - G + 2)
     else:
         cur_frame = [0]
+    if os.environ.get('CPOS'):   # CPOS=lo,hi (ticks): cat positions at the entry of the cat task function (FUN_00028ffc)
+        clo, chi = [int(v) for v in os.environ['CPOS'].split(',')]
+        from unicorn import UC_HOOK_CODE as _HC2
+        def ccb(uc, a_, sz, u):
+            t = cur_frame[0] - 469
+            if clo <= t <= chi:
+                pr = uc.reg_read(UC_ARM_REG_R0); x, z = struct.unpack('<ff', o.read(pr + 0x14, 4) + o.read(pr + 0x1c, 4)); print('CPOS t%d %.3f %.3f' % (t, x, z))
+        o.uc.hook_add(_HC2, ccb, begin=BASE + 0x28ffc - G, end=BASE + 0x28ffc - G + 2)
+    if os.environ.get('EXEFUNCS'):   # SmpTskSetExe (0x3db88) arguments from CA_PutCat and the mouse creation: which task function each kind of task runs
+        from unicorn import UC_HOOK_CODE as _HX
+        seen_exe = set()
+        def xcb(uc, a_, sz, u):
+            r1 = uc.reg_read(UC_ARM_REG_R1); lr = uc.reg_read(UC_ARM_REG_LR) - BASE + G
+            if (r1, lr) not in seen_exe and len(seen_exe) < 40:
+                seen_exe.add((r1, lr)); print('EXE func %#x caller %#x' % (r1 - BASE + G, lr))
+        o.uc.hook_add(_HX, xcb, begin=BASE + 0x3db88 - G, end=BASE + 0x3db88 - G + 2)
     if os.environ.get('TRACKPUT'):   # MO_PutMouse (0x34ee4) and CA_PutCat (0x28f14): frame, kind, cell, heading, type (each call is seen twice)
         from unicorn import UC_HOOK_CODE as _HP
         def pcb(kind):
