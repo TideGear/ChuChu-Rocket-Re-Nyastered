@@ -18,7 +18,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 ## D. Content and options
 - Unlockables/secrets from code and saves, unlock-all: **open** (menus are not gated except the tutorial).
 - Stage sets: main 100, GBA extras, Dreamcast Express selectable (**done**); PuzzleP stock **open**.
-- DLC skins, CHD/GDI input with per-input dump verification: **open**. .VMS/.VMI reader and writer for puzzle packs: **done in core** (`core/vms.hpp`, `vms_test`, `tools/vms_pack.py`), not yet in the app.
+- DLC skins, CHD/GDI input with per-input dump verification: **open**. .VMS/.VMI reader and writer for puzzle packs: **done**: core reader/writer (`core/vms.hpp`, `vms_test`, `tools/vms_pack.py`) and in-app import (packs in `<data>/imports/*.VMS` appear as the Imported Packs stage set, checked headlessly with DEPuzzle.VMS and a character pack present). Export from the app, DLC character skins and PuzzleP's arrow stock remain open.
 ## E. Sound, animation, assets
 - Full inventory with version/address/asset ID/gates: **open** (pieces in roadmap and docs/*.md).
 ## F. Platforms, controls, play

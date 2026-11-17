@@ -14,6 +14,8 @@
 #include "../core/challenge_battle.hpp"
 #include "../core/userdata.hpp"
 #include "../core/padmap.hpp"
+#include "../core/vms.hpp"
+#include <filesystem>
 #include "rocket_launch.hpp"
 #include "startup.hpp"
 #include <array>
@@ -75,8 +77,36 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 }
 
 // Puzzle stage sets: 0 = the 100 main stages, 1 = the 2,466 further GBA stages, 2 = the Dreamcast Express DLC pack "DEPuzzle" (25 puzzles with the arrow stock decoded from the slot, docs/dlc.md; PuzzleP is left out until its stock is verified)
-static const int kStageSets = 3;
+static const int kStageSets = 4;
+static std::string gImportDir;   // <data folder>/imports: Dreamcast puzzle packs (.VMS) the player dropped there become stage set 3
+static const int kImportedSource = 5;
+static bool loadImportedPacks(Stages& out) {
+    namespace fs = std::filesystem; std::error_code ec; if (gImportDir.empty() || !fs::is_directory(gImportDir, ec)) return false;
+    std::vector<std::string> files;
+    for (auto& de : fs::directory_iterator(gImportDir, ec)) { std::string ext = de.path().extension().string(); for (auto& c : ext) c = (char)tolower((unsigned char)c); if (ext == ".vms") files.push_back(de.path().string()); }
+    std::sort(files.begin(), files.end());
+    int idx = 0;
+    for (const auto& path : files) {
+        FILE* f = fopen(path.c_str(), "rb"); if (!f) continue;
+        std::vector<uint8_t> data; uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) data.insert(data.end(), buf, buf + n);
+        fclose(f);
+        std::vector<VmsPuzzle> puzzles; if (vms::readPack(data, puzzles) <= 0) continue;   // not a puzzle pack (a character pack, or damaged): skipped
+        for (const auto& p : puzzles) {
+            Stages::E e; std::memset(&e.st, 0, sizeof e.st);
+            std::memcpy(e.st.tiles, p.tiles, 108);
+            for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) e.st.hw[r * 12 + c] = p.walls[25 * r + c];
+            for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) e.st.vw[r * 13 + c] = p.walls[25 * r + 12 + c];
+            for (const auto& ar : p.arrows) ++e.stock[ar.dir & 3];
+            std::memset(e.title, 0, sizeof e.title); std::strncpy(e.title, p.title.c_str(), 32);
+            bool plain = !p.title.empty(); for (unsigned char ch : p.title) if (ch < 0x20 || ch > 0x7e) plain = false;   // Shift-JIS titles cannot be drawn with the ASCII font: fall back to a number
+            if (!plain) snprintf(e.title, sizeof e.title, "PUZZLE %d", idx + 1);
+            e.src = kImportedSource; e.idx = idx++; out.list.push_back(e);
+        }
+    }
+    return !out.list.empty();
+}
 static bool loadStageSet(const std::string& root, int set, Stages& out) {
+    if (set == 3) return loadImportedPacks(out);
     if (set == 2) return loadStages((root + "/gba/dlc_stages.bin").c_str(), out, 3);
     if (loadStages((root + "/gba/gba_stages.bin").c_str(), out, set)) return true;
     if (set != 0) return false;
@@ -2279,7 +2309,7 @@ struct StageSelectMode : Screen {
         if (orig()) { origDraw(a); return; }
         SDL_RenderSetLogicalSize(a.ren, W, H);
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
-        a.text(gApp && gApp->stageSet == 2 ? "PUZZLE  DREAMCAST EXPRESS" : gApp && gApp->stageSet ? "PUZZLE  MORE STAGES" : "PUZZLE  STAGE SELECT", 24, 14, 34);
+        a.text(gApp && gApp->stageSet == 3 ? "PUZZLE  IMPORTED PACKS" : gApp && gApp->stageSet == 2 ? "PUZZLE  DREAMCAST EXPRESS" : gApp && gApp->stageSet ? "PUZZLE  MORE STAGES" : "PUZZLE  STAGE SELECT", 24, 14, 34);
         const int cw = 140, ch = 78, x0 = (W - COLS * cw) / 2, y0 = 80;
         for (int i = 0; i < PER; i++) { int idx = page * PER + i; if (idx >= (int)stages.list.size()) break;
             SDL_Rect r{x0 + (i % COLS) * cw + 4, y0 + (i / COLS) * ch + 4, cw - 8, ch - 8}; bool sel = idx == cur;
@@ -2711,6 +2741,7 @@ int main(int argc, char** argv) {
             if (st.width > 0 && st.height > 0) { char sz[40]; snprintf(sz, sizeof sz, "%dx%d", st.width, st.height); SDL_setenv("CCR_SIZE", sz, 0); }
             app.padMap = loadOrCreatePadMap(app.saveDir);
             app.log.open(app.saveDir, st.logLevel, st.logMaxKb, st.logKeepFiles);
+            gImportDir = app.saveDir + "/imports"; std::error_code iec; std::filesystem::create_directories(gImportDir, iec);
             app.log.write(1, ("session start; data folder " + app.saveDir + "; assets " + root).c_str());
         }
     }
