@@ -173,6 +173,9 @@ def run(stage, frames):
                 h_ = ((int(os.environ['ARROWS']) * 1000003 + k * 7919) * 2654435761) & 0xffffffff
                 x_, y_, d_ = h_ % 12, (h_ >> 8) % 9, (h_ >> 16) % 4
             o.write(pt, struct.pack('<hh', x_, y_)); gcall(0x286ac, 0, pt, d_)
+        if os.environ.get('COLLROW') and int(os.environ['COLLROW'].split(',')[0]) <= f <= int(os.environ['COLLROW'].split(',')[1]):   # COLLROW=lo,hi[,row]: the collision words of one row (12 cells) after the frame
+            base_ = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff; row_ = int((os.environ['COLLROW'].split(',') + ['1'])[2])
+            ws_ = struct.unpack('<12I', o.read(BASE + base_ + 48 * row_, 48)); print('COLL f%d row%d' % (f, row_), ' '.join('%x' % w for w in ws_))
         if os.environ.get('ARRCELLS') and f >= 480 and (f - 480) % 40 == 1:   # cells whose collision word has the arrow bit
             base = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff
             words = struct.unpack('<108I', o.read(BASE + base, 432))

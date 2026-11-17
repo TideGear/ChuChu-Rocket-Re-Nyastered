@@ -25,6 +25,8 @@ int main(int argc, char** argv) {
             const unsigned long long d0 = ccr::g_rngDraws;
             g.tick();
             if (getenv("RNGDRAWS") && ccr::g_rngDraws != d0) printf("RNG f%d %llu\n", fr, ccr::g_rngDraws - d0);
+            if (getenv("HEATENT") && fr >= atoi(getenv("HEATENT")) && fr < atoi(getenv("HEATENT")) + 3) { for (const auto& e : g.game.sim.ents) if (e.reg) printf("REG f%d %s slot=%d g=%d,%d type=%d alive=%d done=%d rin=%d%c", fr, e.mouse ? "mouse" : "cat", e.slot, e.gx, e.gy, e.type, (int)e.alive, (int)e.done, (int)e.rocketIn, 10); }
+            if (getenv("COLLROW") && fr >= atoi(getenv("COLLROW")) && fr < atoi(getenv("COLLROW")) + 4) { printf("COLL f%d row1", fr); for (int x = 0; x < 12; x++) printf(" %x", g.game.sim.fieldCollision(x, 1)); printf("%c", 10); }
             if (getenv("HEATSUM") && fr >= atoi(getenv("HEATSUM")) && fr < atoi(getenv("HEATSUM")) + 8) { int nz = 0, sm = 0; for (int v : g.game.sim.heat) { if (v) nz++; sm += v; } printf("HSUM f%d nz=%d sum=%d%c", fr, nz, sm, 10); }
             if (getenv("ARRS") && fr >= atoi(getenv("ARRS")) && fr < atoi(getenv("ARRS")) + 4) { for (const auto& a2 : g.game.sim.arrows) if (a2.live) printf("ARR f%d cell %d,%d dir %d ttl %d%c", fr, a2.x, a2.y, a2.dir, a2.ttl, 10); }
             if (getenv("ENTS") && fr >= atoi(getenv("ENTS")) && fr < atoi(getenv("ENTS")) + 4) { for (const auto& e : g.game.sim.ents) if (e.alive) printf("ENT f%d %s x=%.1f z=%.1f g=%d,%d reg=%d done=%d rin=%d\n", fr, e.mouse ? "mouse" : "cat", e.x, e.z, e.gx, e.gy, (int)e.reg, (int)e.done, (int)e.rocketIn); }

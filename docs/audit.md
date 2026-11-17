@@ -26,7 +26,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Controller remap, quit combo: **done** (logic tested, no hardware run).
 - Wireless local play, online lockstep: **partial** (netplay core and 19,518-iteration loopback test; no screens, no phone pairing).
 - 4K GPU measurement: **open** (CCR_BENCH exists; no recorded 4K/60 result in docs).
-- Linux/macOS: **partial** (main.cpp compiles for x86_64/aarch64 Linux and macOS with zig; `.github/workflows/build.yml` builds and unit-tests natively on GitHub runners, not yet run; no human run on either OS).
+- Linux/macOS: **partial** (main.cpp compiles for x86_64/aarch64 Linux and macOS with zig; `.github/workflows/build.yml`: Linux **built and unit-tested green on a GitHub runner** (no human run of the game on Linux); macOS job cancelled before starting (no runner provided), so macOS is unverified).
 - Android arm64 emulator test, WebAssembly PWA headless test: **open** (build targets exist, no recorded run).
 ## G. Releases and docs
 - Versioned GitHub releases with ZIPs and notes: **done** for Windows (v2026.11.16, v2026.11.17); Linux/macOS **open**.
