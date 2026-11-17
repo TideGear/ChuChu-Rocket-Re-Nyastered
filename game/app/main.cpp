@@ -34,8 +34,18 @@
 #include <vector>
 #include <filesystem>
 #include <algorithm>
+// Sets an environment variable that getenv() sees on every platform (SDL_setenv does not update the C runtime's copy on Windows).
+static void ccrSetEnv(const char* k, const char* v, int overwrite) {
+#ifdef _WIN32
+    if (!overwrite && getenv(k)) return; _putenv_s(k, v);
+#else
+    setenv(k, v, overwrite);
+#endif
+}
 #ifdef _WIN32
 #include "launcher_setup.hpp"
+#elif !defined(__EMSCRIPTEN__)
+#include "launcher_setup_posix.hpp"
 #endif
 extern "C" {
 #include "stb_vorbis.c"
@@ -252,7 +262,7 @@ struct App {
     bool init() {
         headless = getenv("CCR_SHOT") || getenv("CCR_HEADLESS") || getenv("CCR_BENCH");
         bool gpu = getenv("CCR_GPU") != nullptr;   // CCR_GPU=1 with CCR_BENCH: accelerated renderer on a HIDDEN window (nothing is shown, no audio)
-        if (headless) { if (!gpu) SDL_setenv("SDL_VIDEODRIVER", "dummy", 1); SDL_setenv("SDL_AUDIODRIVER", "dummy", 1); if (!gpu) SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software"); }   // never take the user's screen/audio
+        if (headless) { if (!gpu) ccrSetEnv("SDL_VIDEODRIVER", "dummy", 1); ccrSetEnv("SDL_AUDIODRIVER", "dummy", 1); if (!gpu) SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software"); }   // never take the user's screen/audio
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) { printf("SDL: %s\n", SDL_GetError()); return false; }
         int winW = GW, winH = GH; if (const char* sz = getenv("CCR_SIZE")) { int a = 0, b = 0; if (sscanf(sz, "%dx%d", &a, &b) == 2 && a > 0 && b > 0) { winW = a; winH = b; } }
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, getenv("CCR_FILTER") ? getenv("CCR_FILTER") : "linear");
@@ -2565,6 +2575,8 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 int main(int argc, char** argv) {
 #ifdef _WIN32
     if (argc > 1 && !strcmp(argv[1], "--prepare")) return prepareLauncherAssets();
+#elif !defined(__EMSCRIPTEN__)
+    if (argc > 1 && !strcmp(argv[1], "--prepare")) return prepareLauncherAssets(argc, argv);
 #endif
     if (getenv("CCR_STARTUP_FLOW_TRACE")) {
         Startup splash;
@@ -2702,6 +2714,10 @@ int main(int argc, char** argv) {
         std::vector<std::string> cand; if (const char* e = getenv("CCR_ASSETS")) cand.push_back(e);
         char* bp = SDL_GetBasePath(); std::string base = bp ? bp : ""; if (bp) SDL_free(bp);
         cand.push_back(base + "assets"); cand.push_back(base + "../../local/cache/assets"); cand.push_back(base + "../../../local/cache/assets"); cand.push_back("local/cache/assets");
+#ifndef _WIN32
+        if (const char* xdg = getenv("XDG_CONFIG_HOME")) cand.push_back(std::string(xdg) + "/ChuChuRocketReNyastered/assets");   // where RecompLauncher's {config} points on Linux
+        if (const char* home = getenv("HOME")) { cand.push_back(std::string(home) + "/.config/ChuChuRocketReNyastered/assets"); cand.push_back(std::string(home) + "/Library/Application Support/ChuChuRocketReNyastered/assets"); }
+#endif
         if (const char* ap = getenv("APPDATA")) { cand.push_back(std::string(ap) + "/ChuChuRocketReNyastered/assets"); cand.push_back(std::string(ap) + "/ReNyastered/assets"); }   // the second is the folder name used before 2026-11-17
         for (auto& c : cand) if (hasAssets(c)) { root = c; break; }
         if (root.empty()) {
@@ -2709,27 +2725,26 @@ int main(int argc, char** argv) {
             printf("%s\n", msg); if (!getenv("CCR_SHOT") && !getenv("CCR_HEADLESS") && !getenv("CCR_BENCH") && SDL_Init(SDL_INIT_VIDEO) == 0) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ChuChu Rocket! Re-Nyastered", msg, nullptr); SDL_Quit(); } return 2;
         }
     }
-#ifdef _WIN32
     if (argc > 1 + shift && !strcmp(argv[1 + shift], "--launcher")) {
         if (!hasAssets(root)) return 2;
         ++shift;
         if (!getenv("CCR_FULLSCREEN")) {
             const char* mode = getenv("RECOMPLAUNCHER_MODE");
-            if (mode && !strcmp(mode, "bigpicture")) _putenv_s("CCR_FULLSCREEN", "1");
+            if (mode && !strcmp(mode, "bigpicture")) ccrSetEnv("CCR_FULLSCREEN", "1", 1);
         }
         while (argc > 1 + shift) {
             const char* arg = argv[1 + shift];
-            if (!strcmp(arg, "--fullscreen")) _putenv_s("CCR_FULLSCREEN", "1");
-            else if (!strcmp(arg, "--windowed")) _putenv_s("CCR_FULLSCREEN", "");
-            else if (!strcmp(arg, "--vsync")) _putenv_s("CCR_VSYNC", "1");
-            else if (!strcmp(arg, "--no-vsync")) _putenv_s("CCR_VSYNC", "0");
-            else if (!strcmp(arg, "--filter=nearest")) _putenv_s("CCR_FILTER", "nearest");
-            else if (!strcmp(arg, "--filter=linear")) _putenv_s("CCR_FILTER", "linear");
+            if (!strcmp(arg, "--fullscreen")) ccrSetEnv("CCR_FULLSCREEN", "1", 1);
+            else if (!strcmp(arg, "--windowed")) ccrSetEnv("CCR_FULLSCREEN", "", 1);
+            else if (!strcmp(arg, "--vsync")) ccrSetEnv("CCR_VSYNC", "1", 1);
+            else if (!strcmp(arg, "--no-vsync")) ccrSetEnv("CCR_VSYNC", "0", 1);
+            else if (!strcmp(arg, "--filter=nearest")) ccrSetEnv("CCR_FILTER", "nearest", 1);
+            else if (!strcmp(arg, "--filter=linear")) ccrSetEnv("CCR_FILTER", "linear", 1);
             else break;
             ++shift;
         }
     }
-#endif
+
     App app; app.root = root;
     {   // data folder, readable settings and the rotating log (core/userdata.hpp)
         char* bp2 = SDL_GetBasePath(); const std::string programDir = bp2 ? bp2 : "."; if (bp2) SDL_free(bp2);
@@ -2737,10 +2752,10 @@ int main(int argc, char** argv) {
         app.saveDir = quiet ? root : resolveDataDir(programDir, root, portableFlag);
         if (!quiet) {
             const Settings st = loadOrCreateSettings(app.saveDir); app.settings = st;
-            if (st.fullscreen) SDL_setenv("CCR_FULLSCREEN", "1", 0);
-            if (!st.vsync) SDL_setenv("CCR_VSYNC", "0", 0);
-            SDL_setenv("CCR_FILTER", st.filter.c_str(), 0);
-            if (st.width > 0 && st.height > 0) { char sz[40]; snprintf(sz, sizeof sz, "%dx%d", st.width, st.height); SDL_setenv("CCR_SIZE", sz, 0); }
+            if (st.fullscreen) ccrSetEnv("CCR_FULLSCREEN", "1", 0);
+            if (!st.vsync) ccrSetEnv("CCR_VSYNC", "0", 0);
+            ccrSetEnv("CCR_FILTER", st.filter.c_str(), 0);
+            if (st.width > 0 && st.height > 0) { char sz[40]; snprintf(sz, sizeof sz, "%dx%d", st.width, st.height); ccrSetEnv("CCR_SIZE", sz, 0); }
             app.padMap = loadOrCreatePadMap(app.saveDir);
             app.log.open(app.saveDir, st.logLevel, st.logMaxKb, st.logKeepFiles);
             gImportDir = app.saveDir + "/imports"; std::error_code iec; std::filesystem::create_directories(gImportDir, iec);

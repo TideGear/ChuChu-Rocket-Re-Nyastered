@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Windowless asset extraction for launchers (RecompLauncher "prepare" step) on Linux and macOS (tools/prepare.ps1 does the same on Windows).
+Extracts assets from YOUR original game files into the data folder; never changes your original files.
+usage: prepare.py --game-files <folder with your original files, loose or ZIP> [--cache <folder>]
+Prints "progress <0..1> <text>" lines; exits 0 when the cache holds playable stage data, 1 otherwise.
+Needs Python 3.10+ and Pillow (python3 -m pip install pillow, or your distribution's python3-pil / python-pillow package)."""
+import argparse, json, os, shutil, subprocess, sys, uuid
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+def default_cache():
+    if sys.platform == 'darwin': return Path.home() / 'Library' / 'Application Support' / 'ChuChuRocketReNyastered'
+    base = os.environ.get('XDG_CONFIG_HOME') or str(Path.home() / '.config')   # same folder as the launcher's {config}
+    return Path(base) / 'ChuChuRocketReNyastered'
+
+def say(text): print(text, flush=True)
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--game-files', default=os.environ.get('CCR_SETUP_GAME_FILES'))
+    ap.add_argument('--cache', default=None)
+    a = ap.parse_args()
+    if not a.game_files or not Path(a.game_files).is_dir():
+        say('Your game folder was not found: %s' % a.game_files); return 1
+    game = Path(a.game_files).resolve()
+    cache = Path(a.cache).resolve() if a.cache else default_cache()
+    old = cache.parent / 'ReNyastered'   # the folder name used before the rename: move it once if the new one does not exist
+    if not a.cache and not cache.exists() and old.exists(): shutil.move(str(old), str(cache))
+    cache.mkdir(parents=True, exist_ok=True)
+    say('progress 0.02 Checking Python')
+    if sys.version_info < (3, 10): say('Python 3.10 or later is required (found %s).' % sys.version.split()[0]); return 1
+    try: import PIL  # noqa: F401
+    except ImportError:
+        say('Pillow is missing. Install it with: python3 -m pip install --user pillow  (or your distribution\'s python3-pil / python-pillow package), then run setup again.'); return 1
+    lock = open(cache / 'prepare.lock', 'w')
+    try:
+        import fcntl
+        try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError: say('Another setup is already running for this folder.'); return 1
+    except ImportError: pass
+    staging = cache / ('prepare-' + uuid.uuid4().hex)
+    published = False
+    try:
+        staging.mkdir()
+        say('progress 0.15 Extracting from your game files (this can take several minutes)')
+        log = cache / 'setup.log'
+        with open(log, 'w') as lf:
+            code = subprocess.call([sys.executable, str(HERE / 'extract_all.py'), '--game-files', str(game), '--cache', str(staging), '--exclude-cache', str(cache)], stdout=lf, stderr=subprocess.STDOUT)
+        if code != 0:
+            say('Extraction failed. See %s' % log); say('\n'.join(log.read_text(errors='replace').splitlines()[-10:])); return 1
+        say('progress 0.95 Checking what can be played')
+        new_manifest = staging / 'manifest.json'
+        manifest = json.loads(new_manifest.read_text())
+        if not manifest.get('playable_modes'):
+            if not manifest.get('base_graphics_available'): say('No playable graphics were found. Add an iPad, iPhone or Android release of ChuChu Rocket! to the folder.')
+            else: say('No playable stage data was found. See %s' % log)
+            return 1
+        assets, new_assets, old_assets = cache / 'assets', staging / 'assets', staging / 'previous-assets'
+        had_old = assets.is_dir()
+        if had_old:
+            for name in ('progress.bin', 'challenge.bin', 'options.bin', 'settings.ini', 'controls.ini'):
+                if (assets / name).is_file(): shutil.copy2(assets / name, new_assets / name)
+            for d in ('imports', 'logs'):   # player data kept across re-runs
+                if (assets / d).is_dir(): shutil.copytree(assets / d, new_assets / d, dirs_exist_ok=True)
+            assets.rename(old_assets)
+        try:
+            new_assets.rename(assets)
+            os.replace(new_manifest, cache / 'manifest.json')
+            published = True
+        except Exception:
+            if assets.is_dir(): assets.rename(new_assets)
+            if had_old: old_assets.rename(assets)
+            raise
+        say('Playable modes: %s' % ', '.join(manifest['playable_modes']))
+        say('progress 1 Done')
+        return 0
+    except Exception as e:
+        say('Setup failed: %s' % e); return 1
+    finally:
+        recoverable = (not published) and (staging / 'previous-assets').exists()
+        if staging.exists() and not recoverable: shutil.rmtree(staging, ignore_errors=True)
+        lock.close()
+
+if __name__ == '__main__': sys.exit(main())

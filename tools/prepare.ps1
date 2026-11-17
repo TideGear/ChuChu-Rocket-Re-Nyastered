@@ -45,10 +45,11 @@ try {
     $oldAssets = Join-Path $staging 'previous-assets'
     $oldExists = [IO.Directory]::Exists($assets)
     if ($oldExists) {
-        foreach ($name in 'progress.bin', 'challenge.bin', 'options.bin') {
+        foreach ($name in 'progress.bin', 'challenge.bin', 'options.bin', 'settings.ini', 'controls.ini') {
             $save = Join-Path $assets $name
             if (Test-Path -LiteralPath $save -PathType Leaf) { Copy-Item -LiteralPath $save -Destination $newAssets }
         }
+        foreach ($dir in 'imports', 'logs') { $keep = Join-Path $assets $dir; if (Test-Path -LiteralPath $keep -PathType Container) { Copy-Item -LiteralPath $keep -Destination $newAssets -Recurse } }   # player data kept across re-runs
         [IO.Directory]::Move($assets, $oldAssets)
     }
     try {

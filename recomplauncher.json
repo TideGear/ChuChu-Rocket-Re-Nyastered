@@ -9,7 +9,8 @@
   },
   "start": {
     "program": [
-      "ccr.exe"
+      "ccr.exe",
+      "ccr"
     ],
     "args": [
       "{config}/ChuChuRocketReNyastered/assets",
@@ -92,7 +93,8 @@
   ],
   "prepare": {
     "program": [
-      "ccr.exe"
+      "ccr.exe",
+      "ccr"
     ],
     "args": [
       "--prepare",

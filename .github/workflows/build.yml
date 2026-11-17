@@ -1,16 +1,23 @@
-# Native Linux and macOS builds of ccr plus the data-free unit tests. Contains no game files; nothing is uploaded except the built program.
+# Native Linux and macOS builds of ccr plus the data-free unit tests. Contains no game files; nothing is uploaded except the built program, the extraction scripts and licences.
+# Pushing a tag like v2026.11.18 also attaches ChuChuRocketReNyastered-<tag>-<os>-<arch>.tar.gz to that GitHub release (RecompLauncher picks the file by the OS word in its name).
 name: build
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   native:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-latest, macos-13]
+        include:
+          - { os: ubuntu-22.04, label: linux-x64 }
+          - { os: macos-latest, label: macos-arm64 }
+          - { os: macos-13, label: macos-x64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -25,16 +32,28 @@ jobs:
       - name: Configure
         run: cmake -S game -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build build --target ccr userdata_test padmap_test
+        run: cmake --build build --target ccr userdata_test padmap_test vms_test
       - name: Unit tests that need no game data
         run: |
           ./build/userdata_test
           ./build/padmap_test
+          ./build/vms_test /nonexistent
       - name: Package
         run: |
-          mkdir -p out && cp build/ccr out/ccr && cp README.md recomplauncher.json out/
-          tar -czf ccr-${{ runner.os }}-${{ runner.arch }}.tar.gz -C out .
+          name=ChuChuRocketReNyastered-${GITHUB_REF_NAME}-${{ matrix.label }}
+          mkdir -p "pkg/$name/tools" "pkg/$name/licenses"
+          cp build/ccr README.md recomplauncher.json "pkg/$name/"
+          for f in prepare bhunpack dc_models dc_objects export_android_ui export_battle export_dc_solutions export_dc_ui export_dlc_stages export_hd_geometry export_hd_images export_hd_locale export_pad_ui export_sprites export_strings export_testdata export_tilemaps extract_all extract_android extract_ios_locale extract_packs gba_stages gdi_extract macho pvr2png stage_registry textures thin prs; do cp "tools/$f.py" "pkg/$name/tools/"; done
+          cp tools/hd_image_ids.txt "pkg/$name/tools/"
+          cp build/_deps/sdl2-src/LICENSE.txt "pkg/$name/licenses/SDL2.txt"
+          tar -czf "$name.tar.gz" -C pkg "$name"
+          echo "ARCHIVE=$name.tar.gz" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
-          name: ccr-${{ runner.os }}-${{ runner.arch }}
-          path: ccr-${{ runner.os }}-${{ runner.arch }}.tar.gz
+          name: ccr-${{ matrix.label }}
+          path: ${{ env.ARCHIVE }}
+      - name: Attach to the release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "$ARCHIVE" --clobber
