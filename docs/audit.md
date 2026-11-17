@@ -38,3 +38,20 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 2. Finish stage 24 seed 3000; Challenge HUD/result art; Team Battle result screen.
 3. Puzzle Edit screen and VMS/VMI export; unlock-all and gating; VMS import and skins; CHD/GDI.
 4. Linux/macOS CI builds, 4K measurement, Android and PWA test runs.
+
+## Claims from "ChuChu Rocket Version Comparison (AI Deep Research)" and where they stand
+The goal text covers them only through its general version-comparison duties; this list keeps each one visible. See also `docs/research_check.md` (2026-11-13).
+| Claim | Status |
+|---|---|
+| Eight roulette events on Dreamcast, same on mobile | **verified** (selector, weights and handlers; Dreamcast selector exact; mobile 26/26 whole-battle) |
+| GBA adds five roulette events (13 total): Mouse Mania (Special), KapuKapu Kittens, Stealing Mania, Blindfold the Winner, Night Time | **open**: the ROM's dispatcher has 12 handlers (not 13); which index is which event is not mapped; "Night Time!" was seen in the title demo |
+| GBA KapuKapu grow after 50 mice eaten | **open** |
+| GBA multiplayer handicap system | **open** |
+| Mobile builds do or do not carry the GBA events | **open** (mobile selector has eight outcomes and identical weight tables, so no extra events found there) |
+| Dreamcast Puzzle Edit with VMU save and online sharing | **partial** (storage and sharing format decoded from Android; no screen, no VMS export) |
+| GBA Puzzle Edit with link-cable trading; Character Edit (four custom sprite groups) | **open**, and not named in docs/goal.md |
+| Chao swap after all 25 Stage Challenge stages; Pian swap after all 25 Mania puzzles | **open** (unlockables phase) |
+| NiGHTS hat via a DS plus Project Rub | **open**, hardware-dependent, likely not testable |
+| Dreamcast online via modem, UDP 9789, revived by private servers | **external source only**; port's netplay modelled on SERVER_/CLIENT_ code, no Dreamcast server tested |
+| iOS lacked level editing; Android had only costumes | **partial** (editor code exists in Android 1.15 `Editor`/`EditorGameScreen`; screen presence per build not checked) |
+| Prices, reviews, release dates, store listings | **not testable** from game files |
