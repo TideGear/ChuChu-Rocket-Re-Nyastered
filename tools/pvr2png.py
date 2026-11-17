@@ -114,6 +114,7 @@ if __name__ == '__main__':
             if img is None:
                 bad += 1; continue
             os.makedirs(dst, exist_ok=True)
-            img.save(os.path.join(dst, '%s__%s.png' % (rel, os.path.splitext(f)[0])))
+            base = os.path.splitext(f)[0]
+            img.save(os.path.join(dst, base + '.png' if rel == '.' else '%s__%s.png' % (rel, base)))   # files directly in the source folder keep their plain name (a '.__' prefix made hidden files)
             n += 1
     print('decoded', n, 'failed', bad)
