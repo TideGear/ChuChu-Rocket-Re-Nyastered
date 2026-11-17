@@ -49,7 +49,7 @@ The goal text covers them only through its general version-comparison duties; th
 | GBA multiplayer handicap system | **open** |
 | Mobile builds do or do not carry the GBA events | **open** (mobile selector has eight outcomes and identical weight tables, so no extra events found there) |
 | Dreamcast Puzzle Edit with VMU save and online sharing | **partial** (storage and sharing format decoded from Android; no screen, no VMS export) |
-| GBA Puzzle Edit with link-cable trading; Character Edit (four custom sprite groups) | **open**, and not named in docs/goal.md |
+| GBA Puzzle Edit with link-cable trading; Character Edit (four custom sprite groups) | **open** (goal.md covers it only through its "also cover what the claims imply" line) |
 | Chao swap after all 25 Stage Challenge stages; Pian swap after all 25 Mania puzzles | **open** (unlockables phase) |
 | NiGHTS hat via a DS plus Project Rub | **open**, hardware-dependent, likely not testable |
 | Dreamcast online via modem, UDP 9789, revived by private servers | **external source only**; port's netplay modelled on SERVER_/CLIENT_ code, no Dreamcast server tested |
