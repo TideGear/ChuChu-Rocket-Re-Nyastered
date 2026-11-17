@@ -12,6 +12,7 @@
 #include "rocket_lid.hpp"
 #include "../core/challenge.hpp"
 #include "../core/challenge_battle.hpp"
+#include "../core/userdata.hpp"
 #include "rocket_launch.hpp"
 #include "startup.hpp"
 #include <array>
@@ -123,13 +124,13 @@ struct StarBackground {
 
 struct App {
     StarBackground stars;
-    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root; bool headless = false, quit = false, vsync = true;
+    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; bool headless = false, quit = false, vsync = true;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
-    void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((root + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
+    void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
     bool isCleared(int s) { loadProgress(); return s >= 0 && s < 100 && ((clr[s / 25] >> (s % 25)) & 1); }
     int maxStage() { loadProgress(); for (int i = 0; i < 3; i++) if ((clr[i] & 0x1ffffff) != 0x1ffffff) return i; return 3; }   // VMU::getPuzzleMaxStage 0x372b4
-    void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((root + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
+    void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     BattlePreviewAtlas battlePreviewAtlas;
@@ -428,9 +429,9 @@ struct App {
     bool langAvailable(int l) { FILE* f = fopen((retDir + "loc_" + langDir(l) + "/hd_text.tsv").c_str(), "rb"); if (f) fclose(f); return f != nullptr; }
     void loadLocale(const std::string& ret) {
         retDir = ret; if (const char* e = getenv("CCR_LANG")) for (int i = 0; i < 6; i++) if (!strcmp(e, langDir(i))) lang = i;
-        if (FILE* f = fopen((root + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; unsigned char v[2]; if (fread(v, 1, 2, f) == 2) { musicVol = v[0]; sfxVol = v[1]; } fclose(f); }
+        if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; unsigned char v[2]; if (fread(v, 1, 2, f) == 2) { musicVol = v[0]; sfxVol = v[1]; } fclose(f); }
         if (!langAvailable(lang)) lang = 0; applyLocale(); }
-    void saveOptions() { if (FILE* f = fopen((root + "/options.bin").c_str(), "wb")) { unsigned char c[3] = {(unsigned char)lang, (unsigned char)std::max(0, std::min(255, musicVol)), (unsigned char)std::max(0, std::min(255, sfxVol))}; fwrite(c, 1, 3, f); fclose(f); } }
+    void saveOptions() { if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "wb")) { unsigned char c[3] = {(unsigned char)lang, (unsigned char)std::max(0, std::min(255, musicVol)), (unsigned char)std::max(0, std::min(255, sfxVol))}; fwrite(c, 1, 3, f); fclose(f); } }
     void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); saveOptions(); }
     void applyLocale() {
         dropImages();
@@ -2088,9 +2089,9 @@ struct ChallengeMode : Screen {
     struct Save { uint32_t mask = 0, best[25] = {}; };
     static Save loadSave(const std::string& root) { Save s; if (FILE* f = fopen((root + "/challenge.bin").c_str(), "rb")) { if (fread(&s, sizeof s, 1, f) != 1) s = Save(); fclose(f); } return s; }
     void saveResult(App& a) {   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
-        Save s = loadSave(a.root); const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
+        Save s = loadSave(a.saveDir); const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur];
-        if (FILE* f = fopen((a.root + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
+        if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false; begin(stage); return true; }
@@ -2617,6 +2618,8 @@ int main(int argc, char** argv) {
             if (finished) return 0;
         }
     }
+    bool portableFlag = false;   // --portable anywhere on the command line: saves, settings and logs go to <program folder>/data
+    for (int i = 1; i < argc; ) { if (!strcmp(argv[i], "--portable")) { portableFlag = true; for (int j = i; j < argc; j++) argv[j] = argv[j + 1]; --argc; } else ++i; }
     // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ChuChuRocketReNyastered/assets, then the older %APPDATA%/ReNyastered/assets).
     std::string root; int shift = 0;
     auto hasAssets = [](const std::string& d) { FILE* f = fopen((d + "/ret_all/r0930.tex.bin").c_str(), "rb"); if (f) { fclose(f); return true; } return false; };
@@ -2653,11 +2656,27 @@ int main(int argc, char** argv) {
         }
     }
 #endif
-    App app; app.root = root; if (!app.init()) return 2; gApp = &app;
+    App app; app.root = root;
+    {   // data folder, readable settings and the rotating log (core/userdata.hpp)
+        char* bp2 = SDL_GetBasePath(); const std::string programDir = bp2 ? bp2 : "."; if (bp2) SDL_free(bp2);
+        const bool quiet = (getenv("CCR_SHOT") || getenv("CCR_HEADLESS") || getenv("CCR_BENCH")) && !getenv("CCR_USERDATA_TEST");   // test runs never create settings or logs (CCR_USERDATA_TEST=1 exercises them headlessly)
+        app.saveDir = quiet ? root : resolveDataDir(programDir, root, portableFlag);
+        if (!quiet) {
+            const Settings st = loadOrCreateSettings(app.saveDir);
+            if (st.fullscreen) SDL_setenv("CCR_FULLSCREEN", "1", 0);
+            if (!st.vsync) SDL_setenv("CCR_VSYNC", "0", 0);
+            SDL_setenv("CCR_FILTER", st.filter.c_str(), 0);
+            if (st.width > 0 && st.height > 0) { char sz[40]; snprintf(sz, sizeof sz, "%dx%d", st.width, st.height); SDL_setenv("CCR_SIZE", sz, 0); }
+            app.log.open(app.saveDir, st.logLevel, st.logMaxKb, st.logKeepFiles);
+            app.log.write(1, ("session start; data folder " + app.saveDir + "; assets " + root).c_str());
+        }
+    }
+    if (!app.init()) return 2; gApp = &app;
     std::string start = argc > 1 + shift ? argv[1 + shift] : "STARTUP"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
     int lv[4] = {-1, 3, 3, 3}; if (argc > 4 + shift) { int k = 1; for (const char* p = argv[4 + shift]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
     std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
+        app.log.write(2, ("screen " + name).c_str());
         if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
         else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
@@ -2981,5 +3000,5 @@ int main(int argc, char** argv) {
 #else
     while (!app.quit) frame();
 #endif
-    mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit(); return 0;
+    app.log.write(1, "session end"); mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit(); return 0;
 }
