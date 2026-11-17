@@ -1,0 +1,72 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "ChuChu Rocket! Re-Nyastered",
+  "repo": "TideGear/ChuChu-Rocket-Re-Nyastered",
+  "game": {
+    "kind": "folder",
+    "label": "A folder with your own copies of ChuChu Rocket!, loose or as ZIPs. Add at least one iPad, iPhone or Android release for the graphics; the Dreamcast disc, the GBA ROM and the Dreamcast Express pack add music, boards and menus."
+  },
+  "start": {
+    "program": ["ccr.exe"],
+    "args": ["{config}/ReNyastered/assets", "--launcher"]
+  },
+  "settings": [
+    {
+      "id": "window_mode",
+      "label": "Window mode",
+      "help": "Automatic opens full screen in Big Picture mode.",
+      "in": "args",
+      "choices": [
+        { "label": "Automatic", "args": [] },
+        { "label": "Windowed", "args": ["--windowed"] },
+        { "label": "Full screen", "args": ["--fullscreen"] }
+      ]
+    },
+    {
+      "id": "vsync",
+      "label": "V-Sync",
+      "help": "Synchronize drawing with the display to reduce tearing.",
+      "in": "args",
+      "choices": [
+        { "label": "Game default", "args": [] },
+        { "label": "On", "args": ["--vsync"] },
+        { "label": "Off", "args": ["--no-vsync"] }
+      ]
+    },
+    {
+      "id": "filter",
+      "label": "Texture filtering",
+      "help": "Choose crisp or smooth scaling for the original artwork.",
+      "in": "args",
+      "choices": [
+        { "label": "Game default", "args": [] },
+        { "label": "Nearest", "args": ["--filter=nearest"] },
+        { "label": "Linear", "args": ["--filter=linear"] }
+      ]
+    }
+  ],
+  "prepare": {
+    "program": ["ccr.exe"],
+    "args": ["--prepare", "{game}"],
+    "label": "Graphics, boards and music from your game files",
+    "timeout": 1800,
+    "options": [
+      {
+        "id": "download_python",
+        "label": "Download Python and Pillow if needed",
+        "note": "Setup uses these to extract assets from your own copies.",
+        "args": ["--download-python"],
+        "default": false
+      }
+    ]
+  },
+  "exit_codes": {
+    "2": "The game could not start. Check that Easy Setup finished and the extracted assets are still available."
+  },
+  "saves": [
+    "{config}/ReNyastered/assets/progress.bin",
+    "{config}/ReNyastered/assets/challenge.bin",
+    "{config}/ReNyastered/assets/options.bin"
+  ]
+}

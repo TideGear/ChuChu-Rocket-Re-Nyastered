@@ -58,3 +58,6 @@ __pycache__/
 
 # Derived from the game files (stage titles etc.): regenerate with tools/stage_registry.py
 /docs/stage_registry.json
+
+# Release packaging output (tools/package-release.ps1)
+/dist/

@@ -10,6 +10,10 @@ Re-Nyastered is an unofficial fan project. SEGA and the other rights holders ret
 
 ## Before distributing a release
 
+Run `.\tools\package-release.ps1 -Version 1.2.3` from PowerShell to build the Windows x64 ZIP in `dist\`. Attach it to the matching versioned GitHub release with release notes. The ZIP puts the RecompLauncher profile beside `ccr.exe` and includes the tools for Easy Setup. Players who already have an asset cache can start the packaged executable directly.
+
+For manual setup from the unpacked ZIP, run `.\ccr.exe --prepare "D:\My Game Files"`, then launch `ccr.exe`. Add `--download-python` to the setup command to allow downloading the verified Python and Pillow runtime if needed. Setup writes `setup.log` to `%APPDATA%\ReNyastered`. Player progress and options live in its `assets` folder.
+
 - Review the outgoing Git history as well as the current tree. Removing an asset from the latest revision leaves it reachable through earlier commits.
 - Review the source and release contents for copied game material. Keep third-party materials that have redistribution permission with their required notices. Choose a license for the project's own code before describing it as open source. Third-party dependency licenses cover their respective components.
 - The pinned native build uses SDL2 2.30.9 under its zlib license and `stb_vorbis.c` under a choice of MIT or the public-domain dedication in its source footer. Preserve the applicable notices when redistributing these components. The build fetches Zig, CMake and Ninja separately. Review their notices if shipping those tools with a release. [SDL2 2.30.9 license](https://github.com/libsdl-org/SDL/blob/release-2.30.9/LICENSE.txt) · [Pinned stb_vorbis source and license](https://github.com/nothings/stb/blob/ae721c50eaf761660b4f90cc590453cdb0c2acd0/stb_vorbis.c)

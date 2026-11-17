@@ -1,5 +1,9 @@
 # ChuChu Rocket! Re-Nyastered
 
+<a href="https://recomplauncher.com"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
+On Windows, start with your own supported iOS or Android copy of ChuChu Rocket! Use its containing folder in RecompLauncher's Easy Setup, or follow [Windows build and setup](#build-and-setup-windows) from a checkout. Dreamcast, GBA and Dreamcast Express files are optional.
+
 **This is a fully human-driven, AI-powered reimplementation of SEGA's ChuChu Rocket!** I direct the project and set the standard for accepting changes. AI assists with reverse engineering, implementation, testing and documentation. When a feature is verified against an original release, the documentation shows how the comparison ran and which cases it covered.
 
 ### Work-in-progress screenshots
