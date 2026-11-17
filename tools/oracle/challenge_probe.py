@@ -150,6 +150,16 @@ def run(stage, frames):
         if os.environ.get('DUMPARR') and f in [int(x) for x in os.environ['DUMPARR'].split(',')]:
             pa = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
             print('ARR f%d' % f, struct.unpack('<24i', o.read(o.u32(BASE + pa), 96)))
+        if os.environ.get('COLLDUMP') and f == int(os.environ['COLLDUMP']):   # the original's field collision words (12 x 9), index = 12 * row + column
+            base_ = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff
+            ws_ = struct.unpack('<108I', o.read(BASE + base_, 432))
+            for r_ in range(9): print('COLL row', r_, ' '.join('%03x' % (ws_[12 * r_ + c_] & 0xfff) for c_ in range(12)))
+        if os.environ.get('TRACKWORDS'):   # log changes of the score array words 8, 9, 12, 13 (type 4 counters and the stage 24 words)
+            pa2 = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
+            w_ = struct.unpack('<24i', o.read(o.u32(BASE + pa2), 96))
+            cur_ = (w_[0], w_[1], w_[2], w_[3], w_[8], w_[9], w_[12], w_[13])
+            if cur_ != globals().get('_lastw'):
+                print('WORDS f%d w0-3 %s w8 %d w9 %d w12 %d w13 %d' % (f, cur_[:4], cur_[4], cur_[5], cur_[6], cur_[7])); globals()['_lastw'] = cur_
         if os.environ.get('TRACKSCORE'):   # log every change of score word 0 (the player's score, the type 3 win counter)
             pa_ = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
             sc_ = struct.unpack('<i', o.read(o.u32(BASE + pa_), 4))[0]
