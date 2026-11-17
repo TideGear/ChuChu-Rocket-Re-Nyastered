@@ -16,6 +16,7 @@ int main() {
     Settings e = parseSettings("fullscreen = yes # comment\nvsync=off\nfilter = nearest\nwindow_width = 1280\nwindow_height=720\nlog_level = 9\nlog_keep_files = 0\nunknown = 1\nfilter2\n");
     CHECK(e.fullscreen && !e.vsync && e.filter == "nearest" && e.width == 1280 && e.height == 720 && e.logLevel == 2 && e.logKeepFiles == 1);
     CHECK(parseSettings("filter = blurry\n").filter == "linear");
+    CHECK(parseSettings("cpu_style = gba").cpuStyle == "gba" && parseSettings("cpu_style = x").cpuStyle == "dreamcast" && r.cpuStyle == "dreamcast");
     // data folder
     CHECK(resolveDataDir((tmp / "prog").string(), (tmp / "assets").string(), false) == (tmp / "assets").string());
     CHECK(resolveDataDir((tmp / "prog").string(), (tmp / "assets").string(), true) == (tmp / "prog" / "data").generic_string() && fs::is_directory(tmp / "prog" / "data"));
