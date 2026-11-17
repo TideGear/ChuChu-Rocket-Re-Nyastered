@@ -12,12 +12,13 @@ from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_PC, UC_ARM_REG_LR
 import os
 TEAM = os.environ.get('TEAM') == '1'   # TEAM=1: Team Battle (GA game type 1, mode 0xd); output battle_team_forced_<k>.txt
 GT = int(os.environ.get('GT', '0'))   # fixed game time (TI_GetGameTime); with GT set the output is battle_[team_]forced_<k>_gt<GT>.txt
+MASK = os.environ.get('MASK') == '1'   # MASK=1: run the task server through the status mask (output name gets _mask)
 force = int(sys.argv[1])
 frames = int(sys.argv[2]) if len(sys.argv) > 2 else 3000
 first = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 count = int(sys.argv[4]) if len(sys.argv) > 4 else 26
 d = open(r'C:\Dev\ChuChu Rocket\analysis\extracted\dc_files\ENGLISH\BTSTAGE25.DAT', 'rb').read()
-out = open(r'C:\Dev\ChuChu Rocket\local\testdata\battle_%sforced_%d%s.txt' % ('team_' if TEAM else '', force, '_gt%d' % GT if GT else ''), 'w' if first == 0 else 'a')
+out = open(r'C:\Dev\ChuChu Rocket\local\testdata\battle_%sforced_%d%s.txt' % ('team_' if TEAM else '', force, ('_gt%d' % GT if GT else '') + ('_mask' if MASK else '')), 'w' if first == 0 else 'a')
 rl = []
 def hook_rl(ga):
     def cb(uc, a, s, u): rl.append(B.frame_no[0])
@@ -48,7 +49,11 @@ for idx, seed, use_arrows in cases[first:first + count]:
         B.frame_no[0] = f
         if f in pend:
             _, pl, x, y, dd = pend[f]; o.write(pt, struct.pack('<hh', x, y)); gcall(0x286ac, pl, pt, dd)
-        step('SmpColLoopInit', 0x2993c); step('SmpTskExeServer', 0x3da60); step('SmpColAnalyze', 0x29b1c)
+        if MASK:   # the real loops (ChallengeLoop, FourBattleLoop) run the task server with the char-ID mask table[RL_GetRoulette4Status] = {0, 0x1f, 0x13}
+            st_ = o.u32(BASE + 0x184c8c - G); mask_ = (0, 0x1f, 0x13)[st_] if st_ < 3 else 0
+            step('SmpColLoopInit', 0x2993c); step('SmpTskExeServerSpecifiedCharID', 0x3da10, mask_, 0); step('SmpColAnalyze', 0x29b1c)
+        else:
+            step('SmpColLoopInit', 0x2993c); step('SmpTskExeServer', 0x3da60); step('SmpColAnalyze', 0x29b1c)
         s = tuple(struct.unpack('<4i', o.read(arr, 16)))
         if s != prev: sc.append((f,) + s); prev = s
     ev = []
