@@ -48,6 +48,71 @@ def cat_morph_frames(root, V):
         frames.append(fr)
     return frames
 
+def cat_pose_frames(root):
+    """Full 24-frame cat animation from the two Ninja motions the game plays together (draw call 0x8c0e673e with 0x8c088108 and 0x8c08cfd4, frame = a float in [0, 24)):
+    motion A (type 0x7, 24 keys per animated node: 'ang' and 'pos' key lists) turns/moves the feet and tail nodes 1, 2, 3 and 5; motion B (type 0x30) morphs the head's 69 vertices
+    (node 0). Returns 24 flat position arrays in the triangle order of obj_0778c4.obj (3 vertices x xyz per triangle)."""
+    import math
+    d = open(os.path.join(root, '..', '..', '..', '..', 'analysis', 'extracted', 'dc_files', '1ST_READ.BIN'), 'rb').read(); B = 0x8C010000
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import dc_models as M
+    models = {B + o: (vl, pl) for (o, vo, po, vl, pl) in M.find_models(d, B)}
+    def node(a):
+        o = a - B; fl, mp = struct.unpack_from('<II', d, o)
+        return dict(fl=fl, mp=mp, pos=list(struct.unpack_from('<3f', d, o + 8)), ang=list(struct.unpack_from('<3i', d, o + 20)), scl=struct.unpack_from('<3f', d, o + 32), ch=struct.unpack_from('<I', d, o + 44)[0], sb=struct.unpack_from('<I', d, o + 48)[0])
+    order = []
+    def walk(a, parent):
+        while a:
+            n = node(a); n['parent'] = parent; order.append(n)
+            if n['ch']: walk(n['ch'], len(order) - 1)
+            a = n['sb']
+    walk(0x8c0878c4, None)
+    def keys(ptr, kind):
+        o = ptr - B
+        return [struct.unpack_from('<Iiii' if kind == 'ang' else '<Ifff', d, o + 16 * i)[1:] for i in range(24)]
+    angk = {1: keys(0x8c0878f8, 'ang'), 2: keys(0x8c087a78, 'ang'), 3: keys(0x8c087d78, 'ang'), 5: keys(0x8c087ef8, 'ang')}
+    posk = {3: keys(0x8c087bf8, 'pos')}
+    vkeys = [struct.unpack_from('<II', d, 0x7ceb4 + 8 * k)[1] - B for k in range(24)]
+    def rot(v, a, flags):
+        ax, ay, az = [t * 2 * math.pi / 65536.0 for t in a]
+        x, y, z = v
+        ops = (('x', ax), ('y', ay), ('z', az)) if flags & 0x20 else (('z', az), ('y', ay), ('x', ax))
+        for ax_, t in ops:
+            c, s_ = math.cos(t), math.sin(t)
+            if ax_ == 'x': y, z = y * c - z * s_, y * s_ + z * c
+            elif ax_ == 'y': x, z = x * c + z * s_, -x * s_ + z * c
+            else: x, y = x * c - y * s_, x * s_ + y * c
+        return (x, y, z)
+    frames = []
+    for f in range(24):
+        pos = [list(n['pos']) for n in order]; ang = [list(n['ang']) for n in order]
+        for i, k in angk.items(): ang[i] = list(k[f])
+        for i, k in posk.items(): pos[i] = list(k[f])
+        def world(i, v):
+            while i is not None:
+                n = order[i]; fl = n['fl']
+                if not fl & 4: v = (v[0] * n['scl'][0], v[1] * n['scl'][1], v[2] * n['scl'][2])
+                if not fl & 2: v = rot(v, ang[i], fl)
+                if not fl & 1: v = (v[0] + pos[i][0], v[1] + pos[i][1], v[2] + pos[i][2])
+                i = n['parent']
+            return v
+        verts = []; tris = []
+        for i, n in enumerate(order):
+            if n['mp'] == 0 or n['fl'] & 8: continue
+            vl, pl = models[n['mp']]; keys_ = sorted(vl); base = len(verts); remap = {k: base + j for j, k in enumerate(keys_)}
+            for j, k in enumerate(keys_):
+                p = vl[k][0]
+                if i == 0: p = struct.unpack_from('<3f', d, vkeys[f] + 12 * j)   # head: motion B replaces the vertex positions
+                verts.append(world(i, p))
+            for strip, rev, tex, mat in pl:
+                for q in range(len(strip) - 2):
+                    t3 = [strip[q], strip[q + 1], strip[q + 2]]
+                    if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
+                    a_, b_, c_ = t3[0][0], t3[1][0], t3[2][0]
+                    if a_ in remap and b_ in remap and c_ in remap and len({a_, b_, c_}) == 3: tris.append((remap[a_], remap[b_], remap[c_]))
+        frames.append([c for t in tris for vi in t for c in verts[vi]])
+    return frames
+
 def load_obj(path):
     V, T, tris, mat = [], [], [], 0
     for line in open(path):
@@ -76,8 +141,8 @@ def main(root):
         mats = [tex(texlist[m]) if m < len(texlist) else 0 for m in range(nm)]
         frames = []
         if name == 'cat':
-            for fr in cat_morph_frames(root, V):
-                frames.append([c for m, idx in F for a, b in idx for c in fr[a]])
+            frames = cat_pose_frames(root)
+            assert all(len(fr) == len(F) * 9 for fr in frames), (len(frames[0]), len(F) * 9)
         models.append((name, tris, mats, frames))
     out = bytearray(b'CCM2' + struct.pack('<I', len(textures)))
     for im in textures:

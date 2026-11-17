@@ -764,13 +764,14 @@ struct App {
     };
     std::vector<FieldObject> fieldObjects;
     // Dreamcast 3D characters (docs/dreamcast_models.md): the basic mouse plays its eight keyframes by the low three bits of the shared clock (0x8c019b0c writes them, 0x8c019e26 draws the frame
-    // directly); the cat shows the head pose 17 (the base pose) until the game's morph-frame rule is decoded. Orientation: the heading angle (heading << 14) turns the model about the vertical axis.
+    // directly); the cat plays its 24-frame walk cycle from the walk phase (provisional mapping). Orientation: the heading angle (heading << 14) turns the model about the vertical axis.
     bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z) {
         const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(gtime & 7)) : models3d.find("cat");
         if (!m) return false;
         const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
         const float scale = CELL * (en.mouse ? 0.095f : 0.052f);
-        models3d.draw(ren, *m, x, z - CELL * 0.1f, scale, yaw, 50.0f, 0.35f, en.mouse ? -1 : 17);
+        const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
+        models3d.draw(ren, *m, x, z - CELL * 0.1f, scale, yaw, 50.0f, 0.35f, en.mouse ? -1 : catFrame);
         (void)i; return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
