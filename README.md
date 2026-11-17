@@ -22,7 +22,7 @@ The project brings together the strongest parts of the Dreamcast, Game Boy Advan
 
 ## Status and plan
 
-**Playable now on Windows:** Puzzle with stage select, Battle with local hotseat for up to four players on one machine and CPU opponents, Stage Challenge (24 of 25 stages; the last, a one-minute roulette battle, still differs from the original on some seeds), the title and main menu, Help & Options with a Settings page (display, log detail, controller button remapping, Battle CPU style), and a portable data mode.
+**Playable now on Windows:** Puzzle with stage select, Battle with local hotseat for up to four players on one machine and CPU opponents, Stage Challenge (24 of 25 stages; the last, a one-minute roulette battle, matches the original on two of three recorded seeds and to frame 2779 of 4070 on the third), the title and main menu, Help & Options with a Settings page (display, log detail, controller button remapping, Battle CPU style), and a portable data mode.
 
 **Planned multiplayer:** Wireless local play via mobile devices and online play.
 
