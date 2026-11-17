@@ -9,7 +9,13 @@ from PIL import Image
 
 CAT_TEX = ['CAT_c_cat01', 'CAT_c_cat02', 'CAT_c_cat03', 'CAT_c_cat04']
 MOUSE_TEX = ['MOUSE_c_mouse%02d' % n for n in (1, 2, 3, 5, 4, 6, 7, 8, 9, 10)]
-MODELS = [('cat', '0778c4', CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o in enumerate(('07efb8', '07fe38', '080cb8', '081b38', '0829b8', '083838', '0846b8', '085538'))]
+# BATTLEMODELS texture list in the executable's order (NJS_TEXNAME array at 0x75a8c; index = the material number in the objects; verified by the 4 rocket-lid objects using 12..15 = rokefuta01..04 and the four rocket colours using the matching ita/mado pairs)
+BATTLE_TEX = ['sphere_tx', 'ins', 'bluemado', 'itablue', 'itaorange', 'orangemado', 'itared', 'redmado', 'greenmado', 'itagreen', 'outs', 'rue729', 'rokefuta01', 'rokefuta02', 'rokefuta03', 'rokefuta04',
+              'newk1', 'newk1s', 'newk2', 'newk2s', 'newk3', 'newk3s', 'newk4', 'newk4s', 's01', 'rfire01', 'rfire04', 'rfire03', 'rfire02', 'yuka01', 'yuka02', 'yuka03', 'yuka04', 'yuka05', 'yuka06',
+              'kabetx01', 'kabetx02', 'kabetx03']
+BATTLE_TEX = ['BATTLEMODELS_' + n for n in BATTLE_TEX]
+MODELS = [('cat', '0778c4', CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o in enumerate(('07efb8', '07fe38', '080cb8', '081b38', '0829b8', '083838', '0846b8', '085538'))]     + [('rocket_blue', '09a340', BATTLE_TEX), ('rocket_orange', '09b490', BATTLE_TEX), ('rocket_red', '09c5e0', BATTLE_TEX), ('rocket_green', '09d730', BATTLE_TEX),
+       ('lid1', '0987b8', BATTLE_TEX), ('lid2', '098b20', BATTLE_TEX), ('lid3', '098e88', BATTLE_TEX), ('lid4', '0991f0', BATTLE_TEX), ('fire', '0a0258', BATTLE_TEX), ('wall', '0a2114', BATTLE_TEX)]
 
 def load_obj(path):
     V, T, tris, mat = [], [], [], 0
