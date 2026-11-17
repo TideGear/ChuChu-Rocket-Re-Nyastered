@@ -1,7 +1,7 @@
 Import-Module Microsoft.PowerShell.Utility, Microsoft.PowerShell.Archive
 . (Join-Path $PSScriptRoot 'windows-download.ps1')
 
-function Get-SetupPython($Tools) {
+function Get-SetupPython($Tools, [switch]$NoDownload) {
     $probe = 'import sys; from PIL import Image; assert sys.version_info >= (3, 10); Image.new(chr(76), (1, 1))'
     foreach ($candidate in @(@('py.exe', '-3.12'), @('py.exe', '-3'), @('python.exe'))) {
         $commands = Get-Command $candidate[0] -CommandType Application -All -ErrorAction SilentlyContinue
@@ -20,6 +20,9 @@ function Get-SetupPython($Tools) {
         & $python -c $probe
         if ($LASTEXITCODE -ne 0) { throw "Could not start the cached extraction runtime at $destination." }
         return @{ Exe = $python; Prefix = @() }
+    }
+    if ($NoDownload) {
+        throw 'Python 3.10 or newer with Pillow is required. Enable the Python and Pillow download in setup or install them yourself.'
     }
 
     $staging = Join-Path $Tools ([guid]::NewGuid().ToString('N'))

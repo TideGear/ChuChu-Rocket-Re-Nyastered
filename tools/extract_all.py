@@ -269,6 +269,8 @@ def export_playable_stages(assets):
 
 def discover(root, work, prefix='', exclude=None):
     """Yield (kind, local path, original label) for packages and loose input."""
+    if root.resolve() == exclude:
+        return
     for base, dirs, files in os.walk(root):
         dirs[:] = sorted(name for name in dirs if (Path(base) / name).resolve() != exclude)
         files.sort()
@@ -319,13 +321,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--game-files', required=True)
     ap.add_argument('--cache', required=True)
+    ap.add_argument('--exclude-cache', type=Path, help='existing cache to skip when extracting into staging')
     a = ap.parse_args()
     gf, cache = a.game_files, a.cache
     work, assets = os.path.join(cache, 'work'), os.path.join(cache, 'assets')
     os.makedirs(work, exist_ok=True); os.makedirs(assets, exist_ok=True)
     manifest = {'created': time.strftime('%Y-%m-%d %H:%M:%S'), 'inputs': []}
     actions = {'ios': do_ios, 'android': do_apk, 'gba': do_gba, 'dreamcast': do_dreamcast}
-    for kind, path, label in discover(Path(gf), work, exclude=Path(cache).resolve()):
+    for kind, path, label in discover(Path(gf), work, exclude=(a.exclude_cache or Path(cache)).resolve()):
         if kind == 'error':
             manifest['inputs'].append({'kind': 'zip', 'file': label[0], 'error': label[1]})
             continue

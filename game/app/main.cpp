@@ -29,6 +29,9 @@
 #include <vector>
 #include <filesystem>
 #include <algorithm>
+#ifdef _WIN32
+#include "launcher_setup.hpp"
+#endif
 extern "C" {
 #include "stb_vorbis.c"
 }
@@ -2468,6 +2471,9 @@ static int saveFrame(SDL_Renderer* renderer, const char* path) {
 }
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    if (argc > 1 && !strcmp(argv[1], "--prepare")) return prepareLauncherAssets();
+#endif
     if (getenv("CCR_STARTUP_FLOW_TRACE")) {
         Startup splash;
         float elapsed;
@@ -2609,6 +2615,27 @@ int main(int argc, char** argv) {
             printf("%s\n", msg); if (!getenv("CCR_SHOT") && !getenv("CCR_HEADLESS") && !getenv("CCR_BENCH") && SDL_Init(SDL_INIT_VIDEO) == 0) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ChuChu Rocket! Re-Nyastered", msg, nullptr); SDL_Quit(); } return 2;
         }
     }
+#ifdef _WIN32
+    if (argc > 1 + shift && !strcmp(argv[1 + shift], "--launcher")) {
+        if (!hasAssets(root)) return 2;
+        ++shift;
+        if (!getenv("CCR_FULLSCREEN")) {
+            const char* mode = getenv("RECOMPLAUNCHER_MODE");
+            if (mode && !strcmp(mode, "bigpicture")) _putenv_s("CCR_FULLSCREEN", "1");
+        }
+        while (argc > 1 + shift) {
+            const char* arg = argv[1 + shift];
+            if (!strcmp(arg, "--fullscreen")) _putenv_s("CCR_FULLSCREEN", "1");
+            else if (!strcmp(arg, "--windowed")) _putenv_s("CCR_FULLSCREEN", "");
+            else if (!strcmp(arg, "--vsync")) _putenv_s("CCR_VSYNC", "1");
+            else if (!strcmp(arg, "--no-vsync")) _putenv_s("CCR_VSYNC", "0");
+            else if (!strcmp(arg, "--filter=nearest")) _putenv_s("CCR_FILTER", "nearest");
+            else if (!strcmp(arg, "--filter=linear")) _putenv_s("CCR_FILTER", "linear");
+            else break;
+            ++shift;
+        }
+    }
+#endif
     App app; app.root = root; if (!app.init()) return 2; gApp = &app;
     std::string start = argc > 1 + shift ? argv[1 + shift] : "STARTUP"; int stageNo = argc > 2 + shift ? atoi(argv[2 + shift]) : 0; uint32_t seed = argc > 3 + shift ? (uint32_t)atoi(argv[3 + shift]) : 1;
     int lv[4] = {-1, 3, 3, 3}; if (argc > 4 + shift) { int k = 1; for (const char* p = argv[4 + shift]; *p && k < 4; ) { lv[k++] = atoi(p); while (*p && *p != ',') p++; if (*p == ',') p++; } }
