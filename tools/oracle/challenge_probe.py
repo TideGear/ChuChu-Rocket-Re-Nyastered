@@ -75,6 +75,16 @@ def run(stage, frames):
         o.uc.hook_add(_H, mcb, begin=BASE + 0x3501c - G, end=BASE + 0x3501c - G + 2)
     else:
         cur_frame = [0]
+    if os.environ.get('COMPSEED'):   # CT_StartCompThink (0x29d50): player, level and the value read by 0x2ef3c (the seed of the computer player's generator)
+        from unicorn import UC_HOOK_CODE as _HS
+        def scb(uc, a_, sz, u): print('COMPSEED r0 %#x r5(player) %d r6(level) %d f%d' % (uc.reg_read(UC_ARM_REG_R0), uc.reg_read(5), uc.reg_read(6), cur_frame[0]))
+        o.uc.hook_add(_HS, scb, begin=BASE + 0x29d5a - G, end=BASE + 0x29d5a - G + 2)
+    if os.environ.get('TRACKARR'):   # every call of the arrow placement function 0x286ac: frame, player, cell, direction (each call is seen twice)
+        from unicorn import UC_HOOK_CODE as _HA
+        def acb(uc, a_, sz, u):
+            pr = uc.reg_read(UC_ARM_REG_R1); x, y = struct.unpack('<hh', o.read(pr, 4))
+            print('ARRPUT f%d player %d cell %d %d dir %d' % (cur_frame[0], uc.reg_read(UC_ARM_REG_R0), x, y, uc.reg_read(UC_ARM_REG_R2)))
+        o.uc.hook_add(_HA, acb, begin=BASE + 0x286ac - G, end=BASE + 0x286ac - G + 2)
     if os.environ.get('CPOS'):   # CPOS=lo,hi (ticks): cat positions at the entry of the cat task function (FUN_00028ffc)
         clo, chi = [int(v) for v in os.environ['CPOS'].split(',')]
         from unicorn import UC_HOOK_CODE as _HC2
