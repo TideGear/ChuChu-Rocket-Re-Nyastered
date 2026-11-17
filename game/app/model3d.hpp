@@ -51,7 +51,7 @@ struct ModelPack {
         return true;
     }
     // Draws the model centred at (cx, cy) on screen. scale: pixels per model unit; yaw/pitch in degrees; light: simple directional shade 0..1 (1 = none).
-    void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float shade = 1.0f, int frame = -1, int forceMat = -1) const {
+    void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float shade = 1.0f, int frame = -1, int forceMat = -1, uint64_t skipMats = 0) const {
         const std::vector<float>* pose = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
         const float ya = yawDeg * 0.017453292f, pa = pitchDeg * 0.017453292f, cyw = cosf(ya), syw = sinf(ya), cp = cosf(pa), sp = sinf(pa);
         struct T { float z; int tex; SDL_Vertex v[3]; };
@@ -59,6 +59,7 @@ struct ModelPack {
         const ModelLight& L = modelLight();
         for (size_t ti = 0; ti < m.tris.size(); ti++) {
             const auto& t = m.tris[ti];
+            if (skipMats >> (t.mat & 63) & 1) continue;
             T o; float zsum = 0;
             for (int k = 0; k < 3; k++) {
                 const float* pp = pose ? &(*pose)[ti * 18 + k * 6] : nullptr;

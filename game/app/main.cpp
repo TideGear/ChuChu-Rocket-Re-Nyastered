@@ -464,7 +464,11 @@ struct App {
             if (t == 0x11) { blit(atlas, 7, ax, ay); continue; }
             if (!three) blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
             if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay);
-            else if (t >= 5 && t <= 8) blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay);
+            else if (t >= 5 && t <= 8) {
+                const Model3D* po = three ? models3d.find("hole_out") : nullptr; const Model3D* pi = three ? models3d.find("hole_in") : nullptr; const float k = (float)CELL / 15.0f;   // the generator pad: outs (rim) and ins (inner disc) from the disc, seen from above
+                if (po && pi) { models3d.draw(ren, *po, ax, ay, k, 0.0f, 90.0f); models3d.draw(ren, *pi, ax, ay, k, 0.0f, 90.0f); }
+                else blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay);
+            }
         }
         if (three) { walls3d(st, wallColor, ox, oy); return; }
         // HD 1.0 createPlayfield draws horizontal and vertical edge rows in
@@ -796,10 +800,10 @@ struct App {
     bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z) {
         const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(gtime & 7)) : models3d.find("cat");
         if (!m) return false;
-        const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
+        const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);   // both fronts are at yaw 180 (the real Dreamcast frames show the mouse's black eyes and the cat's spiral eyes from that side)
         const float scale = CELL * (en.mouse ? 0.095f : 0.052f);
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
-        models3d.draw(ren, *m, x, z + CELL * 0.28f, scale, yaw, 12.0f, 0.35f, en.mouse ? -1 : catFrame);
+        models3d.draw(ren, *m, x, z + CELL * 0.22f, scale, yaw, 38.0f, 0.35f, en.mouse ? -1 : catFrame);
         (void)i; return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
@@ -858,7 +862,7 @@ struct App {
             if (object.rocket) {
                 if (useModels3d()) {   // Dreamcast rocket models: one per player colour (blue, orange, red, green = itablue/itaorange/itared/itagreen)
                     static const char* names[4] = {"rocket_blue", "rocket_orange", "rocket_red", "rocket_green"};
-                    if (const Model3D* m = models3d.find(names[i & 3])) { models3d.draw(ren, *m, x, z + CELL * 0.30f, CELL * 0.07f * (puku ? puku[i] : 1.0f), 0.0f, 12.0f, 0.35f); continue; }
+                    if (const Model3D* m = models3d.find(names[i & 3])) { models3d.draw(ren, *m, x, z, CELL * 0.07f * (puku ? puku[i] : 1.0f), 0.0f, 54.0f); continue; }   // provisional: the real pad rocket is a studded ball with a ring of portholes (not identified); the launch rocket at a steep angle shows its portholes
                 }
                 blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f);
                 continue;
@@ -926,6 +930,11 @@ struct ModelViewerMode : Screen {
         if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 0.35f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
         const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
         if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
+        if (getenv("CCR_CANDS")) { if (const Model3D* m = pack.find("rocket_blue")) { for (int i = 0; i < 6; i++) pack.draw(a.ren, *m, 90.0f + 170.0f * i, 260.0f, 14.0f, 0.0f, 30.0f + 12.0f * i); } a.text("ROCKET PITCH 30 42 54 66 78 90", 24, 14, 24); return; }
+        if (getenv("CCR_CAMFIT")) {   // pitch comparison against the Dreamcast frame: cat and mouse at pitches 30..80 (columns), cat yaw 180 and mouse yaw 0 (their fronts)
+            const Model3D* cat = pack.find("cat"); const Model3D* mo = pack.find("mouse0");
+            for (int i = 0; i < 6; i++) { const float pitch = 20.0f + 10.0f * i; if (cat) { pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 130.0f, 5.2f, 180.0f, pitch, 1.0f, 17); pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 330.0f, 5.2f, 0.0f, pitch, 1.0f, 17); } if (mo) { pack.draw(a.ren, *mo, 90.0f + 160.0f * i, 500.0f, 7.0f, 180.0f, pitch); } }
+            a.text("PITCH 30 40 50 60 70 80", 24, 14, 24); return; }
         if (getenv("CCR_LIGHTFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) pack.draw(a.ren, *cat, 130.0f + 250.0f * i, 400.0f, 18.0f, 180.0f - 90.0f * i, 10.0f, 1.0f, 17); return; }
         if (getenv("CCR_MOUSEFIT")) { if (const Model3D* mo = pack.find("mouse0")) for (int i = 0; i < 4; i++) pack.draw(a.ren, *mo, 140.0f + 240.0f * i, 330.0f, 22.0f, 90.0f * i, 12.0f, 0.35f); a.text("MOUSE YAW 0 90 180 270", 24, 14, 24); return; }
         if (getenv("CCR_PITCHFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) { pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 330.0f, 9.0f, 180.0f, 10.0f + 10.0f * i, 0.35f, 0); pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 640.0f, 9.0f, 0.0f, 10.0f + 10.0f * i, 0.35f, 0); } a.text("PITCH 10 20 30 40  FRONT / BACK", 24, 14, 24); return; }
