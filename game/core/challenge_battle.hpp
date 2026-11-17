@@ -20,7 +20,7 @@ public:
     int teamScore(int t) const { return game.score.team[t]; }   // stage 24 words 8 and 9
     void start(const Stage& st, int stageIndex, uint32_t seed) {
         stage = stageIndex; type = stageIndex == 24 ? 5 : stageIndex % 5; limit_ = type == 5 ? 3600 : kLimitTicks; phase = Intro; phaseFrame = 0; playTick = 0; failReason = nullptr; decided_ = false;
-        game = BattleGame(); game.roundFrames = type == 5 ? 3600 : 1 << 30; game.baseScale = 1.0f; game.rouletteEnabled = type == 5; game.rouletteManager = type == 5; if (type == 5) { game.fixedGameTime = 0; game.freezeOnRoll = true; game.cpuRunsOnFreeze = true; game.ffaShuffle = true; game.catManiaLimit = 601; game.heatArrowLag = true; }   // ChallengeLoop never advances TI_GetGameTime (only EditplayLoop and the battle loops call TI_CountUpGameTimer)
+        game = BattleGame(); game.roundFrames = type == 5 ? 3600 : 1 << 30; game.baseScale = 1.0f; game.rouletteEnabled = type == 5; game.rouletteManager = type == 5; if (type == 5) { game.fixedGameTime = 0; game.freezeOnRoll = true; game.cpuRunsOnFreeze = true; game.ffaShuffle = true; game.catManiaLimit = 600; game.heatArrowLag = true; }   // ChallengeLoop never advances TI_GetGameTime (only EditplayLoop and the battle loops call TI_CountUpGameTimer)
         if (type == 4) { game.cpuLevel[1] = game.cpuLevel[3] = 0; }
         if (type == 5) { game.cpuLevel[1] = game.cpuLevel[3] = 3; }
         game.start(st, seed);
