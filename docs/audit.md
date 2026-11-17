@@ -9,7 +9,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 ## B. Rules and modes
 - 26 whole-battle cases per forced roulette outcome: **done in the harness** (26/26 for outcomes 0-7, natural, Team); **done** against the real loop too: the original freezes the action while the wheel spins (task mask 0x1f / 0x13); recordings through the mask (`MASK=1`) are 26/26 for all eight outcomes.
 - Rank thresholds: **partial** (covered by the 26 cases; no separate check).
-- Team Battle: **done** through the real loop (26/26 for all eight forced outcomes; Everybody Move at other game times being re-recorded); end-of-round result and score screens: **open**.
+- Team Battle: **done** through the real loop (26/26 for all eight forced outcomes; Everybody Move at game times 1, 3, 4 and 7 also 26/26 through the mask); end-of-round result and score screens: **open**.
 - Stage Challenge: types 0-4 (24 stages) **done** (stage types 3/4: 8 of 8 runs identical); stage 24 **partial** (seeds 1000 and 2000 identical on every score word and computer-player arrow; seed 3000 identical to f2779, then a second heat source leaves the computer players' heat map at f2779 in the original but at f2785 in the port).
 - Puzzle Edit: conversion and CRC **done**; screen, save format, validity rules, VMS/VMI export **open**.
 ## C. Version differences
