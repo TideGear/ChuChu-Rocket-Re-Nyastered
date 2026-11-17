@@ -35,6 +35,8 @@ public:
     bool thaw_ = false; float earlyChance_ = -1.0f;
     bool cpuRunsOnFreeze = false;                 // the computer players' think tasks carry char ID 0, so they keep running while the wheel spins
     bool ffaShuffle = false;                      // RO_ShuffleRockets picks its table from the game type: Challenge (type 2) uses the free-for-all one
+    std::vector<std::pair<int,int>> lateNow_, lateNext_;   // cells of arrows a player's placement replaced: their collision word clears two ticks after the placement (measured, Challenge stage 24)
+    bool heatArrowLag = false;                    // player arrows enter the CPU heat spread one tick after the collision words (measured in ChallengeLoop; off in the whole-battle harness runs)
     bool freezeOnRoll = false;                    // the original's task mask while the wheel spins (measured in ChallengeLoop, stage 24); the whole-battle verification harness never applied it
     bool rouletteEnabled = true;                 // test harness: the emulated original rolls only under conditions not yet understood (see docs)
     bool genFirst = true;                        // generator task runs before the entity tasks (measured: 26/26 battles identical)
@@ -99,7 +101,7 @@ public:
         }
         if (f & (kRocket | kHole | kGenerator)) { if (sfx && player == localPlayer) sfx(0x13); return false; }
         int k = ring_[player]; int old = slot_[player][k];
-        if (old >= 0 && sim.arrows[old].live) { sim.arrows[old].live = false; sim.refreshCell(sim.arrows[old].x, sim.arrows[old].y); }
+        if (old >= 0 && sim.arrows[old].live) { sim.arrows[old].live = false; if (heatArrowLag && !inCpu_) lateNext_.push_back({sim.arrows[old].x, sim.arrows[old].y}); else sim.refreshCell(sim.arrows[old].x, sim.arrows[old].y); }
         sim.arrows.push_back({x, y, dir, 0, true, player, kArrowTtl}); if (arrowLatency && !inCpu_) pendRefresh_.push_back({x, y}); else sim.refreshCell(x, y);   // placements by the player (before the frame) register a tick later; the CPU task places inside the task pass and registers at once (cpu_test 10/10)
         slot_[player][k] = (int)sim.arrows.size() - 1; ring_[player] = (k + 1) % kArrowSlots;
         if (sfx && player == localPlayer) sfx(1);
@@ -114,7 +116,7 @@ public:
         if (freezeOnRoll && m1) { for (auto& h : sim.heat) h = 0; const bool was = roll_.active; thaw_ = false; if (cpuRunsOnFreeze) runCpu(); updateEvent(); if (was && !roll_.active) thaw_ = true; return; }   // while RL_GetRoulette4Status is 1 the task server skips every task whose char ID is in mask 0x1f (mice 1, arrow tasks 4, 8, generator 0x10); the roulette task (ID 0) keeps running; the mask follows the status one frame late
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
-        for (auto& c : pendRefresh_) sim.refreshCell(c.first, c.second);
+        sim.heatMask.clear(); for (auto& c : lateNow_) sim.refreshCell(c.first, c.second); lateNow_ = lateNext_; lateNext_.clear(); for (auto& c : pendRefresh_) { sim.refreshCell(c.first, c.second); if (heatArrowLag) sim.heatMask.push_back(c.second * kCols + c.first); }
         pendRefresh_.clear();
         applyMiceDec();
         if (genFirst && !m2) { gen->frame(frame); spawnPending(true); }

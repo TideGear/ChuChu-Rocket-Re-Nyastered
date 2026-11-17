@@ -214,6 +214,8 @@ public:
         return r;
     }
     static bool unchangedByCorrect(uint32_t f, int d) { int h = d; correct(f, h); return h == d; }
+    std::vector<std::pair<int, uint32_t>> heatKeep;   // arrows removed by a replacement this tick still count in the heat spread (cell index, their collision bits)
+    std::vector<int> heatMask;   // cells whose arrow is hidden from the heat spread this tick
     void buildHeat() {                                    // second half of SmpColAnalyze (run after all tasks each frame)
         for (auto& h : heat) h = 0;
         static const int mouseValue[4] = {1, 50, 25, 85};
@@ -234,7 +236,7 @@ private:
         if (depth != 1 && (unsigned)(v + 1) > 2u) {
             static const int dx[4] = {0, -1, 0, 1}, dy[4] = {1, 0, -1, 0};
             for (int d = 0; d < 4; d++) {
-                uint32_t f = fieldCollision(x, y);
+                uint32_t f = fieldCollision(x, y); for (int c : heatMask) if (c == y * kCols + x) f &= ~(kArrow | 3u); for (const auto& kp : heatKeep) if (kp.first == y * kCols + x) f |= kp.second;   // an arrow the player placed this tick is not in the heat spread yet (measured, Challenge stage 24)
                 if (!unchangedByCorrect(f, d)) continue;
                 int nx = x + dx[d], ny = y + dy[d];
                 if (nx < 0) nx += kCols; else if (nx >= kCols) nx -= kCols;

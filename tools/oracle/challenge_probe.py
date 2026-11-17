@@ -220,6 +220,11 @@ def run(stage, frames):
             cnt = struct.unpack_from('<i', raw, 0)[0]
             print('GENBLOCK count', cnt, [struct.unpack_from('<hhi', raw, 0x24 + 8 * i) for i in range(min(cnt, 8))])
         if os.environ.get('RNGDRAWS') and globals()['_rngc'][0]: print('RNG f%d %d' % (f, globals()['_rngc'][0])); globals()['_rngc'][0] = 0
+        if os.environ.get('HEATW'):   # HEATW=lo,hi: the CPU heat map (108 int16, 12 columns) at the end of each frame; 'HEAT f<frame> <row 5 cols 3..7>' plus the nonzero count
+            hlo, hhi = [int(v) for v in os.environ['HEATW'].split(',')]
+            if hlo <= f <= hhi:
+                hp = o.u32(BASE + 0x79498 + 0x564 - G); hh = struct.unpack('<108h', o.read(hp, 216))
+                print('HEAT f%d' % f + ''.join(' (%d,5)=%d' % (x, hh[5 * 12 + x]) for x in range(3, 8)) + ' nz=%d sum=%d' % (sum(1 for v in hh if v), sum(hh)))
         b = block()
         if os.environ.get('TRACKW4'):
             st_ = struct.unpack('<i', o.read(BASE + 0x184c8c - G, 4))[0]
