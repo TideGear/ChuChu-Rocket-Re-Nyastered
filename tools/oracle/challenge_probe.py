@@ -105,6 +105,14 @@ def run(stage, frames):
         from unicorn import UC_HOOK_CODE as _HF
         def fcb(uc, a_, sz, u): uc.reg_write(UC_ARM_REG_R0, int(os.environ['FORCE'])); uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
         o.uc.hook_add(_HF, fcb, begin=BASE + 0x3c2bc - G, end=BASE + 0x3c2bc - G + 2)
+    if os.environ.get('RNGDRAWS'):   # per-frame count of BHLib_GetRandomNumber calls, printed when it changes: 'RNG f<frame> <n>'
+        from unicorn import UC_HOOK_CODE as _HR
+        rngc = [0]
+        def rcb(uc, a_, sz, u):
+            rngc[0] += 1
+            if os.environ.get('RNGCALLERS') and globals().get('_curf') in (995, 996): print('RNGCALL f%d lr %#x' % (globals()['_curf'], uc.reg_read(UC_ARM_REG_LR) - BASE + G))
+        o.uc.hook_add(_HR, rcb, begin=BASE + 0x360a8 - G, end=BASE + 0x360a8 - G + 2)
+        globals()['_rngc'] = rngc
     if os.environ.get('TASKFLAGS'):   # the char ID byte (task + 2) and the exec function of every task the server visits, for the frame window lo,hi
         tlo, thi = [int(v) for v in os.environ['TASKFLAGS'].split(',')]
         from unicorn import UC_HOOK_CODE as _HT
@@ -202,6 +210,7 @@ def run(stage, frames):
             raw = o.read(BASE + 0x17b810 - G, 0x24 + 8 * 8)
             cnt = struct.unpack_from('<i', raw, 0)[0]
             print('GENBLOCK count', cnt, [struct.unpack_from('<hhi', raw, 0x24 + 8 * i) for i in range(min(cnt, 8))])
+        if os.environ.get('RNGDRAWS') and globals()['_rngc'][0]: print('RNG f%d %d' % (f, globals()['_rngc'][0])); globals()['_rngc'][0] = 0
         b = block()
         if os.environ.get('TRACKW4'):
             st_ = struct.unpack('<i', o.read(BASE + 0x184c8c - G, 4))[0]

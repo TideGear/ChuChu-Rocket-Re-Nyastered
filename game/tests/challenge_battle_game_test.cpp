@@ -16,13 +16,15 @@ int main(int argc, char** argv) {
         for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) st.hw[r * 12 + c] = walls[25 * r + c];
         for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) st.vw[r * 13 + c] = walls[25 * r + 12 + c];
         if (hdr[0] != 3 || (hdr[2] | (hdr[3] << 8)) != want) continue;
-        ChallengeBattleGame g; g.start(st, want, (uint32_t)seed); g.game.debug = getenv("BDEBUG") != nullptr;
+        ChallengeBattleGame g; g.start(st, want, (uint32_t)seed); g.game.debug = g.game.sim.trace = getenv("BDEBUG") != nullptr; if (getenv("FORCE")) g.game.forceOutcome = atoi(getenv("FORCE"));
         printf("f0 phase 1\n");
         int lastPhase = 1, lastW0 = -1, lastW1 = -1, lastScore = -1, lastT0 = -1, lastT1 = -1; size_t putsShown = 0, spShown = 0;
         for (int fr = 1; fr <= frames; fr++) {
             if (arrowSeed && fr >= 480 && (fr - 480) % 40 == 0) { const int k = (fr - 480) / 40; const uint32_t h = ((uint32_t)arrowSeed * 1000003u + (uint32_t)k * 7919u) * 2654435761u; g.placeArrow((int)(h % 12), (int)((h >> 8) % 9), (int)((h >> 16) % 4)); }
-            if (getenv("MPOS") && fr - 469 >= atoi(getenv("MPOS")) && fr - 469 <= atoi(getenv("MPOS")) + 8) for (const auto& e : g.game.sim.ents) if (e.mouse && e.alive && !e.done && !e.rocketIn) printf("MPOS t%d %.3f %.3f\n", fr - 469, e.x, e.z);
+            if (getenv("MPOS") && fr - 469 >= atoi(getenv("MPOS")) && fr - 469 <= atoi(getenv("MPOS")) + 8) for (const auto& e : g.game.sim.ents) if ((getenv("CATS") ? !e.mouse : e.mouse) && e.alive && !e.done && !e.rocketIn) printf("MPOS t%d %.3f %.3f\n", fr - 469, e.x, e.z);
+            const unsigned long long d0 = ccr::g_rngDraws;
             g.tick();
+            if (getenv("RNGDRAWS") && ccr::g_rngDraws != d0) printf("RNG f%d %llu\n", fr, ccr::g_rngDraws - d0);
             if (g.phase != lastPhase) { printf("f%d phase %d", fr, g.phase); if (g.failReason) printf(" (%s)", g.failReason); putchar(10); lastPhase = g.phase; }
             if (g.ownTeam() != lastW0 || g.enemyTeam() != lastW1) { printf("WORDS f%d w12 %d w13 %d", fr, g.ownTeam(), g.enemyTeam()); putchar(10); lastW0 = g.ownTeam(); lastW1 = g.enemyTeam(); }
             if (want == 24 && (g.teamScore(0) != lastT0 || g.teamScore(1) != lastT1)) { printf("WORDS f%d w8 %d w9 %d\n", fr, g.teamScore(0), g.teamScore(1)); lastT0 = g.teamScore(0); lastT1 = g.teamScore(1); }

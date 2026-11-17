@@ -31,7 +31,7 @@ public:
     int event = -1, eventLeft = 0; bool over = false;
     int rankOf(int p) const { return rank_[p]; }
     bool rotateOwn = false;                      // true: re-placing on your own arrow rotates it (the flagged branch of FUN_0002859c)
-    bool thaw_ = false;
+    bool thaw_ = false; float earlyChance_ = -1.0f;
     bool cpuRunsOnFreeze = false;                 // the computer players' think tasks carry char ID 0, so they keep running while the wheel spins
     bool ffaShuffle = false;                      // RO_ShuffleRockets picks its table from the game type: Challenge (type 2) uses the free-for-all one
     bool freezeOnRoll = false;                    // the original's task mask while the wheel spins (measured in ChallengeLoop, stage 24); the whole-battle verification harness never applied it
@@ -119,6 +119,8 @@ public:
         if (genFirst && !m2) { gen->frame(frame); spawnPending(true); }
         if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr, pendingRollSlot_); }   // the roll runs in the rolling mouse's destroy step, after the generator task (created first) of the same frame
 
+        earlyChance_ = -1.0f;
+        if (freezeOnRoll) for (const Ev& e : evs_) if (e.kind == 0 && e.state == 1 && e.count + 1 < e.limit && (e.count + 1) % 16 == 0) earlyChance_ = gen->rng().next();   // ChallengeLoop: the Cat Mania task (created before its four cats) draws before the cat tasks' respawn draws
         if (cpuFirst) runCpu();
         prepareSpeedChange();
         sim.events.clear(); if (!m2) sim.tick(); else for (auto& e : sim.ents) e.reg = false;
@@ -290,7 +292,7 @@ private:
             e.count++;
             // HD 1.0 RL_Eve_NekoFever rolls once every 16 ticks before expiry.
             if (e.kind == 0 && e.count < e.limit && e.count % 16 == 0) {
-                const float chance = gen->rng().next();
+                const float chance = earlyChance_ >= 0 ? earlyChance_ : gen->rng().next(); earlyChance_ = -1.0f;
                 if (chance < 0.3f && sfx) sfx(0x1b);
             }
             if (e.kind == 2 && e.count == 300) gen->flags = 0;
