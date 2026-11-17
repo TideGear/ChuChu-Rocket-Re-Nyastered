@@ -57,32 +57,24 @@ if ($Wait -gt 0 -and -not $Run) { if (Wait-Quiet $Wait) { Write-Output 'quiet'; 
 if ($Run) {
     $timeout = if ($Wait -gt 0) { $Wait } else { 300 }
     if (-not (Wait-Quiet $timeout)) { Write-Output "NOT RUN: machine stayed busy for $timeout s ($Label)"; exit 3 }
-    $job = Start-Job -ScriptBlock {
-        param($own)
-        while ($true) {
-            $c = [math]::Round((Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1).CounterSamples[0].CookedValue, 1)
-            $mine = @(Get-Process | Where-Object { $own -contains $_.ProcessName } | ForEach-Object { $_.Id })
-            $foreign = 0.0; $who = '-'
-            foreach ($x in (Get-Counter '\GPU Engine(*)\Utilization Percentage').CounterSamples) {
-                if ($x.InstanceName -match 'pid_(\d+)_') { $p = [int]$Matches[1]; if ($mine -notcontains $p -and $x.CookedValue -gt $foreign) { $foreign = [math]::Round($x.CookedValue, 1); $who = (Get-Process -Id $p).ProcessName } }
-            }
-            "$c $foreign $who"
-        }
-    } -ArgumentList (, $own)
-    $t0 = Get-Date
-    $out = Invoke-Expression $Run
-    $code = $LASTEXITCODE
+    # run the command as a child process (its own cmd.exe) and sample the load from this loop until it exits
+    $outFile = [IO.Path]::GetTempFileName()
+    $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', ($Run + ' > "' + $outFile + '" 2>&1') -PassThru -WindowStyle Hidden
+    $t0 = Get-Date; $peakCpu = 0.0; $peakForeign = 0.0; $who = '-'; $n = 0
+    while (-not $proc.HasExited) {
+        $c = [math]::Round((Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1).CounterSamples[0].CookedValue, 1)
+        $g = Get-ForeignGpu; $n++
+        if ($c -gt $peakCpu) { $peakCpu = $c }
+        if ($g.Gpu -gt $peakForeign) { $peakForeign = $g.Gpu; $who = $g.Who }
+    }
     $elapsed = ((Get-Date) - $t0).TotalSeconds
-    $rows = Receive-Job $job; Stop-Job $job; Remove-Job $job
-    $out
-    $peakCpu = 0; $peakForeign = 0; $who = '-'
-    foreach ($r in $rows) { $p = $r -split ' '; if ([double]$p[0] -gt $peakCpu) { $peakCpu = [double]$p[0] }; if ([double]$p[1] -gt $peakForeign) { $peakForeign = [double]$p[1]; $who = $p[2] } }
+    Get-Content $outFile; Remove-Item $outFile
     $after = Get-Load
-    Write-Output ("load during run {0:N0} s: peak total cpu {1} %, peak GPU use by other processes {2} % ({3}); after the run: cpu {4} %  other gpu {5} %" -f $elapsed, $peakCpu, $peakForeign, $who, $after.Cpu, $after.Gpu)
-    if (@($rows).Count -eq 0) { Write-Output 'TAINTED (no load samples); repeat this measurement' }
+    Write-Output ("load during run {0:N0} s ({1} samples): peak total cpu {2} %, peak GPU use by other processes {3} % ({4}); after the run: cpu {5} %  other gpu {6} %" -f $elapsed, $n, $peakCpu, $peakForeign, $who, $after.Cpu, $after.Gpu)
+    if ($n -eq 0) { Write-Output 'UNSAMPLED (run shorter than one sample); use a longer run' }
     elseif ($peakForeign -gt $GpuMax) { Write-Output "TAINTED (another process used the GPU during the run: $who $peakForeign %); repeat this measurement" }
     elseif ($after.Busy) { Write-Output "TAINTED (another process was busy right after the run: $($after.Busy)); repeat this measurement" }
     else { Write-Output 'CLEAN (quiet before, no other GPU use during, quiet after)' }
-    exit $code
+    exit $proc.ExitCode
 }
 Write-Output 'usage: quiet.ps1 -Check | -Wait <s> | -Run "<command>" [-Wait <s>] [-Label <name>]'

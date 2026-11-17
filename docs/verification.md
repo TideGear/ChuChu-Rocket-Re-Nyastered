@@ -47,14 +47,15 @@ is compared with it.
 | 7680x4320 | 60 Hz | 60.0 | 72.9 ms/frame (needs the GPU renderer) |
 Saved frames have exactly the output pixel size (checked from the BMP sizes). Logic speed is independent of display rate; even the CPU renderer reaches about 60 fps at 4K, the GPU renderer has far more headroom. Not yet measured: the GPU (accelerated) path, since that needs a visible window.
 
-### GPU path (2026-11-13, hidden window, nothing displayed)
-`CCR_GPU=1` with `CCR_BENCH` uses the accelerated renderer on a hidden window (a 1x1 pixel read each frame forces the GPU to finish, so the time includes the GPU work). Same battle scene, 300 frames, vsync off:
-| Output size | Draw time | Share of the 16.7 ms frame budget |
-|---|---|---|
-| 1920x1080 | 0.08 ms | 0.5% |
-| 3840x2160 | 0.17 ms | 1% |
-| 7680x4320 | 0.53 ms | 3% |
-This is the current 2D scene only (tiles, sprites, HUD). The Dreamcast 3D models are not drawn by the app yet, so their cost is not included; it has to be measured again when they are added (target: 4K at 60 fps with at least 2x headroom on the 3D pass).
+### GPU path (re-measured 2026-11-17 through `tools/quiet.ps1`, hidden window, nothing displayed)
+`CCR_GPU=1 CCR_BENCH=1500 CCR_HZ=240 CCR_VSYNC=0` with `CCR_SIZE`; a 1x1 pixel read each frame forces the GPU to finish, so the time includes the GPU work. Each run went through `tools\quiet.ps1 -Run`, which waits for a quiet machine and reports CLEAN only if no other process used the GPU during the run (other projects share this PC). NVIDIA GeForce RTX 3060, Windows 10, release build of the commit that carries this entry.
+| Scene | Output size | Draw time | Uncapped rate | Share of the 16.7 ms (60 fps) budget | Load check |
+|---|---|---|---|---|---|
+| Battle (stage 3) | 1920x1080 | 1.84 ms | ~540 fps | 11% | CLEAN |
+| Puzzle (stage 3) | 1920x1080 | 1.87 ms | ~535 fps | 11% | CLEAN |
+| Battle (stage 3) | 3840x2160 | 8.16 ms | ~122 fps | 49% | CLEAN |
+| Puzzle (stage 3) | 3840x2160 | 8.13 ms | ~123 fps | 49% | CLEAN |
+So 4K at 60 fps holds with about 2x headroom for the current 2D scene on this GPU. **Not covered:** the Dreamcast 3D models are not drawn by the app yet (measure again when they are added; target 4K/60 with at least 2x headroom), a real presented window on a display (this is the hidden-window renderer), 8K (the earlier 8K figure was taken while other work shared the GPU and is withdrawn), and weaker GPUs, phones and browsers. Earlier numbers in this section (0.08-0.53 ms) and ad-hoc runs of 12-50 ms were taken without the load guard and are not valid evidence.
 
 ## Determinism and replay (2026-11-13)
 `game/tests/determinism_test.cpp` (`determinism_test.exe <battle_stages.bin>`): each of the 25 Dreamcast battle stages is played for a full 3-minute round with roulette, three level-3 CPU opponents and scripted human arrows while the input log is recorded; the log is replayed on a fresh game, and a third run does unrelated work between ticks (what a renderer does). A 64-bit hash of all entity positions and scores after every tick is compared: 25 stages x 3 runs, 180,000 replayed ticks, **0 divergences**. Together with the render-rate table above (60 ticks/s at every display rate) this covers the replay / lockstep requirement for the simulation; wire protocol and netplay are not built yet.
