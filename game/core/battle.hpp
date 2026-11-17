@@ -31,6 +31,10 @@ public:
     int event = -1, eventLeft = 0; bool over = false;
     int rankOf(int p) const { return rank_[p]; }
     bool rotateOwn = false;                      // true: re-placing on your own arrow rotates it (the flagged branch of FUN_0002859c)
+    bool thaw_ = false;
+    bool cpuRunsOnFreeze = false;                 // the computer players' think tasks carry char ID 0, so they keep running while the wheel spins
+    bool ffaShuffle = false;                      // RO_ShuffleRockets picks its table from the game type: Challenge (type 2) uses the free-for-all one
+    bool freezeOnRoll = false;                    // the original's task mask while the wheel spins (measured in ChallengeLoop, stage 24); the whole-battle verification harness never applied it
     bool rouletteEnabled = true;                 // test harness: the emulated original rolls only under conditions not yet understood (see docs)
     bool genFirst = true;                        // generator task runs before the entity tasks (measured: 26/26 battles identical)
     // CPU players (Android CT_*): level 0..3 or 4 = chosen from time and player; -1 = human
@@ -104,17 +108,20 @@ public:
         if (over) return;
         frame++;
         if (!roll_.active) { clock++; int left = roundFrames - clock; if (sfx && left >= 0 && left % 60 == 0 && left / 60 <= 5) sfx(0x13 - left / 60); }   // FourBattleLoop: ChuSECall(0x13 - seconds) as the BCD countdown (mm:ss:ff, ff = 60 Hz frames) reaches 5, 4, 3, 2, 1, 0 s
+        bool m2 = false, m1 = roll_.active || thaw_;
+        if (freezeOnRoll) for (const Ev& e : evs_) { if (e.kind == 5 || e.kind == 6) m1 = true; if (e.kind == 4) m2 = true; }   // RL status 1 while the wheel spins and during Everybody Move / Cat Attack (mask 0x1f); status 2 during Place Arrows Again (mask 0x13: mice, cats and the generator stop, arrows keep running)
+        if (freezeOnRoll && m1) { for (auto& h : sim.heat) h = 0; const bool was = roll_.active; thaw_ = false; if (cpuRunsOnFreeze) runCpu(); updateEvent(); if (was && !roll_.active) thaw_ = true; return; }   // while RL_GetRoulette4Status is 1 the task server skips every task whose char ID is in mask 0x1f (mice 1, arrow tasks 4, 8, generator 0x10); the roulette task (ID 0) keeps running; the mask follows the status one frame late
         for (auto& a : sim.arrows) if (a.live && a.ttl > 0 && --a.ttl == 0) { a.live = false; sim.refreshCell(a.x, a.y); }
         if (cursorLock > 0) cursorLock--;
         for (auto& c : pendRefresh_) sim.refreshCell(c.first, c.second);
         pendRefresh_.clear();
         applyMiceDec();
-        if (genFirst) { gen->frame(frame); spawnPending(true); }
+        if (genFirst && !m2) { gen->frame(frame); spawnPending(true); }
         if (pendingRoll_ >= 0) { int pr = pendingRoll_; pendingRoll_ = -1; startRoulette(pr, pendingRollSlot_); }   // the roll runs in the rolling mouse's destroy step, after the generator task (created first) of the same frame
 
         if (cpuFirst) runCpu();
         prepareSpeedChange();
-        sim.events.clear(); sim.tick();
+        sim.events.clear(); if (!m2) sim.tick(); else for (auto& e : sim.ents) e.reg = false;
         for (const Event& e : sim.events) handle(e);
         if (pairLag && eatenTick_ >= 2) { pendMice_ -= eatenNormal_; extraMice_ += eatenNormal_; }   // hypothesis: a same-frame pair of eaten mice leaves the counter one tick later
         eatenTick_ = eatenNormal_ = 0;
@@ -123,7 +130,7 @@ public:
         if (!cpuFirst) runCpu();
         updateEvent();                                                     // roulette/event tasks run after the mouse and cat tasks
         sim.buildHeat();                                                   // SmpColAnalyze: heat map seen by the CPU players next frame
-        if (!genFirst) { gen->frame(frame); spawnPending(false); }                                                 // entities spawned this frame first move next frame (measured against the original)
+        if (!genFirst && !m2) { gen->frame(frame); spawnPending(false); }                                                 // entities spawned this frame first move next frame (measured against the original)
         if (clock >= roundFrames) { over = true; gen->flags = 0xF; }
     }
 private:
@@ -214,7 +221,7 @@ private:
     float feverDuration() const { return 600.0f; }
     void startEvent(int out) {                                            // dispatch: the event task is created; its first exec (state 0) is next frame
         int lim = 0;
-        switch (out) { case 0: lim = (int)(600.0f * 2.0f); break; case 1: lim = 599; break; case 2: case 3: lim = 479; break; case 4: lim = 179; break;
+        switch (out) { case 0: lim = (int)(600.0f * (freezeOnRoll ? 1.0f : 2.0f)) + (freezeOnRoll ? 1 : 0); break;   /* Cat Mania: 600 frames in ChallengeLoop (measured: first mouse spawn 604 frames after the wheel); the whole-battle harness showed 1200 */ case 1: lim = 599; break; case 2: case 3: lim = 479; break; case 4: lim = 179; break;
                        case 5: case 6: lim = 59; break; default: lim = 239; }   // RL_Eve_Hikkoshi and RL_Eve_NekoPresent end when their counter exceeds 0x3b; RL_Eve_Hitorijime when it exceeds 0xef
         int es = sim.allocSlot(-2);                                       // the event task is created first, then the roulette task deletes itself (0x3c6e0..0x3c6f2)
         sim.releaseSlot(roll_.slot); roll_.slot = -1;
@@ -227,7 +234,7 @@ private:
         static const uint8_t ffa[9][4] = {{1,0,3,2},{3,0,1,2},{2,0,3,1},{1,3,0,2},{2,3,0,1},{3,2,0,1},{1,2,3,0},{2,3,1,0},{3,2,1,0}};
         static const uint8_t team[5][4] = {{1,0,3,2},{2,0,3,1},{1,3,0,2},{3,2,0,1},{2,3,1,0}};
         int gt = fixedGameTime >= 0 ? fixedGameTime : frame + gtOff;
-        const uint8_t* perm = teamMode ? team[(gt & 0xf) % 5] : ffa[(gt & 0x3f) % 9];
+        const uint8_t* perm = teamMode && !ffaShuffle ? team[(gt & 0xf) % 5] : ffa[(gt & 0x3f) % 9];
         int old[4][2]; for (int i = 0; i < 4; i++) { old[i][0] = sim.rocketPos[i][0]; old[i][1] = sim.rocketPos[i][1]; }
         for (int i = 0; i < 4; i++) { int x = old[perm[i]][0], y = old[perm[i]][1]; sim.rocketOwner[y][x] = (uint8_t)i; sim.rocketPos[i][0] = x; sim.rocketPos[i][1] = y; cpuEnv.rocketX[i] = x; cpuEnv.rocketY[i] = y; }
     }

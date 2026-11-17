@@ -2151,9 +2151,10 @@ struct ChallengeMode : Screen {
         else if (ph == ChallengeGame::Intro) line = "STAGE CHALLENGE " + std::to_string(cur + 1) + "  CLICK TO START";
         else if (ph == ChallengeGame::Countdown) line = std::to_string(1 + (ChallengeGame::kCountdownFrames - pf) / 36) + "...";
         else if (ph == ChallengeGame::Play) {
-            const std::string time = "   TIME " + std::to_string(std::max(0, (ChallengeGame::kLimitTicks - pt) / 60 + 1));
+            const std::string time = "   TIME " + std::to_string(std::max(0, battle ? bgame.secondsLeft() + 1 : (ChallengeGame::kLimitTicks - pt) / 60 + 1));
             if (!battle) line = std::string(game.type == 2 ? "EATEN " : "SAVED ") + std::to_string(game.counter()) + " OF " + std::to_string(game.target) + time;
             else if (bgame.type == 3) line = "SCORE " + std::to_string(bgame.playerScore()) + " OF 100" + time;
+            else if (bgame.type == 5) line = "YOUR TEAM " + std::to_string(bgame.teamScore(0)) + "  OTHERS " + std::to_string(bgame.teamScore(1)) + time;
             else line = "YOUR TEAM " + std::to_string(bgame.ownTeam()) + "  OTHERS " + std::to_string(bgame.enemyTeam()) + time;
         }
         else if (ph == ChallengeGame::Success || ph == ChallengeGame::Result) line = ph == ChallengeGame::Result ? "CLEAR!  " + std::to_string(clearSec) + " SEC  BEST " + std::to_string(bestSeconds) + (newBest ? " NEW" : "") + "  CLICK FOR NEXT" : "CLEAR!";

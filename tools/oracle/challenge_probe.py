@@ -77,7 +77,7 @@ def run(stage, frames):
         cur_frame = [0]
     if os.environ.get('COMPSEED'):   # CT_StartCompThink (0x29d50): player, level and the value read by 0x2ef3c (the seed of the computer player's generator)
         from unicorn import UC_HOOK_CODE as _HS
-        def scb(uc, a_, sz, u): print('COMPSEED r0 %#x r5(player) %d r6(level) %d f%d' % (uc.reg_read(UC_ARM_REG_R0), uc.reg_read(5), uc.reg_read(6), cur_frame[0]))
+        def scb(uc, a_, sz, u): print('COMPSEED r0 %#x r5(player) %d r6(level) %d f%d' % (uc.reg_read(UC_ARM_REG_R0), uc.reg_read(UC_ARM_REG_R5), uc.reg_read(UC_ARM_REG_R6), cur_frame[0]))
         o.uc.hook_add(_HS, scb, begin=BASE + 0x29d5a - G, end=BASE + 0x29d5a - G + 2)
     if os.environ.get('TRACKARR'):   # every call of the arrow placement function 0x286ac: frame, player, cell, direction (each call is seen twice)
         from unicorn import UC_HOOK_CODE as _HA
@@ -101,6 +101,21 @@ def run(stage, frames):
             if (r1, lr) not in seen_exe and len(seen_exe) < 40:
                 seen_exe.add((r1, lr)); print('EXE func %#x caller %#x' % (r1 - BASE + G, lr))
         o.uc.hook_add(_HX, xcb, begin=BASE + 0x3db88 - G, end=BASE + 0x3db88 - G + 2)
+    if os.environ.get('FORCE'):   # FORCE=<0-7>: the roulette selector (FUN_0003c2bc) returns this outcome, as make_battle_forced_golden.py
+        from unicorn import UC_HOOK_CODE as _HF
+        def fcb(uc, a_, sz, u): uc.reg_write(UC_ARM_REG_R0, int(os.environ['FORCE'])); uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
+        o.uc.hook_add(_HF, fcb, begin=BASE + 0x3c2bc - G, end=BASE + 0x3c2bc - G + 2)
+    if os.environ.get('TASKFLAGS'):   # the char ID byte (task + 2) and the exec function of every task the server visits, for the frame window lo,hi
+        tlo, thi = [int(v) for v in os.environ['TASKFLAGS'].split(',')]
+        from unicorn import UC_HOOK_CODE as _HT
+        seen_t = {}
+        def tcb(uc, a_, sz, u):
+            f_ = globals().get('_curf', 0)
+            if tlo <= f_ <= thi:
+                r4 = uc.reg_read(UC_ARM_REG_R4); fn = struct.unpack('<I', o.read(r4 + 0x40, 4))[0] - BASE + G; fl = uc.reg_read(UC_ARM_REG_R2) & 0xff
+                seen_t[(fn, fl)] = seen_t.get((fn, fl), 0) + 1
+        o.uc.hook_add(_HT, tcb, begin=BASE + 0x3d9c4 - G, end=BASE + 0x3d9c4 - G + 2)
+        globals()['_seen_t'] = seen_t
     if os.environ.get('TRACKPUT'):   # MO_PutMouse (0x34ee4) and CA_PutCat (0x28f14): frame, kind, cell, heading, type (each call is seen twice)
         from unicorn import UC_HOOK_CODE as _HP
         def pcb(kind):
@@ -121,7 +136,7 @@ def run(stage, frames):
             uc.reg_write(UC_ARM_REG_R0, 1); uc.reg_write(UC_ARM_REG_PC, uc.reg_read(UC_ARM_REG_LR))
         o.uc.hook_add(_HC, hcb, begin=BASE + 0x3e894 - G, end=BASE + 0x3e894 - G + 2)
     for f in range(frames):
-        cur_frame[0] = f
+        cur_frame[0] = f; globals()["_curf"] = f
         try:
             gcall(0x30388)                          # ChallengeLoop
         except Exception as e:
@@ -164,6 +179,8 @@ def run(stage, frames):
             base_ = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff
             ws_ = struct.unpack('<108I', o.read(BASE + base_, 432))
             for r_ in range(9): print('COLL row', r_, ' '.join('%03x' % (ws_[12 * r_ + c_] & 0xfff) for c_ in range(12)))
+        if os.environ.get('BCDTIME') and f in (1, 400, 470, 471, 600, 1000, 1500):   # the BCD timer block (0x17b5f8 + 8) and the game time (+0xc) as TI_GetBCDTime / TI_GetGameTime read them
+            print('BCDTIME f%d bcd %#x game %d' % (f, struct.unpack('<i', o.read(BASE + 0x17b5f8 - G + 8, 4))[0], struct.unpack('<i', o.read(BASE + 0x17b5f8 - G + 0xc, 4))[0]))
         if os.environ.get('GTIME') and (f in (1, 2, 3, 100, 361, 362, 469, 470, 471, 472, 473, 480)):   # TI_GetGlobalTime (0x17b5f8) at chosen frames
             print('GTIME f%d %d' % (f, struct.unpack('<i', o.read(BASE + 0x17b5f8 - G, 4))[0]))
         if os.environ.get('TRACKWORDS'):   # log changes of the score array words 8, 9, 12, 13 (type 4 counters and the stage 24 words)
@@ -186,9 +203,15 @@ def run(stage, frames):
             cnt = struct.unpack_from('<i', raw, 0)[0]
             print('GENBLOCK count', cnt, [struct.unpack_from('<hhi', raw, 0x24 + 8 * i) for i in range(min(cnt, 8))])
         b = block()
+        if os.environ.get('TRACKW4'):
+            st_ = struct.unpack('<i', o.read(BASE + 0x184c8c - G, 4))[0]
+            if st_ != globals().get('_rl', 0): print('RLSTATUS f%d %d' % (f, st_)); globals()['_rl'] = st_
+        if os.environ.get('TRACKW4') and b[4] != globals().get('_w4', 0): print('W4 f%d %d (phase %d)' % (f, b[4], b[3])); globals()['_w4'] = b[4]
         if b[3] != last:
             print('f%d phase %d block %s' % (f, b[3], b))
             last = b[3]
+    if os.environ.get('TASKFLAGS'):
+        for (fn_, fl_), n_ in sorted(globals()['_seen_t'].items()): print('TASK func %#x flag %#x visits %d' % (fn_, fl_, n_))
     print('counters rocket %d eaten %d' % (struct.unpack('<i', o.read(BASE + 0x17bbb4 - G, 4))[0], struct.unpack('<i', o.read(BASE + 0x17bbc0 - G, 4))[0]))
     print('end block', block(), 'unhandled', o.unhandled)
 

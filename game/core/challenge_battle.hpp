@@ -16,27 +16,30 @@ public:
     BattleGame game;
     int stage = 0, type = 0, phase = Intro, phaseFrame = 0, playTick = 0;
     const char* failReason = nullptr;
-    static bool supports(int stageIndex) { return stageIndex != 24 && (stageIndex % 5 == 3 || stageIndex % 5 == 4); }
+    static bool supports(int stageIndex) { return stageIndex == 24 || stageIndex % 5 == 3 || stageIndex % 5 == 4; }
+    int teamScore(int t) const { return game.score.team[t]; }   // stage 24 words 8 and 9
     void start(const Stage& st, int stageIndex, uint32_t seed) {
-        stage = stageIndex; type = stageIndex % 5; phase = Intro; phaseFrame = 0; playTick = 0; failReason = nullptr; decided_ = false;
-        game = BattleGame(); game.roundFrames = 1 << 30; game.baseScale = 1.0f; game.rouletteEnabled = false; game.rouletteManager = false;
+        stage = stageIndex; type = stageIndex == 24 ? 5 : stageIndex % 5; limit_ = type == 5 ? 3600 : kLimitTicks; phase = Intro; phaseFrame = 0; playTick = 0; failReason = nullptr; decided_ = false;
+        game = BattleGame(); game.roundFrames = type == 5 ? 3600 : 1 << 30; game.baseScale = 1.0f; game.rouletteEnabled = type == 5; game.rouletteManager = type == 5; if (type == 5) { game.fixedGameTime = 0; game.freezeOnRoll = true; game.cpuRunsOnFreeze = true; game.ffaShuffle = true; }   // ChallengeLoop never advances TI_GetGameTime (only EditplayLoop and the battle loops call TI_CountUpGameTimer)
         if (type == 4) { game.cpuLevel[1] = game.cpuLevel[3] = 0; }
+        if (type == 5) { game.cpuLevel[1] = game.cpuLevel[3] = 3; }
         game.start(st, seed);
         if (type == 3) { game.gen->flags = 6; game.gen->params().pSpawn = 0.075f; }
+        else if (type == 5) { game.teamMode = true; game.cpuEnv.gameType = 2; game.preRollCpu(1); }
         else { game.teamMode = true; game.cpuEnv.gameType = 2; game.gen->flags = 0xF; game.startCatFever(); game.preRollCpu(1); }   // the frame-0 call of the original's loop
     }
     void skipIntro() { if (phase == Intro) { phase = Countdown; phaseFrame = 0; } }
     bool placeArrow(int x, int y, int dir) { return phase == Play && game.placeArrow(0, x, y, dir); }
-    int secondsLeft() const { return (kLimitTicks - playTick) / 60; }
-    int clearSeconds() const { return 30 - secondsLeft(); }   // Data::clearChallenge stores limit minus the whole seconds left
+    int secondsLeft() const { return type == 5 ? (limit_ - game.clock) / 60 : (limit_ - playTick) / 60; }   // the one minute timer stops while the roulette runs
+    int clearSeconds() const { return (type == 5 ? 60 : 30) - secondsLeft(); }   // Data::clearChallenge stores limit minus the whole seconds left
     int ownTeam() const { return game.score.catCounter[0]; }
     int enemyTeam() const { return game.score.catCounter[1]; }
     int playerScore() const { return game.score.player[0]; }
     void tick() {
         ++phaseFrame;
         switch (phase) {
-        case Intro: if (type == 4) game.preRollCpu(1); if (phaseFrame >= kIntroFrames) { phase = Countdown; phaseFrame = 0; } break;
-        case Countdown: if (type == 4 && phaseFrame < kCountdownFrames) game.preRollCpu(1); if (phaseFrame >= kCountdownFrames) { phase = Play; phaseFrame = 0; playFrame(); } break;
+        case Intro: if (type >= 4) game.preRollCpu(1); if (phaseFrame >= kIntroFrames) { phase = Countdown; phaseFrame = 0; } break;
+        case Countdown: if (type >= 4 && phaseFrame < kCountdownFrames) game.preRollCpu(1); if (phaseFrame >= kCountdownFrames) { phase = Play; phaseFrame = 0; playFrame(); } break;
         case Play: playFrame(); break;
         case Success: if (phaseFrame >= kSuccessFrames) { phase = Result; phaseFrame = 0; } break;
         default: break;
@@ -47,6 +50,11 @@ private:
         if (decided_) { phase = decidedPhase_; phaseFrame = 0; decided_ = false; return; }   // the outcome shows one frame after the check that found it
         ++playTick;
         game.tick();
+        if (type == 5) {
+            if (teamScore(1) - teamScore(0) >= 100) { failReason = "the other team leads by 100"; decided_ = true; decidedPhase_ = Failure; return; }
+            if (game.over) { if (teamScore(0) > teamScore(1)) { decided_ = true; decidedPhase_ = Success; } else { failReason = "time out"; decided_ = true; decidedPhase_ = Failure; } }
+            return;
+        }
         if (type == 3) { if (playerScore() >= 100) { decided_ = true; decidedPhase_ = Success; return; } }
         else {
             if (ownTeam() == 0) { failReason = "your team's cats ran out"; decided_ = true; decidedPhase_ = Failure; return; }
@@ -57,6 +65,6 @@ private:
             else { failReason = "time out"; decided_ = true; decidedPhase_ = Failure; }
         }
     }
-    bool decided_ = false; int decidedPhase_ = Failure;
+    int limit_ = kLimitTicks; bool decided_ = false; int decidedPhase_ = Failure;
 };
 } // namespace ccr
