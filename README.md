@@ -1,6 +1,6 @@
 # ChuChu Rocket! Re-Nyastered
 
-On Windows, start with your own supported iOS or Android copy of ChuChu Rocket! Use its containing folder in RecompLauncher's Easy Setup, or follow [Windows build and setup](#build-and-setup-windows) from a checkout. Dreamcast, GBA and Dreamcast Express files are optional.
+On Windows, start with your own supported iOS or Android copy of ChuChu Rocket! Use its containing folder in RecompLauncher's Easy Setup, or follow [Windows build and setup](#build-and-setup-windows) from a checkout. Dreamcast, GBA and Dreamcast Express files are optional. Pre-built Windows releases (ZIP with checksum, no game files inside) are on the [GitHub releases page](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/releases): extract one, run `ccr.exe --prepare` with the folder that holds your original files (or let RecompLauncher do it), then start `ccr.exe`.
 
 **This is a fully human-driven, AI-powered reimplementation of SEGA's ChuChu Rocket!** I direct the project and set the standard for accepting changes. AI assists with reverse engineering, implementation, testing and documentation. When a feature is verified against an original release, the documentation shows how the comparison ran and which cases it covered.
 
@@ -36,9 +36,9 @@ The goal is a faithful Windows, Android arm64 and web reimplementation. Each pha
 | **D. Content and options** | Asset extractors and a cross-version stage registry exist. The current build can play the main puzzles, GBA extras and the Dreamcast Express set with the corresponding exports. Some sound and language options work. | Verify original unlocks and options, add unlock-all, import DLC skins and VMU saves, determine PuzzleP arrow stock, and make every stage set selectable. |
 | **E. Audio, animation and assets** | Dreamcast CD music is preferred when available. Mobile files supply effects and voices. Some triggers, effects and animations have original-runtime comparisons. Dreamcast models are extracted and render offline. | Audit every sound, voice, song, animation and effect across versions, including indirect triggers, timing and cancellation. Verify loops and fades, document source quality, and integrate the Dreamcast models into live play. |
 | **F. Platforms and play** | Windows build, fixed 60 Hz simulation with interpolation, headless 2D GPU measurements at 4K, local hotseat for up to four players, controller remapping with a hold-to-quit combo, and headless WebAssembly runs. Deterministic replays and loopback UDP lockstep have been tested. | Verify sustained and uncapped 4K performance as rendering is completed, implement wireless local play via mobile devices and online play, build and test the Android arm64 app, and finish the web app’s asset import and PWA checks in a headless browser and on iOS Safari. |
-| **G. Documentation and setup** | Cross-version matrix, asset provenance, original-file requirements, and a portable Zig build. Setup unpacks originals and records their hashes. Versioned Windows releases with checksums, portable mode (`portable.txt`), a commented `settings.ini` and `controls.ini`, and a rotating gameplay log. | Linux and macOS builds (only a compile check so far), Complete the evidence and provenance for each version, automate the remaining asset exports, and verify the full setup-to-play process on a clean machine. |
+| **G. Documentation and setup** | Cross-version matrix, asset provenance, original-file requirements, and a portable Zig build. Setup unpacks originals and records their hashes. Versioned Windows releases with checksums, portable mode (`portable.txt`), a commented `settings.ini` and `controls.ini`, and a rotating gameplay log. | Linux and macOS builds (only a compile check so far), complete the evidence and provenance for each version, automate the remaining asset exports, and verify the full setup-to-play process on a clean machine. |
 
-See the [roadmap and dated work log](docs/roadmap.md), [verification results](docs/verification.md), [per-version matrix](docs/version_matrix.md) and [known gaps](docs/known_gaps.md) for the evidence behind each row.
+See the [roadmap and dated work log](docs/roadmap.md), [verification results](docs/verification.md), [per-version matrix](docs/version_matrix.md) and [known gaps](docs/known_gaps.md) for the evidence behind each row, and the [requirement audit](docs/audit.md) for the current status of every goal requirement and every claim in the version-comparison document.
 
 ## Build and setup (Windows)
 
@@ -53,9 +53,9 @@ Run `build.cmd --target ccr` to rebuild only the game. For an offline build, set
 
 **Controller.** Button assignments live in `controls.ini` (created with comments beside `settings.ini`): the four arrow buttons, pause, and the controller-only quit combo (hold Back + Start for two seconds to leave the game, e.g. back to RecompLauncher). Pad prompt names come from the same file.
 
-Runtime options include `CCR_CPU=gba` for GBA-style battle AI, `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4`, `CCR_SIZE=3840x2160` and `CCR_FULLSCREEN=1`. Use `CCR_HEADLESS`, `CCR_SHOT` or `CCR_BENCH` for silent runs without a visible window. The C++ tests are CMake targets in `game/`, including `determinism_test`, `battle_full_test`, `cpu_test` and `netplay_test`.
+Runtime options include `CCR_CPU=gba` for GBA-style battle AI (also the `cpu_style` setting and a row on the Options Settings page), `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4` (quick-start launches only; the Battle setup screen chooses players), `CCR_SIZE=3840x2160` and `CCR_FULLSCREEN=1`. Use `CCR_HEADLESS`, `CCR_SHOT` or `CCR_BENCH` for silent runs without a visible window. The C++ tests are CMake targets in `game/`, including `determinism_test`, `battle_full_test`, `cpu_test` and `netplay_test`.
 
-Other platforms: the core and tests cross-compile for Android arm64 (NDK) and build for WebAssembly (Emscripten; see [docs/roadmap.md](docs/roadmap.md)); neither has been run on a device yet.
+Other platforms: the core and tests cross-compile for Android arm64 (NDK) and build for WebAssembly (Emscripten; see [docs/roadmap.md](docs/roadmap.md)); neither has been run on a device yet. The game source also compiles for x86_64 and arm64 Linux and macOS (checked with Zig, compile only; nothing has been linked or run there).
 
 ### Which original files do I need?
 
@@ -93,9 +93,10 @@ The core gameplay exports are automatic. To refresh your cache, rerun setup. To 
 $assets = Join-Path $env:APPDATA 'ChuChuRocketReNyastered\assets'
 .\build\game\ccr.exe "$assets" puzzle
 .\build\game\ccr.exe "$assets" battle
+.\build\game\ccr.exe "$assets" challenge 4   # Stage Challenge; the stage number is optional
 ```
 
-In Puzzle and Battle, aim with the mouse and press **WASD** or the **arrow keys** to place an arrow in the hovered cell. Mouse dragging also places arrows. On a controller, move with the left stick or D-pad and use the four face buttons in their directional positions, as on Dreamcast.
+In Puzzle and Battle, aim with the mouse and press **WASD** or the **arrow keys** to place an arrow in the hovered cell. Mouse dragging also places arrows. On a controller, move with the left stick or D-pad and use the four face buttons in their directional positions, as on Dreamcast (rebind them in `controls.ini` or Options > Settings).
 
 The default launch plays the iPad startup logos when available. Pass `title` to skip the logos. If you supply a Dreamcast disc, setup also exports its title logo and Start prompt for the desktop build.
 
