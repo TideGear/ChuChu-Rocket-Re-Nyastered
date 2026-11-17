@@ -4,7 +4,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 
 ## A. Presentation and UI
 - Startup, main menu, Options (Sounds, Language, Credits, How to Play), Help: **partial** (iPad HD 1.0 layouts reproduced and diffed against the original for several screens; The Basics, Costumes, roulette wheel art, celebration rockets, phone/larger-device HUD layouts, tutorial highlights, split-screen are open; see roadmap "Phase A leftovers").
-- Port Settings page and controller remap: **done** (screenshot read; pad remap untested on hardware).
+- Settings page and controller remap: **done** (screenshot read; pad remap untested on hardware).
 - Pad prompts in the HUD: **open** (`padButtonLabel` exists).
 ## B. Rules and modes
 - 26 whole-battle cases per forced roulette outcome: **done in the harness** (26/26 for outcomes 0-7, natural, Team); **open** against the real loop: the original freezes the action while the wheel spins (task mask 0x1f / 0x13), the harness never did; the port applies it only in Challenge stage 24 and the battle screen, not in the recorded goldens.
