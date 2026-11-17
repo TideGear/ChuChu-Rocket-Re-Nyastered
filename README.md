@@ -51,6 +51,8 @@ Run `build.cmd --target ccr` to rebuild only the game. For an offline build, set
 
 **Saves, settings and logs.** By default saves (`progress.bin`, `challenge.bin`, `options.bin`), `settings.ini` and `logs/` live in the extracted asset folder. For a portable install put an empty `portable.txt` beside `ccr.exe` (or start with `--portable`, or set `CCR_PORTABLE=1`): everything then lives in a `data` folder beside the program. `settings.ini` is created with comments on first start (fullscreen, vsync, scaling filter, window size, log detail); environment variables and launcher options override it. `logs/ccr.log` rotates by size (`ccr.1.log`, `ccr.2.log`, ...) and records sessions and, at `log_level = 2`, every screen change.
 
+**Controller.** Button assignments live in `controls.ini` (created with comments beside `settings.ini`): the four arrow buttons, pause, and the controller-only quit combo (hold Back + Start for two seconds to leave the game, e.g. back to RecompLauncher). Pad prompt names come from the same file.
+
 Runtime options include `CCR_CPU=gba` for GBA-style battle AI, `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4`, `CCR_SIZE=3840x2160` and `CCR_FULLSCREEN=1`. Use `CCR_HEADLESS`, `CCR_SHOT` or `CCR_BENCH` for silent runs without a visible window. The C++ tests are CMake targets in `game/`, including `determinism_test`, `battle_full_test`, `cpu_test` and `netplay_test`.
 
 Other platforms: the core and tests cross-compile for Android arm64 (NDK) and build for WebAssembly (Emscripten; see [docs/roadmap.md](docs/roadmap.md)); neither has been run on a device yet.

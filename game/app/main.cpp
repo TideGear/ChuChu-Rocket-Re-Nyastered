@@ -13,6 +13,7 @@
 #include "../core/challenge.hpp"
 #include "../core/challenge_battle.hpp"
 #include "../core/userdata.hpp"
+#include "../core/padmap.hpp"
 #include "rocket_launch.hpp"
 #include "startup.hpp"
 #include <array>
@@ -124,7 +125,7 @@ struct StarBackground {
 
 struct App {
     StarBackground stars;
-    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; bool headless = false, quit = false, vsync = true;
+    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; bool headless = false, quit = false, vsync = true;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
     void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
@@ -1895,8 +1896,8 @@ struct PuzzleMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad && state == 0 && !paused &&
                  SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cbutton.which) { int b = e.cbutton.button;
             mouseCursor = false;
-            if (b == SDL_CONTROLLER_BUTTON_Y) putAt(curX, curY, 2); else if (b == SDL_CONTROLLER_BUTTON_A) putAt(curX, curY, 0); else if (b == SDL_CONTROLLER_BUTTON_X) putAt(curX, curY, 1); else if (b == SDL_CONTROLLER_BUTTON_B) putAt(curX, curY, 3);
-            else if (b == SDL_CONTROLLER_BUTTON_START) { state = 1; running = true; } }
+            { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) putAt(curX, curY, d);
+            else if (b == pm.pause) { state = 1; running = true; } } }
     }
     // Touch rects of the puzzle screen (HD 1.0 PuzzleGameScreen::process 0x12994 -> Input::addRect(i, x0, y0, x1, y1) from layout +0x4d0 + 16 i): rect 3 (18, 88)-(160, 190) Start/Dash, rect 4 (21, 229)-(159, 275) Cancel.
     // In the placing mode, rect 3 sets input flag 1 (start) and rect 4 flag 2 (Cancel). Effects read from Android PuzzleLoop (0x33bbc): placing: flag 1 = start, flag 2 = delete all arrows; running: flag 1 = Dash, flag 2 = restart with the arrows kept.
@@ -2283,8 +2284,7 @@ struct BattleMode : Screen {
     void padButton(int p, int button) {
         if (p < 0 || p > 3 || lv[p] >= 0) return;
         if (p == 0) mouseCursor = false;
-        switch (button) {
-            case SDL_CONTROLLER_BUTTON_Y: place(p, curX[p], curY[p], 2); break; case SDL_CONTROLLER_BUTTON_A: place(p, curX[p], curY[p], 0); break; case SDL_CONTROLLER_BUTTON_X: place(p, curX[p], curY[p], 1); break; case SDL_CONTROLLER_BUTTON_B: place(p, curX[p], curY[p], 3); break; default: break; }
+        for (int d = 0; d < 4; d++) if (button == gApp->padMap.arrow[d]) { place(p, curX[p], curY[p], d); break; }
     }
     bool load(const std::string& root, int stage, uint32_t sd,
               const SettingsPaneItems::PadRules* rules = nullptr, int localTeam = -1) {
@@ -2674,6 +2674,7 @@ int main(int argc, char** argv) {
             if (!st.vsync) SDL_setenv("CCR_VSYNC", "0", 0);
             SDL_setenv("CCR_FILTER", st.filter.c_str(), 0);
             if (st.width > 0 && st.height > 0) { char sz[40]; snprintf(sz, sizeof sz, "%dx%d", st.width, st.height); SDL_setenv("CCR_SIZE", sz, 0); }
+            app.padMap = loadOrCreatePadMap(app.saveDir);
             app.log.open(app.saveDir, st.logLevel, st.logMaxKb, st.logKeepFiles);
             app.log.write(1, ("session start; data folder " + app.saveDir + "; assets " + root).c_str());
         }
@@ -2998,7 +2999,10 @@ int main(int argc, char** argv) {
             else { mode->event(app, e); if (const char* nx = mode->next()) { enter(nx); acc = 0; } }
         }
         Uint64 now = SDL_GetPerformanceCounter(); acc += (double)(now - last) / (double)SDL_GetPerformanceFrequency(); last = now; if (acc > 0.25) acc = 0.25;
-        while (acc >= dt) { mode->tick(app); if (const char* nx = mode->next()) { enter(nx); acc = 0; break; } acc -= dt; }   // screens that finish by themselves (fade-outs) are polled after every tick
+        while (acc >= dt) { bool a1 = false, a2 = false;   // controller-only quit: hold the two quit buttons on any pad
+            for (int i = 0; i < SDL_NumJoysticks(); i++) if (SDL_IsGameController(i)) if (SDL_GameController* c = SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(i))) { if (SDL_GameControllerGetButton(c, (SDL_GameControllerButton)app.padMap.quitA) && SDL_GameControllerGetButton(c, (SDL_GameControllerButton)app.padMap.quitB)) a1 = a2 = true; }
+            if (app.quitHold.tick(a1, a2, app.padMap.quitHoldTicks)) { app.log.write(1, "quit: controller quit combo held"); app.quit = true; break; }
+            mode->tick(app); if (const char* nx = mode->next()) { enter(nx); acc = 0; break; } acc -= dt; }   // screens that finish by themselves (fade-outs) are polled after every tick
         if (mode->music() >= 0) app.pumpMusic(mode->music());
         mode->draw(app, (float)(acc / dt)); SDL_RenderPresent(app.ren);
     };
