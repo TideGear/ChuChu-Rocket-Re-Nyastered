@@ -430,15 +430,43 @@ struct App {
     // Render::buildPlayfield (Android 0x37c50), read from the code: for every cell the floor tile atlas frame 8 + colour * 2 + ((col ^ row) & 1) (a pit, tile 0x11, replaces the floor with frame 7), a rocket cell gets its round base (frame 6), a
     // generator cell the ring frame table[(col >> 2) + 3 * (row / 3)] (frames 26..34); then every wall edge as a bar of frame wallColor (horizontal, edge row 0..9) or wallColor + 3 (vertical, edge column 0..12), anchored at the edge centre.
     // Colours by game type (Render::createPlayfieldPreview, 0x38458): free-for-all and team battle: floor {1,3,4,5}[stage & 3], wall 0; challenge: floor 1, wall 1; puzzle: floor (group & 3) + 2, wall 2.
+    // Dreamcast board (models_3d): the floor is the game's single 180 x 135 quad textured with yuka01-06 (floor colour N = yuka N+1), each wall edge a kabetx01-03 piece (wall colour N = kabetx N+1),
+    // both seen from straight above like the mobile board; holes, spawn markers and rocket rings still use the mobile atlas on top of the 3D floor (their Dreamcast models are not identified).
+    bool board3d(const Stage& st, int floorColor, int wallColor, int ox, int oy) {
+        if (!useModels3d()) return false;
+        const Model3D* floorM = models3d.find("floor"); const Model3D* wallM = models3d.find("wall"); if (!floorM || !wallM) return false;
+        const float k = (float)CELL / 15.0f;
+        (void)k;   // the game's floor quad has UVs 0..6 x 0..4.5 (u = (x + 90) / 30, v = (z + 67.5) / 30) and SDL's geometry call clamps UVs, so the 108 cells are drawn as quarter-texture quads (same mapping)
+        const int mat = 29 + std::max(0, std::min(5, floorColor)); if (mat >= (int)floorM->matTex.size()) return false;
+        SDL_Texture* tex = models3d.textures[floorM->matTex[mat]];
+        std::vector<SDL_Vertex> verts; verts.reserve(12 * 9 * 6); const SDL_Color white{255, 255, 255, 255};
+        for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
+            const float x0 = ox + c * (float)CELL, y0 = oy + r * (float)CELL, x1 = x0 + CELL, y1 = y0 + CELL, u0 = (c & 1) * 0.5f, v0 = (r & 1) * 0.5f, u1 = u0 + 0.5f, v1 = v0 + 0.5f;
+            SDL_Vertex a{{x0, y0}, white, {u0, v0}}, b{{x1, y0}, white, {u1, v0}}, d{{x1, y1}, white, {u1, v1}}, e{{x0, y1}, white, {u0, v1}};
+            verts.push_back(a); verts.push_back(b); verts.push_back(d); verts.push_back(a); verts.push_back(d); verts.push_back(e);
+        }
+        SDL_RenderGeometry(ren, tex, verts.data(), (int)verts.size(), nullptr, 0);
+        return true;
+    }
+    void walls3d(const Stage& st, int wallColor, int ox, int oy) {
+        const Model3D* wallM = models3d.find("wall"); if (!wallM) return; const float k = (float)CELL / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor));
+        for (int r = 0; r <= kRows; ++r) {
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c]) models3d.draw(ren, *wallM, ox + (c + 0.5f) * CELL, oy + r * (float)CELL, k, 0.0f, 90.0f, 1.0f, -1, mat);
+            if (r == kRows) break;
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c]) models3d.draw(ren, *wallM, ox + c * (float)CELL, oy + (r + 0.5f) * CELL, k, 90.0f, 90.0f, 1.0f, -1, mat);
+        }
+    }
     void board(const Stage& st, int floorColor, int wallColor, int ox = OX, int oy = OY) {
+        const bool three = board3d(st, floorColor, wallColor, ox, oy);
         static const int ring[9] = {0x1b, 0x1c, 0x1d, 0x22, 0x1a, 0x1e, 0x21, 0x20, 0x1f};
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
             float ax = ox + c * CELL + CELL / 2.0f, ay = oy + r * CELL + CELL / 2.0f; uint8_t t = st.tiles[r * 12 + c];
             if (t == 0x11) { blit(atlas, 7, ax, ay); continue; }
-            blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
+            if (!three) blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
             if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay);
             else if (t >= 5 && t <= 8) blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay);
         }
+        if (three) { walls3d(st, wallColor, ox, oy); return; }
         // HD 1.0 createPlayfield draws horizontal and vertical edge rows in
         // alternation. Keep its wall footprint and use the higher-resolution art.
         auto wall = [&](int frame, int x, int y, int w, int h) {
@@ -898,6 +926,7 @@ struct ModelViewerMode : Screen {
         if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 0.35f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
         const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
         if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
+        if (getenv("CCR_LIGHTFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) pack.draw(a.ren, *cat, 130.0f + 250.0f * i, 400.0f, 18.0f, 180.0f - 90.0f * i, 10.0f, 1.0f, 17); return; }
         if (getenv("CCR_MOUSEFIT")) { if (const Model3D* mo = pack.find("mouse0")) for (int i = 0; i < 4; i++) pack.draw(a.ren, *mo, 140.0f + 240.0f * i, 330.0f, 22.0f, 90.0f * i, 12.0f, 0.35f); a.text("MOUSE YAW 0 90 180 270", 24, 14, 24); return; }
         if (getenv("CCR_PITCHFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) { pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 330.0f, 9.0f, 180.0f, 10.0f + 10.0f * i, 0.35f, 0); pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 640.0f, 9.0f, 0.0f, 10.0f + 10.0f * i, 0.35f, 0); } a.text("PITCH 10 20 30 40  FRONT / BACK", 24, 14, 24); return; }
         static const char* rk[4] = {"rocket_blue", "rocket_orange", "rocket_red", "rocket_green"};
