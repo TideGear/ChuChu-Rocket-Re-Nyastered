@@ -2088,7 +2088,8 @@ struct ChallengeMode : Screen {
     // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
     struct Save { uint32_t mask = 0, best[25] = {}; };
     static Save loadSave(const std::string& root) { Save s; if (FILE* f = fopen((root + "/challenge.bin").c_str(), "rb")) { if (fread(&s, sizeof s, 1, f) != 1) s = Save(); fclose(f); } return s; }
-    void saveResult(App& a) {   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
+    void logResult(App& a) { char b[160]; snprintf(b, sizeof b, "challenge stage %d: cleared in %d s", cur + 1, battle ? bgame.clearSeconds() : game.clearSeconds()); a.log.write(1, b); }
+    void saveResult(App& a) { logResult(a);   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
         Save s = loadSave(a.saveDir); const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur];
         if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
@@ -2132,7 +2133,7 @@ struct ChallengeMode : Screen {
         const int before = phase();
         if (battle) bgame.tick(); else game.tick();
         if (phase() == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
-        if (phase() != before) { if (phase() == ChallengeGame::Success || phase() == ChallengeGame::Result) a.playSfx(0x15); else if (phase() == ChallengeGame::Failure) a.playSfx(0x1b); }
+        if (phase() != before) { if (phase() == ChallengeGame::Success || phase() == ChallengeGame::Result) a.playSfx(0x15); else if (phase() == ChallengeGame::Failure) { a.playSfx(0x1b); char lb[200]; snprintf(lb, sizeof lb, "challenge stage %d: failed (%s)", cur + 1, (battle ? bgame.failReason : game.failReason) ? (battle ? bgame.failReason : game.failReason) : ""); a.log.write(1, lb); } }
     }
     const char* next() override { if (!back) return nullptr; back = false; return "MENU"; }
     void draw(App& a, float alpha) override {
@@ -2361,7 +2362,13 @@ struct BattleMode : Screen {
         // The iPad camera task switches StarsExec when the final win starts its rocket parade.
         a.stars.tick(mode == 5 && sub5 == 3);
     }
+    int loggedMode_ = 0;
+    void logRound(App& a) {   // match results for the rotating log
+        char b[200]; snprintf(b, sizeof b, "battle %s: stage %d, round winner player %d%s, wins %d-%d-%d-%d, scores %d %d %d %d", matchOver ? "match over" : "round over", cur, roundWinner + 1, drawFlag ? " (draw)" : "", wins[0], wins[1], wins[2], wins[3], game.score.player[0], game.score.player[1], game.score.player[2], game.score.player[3]);
+        a.log.write(1, b);
+    }
     void tickBattle(App& a) { if (paused) return;
+        if (mode >= 4 && loggedMode_ != mode) { loggedMode_ = mode; logRound(a); } else if (mode < 4) loggedMode_ = 0;
         if (intro >= 120 && mode == 2 && !game.rollPending()) {
             for (int p = 0; p < 4; ++p) {
                 if (!pads[p] || lv[p] >= 0) continue;
