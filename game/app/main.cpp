@@ -15,6 +15,7 @@
 #include "../core/userdata.hpp"
 #include "../core/padmap.hpp"
 #include "../core/vms.hpp"
+#include "model3d.hpp"
 #include <filesystem>
 #include "rocket_launch.hpp"
 #include "startup.hpp"
@@ -866,6 +867,23 @@ void StarBackground::draw(App& a) const {
 
 static App* gApp = nullptr;   // for sound hooks
 struct Screen { virtual ~Screen() {} virtual void event(App&, const SDL_Event&) {} virtual void tick(App&) {} virtual void draw(App&, float) {} virtual int music() { return -1; } virtual const char* next() { return nullptr; } };
+
+// Developer/preview screen: the Dreamcast 3D character models drawn live (cat, and the basic mouse's eight walk keyframes played as an animation). Start with: ccr <assets> models
+struct ModelViewerMode : Screen {
+    ModelPack pack; bool loaded = false; int tickCount = 0; bool leave = false;
+    bool load(App& a) { loaded = pack.load(a.ren, a.root + "/dreamcast/models.bin"); return loaded; }
+    void event(App&, const SDL_Event& e) override { if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) leave = true; }
+    void tick(App&) override { tickCount++; }
+    const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 70, 80, 110, 255); SDL_RenderClear(a.ren);
+        const float yaw = (float)(tickCount % 360);
+        if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f);
+        const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
+        if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
+        a.text("DREAMCAST MODELS  CAT   MOUSE (8 FRAME WALK)  ESC BACK", 24, 14, 24);
+    }
+};
 
 struct StartupMode : Screen {
     Startup splash;
@@ -2709,7 +2727,7 @@ int main(int argc, char** argv) {
     // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ChuChuRocketReNyastered/assets, then the older %APPDATA%/ReNyastered/assets).
     std::string root; int shift = 0;
     auto hasAssets = [](const std::string& d) { FILE* f = fopen((d + "/ret_all/r0930.tex.bin").c_str(), "rb"); if (f) { fclose(f); return true; } return false; };
-    if (argc >= 2 && std::string(argv[1]) != "menu" && std::string(argv[1]) != "puzzle" && std::string(argv[1]) != "battle" && std::string(argv[1]) != "title") { root = argv[1]; shift = 1; }
+    if (argc >= 2 && std::string(argv[1]) != "menu" && std::string(argv[1]) != "models" && std::string(argv[1]) != "puzzle" && std::string(argv[1]) != "battle" && std::string(argv[1]) != "title") { root = argv[1]; shift = 1; }
     else {
         std::vector<std::string> cand; if (const char* e = getenv("CCR_ASSETS")) cand.push_back(e);
         char* bp = SDL_GetBasePath(); std::string base = bp ? bp : ""; if (bp) SDL_free(bp);
@@ -2801,6 +2819,7 @@ int main(int argc, char** argv) {
         }
         else if (name == "HELP" && HelpMode::ok(app)) mode = std::make_unique<HelpMode>();
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
+        else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
         else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
         else mode = std::make_unique<MenuMode>();
