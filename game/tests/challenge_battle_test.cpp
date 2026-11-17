@@ -19,12 +19,14 @@ int main(int argc, char** argv) {
         BattleGame b; b.roundFrames = 1 << 30; b.baseScale = getenv("SCALE") ? (float)atof(getenv("SCALE")) : 1.0f; b.rouletteEnabled = false; b.rouletteManager = false;   // ChallengeLoop uses the puzzle speed (GA_SetCharaSpeed 1.0), not the quarter speed of the battle harness
         b.start(st, (uint32_t)seed); b.gen->flags = (uint32_t)mask; if (want % 5 == 3) b.gen->params().pSpawn = 0.075f;   // GE_StartGenerator4Manager in Challenge mode (0x34bf6): stage type 3 raises the spawn probability to 0.075
         size_t shown = 0;
-        int last = -1;
+        int last = -1, lastScore = -1;
         for (int t = 1; t <= ticks; t++) {
             if (getenv("MPOS") && t >= atoi(getenv("MPOS"))) for (auto& e : b.sim.ents) if (e.mouse && e.alive && !e.done && !e.fresh) { printf("MPOS t%d %.3f %.3f", t, e.x, e.z); putchar(10); }
             if (getenv("CPOS") && t >= atoi(getenv("CPOS"))) for (auto& e : b.sim.ents) if (!e.mouse && e.alive && !e.done && !e.fresh && !e.rocketIn) { printf("CPOS t%d %.3f %.3f", t, e.x, e.z); putchar(10); }
+            if (getenv("ARROWS") && t + 469 >= 480 && (t + 469 - 480) % 40 == 0) { const int k = (t + 469 - 480) / 40; const uint32_t sd = (uint32_t)atoi(getenv("ARROWS")), h = (sd * 1000003u + (uint32_t)k * 7919u) * 2654435761u; b.placeArrow(0, (int)(h % 12), (int)((h >> 8) % 9), (int)((h >> 16) % 4)); }   // the scripted arrows of challenge_probe.py (ARROWS=1)
             b.tick();
             if (getenv("SPAWNS")) for (; shown < b.gen->spawns.size(); shown++) { const auto& sp = b.gen->spawns[shown]; printf("UP f%d type %d%s", sp.frame + 469, sp.mouseType, sp.cat ? " cat" : ""); putchar(10); }
+            if (getenv("TRACKSCORE") && b.score.player[0] != lastScore) { printf("SCORE f%d %d", t + 469, b.score.player[0]); putchar(10); lastScore = b.score.player[0]; }
             if (b.sim.killedByCat != last) { printf("CNT f%d rocket 0 eaten %d", t + 469, b.sim.killedByCat); putchar(10); last = b.sim.killedByCat; }
         }
         return 0;

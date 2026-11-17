@@ -125,7 +125,12 @@ def run(stage, frames):
         if os.environ.get('ARROWS') and f >= 480 and (f - 480) % 40 == 0:   # scripted arrows for player 0 (battle arrow manager, as battle_probe.py): k-th arrow at cell ((7k+3) mod 12, (5k+1) mod 9), direction k mod 4
             k = (f - 480) // 40
             pt = o.heap_ptr; o.heap_ptr += 16
-            o.write(pt, struct.pack('<hh', (7 * k + 3) % 12, (5 * k + 1) % 9)); gcall(0x286ac, 0, pt, k % 4)
+            if os.environ['ARROWS'] == '1':
+                x_, y_, d_ = (7 * k + 3) % 12, (5 * k + 1) % 9, k % 4
+            else:   # ARROWS=<seed>: the hashed schedule shared with challenge_battle_test
+                h_ = ((int(os.environ['ARROWS']) * 1000003 + k * 7919) * 2654435761) & 0xffffffff
+                x_, y_, d_ = h_ % 12, (h_ >> 8) % 9, (h_ >> 16) % 4
+            o.write(pt, struct.pack('<hh', x_, y_)); gcall(0x286ac, 0, pt, d_)
         if os.environ.get('ARRCELLS') and f >= 480 and (f - 480) % 40 == 1:   # cells whose collision word has the arrow bit
             base = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff
             words = struct.unpack('<108I', o.read(BASE + base, 432))
@@ -145,6 +150,11 @@ def run(stage, frames):
         if os.environ.get('DUMPARR') and f in [int(x) for x in os.environ['DUMPARR'].split(',')]:
             pa = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
             print('ARR f%d' % f, struct.unpack('<24i', o.read(o.u32(BASE + pa), 96)))
+        if os.environ.get('TRACKSCORE'):   # log every change of score word 0 (the player's score, the type 3 win counter)
+            pa_ = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
+            sc_ = struct.unpack('<i', o.read(o.u32(BASE + pa_), 4))[0]
+            if sc_ != globals().get('_lastscore'):
+                print('SCORE f%d %d' % (f, sc_)); globals()['_lastscore'] = sc_
         if os.environ.get('TRACKCNT'):   # log every change of the rocket / eaten counters (frame, value)
             cur = (struct.unpack('<i', o.read(BASE + 0x17bbb4 - G, 4))[0], struct.unpack('<i', o.read(BASE + 0x17bbc0 - G, 4))[0])
             if cur != globals().get('_lastcnt'):
