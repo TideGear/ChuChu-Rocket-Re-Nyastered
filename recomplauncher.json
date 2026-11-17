@@ -8,8 +8,13 @@
     "label": "A folder with your own copies of ChuChu Rocket!, loose or as ZIPs. Add at least one iPad, iPhone or Android release for the graphics; the Dreamcast disc, the GBA ROM and the Dreamcast Express pack add music, boards and menus."
   },
   "start": {
-    "program": ["ccr.exe"],
-    "args": ["{config}/ReNyastered/assets", "--launcher"]
+    "program": [
+      "ccr.exe"
+    ],
+    "args": [
+      "{config}/ChuChuRocketReNyastered/assets",
+      "--launcher"
+    ]
   },
   "settings": [
     {
@@ -18,9 +23,22 @@
       "help": "Automatic opens full screen in Big Picture mode.",
       "in": "args",
       "choices": [
-        { "label": "Automatic", "args": [] },
-        { "label": "Windowed", "args": ["--windowed"] },
-        { "label": "Full screen", "args": ["--fullscreen"] }
+        {
+          "label": "Automatic",
+          "args": []
+        },
+        {
+          "label": "Windowed",
+          "args": [
+            "--windowed"
+          ]
+        },
+        {
+          "label": "Full screen",
+          "args": [
+            "--fullscreen"
+          ]
+        }
       ]
     },
     {
@@ -29,9 +47,22 @@
       "help": "Synchronize drawing with the display to reduce tearing.",
       "in": "args",
       "choices": [
-        { "label": "Game default", "args": [] },
-        { "label": "On", "args": ["--vsync"] },
-        { "label": "Off", "args": ["--no-vsync"] }
+        {
+          "label": "Game default",
+          "args": []
+        },
+        {
+          "label": "On",
+          "args": [
+            "--vsync"
+          ]
+        },
+        {
+          "label": "Off",
+          "args": [
+            "--no-vsync"
+          ]
+        }
       ]
     },
     {
@@ -40,15 +71,33 @@
       "help": "Choose crisp or smooth scaling for the original artwork.",
       "in": "args",
       "choices": [
-        { "label": "Game default", "args": [] },
-        { "label": "Nearest", "args": ["--filter=nearest"] },
-        { "label": "Linear", "args": ["--filter=linear"] }
+        {
+          "label": "Game default",
+          "args": []
+        },
+        {
+          "label": "Nearest",
+          "args": [
+            "--filter=nearest"
+          ]
+        },
+        {
+          "label": "Linear",
+          "args": [
+            "--filter=linear"
+          ]
+        }
       ]
     }
   ],
   "prepare": {
-    "program": ["ccr.exe"],
-    "args": ["--prepare", "{game}"],
+    "program": [
+      "ccr.exe"
+    ],
+    "args": [
+      "--prepare",
+      "{game}"
+    ],
     "label": "Graphics, boards and music from your game files",
     "timeout": 1800,
     "options": [
@@ -56,17 +105,20 @@
         "id": "download_python",
         "label": "Download Python and Pillow if needed",
         "note": "Setup uses these to extract assets from your own copies.",
-        "args": ["--download-python"],
+        "args": [
+          "--download-python"
+        ],
         "default": false
       }
-    ]
+    ],
+    "version": "2"
   },
   "exit_codes": {
     "2": "The game could not start. Check that Easy Setup finished and the extracted assets are still available."
   },
   "saves": [
-    "{config}/ReNyastered/assets/progress.bin",
-    "{config}/ReNyastered/assets/challenge.bin",
-    "{config}/ReNyastered/assets/options.bin"
+    "{config}/ChuChuRocketReNyastered/assets/progress.bin",
+    "{config}/ChuChuRocketReNyastered/assets/challenge.bin",
+    "{config}/ChuChuRocketReNyastered/assets/options.bin"
   ]
 }

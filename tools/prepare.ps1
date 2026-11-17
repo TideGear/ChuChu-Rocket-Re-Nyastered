@@ -11,7 +11,11 @@ $published = $false
 try {
     if (-not $GameFiles -or -not (Test-Path -LiteralPath $GameFiles -PathType Container)) { Write-Output "Your game folder was not found: $GameFiles"; exit 1 }
     $GameFiles = (Resolve-Path -LiteralPath $GameFiles).ProviderPath
-    if (-not $Cache) { $Cache = Join-Path $env:APPDATA "ReNyastered" }
+    if (-not $Cache) {
+        $Cache = Join-Path $env:APPDATA "ChuChuRocketReNyastered"
+    $old = Join-Path $env:APPDATA "ReNyastered"   # the folder name used before the rename: move it once if the new one does not exist
+    if (-not (Test-Path -LiteralPath $Cache) -and (Test-Path -LiteralPath $old)) { Move-Item -LiteralPath $old -Destination $Cache }
+    }
     [IO.Directory]::CreateDirectory($Cache) | Out-Null
     $Cache = (Resolve-Path -LiteralPath $Cache).ProviderPath
     $lock = [IO.File]::Open((Join-Path $Cache 'prepare.lock'), 'OpenOrCreate', 'Write', 'None')

@@ -12,7 +12,11 @@ if (-not $GameFiles) {
     else { $GameFiles = Read-Host "Folder containing any of your original game files (loose or ZIP)" }
 }
 if (-not (Test-Path $GameFiles)) { throw "Game files folder not found: $GameFiles" }
-if (-not $Cache) { $Cache = Join-Path $env:APPDATA "ReNyastered" }
+if (-not $Cache) {
+    $Cache = Join-Path $env:APPDATA "ChuChuRocketReNyastered"
+    $old = Join-Path $env:APPDATA "ReNyastered"   # the folder name used before the rename: move it once if the new one does not exist
+    if (-not (Test-Path -LiteralPath $Cache) -and (Test-Path -LiteralPath $old)) { Move-Item -LiteralPath $old -Destination $Cache }
+}
 New-Item -ItemType Directory -Force $Cache | Out-Null
 
 . (Join-Path $PSScriptRoot 'setup-python.ps1')

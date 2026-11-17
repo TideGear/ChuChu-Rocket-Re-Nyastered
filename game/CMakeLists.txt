@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ReNyastered CXX)
+project(ChuChuRocketReNyastered CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(RN_SDL_ARCHIVE "https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz")
 set(RN_VORBIS_SOURCE "https://raw.githubusercontent.com/nothings/stb/ae721c50eaf761660b4f90cc590453cdb0c2acd0/stb_vorbis.c")

@@ -1,5 +1,5 @@
 # Builds the game and packs a Windows release zip: ccr.exe, recomplauncher.json at the top (for RecompLauncher), and the extraction tools
-# that tools\prepare.ps1 needs. Never includes game files, extracted assets or keys. Output: dist\ReNyastered-<version>-windows-x64.zip
+# that tools\prepare.ps1 needs. Never includes game files, extracted assets or keys. Output: dist\ChuChuRocketReNyastered-<version>-windows-x64.zip
 # usage: tools\package-release.ps1 -Version 0.1.0 [-SkipBuild]
 param(
     [Parameter(Mandatory = $true)]
@@ -15,7 +15,7 @@ if (-not $SkipBuild) {
 }
 $exe = Join-Path $root 'build\game\ccr.exe'
 if (-not (Test-Path -LiteralPath $exe)) { throw "ccr.exe not found: build first" }
-$name = "ReNyastered-$Version-windows-x64"
+$name = "ChuChuRocketReNyastered-$Version-windows-x64"
 $dist = Join-Path $root 'dist'
 $temp = Join-Path $dist ([guid]::NewGuid().ToString('N'))
 $stage = Join-Path $temp 'release'

@@ -2600,7 +2600,7 @@ int main(int argc, char** argv) {
             if (finished) return 0;
         }
     }
-    // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ReNyastered/assets).
+    // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ChuChuRocketReNyastered/assets, then the older %APPDATA%/ReNyastered/assets).
     std::string root; int shift = 0;
     auto hasAssets = [](const std::string& d) { FILE* f = fopen((d + "/ret_all/r0930.tex.bin").c_str(), "rb"); if (f) { fclose(f); return true; } return false; };
     if (argc >= 2 && std::string(argv[1]) != "menu" && std::string(argv[1]) != "puzzle" && std::string(argv[1]) != "battle" && std::string(argv[1]) != "title") { root = argv[1]; shift = 1; }
@@ -2608,7 +2608,7 @@ int main(int argc, char** argv) {
         std::vector<std::string> cand; if (const char* e = getenv("CCR_ASSETS")) cand.push_back(e);
         char* bp = SDL_GetBasePath(); std::string base = bp ? bp : ""; if (bp) SDL_free(bp);
         cand.push_back(base + "assets"); cand.push_back(base + "../../local/cache/assets"); cand.push_back(base + "../../../local/cache/assets"); cand.push_back("local/cache/assets");
-        if (const char* ap = getenv("APPDATA")) cand.push_back(std::string(ap) + "/ReNyastered/assets");
+        if (const char* ap = getenv("APPDATA")) { cand.push_back(std::string(ap) + "/ChuChuRocketReNyastered/assets"); cand.push_back(std::string(ap) + "/ReNyastered/assets"); }   // the second is the folder name used before 2026-11-17
         for (auto& c : cand) if (hasAssets(c)) { root = c; break; }
         if (root.empty()) {
             const char* msg = "Game assets not found.\n\nRun setup.cmd (it extracts them from your own copies of the game), start ccr with the asset folder as its first argument, or set CCR_ASSETS.";

@@ -44,8 +44,8 @@ See the [roadmap and dated work log](docs/roadmap.md), [verification results](do
 
 ## Build and setup (Windows)
 
-1. Put your [original game files](#which-original-files-do-i-need) in `Original Game Files` beside `setup.cmd`, then run `setup.cmd` from the checkout. If that folder is absent, setup asks for the path. To specify both paths directly from PowerShell, run `.\setup.cmd -GameFiles 'D:\My Game Files' -Cache 'D:\ReNyastered'`.
-2. Setup uses Python 3.10 or later if it can import Pillow. Otherwise it downloads and verifies private copies of Python 3.12.10 and Pillow 12.2.0 and caches them in `local\tools\windows`. Setup extracts into `%APPDATA%\ReNyastered\assets` by default and writes `manifest.json` and `setup.log` beside `assets`.
+1. Put your [original game files](#which-original-files-do-i-need) in `Original Game Files` beside `setup.cmd`, then run `setup.cmd` from the checkout. If that folder is absent, setup asks for the path. To specify both paths directly from PowerShell, run `.\setup.cmd -GameFiles 'D:\My Game Files' -Cache 'D:\ChuChuRocketReNyastered'`.
+2. Setup uses Python 3.10 or later if it can import Pillow. Otherwise it downloads and verifies private copies of Python 3.12.10 and Pillow 12.2.0 and caches them in `local\tools\windows`. Setup extracts into `%APPDATA%\ChuChuRocketReNyastered\assets` by default and writes `manifest.json` and `setup.log` beside `assets`.
 3. Setup builds `build\game\ccr.exe`. The first build downloads and verifies portable Zig 0.14.1, CMake 4.0.3, Ninja 1.12.1, SDL2 2.30.9 and `stb_vorbis.c`. It uses the checkout's `local\tools\windows` and `build\game-zig` folders. Visual Studio C++ Build Tools are unnecessary.
 4. Launch `build\game\ccr.exe`. Setup reports which modes are playable from the files in your cache. Pass the `assets` folder as the first argument or set `CCR_ASSETS` if you use a custom cache.
 
@@ -88,7 +88,7 @@ For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu 
 The core gameplay exports are automatic. To refresh your cache, rerun setup. To launch a specific mode directly, pass the mode after the asset cache path.
 
 ```powershell
-$assets = Join-Path $env:APPDATA 'ReNyastered\assets'
+$assets = Join-Path $env:APPDATA 'ChuChuRocketReNyastered\assets'
 .\build\game\ccr.exe "$assets" puzzle
 .\build\game\ccr.exe "$assets" battle
 ```

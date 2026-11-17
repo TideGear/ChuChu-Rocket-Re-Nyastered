@@ -4,7 +4,7 @@ Re-Nyastered is an unofficial fan project. SEGA and the other rights holders ret
 
 ## Local development
 
-- Keep lawfully obtained originals in `Original Game Files/` or an external folder. Setup normally writes its extracted assets, original-code analysis inputs and reports to `%APPDATA%\ReNyastered`. Repository-local research and build outputs belong under the ignored `local/`, `analysis/` and `build/` folders.
+- Keep lawfully obtained originals in `Original Game Files/` or an external folder. Setup normally writes its extracted assets, original-code analysis inputs and reports to `%APPDATA%\ChuChuRocketReNyastered`. Repository-local research and build outputs belong under the ignored `local/`, `analysis/` and `build/` folders.
 - Keep development captures under `local/`. The three in-game screenshots in `docs/screenshots/` illustrate the port’s progress in the README. The game can capture them from your own exported assets using `CCR_SHOT` and `CCR_TICKS`. Keep decompiler dumps, extracted art, music, text, boards, saves and game binaries local. Commit implementation code, tools and documentation of behavior and provenance.
 - `RN_WEB_ASSETS` embeds local game data in the browser build output. Use it only for local testing. For a hosted build, configure with `RN_WEB_ASSETS` empty and check the entire publish directory for preloaded data, copied caches and icons derived from original artwork. Browser-side asset import is still planned.
 
@@ -12,7 +12,7 @@ Re-Nyastered is an unofficial fan project. SEGA and the other rights holders ret
 
 Run `.\tools\package-release.ps1 -Version 1.2.3` from PowerShell to build the Windows x64 ZIP in `dist\`. Attach it to the matching versioned GitHub release with release notes. The ZIP puts the RecompLauncher profile beside `ccr.exe` and includes the tools for Easy Setup. Players who already have an asset cache can start the packaged executable directly.
 
-For manual setup from the unpacked ZIP, run `.\ccr.exe --prepare "D:\My Game Files"`, then launch `ccr.exe`. Add `--download-python` to the setup command to allow downloading the verified Python and Pillow runtime if needed. Setup writes `setup.log` to `%APPDATA%\ReNyastered`. Player progress and options live in its `assets` folder.
+For manual setup from the unpacked ZIP, run `.\ccr.exe --prepare "D:\My Game Files"`, then launch `ccr.exe`. Add `--download-python` to the setup command to allow downloading the verified Python and Pillow runtime if needed. Setup writes `setup.log` to `%APPDATA%\ChuChuRocketReNyastered`. Player progress and options live in its `assets` folder.
 
 - Review the outgoing Git history as well as the current tree. Removing an asset from the latest revision leaves it reachable through earlier commits.
 - Review the source and release contents for copied game material. Keep third-party materials that have redistribution permission with their required notices. Choose a license for the project's own code before describing it as open source. Third-party dependency licenses cover their respective components.
