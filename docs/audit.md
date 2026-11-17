@@ -21,6 +21,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - DLC skins, CHD/GDI input with per-input dump verification: **open**. .VMS/.VMI reader and writer for puzzle packs: **done**: core reader/writer (`core/vms.hpp`, `vms_test`, `tools/vms_pack.py`) and in-app import (packs in `<data>/imports/*.VMS` appear as the Imported Packs stage set, checked headlessly with DEPuzzle.VMS and a character pack present). Export from the app, DLC character skins and PuzzleP's arrow stock remain open.
 ## E. Sound, animation, assets
 - Full inventory with version/address/asset ID/gates: **open** (pieces in roadmap and docs/*.md).
+- Dreamcast 3D models in live play (user priority 2026-11-17): **partial**: cat (24-frame head morph exported), basic mouse (8 keyframes by the clock rule), four rocket colours, rocket lids, exhaust and a wall piece are exported and drawn (`ccr <assets> models`; cats and mice in Puzzle/Battle behind the `models_3d` setting). Open: camera/scale/lighting from the original, the cat's frame rule, per-state animations, rockets/walls/floor in the field, effects, golden mice, and a Dreamcast-only 2D path (field, HUD, menus).
 ## F. Platforms, controls, play
 - 60 Hz fixed simulation: **done**; interpolated rendering **done**; mouse aim, WASD/arrows: **done**; four-player hotseat: **done**.
 - Controller remap, quit combo: **done** (logic tested, no hardware run).

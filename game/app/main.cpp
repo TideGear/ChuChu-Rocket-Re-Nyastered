@@ -166,7 +166,8 @@ struct StarBackground {
 
 struct App {
     StarBackground stars;
-    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings;
+    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings; ModelPack models3d; bool models3dTried = false;
+    bool useModels3d() { if (!models3dTried) { models3dTried = true; if (settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
     void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
     void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
@@ -762,6 +763,16 @@ struct App {
         bool ghost = false;
     };
     std::vector<FieldObject> fieldObjects;
+    // Dreamcast 3D characters (docs/dreamcast_models.md): the basic mouse plays its eight keyframes by the low three bits of the shared clock (0x8c019b0c writes them, 0x8c019e26 draws the frame
+    // directly); the cat shows the head pose 17 (the base pose) until the game's morph-frame rule is decoded. Orientation: the heading angle (heading << 14) turns the model about the vertical axis.
+    bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z) {
+        const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(gtime & 7)) : models3d.find("cat");
+        if (!m) return false;
+        const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
+        const float scale = CELL * (en.mouse ? 0.095f : 0.052f);
+        models3d.draw(ren, *m, x, z - CELL * 0.1f, scale, yaw, 50.0f, 0.35f, en.mouse ? -1 : 17);
+        (void)i; return true;
+    }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
                           float alpha, const float* puku = nullptr) {
         fieldObjects.clear();
@@ -821,6 +832,7 @@ struct App {
             }
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
+            if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z)) continue;
             if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter, 255);
                 if (headless && getenv("CCR_CAT_HOLE_TRACE"))
@@ -1672,12 +1684,13 @@ struct OptionsMode : Screen {
     bool shown(int i) const { return sub == 2 ? i < 6 : i != 6; }   // slot 3 (iPod Music, iOS-only) carries this port's own settings page   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
     int capture = -1;   // sub 3: -1 list, 0..3 waiting for the controller button of arrow dir 0..3
     int back() const { return sub == 2 ? 6 : sub == 1 ? 2 : 7; }
-    static constexpr int PR = 7, PX = 225, PY0 = 173, PPITCH = 78;   // port settings rows
+    static constexpr int PR = 8, PX = 225, PY0 = 173, PPITCH = 70;   // port settings rows
     static const char* dirName(int d) { static const char* n[4] = {"down", "left", "up", "right"}; return n[d]; }
     std::string portLabel(App& a, int i) {
         const Settings& st = a.settings; char b[96];
         switch (i) { case 0: return std::string("Fullscreen: ") + (st.fullscreen ? "On" : "Off"); case 1: return std::string("VSync: ") + (st.vsync ? "On" : "Off"); case 2: return "Scaling: " + st.filter;
             case 3: snprintf(b, sizeof b, "Log detail: %d", st.logLevel); return b;
+            case 7: return std::string("3D characters: ") + (st.models3d ? "On" : "Off");
             case 6: return std::string("Unlock all: ") + (st.unlockAll ? "On" : "Off");
             case 5: return "Battle CPU: " + std::string(st.cpuStyle == "gba" ? "GBA" : "Dreamcast");
             default: if (capture >= 0) { snprintf(b, sizeof b, "Press pad button for arrow %s", dirName(capture)); return b; } return "Remap arrow buttons"; } }
@@ -1689,6 +1702,7 @@ struct OptionsMode : Screen {
         else if (i == 2) st.filter = st.filter == "linear" ? "nearest" : "linear";
         else if (i == 3) st.logLevel = (st.logLevel + 1) % 3;
         else if (i == 4) { capture = 0; return; }
+        else if (i == 7) { st.models3d = !st.models3d; a.models3d = ModelPack(); a.models3dTried = false; }
         else if (i == 6) st.unlockAll = !st.unlockAll;
         else if (i == 5) st.cpuStyle = st.cpuStyle == "gba" ? "dreamcast" : "gba";
         a.saveSettings(); a.log.write(1, ("setting changed: " + portLabel(a, i)).c_str()); }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
