@@ -26,6 +26,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Controller remap, quit combo: **done** (logic tested, no hardware run).
 - Wireless local play, online lockstep: **partial** (netplay core and 19,518-iteration loopback test; no screens, no phone pairing).
 - 4K GPU measurement: **done for the current 2D scene** (4K 8.1 ms/frame, ~122 fps uncapped, 1080p 1.85 ms, RTX 3060, load-guarded CLEAN runs, `docs/verification.md`); **open** for the 3D models once drawn and for a presented display window.
+- Linux/macOS releases: v2026.11.18 carries CI-built `linux-x64` and `macos-arm64` archives (green builds and unit tests on GitHub runners; `macos-13` x64 never got a runner); not run on a real machine; launcher archive selection unconfirmed.
 - Linux/macOS: **partial; a real user report (2026-11-17) showed v2026.11.17 could not extract on Linux (Windows-only `--prepare`); fixed in a3287c6, not yet confirmed on a real Linux PC**.
 - (older note) Linux/macOS: **partial** (main.cpp compiles for x86_64/aarch64 Linux and macOS with zig; `.github/workflows/build.yml`: Linux **built and unit-tested green on a GitHub runner** (no human run of the game on Linux); macOS job cancelled before starting (no runner provided), so macOS is unverified).
 - Android arm64 emulator test, WebAssembly PWA headless test: **open** (build targets exist, no recorded run).
