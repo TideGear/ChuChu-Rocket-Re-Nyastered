@@ -55,6 +55,11 @@ public:
     int cursorLock = 0;                          // frames cursors stay locked (Cat Attack)
     std::vector<int> lastRoll;
     int holeLag = 31;   // a mouse that falls into a hole leaves the generator counter about 30 ticks after the event (measured: Mouse Mania stage 5, f1738 -> f1768)
+    void preRollCpu(int n) {   // Challenge: the computer-think tasks exist from the first frame of the stage and run through the intro (arrows are refused while the cursors are locked)
+        const int lock = cursorLock; cursorLock = 1 << 30;
+        for (int i = 0; i < n; i++) runCpu();
+        cursorLock = lock; cpuPuts.clear();
+    }
     void startCatFever() { spawnCatFever(); }   // Challenge type 4 set-up: GE_SetCatFever at the start (four cats at the generator cells)
     bool pairLag = false; bool inCpu_ = false; bool arrowLatency = true; std::vector<std::pair<int,int>> pendRefresh_;   // verification: the arrow task registers its collision flag one tick after the placement call (Challenge)
     bool decFromFree = false;   // the generator counters drop when the mouse task is destroyed (one tick after the collision event), not at the event

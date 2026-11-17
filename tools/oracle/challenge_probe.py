@@ -164,6 +164,8 @@ def run(stage, frames):
             base_ = (lit(0x2de50) + 0x2de74 - G) & 0xffffffff
             ws_ = struct.unpack('<108I', o.read(BASE + base_, 432))
             for r_ in range(9): print('COLL row', r_, ' '.join('%03x' % (ws_[12 * r_ + c_] & 0xfff) for c_ in range(12)))
+        if os.environ.get('GTIME') and (f in (1, 2, 3, 100, 361, 362, 469, 470, 471, 472, 473, 480)):   # TI_GetGlobalTime (0x17b5f8) at chosen frames
+            print('GTIME f%d %d' % (f, struct.unpack('<i', o.read(BASE + 0x17b5f8 - G, 4))[0]))
         if os.environ.get('TRACKWORDS'):   # log changes of the score array words 8, 9, 12, 13 (type 4 counters and the stage 24 words)
             pa2 = (lit(0x3d3d8) + 0x3d366 + lit(0x3d3dc) - G) & 0xffffffff
             w_ = struct.unpack('<24i', o.read(o.u32(BASE + pa2), 96))

@@ -1,0 +1,32 @@
+// Replays ChallengeBattleGame (core/challenge_battle.hpp, Challenge types 3 and 4) with the hashed arrow schedule of tools/oracle/challenge_probe.py (ARROWS=<seed>) and
+// prints "f<frame> phase <n>", "WORDS f<frame> w12 <a> w13 <b>" and "SCORE f<frame> <n>" lines in the original's frame numbering.
+// usage: challenge_battle_game_test <battle_stages.bin> <stage> <seed> <frames> [arrow seed]
+#include "../core/challenge_battle.hpp"
+#include <cstdio>
+#include <cstdlib>
+using namespace ccr;
+int main(int argc, char** argv) {
+    if (argc < 5) { printf("usage: challenge_battle_game_test <bin> <stage> <seed> <frames> [arrow seed]\n"); return 2; }
+    FILE* f = fopen(argv[1], "rb"); if (!f) { printf("cannot open %s\n", argv[1]); return 2; }
+    const int want = atoi(argv[2]), seed = atoi(argv[3]), frames = atoi(argv[4]); const int arrowSeed = argc > 5 ? atoi(argv[5]) : 0;
+    uint32_t n; fread(&n, 4, 1, f);
+    for (uint32_t i = 0; i < n; i++) {
+        uint8_t hdr[4]; fread(hdr, 1, 4, f); Stage st; uint8_t walls[237]; char title[32];
+        fread(st.tiles, 1, 108, f); fread(walls, 1, 237, f); fread(title, 1, 32, f);
+        for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) st.hw[r * 12 + c] = walls[25 * r + c];
+        for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) st.vw[r * 13 + c] = walls[25 * r + 12 + c];
+        if (hdr[0] != 3 || (hdr[2] | (hdr[3] << 8)) != want) continue;
+        ChallengeBattleGame g; g.start(st, want, (uint32_t)seed);
+        printf("f0 phase 1\n");
+        int lastPhase = 1, lastW0 = -1, lastW1 = -1, lastScore = -1;
+        for (int fr = 1; fr <= frames; fr++) {
+            if (arrowSeed && fr >= 480 && (fr - 480) % 40 == 0) { const int k = (fr - 480) / 40; const uint32_t h = ((uint32_t)arrowSeed * 1000003u + (uint32_t)k * 7919u) * 2654435761u; g.placeArrow((int)(h % 12), (int)((h >> 8) % 9), (int)((h >> 16) % 4)); }
+            g.tick();
+            if (g.phase != lastPhase) { printf("f%d phase %d", fr, g.phase); if (g.failReason) printf(" (%s)", g.failReason); putchar(10); lastPhase = g.phase; }
+            if (g.ownTeam() != lastW0 || g.enemyTeam() != lastW1) { printf("WORDS f%d w12 %d w13 %d", fr, g.ownTeam(), g.enemyTeam()); putchar(10); lastW0 = g.ownTeam(); lastW1 = g.enemyTeam(); }
+            if (g.playerScore() != lastScore) { printf("SCORE f%d %d", fr, g.playerScore()); putchar(10); lastScore = g.playerScore(); }
+        }
+        return 0;
+    }
+    printf("stage %d not found\n", want); return 1;
+}

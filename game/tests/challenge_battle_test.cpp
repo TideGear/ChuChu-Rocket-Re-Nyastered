@@ -20,6 +20,8 @@ int main(int argc, char** argv) {
         if (want % 5 == 4) for (int p = 1; p < 4; p += 2) b.cpuLevel[p] = getenv("NOCPU") ? -1 : 0;   // players 1 and 3 (the second team) are computer players at CT level 0 (CU_StartCursorCh0213Manager; stage 24 uses 3)
         b.start(st, (uint32_t)seed); b.gen->flags = (uint32_t)mask; if (want % 5 == 4) { b.teamMode = true; b.gen->flags = 0xF; b.startCatFever(); }   // type 4: team battle, generators off, four cats if (want % 5 == 3) b.gen->params().pSpawn = 0.075f;   // GE_StartGenerator4Manager in Challenge mode (0x34bf6): stage type 3 raises the spawn probability to 0.075
         size_t shown = 0;
+        if (want % 5 == 4) b.cpuEnv.gameType = 2;   // GA_GetGameType is 2 in Challenge: the computer players pick the target owner as (global time & 2) + ((player + 1) & 1)
+        if (want % 5 == 4 && getenv("PREROLL")) b.preRollCpu(atoi(getenv("PREROLL")));
         int last = -1, lastScore = -1, lastW0 = -1, lastW1 = -1; size_t putsShown = 0;
         if (getenv("COLLDUMP")) for (int r = 0; r < 9; r++) { printf("COLL row %d", r); for (int c = 0; c < 12; c++) printf(" %03x", (unsigned)(b.sim.coll[r][c] & 0xfff)); putchar(10); }
         for (int t = 1; t <= ticks; t++) {
