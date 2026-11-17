@@ -828,6 +828,10 @@ struct App {
                 continue;
             }
             if (object.rocket) {
+                if (useModels3d()) {   // Dreamcast rocket models: one per player colour (blue, orange, red, green = itablue/itaorange/itared/itagreen)
+                    static const char* names[4] = {"rocket_blue", "rocket_orange", "rocket_red", "rocket_green"};
+                    if (const Model3D* m = models3d.find(names[i & 3])) { models3d.draw(ren, *m, x, z + CELL * 0.30f, CELL * 0.07f * (puku ? puku[i] : 1.0f), 0.0f, 12.0f, 0.35f); continue; }
+                }
                 blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f);
                 continue;
             }
