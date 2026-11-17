@@ -75,6 +75,15 @@ def run(stage, frames):
         o.uc.hook_add(_H, mcb, begin=BASE + 0x3501c - G, end=BASE + 0x3501c - G + 2)
     else:
         cur_frame = [0]
+    if os.environ.get('TRACKPUT'):   # MO_PutMouse (0x34ee4) and CA_PutCat (0x28f14): frame, kind, cell, heading, type (each call is seen twice)
+        from unicorn import UC_HOOK_CODE as _HP
+        def pcb(kind):
+            def cb(uc, a_, sz, u):
+                pr = uc.reg_read(UC_ARM_REG_R0); x, y = struct.unpack('<hh', o.read(pr, 4))
+                print('PUT f%d %s %d %d d%d t%d' % (cur_frame[0], kind, x, y, uc.reg_read(UC_ARM_REG_R1) & 3, uc.reg_read(UC_ARM_REG_R2) & 0xff))
+            return cb
+        o.uc.hook_add(_HP, pcb('mouse'), begin=BASE + 0x34ee4 - G, end=BASE + 0x34ee4 - G + 2)
+        o.uc.hook_add(_HP, pcb('cat'), begin=BASE + 0x28f14 - G, end=BASE + 0x28f14 - G + 2)
     if os.environ.get('TRACKUP'):   # log GE_MouseCountUp (0x34a6c) calls: frame and mouse type (each call is seen twice)
         from unicorn import UC_HOOK_CODE as _HU
         def ucb(uc, a_, sz, u): print('UP f%d type %d' % (cur_frame[0], uc.reg_read(UC_ARM_REG_R0)))
@@ -124,6 +133,10 @@ def run(stage, frames):
             cur = (struct.unpack('<i', o.read(BASE + 0x17bbb4 - G, 4))[0], struct.unpack('<i', o.read(BASE + 0x17bbc0 - G, 4))[0])
             if cur != globals().get('_lastcnt'):
                 print('CNT f%d rocket %d eaten %d' % (f, cur[0], cur[1])); globals()['_lastcnt'] = cur
+        if os.environ.get('GENBLOCK') and f == 471:   # the generator manager block (ghidra 0x17b810): count, flags, entries (x, y word pairs from +0x24, 8 bytes each)
+            raw = o.read(BASE + 0x17b810 - G, 0x24 + 8 * 8)
+            cnt = struct.unpack_from('<i', raw, 0)[0]
+            print('GENBLOCK count', cnt, [struct.unpack_from('<hhi', raw, 0x24 + 8 * i) for i in range(min(cnt, 8))])
         b = block()
         if b[3] != last:
             print('f%d phase %d block %s' % (f, b[3], b))
