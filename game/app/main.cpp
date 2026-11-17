@@ -771,7 +771,7 @@ struct App {
         const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
         const float scale = CELL * (en.mouse ? 0.095f : 0.052f);
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
-        models3d.draw(ren, *m, x, z - CELL * 0.1f, scale, yaw, 50.0f, 0.35f, en.mouse ? -1 : catFrame);
+        models3d.draw(ren, *m, x, z + CELL * 0.28f, scale, yaw, 12.0f, 0.35f, en.mouse ? -1 : catFrame);
         (void)i; return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
@@ -894,6 +894,7 @@ struct ModelViewerMode : Screen {
         if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 0.35f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
         const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
         if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
+        if (getenv("CCR_PITCHFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) { pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 330.0f, 9.0f, 180.0f, 10.0f + 10.0f * i, 0.35f, 0); pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 640.0f, 9.0f, 0.0f, 10.0f + 10.0f * i, 0.35f, 0); } a.text("PITCH 10 20 30 40  FRONT / BACK", 24, 14, 24); return; }
         static const char* rk[4] = {"rocket_blue", "rocket_orange", "rocket_red", "rocket_green"};
         for (int i = 0; i < 4; i++) if (const Model3D* m = pack.find(rk[i])) pack.draw(a.ren, *m, 120.0f + 230.0f * i, 690.0f, 7.0f, yaw * 0.5f + 40.0f * i, 25.0f);
         if (const Model3D* m = pack.find("lid1")) pack.draw(a.ren, *m, 120.0f, 250.0f, 12.0f, yaw, 25.0f);
