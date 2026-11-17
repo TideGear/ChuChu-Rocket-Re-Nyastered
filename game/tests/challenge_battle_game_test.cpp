@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
         printf("f0 phase 1\n");
         int lastPhase = 1, lastW0 = -1, lastW1 = -1, lastScore = -1, lastT0 = -1, lastT1 = -1; size_t putsShown = 0, spShown = 0;
         for (int fr = 1; fr <= frames; fr++) {
-            if (arrowSeed && fr >= 480 && (fr - 480) % 40 == 0) { const int k = (fr - 480) / 40; const uint32_t h = ((uint32_t)arrowSeed * 1000003u + (uint32_t)k * 7919u) * 2654435761u; g.placeArrow((int)(h % 12), (int)((h >> 8) % 9), (int)((h >> 16) % 4)); }
+            if (!getenv("ARRLATE") && arrowSeed && fr >= 480 && (fr - 480) % 40 == 0) { const int k = (fr - 480) / 40; const uint32_t h = ((uint32_t)arrowSeed * 1000003u + (uint32_t)k * 7919u) * 2654435761u; g.placeArrow((int)(h % 12), (int)((h >> 8) % 9), (int)((h >> 16) % 4)); }
             if (getenv("MPOS") && fr - 469 >= atoi(getenv("MPOS")) && fr - 469 <= atoi(getenv("MPOS")) + 8) for (const auto& e : g.game.sim.ents) if ((getenv("CATS") ? !e.mouse : e.mouse) && e.alive && !e.done && !e.rocketIn) printf("MPOS t%d %.3f %.3f\n", fr - 469, e.x, e.z);
             const unsigned long long d0 = ccr::g_rngDraws;
             g.tick();
@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
             if (getenv("ARRS") && fr >= atoi(getenv("ARRS")) && fr < atoi(getenv("ARRS")) + 4) { for (const auto& a2 : g.game.sim.arrows) if (a2.live) printf("ARR f%d cell %d,%d dir %d ttl %d%c", fr, a2.x, a2.y, a2.dir, a2.ttl, 10); }
             if (getenv("ENTS") && fr >= atoi(getenv("ENTS")) && fr < atoi(getenv("ENTS")) + 4) { for (const auto& e : g.game.sim.ents) if (e.alive) printf("ENT f%d %s x=%.1f z=%.1f g=%d,%d reg=%d done=%d rin=%d\n", fr, e.mouse ? "mouse" : "cat", e.x, e.z, e.gx, e.gy, (int)e.reg, (int)e.done, (int)e.rocketIn); }
             if (getenv("HEATAT") && fr >= atoi(getenv("HEATAT")) && fr < atoi(getenv("HEATAT")) + 4) { printf("HEAT f%d", fr); for (int x = 3; x <= 7; x++) printf(" (%d,5)=%d", x, g.game.sim.heat[5 * kCols + x]); for (const auto& e : g.game.sim.ents) if (!e.mouse && e.alive && !e.done && !e.rocketIn) printf(" cat[%d,%d]", e.gx, e.gy); printf(" coll55=%x rocket1=%d,%d rocket3=%d,%d", g.game.sim.fieldCollision(5, 5), g.game.cpuEnv.rocketX[1], g.game.cpuEnv.rocketY[1], g.game.cpuEnv.rocketX[3], g.game.cpuEnv.rocketY[3]); printf("%c", 10); }
+            if (getenv("ARRLATE") && arrowSeed && fr >= 480 && (fr - 480) % 40 == 0) { const int k = (fr - 480) / 40; const uint32_t h = ((uint32_t)arrowSeed * 1000003u + (uint32_t)k * 7919u) * 2654435761u; g.placeArrow((int)(h % 12), (int)((h >> 8) % 9), (int)((h >> 16) % 4)); }
             if (g.phase != lastPhase) { printf("f%d phase %d", fr, g.phase); if (g.failReason) printf(" (%s)", g.failReason); putchar(10); lastPhase = g.phase; }
             if (g.ownTeam() != lastW0 || g.enemyTeam() != lastW1) { printf("WORDS f%d w12 %d w13 %d", fr, g.ownTeam(), g.enemyTeam()); putchar(10); lastW0 = g.ownTeam(); lastW1 = g.enemyTeam(); }
             if (want == 24 && (g.teamScore(0) != lastT0 || g.teamScore(1) != lastT1)) { printf("WORDS f%d w8 %d w9 %d\n", fr, g.teamScore(0), g.teamScore(1)); lastT0 = g.teamScore(0); lastT1 = g.teamScore(1); }
