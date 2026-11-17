@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
         for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) st.hw[r * 12 + c] = walls[25 * r + c];
         for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) st.vw[r * 13 + c] = walls[25 * r + 12 + c];
         if (hdr[0] != 3 || (hdr[2] | (hdr[3] << 8)) != want) continue;
-        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = getenv("SCALE") ? (float)atof(getenv("SCALE")) : 1.0f;   // ChallengeLoop uses the puzzle speed (GA_SetCharaSpeed 1.0), not the quarter speed of the battle harness b.rouletteEnabled = false; b.rouletteManager = false;
+        BattleGame b; b.roundFrames = 1 << 30; b.baseScale = getenv("SCALE") ? (float)atof(getenv("SCALE")) : 1.0f; b.rouletteEnabled = false; b.rouletteManager = false;   // ChallengeLoop uses the puzzle speed (GA_SetCharaSpeed 1.0), not the quarter speed of the battle harness
         b.start(st, (uint32_t)seed); b.gen->flags = (uint32_t)mask; if (want % 5 == 3) b.gen->params().pSpawn = 0.075f;   // GE_StartGenerator4Manager in Challenge mode (0x34bf6): stage type 3 raises the spawn probability to 0.075
         size_t shown = 0;
         int last = -1;
