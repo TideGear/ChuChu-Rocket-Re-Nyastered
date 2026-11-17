@@ -31,6 +31,7 @@ public:
     int event = -1, eventLeft = 0; bool over = false;
     int rankOf(int p) const { return rank_[p]; }
     bool rotateOwn = false;                      // true: re-placing on your own arrow rotates it (the flagged branch of FUN_0002859c)
+    int catManiaLimit = 1200;                     // Cat Mania length in frames: 1200 in the verification harness (task server run twice per frame), 601 measured in ChallengeLoop
     bool thaw_ = false; float earlyChance_ = -1.0f;
     bool cpuRunsOnFreeze = false;                 // the computer players' think tasks carry char ID 0, so they keep running while the wheel spins
     bool ffaShuffle = false;                      // RO_ShuffleRockets picks its table from the game type: Challenge (type 2) uses the free-for-all one
@@ -223,7 +224,7 @@ private:
     float feverDuration() const { return 600.0f; }
     void startEvent(int out) {                                            // dispatch: the event task is created; its first exec (state 0) is next frame
         int lim = 0;
-        switch (out) { case 0: lim = (int)(600.0f * (freezeOnRoll ? 1.0f : 2.0f)) + (freezeOnRoll ? 1 : 0); break;   /* Cat Mania: 600 frames in ChallengeLoop (measured: first mouse spawn 604 frames after the wheel); the whole-battle harness showed 1200 */ case 1: lim = 599; break; case 2: case 3: lim = 479; break; case 4: lim = 179; break;
+        switch (out) { case 0: lim = catManiaLimit; break;   /* Cat Mania: 600 frames in ChallengeLoop (measured: first mouse spawn 604 frames after the wheel); the whole-battle harness showed 1200 */ case 1: lim = 599; break; case 2: case 3: lim = 479; break; case 4: lim = 179; break;
                        case 5: case 6: lim = 59; break; default: lim = 239; }   // RL_Eve_Hikkoshi and RL_Eve_NekoPresent end when their counter exceeds 0x3b; RL_Eve_Hitorijime when it exceeds 0xef
         int es = sim.allocSlot(-2);                                       // the event task is created first, then the roulette task deletes itself (0x3c6e0..0x3c6f2)
         sim.releaseSlot(roll_.slot); roll_.slot = -1;

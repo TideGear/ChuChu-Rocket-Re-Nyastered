@@ -2322,7 +2322,7 @@ struct BattleMode : Screen {
         game.localPlayer = 0;
         restart(); return true;
     }
-    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); game.start(stages.list[cur].st, seed); prev.clear(); if (gApp) gApp->angs.clear(); }
+    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); game.freezeOnRoll = game.cpuRunsOnFreeze = true; game.start(stages.list[cur].st, seed); /* FourBattleLoop masks the task server by RL_GetRoulette4Status (docs/roadmap.md, 2026-11-16) */ prev.clear(); if (gApp) gApp->angs.clear(); }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
