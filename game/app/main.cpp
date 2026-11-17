@@ -878,14 +878,14 @@ struct ModelViewerMode : Screen {
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 70, 80, 110, 255); SDL_RenderClear(a.ren);
         const float yaw = (float)(tickCount % 360);
-        if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f);
+        if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 0.35f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
         const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
         if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
         static const char* rk[4] = {"rocket_blue", "rocket_orange", "rocket_red", "rocket_green"};
         for (int i = 0; i < 4; i++) if (const Model3D* m = pack.find(rk[i])) pack.draw(a.ren, *m, 120.0f + 230.0f * i, 690.0f, 7.0f, yaw * 0.5f + 40.0f * i, 25.0f);
         if (const Model3D* m = pack.find("lid1")) pack.draw(a.ren, *m, 120.0f, 250.0f, 12.0f, yaw, 25.0f);
         if (const Model3D* m = pack.find("wall")) pack.draw(a.ren, *m, 940.0f, 250.0f, 6.0f, yaw, 25.0f);
-        a.text("DREAMCAST MODELS  CAT   MOUSE (8 FRAME WALK)  ESC BACK", 24, 14, 24);
+        a.text("DREAMCAST MODELS  CAT (24 FRAME HEAD MORPH)  MOUSE (8 FRAME WALK)  ESC BACK", 24, 14, 24);
     }
 };
 

@@ -13,7 +13,7 @@
 struct Model3D {
     struct V { float x, y, z, u, v; };
     struct Tri { uint8_t mat; V v[3]; };
-    std::string name; std::vector<Tri> tris; std::vector<uint32_t> matTex;
+    std::string name; std::vector<Tri> tris; std::vector<uint32_t> matTex; std::vector<std::vector<float>> frames;   // frames: vertex-morph poses, 9 floats per triangle (3 x xyz)
 };
 struct ModelPack {
     std::vector<SDL_Texture*> textures; std::vector<Model3D> models;
@@ -23,7 +23,7 @@ struct ModelPack {
         FILE* f = fopen(path.c_str(), "rb"); if (!f) return false;
         std::vector<uint8_t> d; uint8_t buf[65536]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) d.insert(d.end(), buf, buf + n); fclose(f);
         size_t p = 0; auto rd = [&](void* o, size_t k) { if (p + k > d.size()) return false; memcpy(o, d.data() + p, k); p += k; return true; };
-        char magic[4]; uint32_t nt; if (!rd(magic, 4) || memcmp(magic, "CCM1", 4) || !rd(&nt, 4)) return false;
+        char magic[4]; uint32_t nt; if (!rd(magic, 4) || memcmp(magic, "CCM2", 4) || !rd(&nt, 4)) return false;
         for (uint32_t i = 0; i < nt; i++) {
             uint16_t w, h; if (!rd(&w, 2) || !rd(&h, 2) || p + (size_t)w * h * 4 > d.size()) return false;
             SDL_Texture* t = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, w, h);
@@ -35,19 +35,24 @@ struct ModelPack {
             m.matTex.resize(nmat); if (nmat && !rd(m.matTex.data(), 4 * nmat)) return false;
             m.tris.resize(ntri);
             for (auto& t : m.tris) { if (!rd(&t.mat, 1)) return false; for (auto& v : t.v) if (!rd(&v, 20)) return false; }
+            uint32_t nf; if (!rd(&nf, 4)) return false; m.frames.resize(nf);
+            for (auto& fr : m.frames) { fr.resize((size_t)ntri * 9); if (!rd(fr.data(), fr.size() * 4)) return false; }
             models.push_back(std::move(m));
         }
         return true;
     }
     // Draws the model centred at (cx, cy) on screen. scale: pixels per model unit; yaw/pitch in degrees; light: simple directional shade 0..1 (1 = none).
-    void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float shade = 0.35f) const {
+    void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float shade = 0.35f, int frame = -1) const {
+        const std::vector<float>* pose = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
         const float ya = yawDeg * 0.017453292f, pa = pitchDeg * 0.017453292f, cyw = cosf(ya), syw = sinf(ya), cp = cosf(pa), sp = sinf(pa);
         struct T { float z; int tex; SDL_Vertex v[3]; };
         std::vector<T> out; out.reserve(m.tris.size());
-        for (const auto& t : m.tris) {
+        for (size_t ti = 0; ti < m.tris.size(); ti++) {
+            const auto& t = m.tris[ti];
             T o; float zsum = 0; float px[3], py[3], pz[3];
             for (int k = 0; k < 3; k++) {
-                float x = t.v[k].x * cyw + t.v[k].z * syw, z = -t.v[k].x * syw + t.v[k].z * cyw, y = t.v[k].y;
+                const float vx = pose ? (*pose)[ti * 9 + k * 3] : t.v[k].x, vy = pose ? (*pose)[ti * 9 + k * 3 + 1] : t.v[k].y, vz = pose ? (*pose)[ti * 9 + k * 3 + 2] : t.v[k].z;
+                float x = vx * cyw + vz * syw, z = -vx * syw + vz * cyw, y = vy;
                 float y2 = y * cp - z * sp, z2 = y * sp + z * cp;
                 px[k] = x; py[k] = y2; pz[k] = z2; zsum += z2;
             }
