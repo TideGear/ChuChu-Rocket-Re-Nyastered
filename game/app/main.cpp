@@ -11,6 +11,7 @@
 #include "roulette_draw.hpp"
 #include "rocket_lid.hpp"
 #include "../core/challenge.hpp"
+#include "../core/challenge_battle.hpp"
 #include "rocket_launch.hpp"
 #include "startup.hpp"
 #include <array>
@@ -2081,34 +2082,40 @@ struct PuzzleMode : Screen {
 // ---------------------------------------------------------------- stage select (functional; the original's layout/art is not reproduced yet: docs/known_gaps.md)
 // ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
 struct ChallengeMode : Screen {
-    Stages stages; int cur = 0; ChallengeGame game; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
+    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
     // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
     struct Save { uint32_t mask = 0, best[25] = {}; };
     static Save loadSave(const std::string& root) { Save s; if (FILE* f = fopen((root + "/challenge.bin").c_str(), "rb")) { if (fread(&s, sizeof s, 1, f) != 1) s = Save(); fclose(f); } return s; }
     void saveResult(App& a) {   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
-        Save s = loadSave(a.root); const int t = game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
+        Save s = loadSave(a.root); const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur];
         if (FILE* f = fopen((a.root + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false; begin(stage); return true; }
-    void begin(int stage) { saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); game.start(stages.list[cur].st, cur); prev.clear(); }
+    void begin(int stage) { saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
+        if (battle) bgame.start(stages.list[cur].st, cur, (uint32_t)SDL_GetTicks() * 2654435761u + (uint32_t)cur); else game.start(stages.list[cur].st, cur);   // types 3 and 4 run on the battle engine (core/challenge_battle.hpp)
+        prev.clear(); }
+    int phase() const { return battle ? bgame.phase : game.phase; }
+    bool supportedNow() const { return battle || game.supported(); }
+    Sim& simRef() { return battle ? bgame.game.sim : game.sim; }
+    void skipIntro() { if (battle) bgame.skipIntro(); else game.skipIntro(); }
     int music() override { return 9; }
-    void place(App& a, int dir) { if (game.phase != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if (game.placeArrow(aim.cellX(), aim.cellY(), dir)) a.playSfx(1); else a.playSfx(0x13); }
+    void place(App& a, int dir) { if (phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN) { aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y); mouseCursor = true; }
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-            if (game.phase == ChallengeGame::Intro) game.skipIntro();                                   // flag 1: a tap skips the intro
+            if (phase() == ChallengeGame::Intro) skipIntro();                                   // flag 1: a tap skips the intro
             else if (game.phase == ChallengeGame::Failure) { begin(cur); a.playSfx(2); }              // flag 8: restart the stage
             else if (game.phase == ChallengeGame::Result) nextStageRequested = true;
-            else if (!game.supported()) back = true;
+            else if (!supportedNow()) back = true;
             else place(a, lastDir);
         }
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             const SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_ESCAPE) { back = true; return; }                                             // flag 2: quit
-            if (game.phase == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) game.skipIntro();
+            if (phase() == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) skipIntro();
             else if (game.phase == ChallengeGame::Failure && (k == SDLK_RETURN || k == SDLK_r)) { begin(cur); a.playSfx(2); }
             else if (game.phase == ChallengeGame::Result && (k == SDLK_RETURN || k == SDLK_SPACE)) nextStageRequested = true;
             else if (arrowKey(k) >= 0) { if (!a.headless) aim.update(a, 0, 0); place(a, arrowKey(k)); }
@@ -2116,14 +2123,15 @@ struct ChallengeMode : Screen {
     }
     void tick(App& a) override {
         if (nextStageRequested) { nextStageRequested = false; begin(cur + 1); return; }
-        if (!game.supported()) return;
+        if (!supportedNow()) return;
         ++cticks;
-        prev.resize(game.sim.ents.size());
-        for (size_t i = 0; i < game.sim.ents.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z};
-        const int before = game.phase;
-        game.tick();
-        if (game.phase == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
-        if (game.phase != before) { if (game.phase == ChallengeGame::Success || game.phase == ChallengeGame::Result) a.playSfx(0x15); else if (game.phase == ChallengeGame::Failure) a.playSfx(0x1b); }
+        Sim& sm = simRef();
+        prev.resize(sm.ents.size());
+        for (size_t i = 0; i < sm.ents.size(); i++) prev[i] = {sm.ents[i].x, sm.ents[i].z};
+        const int before = phase();
+        if (battle) bgame.tick(); else game.tick();
+        if (phase() == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
+        if (phase() != before) { if (phase() == ChallengeGame::Success || phase() == ChallengeGame::Result) a.playSfx(0x15); else if (phase() == ChallengeGame::Failure) a.playSfx(0x1b); }
     }
     const char* next() override { if (!back) return nullptr; back = false; return "MENU"; }
     void draw(App& a, float alpha) override {
@@ -2131,17 +2139,25 @@ struct ChallengeMode : Screen {
         SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255); SDL_RenderClear(a.ren);
         a.stars.draw(a);
         a.board(stages.list[cur].st, 1, 1);                                                          // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
-        for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
-        a.drawFieldObjects(game.sim, prev, game.phase == ChallengeGame::Play ? alpha : 1.0f);
-        if (game.supported() && game.phase == ChallengeGame::Play && mouseCursor && aim.inside) a.cursorAt(aim.x, aim.y, 0, cticks);
+        for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
+        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f);
+        if (supportedNow() && phase() == ChallengeGame::Play && mouseCursor && aim.inside) a.cursorAt(aim.x, aim.y, 0, cticks);
         SDL_RenderSetViewport(a.ren, nullptr);
         std::string line;
-        if (!game.supported()) line = "THIS CHALLENGE TYPE IS NOT PORTED YET  ESC BACK";
-        else if (game.phase == ChallengeGame::Intro) line = "STAGE CHALLENGE " + std::to_string(cur + 1) + "  CLICK TO START";
-        else if (game.phase == ChallengeGame::Countdown) line = std::to_string(1 + (ChallengeGame::kCountdownFrames - game.phaseFrame) / 36) + "...";
-        else if (game.phase == ChallengeGame::Play) line = std::string(game.type == 2 ? "EATEN " : "SAVED ") + std::to_string(game.counter()) + " OF " + std::to_string(game.target) + "   TIME " + std::to_string(std::max(0, (ChallengeGame::kLimitTicks - game.playTick) / 60 + 1));
-        else if (game.phase == ChallengeGame::Success || game.phase == ChallengeGame::Result) line = game.phase == ChallengeGame::Result ? "CLEAR!  " + std::to_string(game.clearSeconds()) + " SEC  BEST " + std::to_string(bestSeconds) + (newBest ? " NEW" : "") + "  CLICK FOR NEXT" : "CLEAR!";
-        else line = std::string("MISS: ") + (game.failReason ? game.failReason : "") + "   CLICK RETRY  ESC QUIT";
+        const int ph = phase(), pf = battle ? bgame.phaseFrame : game.phaseFrame, pt = battle ? bgame.playTick : game.playTick;
+        const char* why = battle ? bgame.failReason : game.failReason;
+        const int clearSec = battle ? bgame.clearSeconds() : game.clearSeconds();
+        if (!supportedNow()) line = "THIS CHALLENGE STAGE IS NOT PORTED YET  ESC BACK";
+        else if (ph == ChallengeGame::Intro) line = "STAGE CHALLENGE " + std::to_string(cur + 1) + "  CLICK TO START";
+        else if (ph == ChallengeGame::Countdown) line = std::to_string(1 + (ChallengeGame::kCountdownFrames - pf) / 36) + "...";
+        else if (ph == ChallengeGame::Play) {
+            const std::string time = "   TIME " + std::to_string(std::max(0, (ChallengeGame::kLimitTicks - pt) / 60 + 1));
+            if (!battle) line = std::string(game.type == 2 ? "EATEN " : "SAVED ") + std::to_string(game.counter()) + " OF " + std::to_string(game.target) + time;
+            else if (bgame.type == 3) line = "SCORE " + std::to_string(bgame.playerScore()) + " OF 100" + time;
+            else line = "YOUR TEAM " + std::to_string(bgame.ownTeam()) + "  OTHERS " + std::to_string(bgame.enemyTeam()) + time;
+        }
+        else if (ph == ChallengeGame::Success || ph == ChallengeGame::Result) line = ph == ChallengeGame::Result ? "CLEAR!  " + std::to_string(clearSec) + " SEC  BEST " + std::to_string(bestSeconds) + (newBest ? " NEW" : "") + "  CLICK FOR NEXT" : "CLEAR!";
+        else line = std::string("MISS: ") + (why ? why : "") + "   CLICK RETRY  ESC QUIT";
         a.text(line, 24, 14, 30);
     }
 };

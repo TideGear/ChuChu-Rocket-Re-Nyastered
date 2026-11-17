@@ -27,6 +27,8 @@ public:
     }
     void skipIntro() { if (phase == Intro) { phase = Countdown; phaseFrame = 0; } }
     bool placeArrow(int x, int y, int dir) { return phase == Play && game.placeArrow(0, x, y, dir); }
+    int secondsLeft() const { return (kLimitTicks - playTick) / 60; }
+    int clearSeconds() const { return 30 - secondsLeft(); }   // Data::clearChallenge stores limit minus the whole seconds left
     int ownTeam() const { return game.score.catCounter[0]; }
     int enemyTeam() const { return game.score.catCounter[1]; }
     int playerScore() const { return game.score.player[0]; }
