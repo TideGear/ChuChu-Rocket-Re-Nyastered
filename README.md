@@ -61,6 +61,8 @@ Runtime options include `CCR_CPU=gba` for GBA-style battle AI (also the `cpu_sty
 
 Other platforms: the core and tests cross-compile for Android arm64 (NDK) and build for WebAssembly (Emscripten; see [docs/roadmap.md](docs/roadmap.md)); neither has been run on a device yet. The game source also compiles for x86_64 and arm64 Linux and macOS (checked with Zig, compile only; nothing has been linked or run there).
 
+**Linux and macOS (new, not yet confirmed on a real machine).** Releases include `...-linux-x64.tar.gz` and `...-macos-<arch>.tar.gz`. Extract one, install Python 3.10+ and Pillow (for example `sudo apt install python3 python3-pil` or `sudo pacman -S python python-pillow`), then run `./ccr --prepare "<folder with your original files>"` (or let RecompLauncher do it) and start `./ccr`. The data folder is `~/.config/ChuChuRocketReNyastered` (`~/Library/Application Support/...` on macOS). Dreamcast CHD and GDI backups are not accepted yet; use numbered `.bin` tracks with their `.cue`. Please report problems with the log from `logs/ccr.log` if one exists.
+
 ### Which original files do I need?
 
 **Start with one mobile release.** iPad HD 1.0, iPhone 1.0, 1.0.2, 1.1, iOS 1.1.2, and Android 1.14 or 1.15 each supply the base graphics and audio, 100 main puzzles, and all 25 Battle boards. Setup exports these automatically. The iPad release also supplies the original startup screens, title, menus and HUD.
