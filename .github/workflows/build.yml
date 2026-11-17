@@ -1,0 +1,40 @@
+# Native Linux and macOS builds of ccr plus the data-free unit tests. Contains no game files; nothing is uploaded except the built program.
+name: build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux packages for the static SDL2 build
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxinerama-dev libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libgl1-mesa-dev libegl1-mesa-dev
+      - name: macOS packages
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Configure
+        run: cmake -S game -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --target ccr userdata_test padmap_test
+      - name: Unit tests that need no game data
+        run: |
+          ./build/userdata_test
+          ./build/padmap_test
+      - name: Package
+        run: |
+          mkdir -p out && cp build/ccr out/ccr && cp README.md recomplauncher.json out/
+          tar -czf ccr-${{ runner.os }}-${{ runner.arch }}.tar.gz -C out .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ccr-${{ runner.os }}-${{ runner.arch }}
+          path: ccr-${{ runner.os }}-${{ runner.arch }}.tar.gz
