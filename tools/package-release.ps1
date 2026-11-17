@@ -33,7 +33,7 @@ try {
 
     $extractors = @(
         'bhunpack', 'dc_models', 'dc_objects', 'export_android_ui', 'export_battle',
-        'export_dc_solutions', 'export_dc_ui', 'export_dlc_stages', 'export_hd_geometry',
+        'export_dc_models', 'export_dc_solutions', 'export_dc_ui', 'export_dlc_stages', 'export_hd_geometry',
         'export_hd_images', 'export_hd_locale', 'export_pad_ui', 'export_sprites',
         'export_strings', 'export_testdata', 'export_tilemaps', 'extract_all',
         'extract_android', 'extract_ios_locale', 'extract_packs', 'gba_stages', 'gdi_extract',

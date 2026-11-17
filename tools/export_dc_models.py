@@ -4,7 +4,7 @@ nTris x {u8 material, 3 x {f32 x, y, z, u, v}}, u32 nFrames, nFrames x nTris x 9
 The cat's head is animated by a 24-frame vertex-morph table (docs/dreamcast_models.md): frame k replaces the 69 head vertices; frames 17 and 23 equal the base pose.
 Models and their texture lists (docs/dreamcast_models.md): the cat object 0x778c4 uses c_cat01..04; the basic mouse's eight walk keyframes 0x7efb8.. use the MOUSE archive in the
 executable's slot order 01, 02, 03, 05, 04, 06, 07, 08, 09, 10 (material index = slot).
-usage: export_dc_models.py <assets/dreamcast folder>"""
+usage: export_dc_models.py <assets/dreamcast folder> <1ST_READ.BIN>   (needs the folders objects/ from dc_objects.py and prs_png/ beside models.bin)"""
 import os, struct, sys
 from PIL import Image
 
@@ -30,9 +30,9 @@ def load_obj_indexed(path):
         elif k[0] == 'f': F.append((mat, [(int(p.split('/')[0]) - 1, int(p.split('/')[1]) - 1) for p in k[1:4]]))
     return V, T, F
 
-def cat_morph_frames(root, V):
+def cat_morph_frames(root, V, exe):
     """Vertex-morph frames of the cat head (table at 0x7ceb4, 24 frames of 69 xyz floats): returns a list of 24 full vertex arrays (object space)."""
-    d = open(os.path.join(root, '..', '..', '..', '..', 'analysis', 'extracted', 'dc_files', '1ST_READ.BIN'), 'rb').read(); base = 0x8C010000
+    d = open(exe, 'rb').read(); base = 0x8C010000
     import sys as _s; _s.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import dc_models as M
     vl = {o: v for (o, vo, po, v, pl) in M.find_models(d, base)}[0x778ac]; keys = sorted(vl); b0 = [vl[k][0] for k in keys]
@@ -48,12 +48,12 @@ def cat_morph_frames(root, V):
         frames.append(fr)
     return frames
 
-def cat_pose_frames(root):
+def cat_pose_frames(root, exe):
     """Full 24-frame cat animation from the two Ninja motions the game plays together (draw call 0x8c0e673e with 0x8c088108 and 0x8c08cfd4, frame = a float in [0, 24)):
     motion A (type 0x7, 24 keys per animated node: 'ang' and 'pos' key lists) turns/moves the feet and tail nodes 1, 2, 3 and 5; motion B (type 0x30) morphs the head's 69 vertices
     (node 0). Returns 24 flat position arrays in the triangle order of obj_0778c4.obj (3 vertices x xyz per triangle)."""
     import math
-    d = open(os.path.join(root, '..', '..', '..', '..', 'analysis', 'extracted', 'dc_files', '1ST_READ.BIN'), 'rb').read(); B = 0x8C010000
+    d = open(exe, 'rb').read(); B = 0x8C010000
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import dc_models as M
     models = {B + o: (vl, pl) for (o, vo, po, vl, pl) in M.find_models(d, B)}
@@ -126,7 +126,7 @@ def load_obj(path):
             tris.append((mat, [(V[a], T[b]) for a, b in idx]))
     return tris
 
-def main(root):
+def main(root, exe):
     tex_ids, textures = {}, []
     def tex(name):
         if name not in tex_ids:
@@ -141,7 +141,7 @@ def main(root):
         mats = [tex(texlist[m]) if m < len(texlist) else 0 for m in range(nm)]
         frames = []
         if name == 'cat':
-            frames = cat_pose_frames(root)
+            frames = cat_pose_frames(root, exe)
             assert all(len(fr) == len(F) * 9 for fr in frames), (len(frames[0]), len(F) * 9)
         models.append((name, tris, mats, frames))
     out = bytearray(b'CCM2' + struct.pack('<I', len(textures)))
@@ -158,4 +158,4 @@ def main(root):
     open(os.path.join(root, 'models.bin'), 'wb').write(out)
     print('models', len(models), 'textures', len(textures), 'bytes', len(out))
 
-if __name__ == '__main__': main(sys.argv[1])
+if __name__ == '__main__': main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else os.path.join(sys.argv[1], '..', '..', '..', 'analysis', 'extracted', 'dc_files', '1ST_READ.BIN'))

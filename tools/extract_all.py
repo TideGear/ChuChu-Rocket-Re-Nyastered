@@ -187,6 +187,12 @@ def do_dreamcast(src, work, assets, entry):
         import dc_objects
         dc_objects.main(os.path.join(files, '1ST_READ.BIN'), objects)
     entry['objects'] = len(glob.glob(os.path.join(objects, 'obj_*.obj')))
+    try:   # the 3D character models and their textures in one file the app loads (dreamcast/models.bin)
+        import export_dc_models
+        export_dc_models.main(os.path.join(assets, 'dreamcast'), os.path.join(files, '1ST_READ.BIN'))
+        entry['model_pack'] = True
+    except Exception as error:
+        entry['model_pack_error'] = str(error)
     # CD audio tracks 04..18 (raw 16-bit stereo 44.1 kHz) -> WAV
     audio = os.path.join(assets, 'dreamcast', 'audio'); os.makedirs(audio, exist_ok=True)
     wavs = []
