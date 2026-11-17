@@ -125,7 +125,9 @@ struct StarBackground {
 
 struct App {
     StarBackground stars;
-    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; bool headless = false, quit = false, vsync = true;
+    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings;
+    void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
+    void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
     void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
@@ -1605,8 +1607,25 @@ struct OptionsMode : Screen {
     static constexpr int N = 7; static constexpr int key[N] = {0x15c, 0x15d, 0x15e, 0x15f, 0x160, 0x161, 0x1d8};   // How to Play, Sounds, Language, iPod Music, Costumes, Credits, Game Center
     static constexpr int px[N] = {145, 225, 305, 385, 465, 545, 625}, py[N] = {173, 263, 353, 433, 523, 613, 630};   // table at 0xe786c (initLanguageMenuItems uses its first six rows)
     static bool ok(App& a) { return a.opBg.tex && a.opHdr.tex && a.mnBars.tex && a.mnMasc.tex && a.ssArrows.tex && a.hdFont1.tex; }
-    bool shown(int i) const { return sub == 2 ? i < 6 : (i != 3 && i != 6); }   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
-    int back() const { return sub == 2 ? 6 : sub == 1 ? 2 : 7; }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
+    bool shown(int i) const { return sub == 2 ? i < 6 : i != 6; }   // slot 3 (iPod Music, iOS-only) carries this port's own settings page   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
+    int capture = -1;   // sub 3: -1 list, 0..3 waiting for the controller button of arrow dir 0..3
+    int back() const { return sub == 2 ? 6 : sub == 1 ? 2 : 7; }
+    static constexpr int PR = 5, PX = 225, PY0 = 173, PPITCH = 90;   // port settings rows
+    static const char* dirName(int d) { static const char* n[4] = {"down", "left", "up", "right"}; return n[d]; }
+    std::string portLabel(App& a, int i) {
+        const Settings& st = a.settings; char b[96];
+        switch (i) { case 0: return std::string("Fullscreen: ") + (st.fullscreen ? "On" : "Off"); case 1: return std::string("VSync: ") + (st.vsync ? "On" : "Off"); case 2: return "Scaling: " + st.filter;
+            case 3: snprintf(b, sizeof b, "Log detail: %d", st.logLevel); return b;
+            default: if (capture >= 0) { snprintf(b, sizeof b, "Press pad button for arrow %s", dirName(capture)); return b; } return "Remap arrow buttons"; } }
+    int portHit(float lx, float ly, App& a) { for (int i = 0; i < PR; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (PX <= lx && lx <= PX + w && PY0 + PPITCH * i <= ly && ly <= PY0 + PPITCH * i + h) return i; } int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 99; return -1; }
+    void portAct(App& a, int i) {
+        Settings& st = a.settings;
+        if (i == 0) { st.fullscreen = !st.fullscreen; SDL_SetWindowFullscreen(a.win, st.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0); }
+        else if (i == 1) { st.vsync = !st.vsync; a.vsync = st.vsync; SDL_RenderSetVSync(a.ren, a.vsync); }
+        else if (i == 2) st.filter = st.filter == "linear" ? "nearest" : "linear";
+        else if (i == 3) st.logLevel = (st.logLevel + 1) % 3;
+        else if (i == 4) { capture = 0; return; }
+        a.saveSettings(); a.log.write(1, ("setting changed: " + portLabel(a, i)).c_str()); }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
     int drag = -1; static constexpr int SX = 303, SY0 = 245, SPITCH = 45, SW = 234;
     int sliderX(App& a) { int w = 0; for (int i = 0; i < 2; i++) if (const std::string* s = a.hdString(0x164 + i)) w = std::max(w, a.hdTextWidth(*s, 0, 1.0f)); return SX + w; }   // initSoundMenuItems: item x = 303 + the widest label
     int music() override { return phase == 0x11 ? -1 : 5; }
@@ -1615,6 +1634,13 @@ struct OptionsMode : Screen {
         int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return back(); return -1; }
     void setVol(App& a, int which, float lx) { int v = (int)((lx - (float)sliderX(a)) * (255.0f / (float)SW)); v = std::max(0, std::min(255, v)); if (which == 0) a.musicVol = v; else a.sfxVol = v; }
     void event(App& a, const SDL_Event& e) override {
+        if (phase == 0x12 && sub == 3) {
+            if (capture >= 0 && e.type == SDL_CONTROLLERBUTTONDOWN) { int b = e.cbutton.button; if (b < 11) { a.padMap.arrow[capture] = b; a.playSfx(2); if (++capture >= 4) { capture = -1; a.savePadMap(); a.log.write(1, "controller arrow buttons remapped"); } } return; }
+            if (capture >= 0 && e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) { capture = -1; return; }
+            if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_ESCAPE) { a.playSfx(2); sub = 0; sel = 3; } else if (k == SDLK_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (k == SDLK_RETURN && capture < 0) { a.playSfx(2); portAct(a, sel); } return; }
+            if (e.type == SDL_CONTROLLERBUTTONDOWN && capture < 0) { int b = e.cbutton.button; if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_A) { a.playSfx(2); portAct(a, sel); } else if (b == SDL_CONTROLLER_BUTTON_B) { a.playSfx(2); sub = 0; sel = 3; } return; }
+            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && capture < 0) { float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int h = portHit(lx, ly, a); if (h == 99) { a.playSfx(2); sub = 0; sel = 3; } else if (h >= 0) { if (sel != h) { sel = h; a.playSfx(0); } else { a.playSfx(2); portAct(a, h); } } }
+            return; }
         if (phase == 0x12 && sub == 1 && (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONUP) && drag >= 0) {   // handleInput param_3 == 1 (move) and 2 (release)
             float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, &lx, &ly);
             if (e.type == SDL_MOUSEMOTION) setVol(a, drag, lx); else { if (drag == 1 && hitTest(a, lx, ly) == 1) a.playSfx(1); a.saveOptions(); drag = -1; } return; }
@@ -1634,6 +1660,7 @@ struct OptionsMode : Screen {
         if (hit == 5 && CreditsMode::ok(a)) { a.playSfx(2); chosen = 5; fade = 0; phase = 0x13; return; }   // Credits
         if (hit == 1) { a.playSfx(2); sub = 1; drag = -1; return; }   // Sounds
         if (hit == 2) { a.playSfx(2); sub = 2; sel = a.lang; return; }   // Language
+        if (hit == 3) { a.playSfx(2); sub = 3; sel = 0; capture = -1; return; }   // this port's settings
         a.playSfx(0x13); }   // Costumes is unfinished. How to Play and Credits also land here if their required assets are unavailable.
     // renderSoundMenuItems 0x22dcc (checked against the original with tools/oracle/hd_options_probe.py, tools/options_diff.py); log != nullptr records the calls instead of drawing
     void drawSounds(App& a, int music, int sfx, int dragState, std::vector<std::string>* log) {
@@ -1658,9 +1685,15 @@ struct OptionsMode : Screen {
         static const int tm[48] = {0,1,2,3,3,3,4,5,6,7,8,3,9,10,11,12,13,14,15,16,17,18,19,3,3,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,3,35,36,37,38,39,3,3};   // tilemap resource 0x125 (HD ccrpad rec 879)
         for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
         a.rtex(a.opHdr, 0, 208, 50, a.opHdr.fr[0].w, a.opHdr.fr[0].h);
+        if (sub == 3) {
+            for (int i = 0; i < PR; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)PX, (float)(PY0 + PPITCH * i), w, h);
+                const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(portLabel(a, i), (float)(PX + w / 2), (float)(PY0 + PPITCH * i) + ((float)h - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1);
+                if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(PX + 36 - m.w), (float)(PY0 + PPITCH * i + (h - m.h) / 2), m.w, m.h); } }
+            a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y); return; }
         if (sub == 1) { drawSounds(a, a.musicVol, a.sfxVol, drag, nullptr); if (phase != 0x12) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(fade / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); } return; }
         for (int i = 0; i < N; i++) { if (!shown(i)) continue; int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
             if (sub == 2 && i == 5 && a.langJa.tex) { const SDL_Rect& f = a.langJa.fr[0]; const SDL_Point& o = a.langJa.off[0]; a.rtex(a.langJa, 0, (float)(px[i] + w / 2 + o.x), (float)(py[i] + h / 2 + o.y), f.w, f.h); }   // the Japanese label is an image
+            else if (sub == 0 && i == 3) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString("Port Settings", (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
             else if (const std::string* s = a.hdString(sub == 2 ? 0x1cd + i : key[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*s, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1); }
             if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); } }
         a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y);
@@ -2669,7 +2702,7 @@ int main(int argc, char** argv) {
         const bool quiet = (getenv("CCR_SHOT") || getenv("CCR_HEADLESS") || getenv("CCR_BENCH")) && !getenv("CCR_USERDATA_TEST");   // test runs never create settings or logs (CCR_USERDATA_TEST=1 exercises them headlessly)
         app.saveDir = quiet ? root : resolveDataDir(programDir, root, portableFlag);
         if (!quiet) {
-            const Settings st = loadOrCreateSettings(app.saveDir);
+            const Settings st = loadOrCreateSettings(app.saveDir); app.settings = st;
             if (st.fullscreen) SDL_setenv("CCR_FULLSCREEN", "1", 0);
             if (!st.vsync) SDL_setenv("CCR_VSYNC", "0", 0);
             SDL_setenv("CCR_FILTER", st.filter.c_str(), 0);
