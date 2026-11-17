@@ -162,7 +162,7 @@ struct App {
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
     void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
     bool isCleared(int s) { loadProgress(); return s >= 0 && s < 100 && ((clr[s / 25] >> (s % 25)) & 1); }
-    int maxStage() { loadProgress(); for (int i = 0; i < 3; i++) if ((clr[i] & 0x1ffffff) != 0x1ffffff) return i; return 3; }   // VMU::getPuzzleMaxStage 0x372b4
+    int maxStage() { if (settings.unlockAll) return 3; loadProgress(); for (int i = 0; i < 3; i++) if ((clr[i] & 0x1ffffff) != 0x1ffffff) return i; return 3; }   // VMU::getPuzzleMaxStage 0x372b4
     void setCleared(int s) { loadProgress(); if (s < 0 || s >= 100 || isCleared(s)) return; clr[s / 25] |= 1u << (s % 25); if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb")) { fwrite(clr, 4, 4, f); fclose(f); } }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
@@ -1640,12 +1640,13 @@ struct OptionsMode : Screen {
     bool shown(int i) const { return sub == 2 ? i < 6 : i != 6; }   // slot 3 (iPod Music, iOS-only) carries this port's own settings page   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
     int capture = -1;   // sub 3: -1 list, 0..3 waiting for the controller button of arrow dir 0..3
     int back() const { return sub == 2 ? 6 : sub == 1 ? 2 : 7; }
-    static constexpr int PR = 6, PX = 225, PY0 = 173, PPITCH = 90;   // port settings rows
+    static constexpr int PR = 7, PX = 225, PY0 = 173, PPITCH = 78;   // port settings rows
     static const char* dirName(int d) { static const char* n[4] = {"down", "left", "up", "right"}; return n[d]; }
     std::string portLabel(App& a, int i) {
         const Settings& st = a.settings; char b[96];
         switch (i) { case 0: return std::string("Fullscreen: ") + (st.fullscreen ? "On" : "Off"); case 1: return std::string("VSync: ") + (st.vsync ? "On" : "Off"); case 2: return "Scaling: " + st.filter;
             case 3: snprintf(b, sizeof b, "Log detail: %d", st.logLevel); return b;
+            case 6: return std::string("Unlock all: ") + (st.unlockAll ? "On" : "Off");
             case 5: return "Battle CPU: " + std::string(st.cpuStyle == "gba" ? "GBA" : "Dreamcast");
             default: if (capture >= 0) { snprintf(b, sizeof b, "Press pad button for arrow %s", dirName(capture)); return b; } return "Remap arrow buttons"; } }
     int portHit(float lx, float ly, App& a) { for (int i = 0; i < PR; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (PX <= lx && lx <= PX + w && PY0 + PPITCH * i <= ly && ly <= PY0 + PPITCH * i + h) return i; } int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 99; return -1; }
@@ -1656,6 +1657,7 @@ struct OptionsMode : Screen {
         else if (i == 2) st.filter = st.filter == "linear" ? "nearest" : "linear";
         else if (i == 3) st.logLevel = (st.logLevel + 1) % 3;
         else if (i == 4) { capture = 0; return; }
+        else if (i == 6) st.unlockAll = !st.unlockAll;
         else if (i == 5) st.cpuStyle = st.cpuStyle == "gba" ? "dreamcast" : "gba";
         a.saveSettings(); a.log.write(1, ("setting changed: " + portLabel(a, i)).c_str()); }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
     int drag = -1; static constexpr int SX = 303, SY0 = 245, SPITCH = 45, SW = 234;

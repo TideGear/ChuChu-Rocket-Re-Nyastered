@@ -16,6 +16,7 @@ struct Settings {
     std::string filter = "linear";   // "linear" or "nearest" scaling
     int width = 0, height = 0;   // window size, 0 = default
     std::string cpuStyle = "dreamcast";   // computer opponents in Battle: "dreamcast" (the Dreamcast/iOS/Android placement rules) or "gba"
+    bool unlockAll = false;      // open every puzzle group and costume without clearing the stages (the original opens group n after all 25 stages of group n-1 are cleared)
     int logLevel = 1;            // 0 = no log, 1 = sessions and results, 2 = also every screen change
     int logKeepFiles = 5;        // rotated log files kept
     int logMaxKb = 256;          // size at which the log rotates
@@ -33,6 +34,7 @@ inline Settings parseSettings(const std::string& text) {
         if (k == "fullscreen") s.fullscreen = parseBool(v, s.fullscreen);
         else if (k == "vsync") s.vsync = parseBool(v, s.vsync);
         else if (k == "filter") { if (v == "linear" || v == "nearest") s.filter = v; }
+        else if (k == "unlock_all") s.unlockAll = parseBool(v, s.unlockAll);
         else if (k == "cpu_style") { if (v == "dreamcast" || v == "gba") s.cpuStyle = v; }
         else if (k == "window_width") s.width = std::max(0, atoi(v.c_str()));
         else if (k == "window_height") s.height = std::max(0, atoi(v.c_str()));
@@ -53,9 +55,10 @@ inline std::string settingsText(const Settings& s) {
         "# How the picture is scaled: linear (smooth) or nearest (sharp pixels).\nfilter = %s\n\n"
         "# Window size in pixels; 0 uses the default size.\nwindow_width = %d\nwindow_height = %d\n\n"
         "# Battle computer players: dreamcast or gba (the GBA game's placement rules).\ncpu_style = %s\n\n"
+        "# Open every puzzle group and costume without playing for them: true or false (the original unlocks them by clearing stages).\nunlock_all = %s\n\n"
         "# Log detail: 0 = off, 1 = sessions and match results, 2 = also every screen change.\nlog_level = %d\n\n"
         "# The log file (logs/ccr.log) rotates when it reaches this many kilobytes; this many old files are kept.\nlog_max_kb = %d\nlog_keep_files = %d\n",
-        s.fullscreen ? "true" : "false", s.vsync ? "true" : "false", s.filter.c_str(), s.width, s.height, s.cpuStyle.c_str(), s.logLevel, s.logMaxKb, s.logKeepFiles);
+        s.fullscreen ? "true" : "false", s.vsync ? "true" : "false", s.filter.c_str(), s.width, s.height, s.cpuStyle.c_str(), s.unlockAll ? "true" : "false", s.logLevel, s.logMaxKb, s.logKeepFiles);
     return b;
 }
 inline bool readFile(const std::string& path, std::string& out) { FILE* f = fopen(path.c_str(), "rb"); if (!f) return false; char buf[4096]; size_t n; out.clear(); while ((n = fread(buf, 1, sizeof buf, f)) > 0) out.append(buf, n); fclose(f); return true; }

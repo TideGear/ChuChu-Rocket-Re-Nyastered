@@ -53,6 +53,8 @@ Run `build.cmd --target ccr` to rebuild only the game. For an offline build, set
 
 `logs/ccr.log` rotates by size (`ccr.1.log`, `ccr.2.log`, ...) and records sessions and, at `log_level = 2`, every screen change.
 
+**Unlock all.** Options > Settings has an "Unlock all" row (`unlock_all` in `settings.ini`): it opens every puzzle group without clearing the stages before it, as the original opens them only in order.
+
 **Controller.** Button assignments live in `controls.ini` (created with comments beside `settings.ini`): the four arrow buttons, pause, and the controller-only quit combo (hold Back + Start for two seconds to leave the game, e.g. back to RecompLauncher). Pad prompt names come from the same file.
 
 Runtime options include `CCR_CPU=gba` for GBA-style battle AI (also the `cpu_style` setting and a row on the Options Settings page), `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4` (quick-start launches only; the Battle setup screen chooses players), `CCR_SIZE=3840x2160` and `CCR_FULLSCREEN=1`. Use `CCR_HEADLESS`, `CCR_SHOT` or `CCR_BENCH` for silent runs without a visible window. The C++ tests are CMake targets in `game/`, including `determinism_test`, `battle_full_test`, `cpu_test` and `netplay_test`.
