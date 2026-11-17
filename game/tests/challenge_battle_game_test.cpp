@@ -25,6 +25,7 @@ int main(int argc, char** argv) {
             const unsigned long long d0 = ccr::g_rngDraws;
             g.tick();
             if (getenv("RNGDRAWS") && ccr::g_rngDraws != d0) printf("RNG f%d %llu\n", fr, ccr::g_rngDraws - d0);
+            if (getenv("HEATAT") && fr >= atoi(getenv("HEATAT")) && fr < atoi(getenv("HEATAT")) + 4) { printf("HEAT f%d", fr); for (int x = 3; x <= 7; x++) printf(" (%d,5)=%d", x, g.game.sim.heat[5 * kCols + x]); for (const auto& e : g.game.sim.ents) if (!e.mouse && e.alive && !e.done && !e.rocketIn) printf(" cat[%d,%d]", e.gx, e.gy); printf(" coll55=%x rocket1=%d,%d rocket3=%d,%d", g.game.sim.fieldCollision(5, 5), g.game.cpuEnv.rocketX[1], g.game.cpuEnv.rocketY[1], g.game.cpuEnv.rocketX[3], g.game.cpuEnv.rocketY[3]); printf("%c", 10); }
             if (g.phase != lastPhase) { printf("f%d phase %d", fr, g.phase); if (g.failReason) printf(" (%s)", g.failReason); putchar(10); lastPhase = g.phase; }
             if (g.ownTeam() != lastW0 || g.enemyTeam() != lastW1) { printf("WORDS f%d w12 %d w13 %d", fr, g.ownTeam(), g.enemyTeam()); putchar(10); lastW0 = g.ownTeam(); lastW1 = g.enemyTeam(); }
             if (want == 24 && (g.teamScore(0) != lastT0 || g.teamScore(1) != lastT1)) { printf("WORDS f%d w8 %d w9 %d\n", fr, g.teamScore(0), g.teamScore(1)); lastT0 = g.teamScore(0); lastT1 = g.teamScore(1); }
