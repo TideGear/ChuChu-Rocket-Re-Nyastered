@@ -180,6 +180,7 @@ def main(prs_png, out, png=None):
         ('PUZZLEMENU_pzleft02.png', 'dc_puzzle_cancel', prs_png),
         ('PUZZLEMENU_pzright.png', 'dc_puzzle_panel', prs_png),
         ('PUZZLEMENU_stage.png', 'dc_puzzle_stage', prs_png),
+        ('BATTLEMODELS_s01.png', 'dc_cursor_bracket', prs_png),
     ):
         if not src_dir: continue
         p = os.path.join(src_dir, src)

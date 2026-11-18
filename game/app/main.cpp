@@ -244,7 +244,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -334,6 +334,7 @@ struct App {
         loadSheet(ret + "dc_pause_boxes", dcPauseBoxes);
         loadSheet(ret + "dc_pause_team", dcPauseTeam);
         loadSheet(ret + "dc_pause_marks", dcPauseMarks);
+        loadSheet(ret + "dc_cursor_bracket", dcCursorBracket);
         loadSheet(ret + "dc_cursors", dcCursors);
         loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
         loadSheet(ret + "dc_battle_hud", dcBattleHud);
@@ -994,6 +995,8 @@ struct App {
             const float size = CELL * scale;
             dcCursorAt(dcCursors, x + size / 2, y + size / 2, player, size);
         }
+        else if (bracket && useDcCursors() && dcCursorBracket.tex)
+            dcCursorAt(dcCursorBracket, x, y, 0, CELL * scale);
         else blit(cur, bracket ? 4 : player & 3, x, y, scale);
     }
     void cursor(int cx, int cy, int player, int ticks, bool bracket = false, FieldLayout field = {}) {
@@ -2728,6 +2731,15 @@ struct PuzzleMode : Screen {
 struct ChallengeMode : Screen {
     Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
+    SDL_GameController* controller = nullptr;
+    PadAim padAim{5.5f * kCell, 3.5f * kCell};
+
+    ~ChallengeMode() override {
+        if (controller) SDL_GameControllerClose(controller);
+    }
+    void openController(int device) {
+        if (!controller && SDL_IsGameController(device)) controller = SDL_GameControllerOpen(device);
+    }
     // Dreamcast layout (Flycast Challenge A1): the same measured floor plane as Battle and Puzzle, and the Battle task's left column (strip, clock, nine-rocket time gauge).
     bool paused = false;   // P key (the original's START) or CCR_PAUSE_TICK in headless tests
     bool fromStageSelect = false;
@@ -2745,8 +2757,10 @@ struct ChallengeMode : Screen {
         if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
-    bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false; begin(stage); return true; }
-    void begin(int stage) { failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
+    bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
+        for (int i = 0; i < SDL_NumJoysticks(); ++i) openController(i);
+        begin(stage); return true; }
+    void begin(int stage) { paused = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
         if (battle) bgame.start(stages.list[cur].st, cur, (uint32_t)SDL_GetTicks() * 2654435761u + (uint32_t)cur); else game.start(stages.list[cur].st, cur);   // types 3 and 4 run on the battle engine (core/challenge_battle.hpp)
         prev.clear(); }
     int phase() const { return battle ? bgame.phase : game.phase; }
@@ -2754,8 +2768,16 @@ struct ChallengeMode : Screen {
     Sim& simRef() { return battle ? bgame.game.sim : game.sim; }
     void skipIntro() { if (battle) bgame.skipIntro(); else game.skipIntro(); }
     int music() override { return 9; }
-    void place(App& a, int dir) { if (phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
+    void place(App& a, int dir) { if (paused || phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
     void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_CONTROLLERDEVICEADDED) { openController(e.cdevice.which); return; }
+        if (e.type == SDL_CONTROLLERDEVICEREMOVED && controller &&
+            SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller)) == e.cdevice.which) {
+            SDL_GameControllerClose(controller);
+            controller = nullptr;
+            return;
+        }
+        if (e.type == SDL_CONTROLLERAXISMOTION) mouseCursor = false;
         if (phase() == ChallengeGame::Result && a.dcChallengeResult.tex) {
             if (e.type == SDL_KEYDOWN) {
                 if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE) nextStageRequested = true;
@@ -2796,6 +2818,24 @@ struct ChallengeMode : Screen {
             }
             return;
         }
+        if (e.type == SDL_CONTROLLERBUTTONDOWN && controller &&
+            SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller)) == e.cbutton.which) {
+            mouseCursor = false;
+            const int button = e.cbutton.button;
+            if (button == a.padMap.pause && phase() == ChallengeGame::Play) { paused = !paused; return; }
+            if (paused) return;
+            if (phase() == ChallengeGame::Intro &&
+                (button == SDL_CONTROLLER_BUTTON_A || button == a.padMap.pause)) { skipIntro(); return; }
+            if (phase() == ChallengeGame::Play) {
+                aim.x = padAim.logicalX(1.0f, pf(a));
+                aim.y = padAim.logicalY(1.0f, pf(a));
+                aim.field = pf(a);
+                aim.inside = true;
+                for (int direction = 0; direction < 4; ++direction)
+                    if (button == a.padMap.arrow[direction]) place(a, direction);
+            }
+            return;
+        }
         if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN) { aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, pf(a)); mouseCursor = true; }
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             if (phase() == ChallengeGame::Intro) skipIntro();                                   // flag 1: a tap skips the intro
@@ -2822,6 +2862,7 @@ struct ChallengeMode : Screen {
         if (pauseAt >= 0 && cticks == pauseAt) paused = true;
         if (paused) return;
         ++cticks;
+        if (controller && phase() == ChallengeGame::Play) padAim.tick(controller);
         Sim& sm = simRef();
         prev.resize(sm.ents.size());
         for (size_t i = 0; i < sm.ents.size(); i++) prev[i] = {sm.ents[i].x, sm.ents[i].z};
@@ -2918,7 +2959,17 @@ struct ChallengeMode : Screen {
         a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
         for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
         a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 2);
-        if (supportedNow() && phase() == ChallengeGame::Play && mouseCursor && aim.inside) a.cursorAt(aim.x, aim.y, 0, cticks, false, field.scale());
+        const bool fieldCursor = supportedNow() && phase() <= ChallengeGame::Play;
+        if (fieldCursor && mouseCursor && aim.inside)
+            a.cursorAt(aim.x, aim.y, 0, cticks, false, field.scale());
+        else if (fieldCursor && dc) {
+            const float x = padAim.logicalX(1.0f, field), y = padAim.logicalY(1.0f, field);
+            a.drawDcBattlePadCursor(x, y, 0, cticks);
+            // The corner bracket follows the same cell as the controller tip.
+            const int col = std::clamp(static_cast<int>(padAim.x / kCell), 0, kCols - 1);
+            const int row = std::clamp(static_cast<int>(padAim.y / kCell), 0, kRows - 1);
+            a.cursor(col, row, 0, cticks, true, field);
+        }
         SDL_RenderSetViewport(a.ren, nullptr);
         std::string line;
         const int ph = phase(), pf = battle ? bgame.phaseFrame : game.phaseFrame, pt = battle ? bgame.playTick : game.playTick;
@@ -2962,7 +3013,8 @@ struct ChallengeMode : Screen {
             }
             return;
         }
-        if (!dc || (ph != ChallengeGame::Intro && ph != ChallengeGame::Countdown)) a.text(line, dc ? 210 : 24, dc ? 660 : 14, 30);   // the real Dreamcast Challenge screen shows no text line; the port keeps one for score and results
+        const bool originalPlay = dc && ph == ChallengeGame::Play && !battle;
+        if (!originalPlay && (!dc || (ph != ChallengeGame::Intro && ph != ChallengeGame::Countdown))) a.text(line, dc ? 210 : 24, dc ? 660 : 14, 30);   // the real Dreamcast Challenge screen shows no text line; the port keeps one for score and results
     }
 };
 
