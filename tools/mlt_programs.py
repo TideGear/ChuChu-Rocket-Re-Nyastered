@@ -38,9 +38,10 @@ def programs(data, file_offset=0, ram_address=0):
                 if not address:
                     continue
                 header = block(address, 16)
-                split_count, splits_at = struct.unpack_from('<2I', header)
-                if split_count > 128:
-                    raise ValueError('Too many program splits')
+                count_word, splits_at = struct.unpack_from('<2I', header)
+                if count_word > 255:
+                    raise ValueError('Unsupported program-layer count flags')
+                split_count = count_word & 127
                 splits = []
                 for index in range(split_count):
                     at = splits_at + 48 * index
@@ -65,9 +66,31 @@ def programs(data, file_offset=0, ram_address=0):
                         velocity_curve=raw[42], velocity_low=raw[43], velocity_high=raw[44],
                         drum_mode=bool(raw[45]), raw=raw.hex()))
                 layers.append(dict(index=layer, offset=address, delay=int.from_bytes(header[8:10], 'little'),
+                    disabled=bool(count_word & 128),
                     bend_high=header[12], bend_low=header[13], splits=splits))
         result.append(dict(index=program, offset=pointer, layers=layers))
     return dict(tag=data[:4].decode('ascii'), version=version, programs=result)
+
+
+def split_matches(raw, note, velocity):
+    """Original ARM 0xf3c..0xf70 inclusive bounds, before drum/allocation work."""
+    if len(raw) < 48 or not 0 <= note <= 127 or not 0 <= velocity <= 127:
+        raise ValueError('Expected a split and seven-bit note/velocity')
+    return raw[36] <= note <= raw[37] and raw[43] <= velocity <= raw[44]
+
+
+def matching_splits(program, note, velocity):
+    """Ordered candidates per enabled layer; allocation may reject a candidate.
+
+    A zero-velocity command is note-off and has no note-on candidates.
+    """
+    if not 0 <= note <= 127 or not 0 <= velocity <= 127:
+        raise ValueError('Expected seven-bit note/velocity')
+    if not velocity:
+        return []
+    return [(layer['index'], [split for split in layer['splits']
+                             if split_matches(bytes.fromhex(split['raw']), note, velocity)])
+            for layer in program['layers'] if not layer.get('disabled', False)]
 
 
 def inventory(data):

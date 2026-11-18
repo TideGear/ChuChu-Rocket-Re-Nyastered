@@ -22,6 +22,7 @@ from arm7_bus import Arm7Bus
 from dc_sound_controls import modulation_word, envelope_words, sample_words
 from dc_sound_pitch import PitchTable
 from dc_aica_state import inspect
+from mlt_programs import inventory as program_inventory, matching_splits
 
 
 def verify(driver, state, mlt):
@@ -52,6 +53,7 @@ def verify(driver, state, mlt):
     print('original ARM modulation matches:', cases)
 
     report = inspect(state, mlt)
+    program = next(b for b in program_inventory(mlt) if b['tag'] == 'SMPB' and b['bank'] == 0)['programs'][27]
     base, registers = report['sound_ram_offset'], report['register_offset']
     ram = state[base:base + 0x200000]
     if ram[0xd68:0x16ac] != driver[32 + 0xd68:32 + 0x16ac]:
@@ -67,6 +69,10 @@ def verify(driver, state, mlt):
         controller = 0xc000 + group * 0x800 + midi_channel * 0x80
         split = struct.unpack_from('<I', voice, 0x10)[0]
         bank_address = struct.unpack_from('<I', ram, controller + 0x10)[0]
+        first_candidates = [bank_address + candidates[0]['offset']
+                            for _, candidates in matching_splits(program, note, velocity) if candidates]
+        if split not in first_candidates:
+            raise AssertionError('Captured split differs from ordered candidates')
         prepared_sample = sample_words(ram[split:split + 8], bank_address)
         if (prepared_sample[0] | 0x4000, *prepared_sample[1:]) != tuple(channel['register_words'][:4]):
             raise AssertionError('Calculated sample setup differs from live channel')

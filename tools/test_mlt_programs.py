@@ -2,7 +2,7 @@
 import struct
 import unittest
 
-from mlt_programs import programs
+from mlt_programs import programs, matching_splits
 
 
 def fixture():
@@ -46,6 +46,16 @@ class ProgramTests(unittest.TestCase):
         struct.pack_into('<H', data, 86, 380)
         with self.assertRaises(ValueError):
             programs(data)
+
+    def test_candidates_disabled_layer_and_note_off(self):
+        data = fixture()
+        program = programs(data)['programs'][0]
+        self.assertEqual(len(matching_splits(program, 84, 64)[0][1]), 1)
+        self.assertEqual(matching_splits(program, 84, 0), [])
+        struct.pack_into('<I', data, 68, 129)
+        program = programs(data)['programs'][0]
+        self.assertTrue(program['layers'][0]['disabled'])
+        self.assertEqual(matching_splits(program, 84, 64), [])
 
 
 if __name__ == '__main__':
