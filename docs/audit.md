@@ -52,22 +52,22 @@ The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `
 | 0 | 0x8c0235ea | SEGA logo | **partial**: layout and fades match Flycast (mean error 0.97); music request not played |
 | 1 | 0x8c023776 | Sonic Team logo | **partial**: 0.66 mean error; fades timed from one-frame captures |
 | 2 | 0x8c0264d2 | Title (idle timeout 588/600 ticks) | **partial**: background, logo, prompt blink and flying rocket done (1.6-2.5 mean error); drop-shadow pieces, music, attract demo (KEY_STAGE000.BIN, srand 0xdead0cab) open |
-| 3 | 0x8c0265da | unidentified | open |
-| 4 | 0x8c022432 | unidentified | open |
-| 5 | 0x8c022f24 | unidentified | open |
-| 6 | 0x8c02cd80 | unidentified | open |
+| 3 | 0x8c0265da | after the first Start on the title (frames 1352-1513): save/VMU check, before Mode Select (screen not compared) | open |
+| 4 | 0x8c022432 | unidentified (not reached by the Start, Help, Options, Battle or Challenge paths) | open |
+| 5 | 0x8c022f24 | Mode Select (mode variable 5 from frame 1519 until a mode is chosen; mode 20 appears for 5 frames just before) | partial: 4P Battle and Challenge selections compared at 640x480 |
+| 6 | 0x8c02cd80 | Help: Help Menu (The Basics, 4P Battle, Team Battle, Stage Challenge, Puzzle, Puzzle Edit, Network, Homepage, Options), The Basics pages ('Basic Rule 1/6') and each mode's help pages ('4P Battle 1/2') | open: not compared |
 | 7 | 0x8c024290 | menus: Mode Select, 4P Battle Select Players and Stage Select, Challenge select (mode variable 7 in all captured menu frames; init loads `yuka01-03` and `kabetx01-03`, VMU removal messages) | partial: Mode Select, Challenge select and Battle setup compared; Puzzle select, Options, Help, Network entries open |
 | 8 | 0x8c02dc50 | Puzzle Edit (mode variable 8 in the Edit/pause capture `pz3`; init loads `yuka01/03`, `kabetx01/03`) | open: pause overlay seen; the editor screens are not compared |
 | 9 | 0x8c034fa0 | network (string `  Disconnecting...  `) | open, not testable offline |
 | 10 | 0x8c04ffc0 | network setup (strings about setting up the Dreamcast for network access) | open, not testable offline |
-| 11 | 0x8c051b9a | unidentified | open |
+| 11 | 0x8c051b9a | Options (General Settings, Settings for 4P Battle and Team Battle, Records, Language, Keyboard F-key Settings, Return to Initial Settings) | open: not compared |
 | 12, 13 | 0x8c0278cc | shared init with `yuka01` floor: 12 = Battle play, Team Battle and the attract demo (mode variable 12 in the battle, HUD and demo captures); 13 unseen | partial: Battle and Team Battle captures compared; demo and mode 13 open |
 | 14 | 0x8c02a33e | Challenge play, pause, failure and clear screens (mode variable 14 in those captures) | partial: A1 play, failure (4.3), clear banner and select compared; other stage types and results open |
 | 15 | 0x8c02b97e | Puzzle play (mode variable 15 in the Normal 01 capture) | partial: Normal 01, 02, 08 compared; Hard, Special, Mania and results open |
 | 16 | 0x8c058292 | tutorial per the style variable (`FUN_8c016bd4`) | open |
 | 17 | 0x8c0507e0 | unlock and password messages ("You can now select Chao / Pians / Mania / Special / Hard", "The password is:") | open |
 | 18-22 | 0x8c05cfba, 0x8c05d39a, 0x8c05d55a, 0x8c05dc80, 0x8c05df12 | unidentified | open |
-Modes 3-6, 11, 16 (tutorial per the style variable) and 18-22 are still unidentified (no strings in their init code, none reached by the captures yet). Next: trigger them in Flycast (tutorial, options, help, credits, roulette, results, VMU screens), read `0x8c1af108` for each, then give every screen of every mode its own row.
+Modes 4, 16 (tutorial per the style variable) and 18-22 are still unidentified (no strings in their init code, none reached by the captures yet). Next: trigger them in Flycast (tutorial, options, help, credits, roulette, results, VMU screens), read `0x8c1af108` for each, then give every screen of every mode its own row. Method: `flyhost` with `FLY_WATCH=1af108:4:<frame>` logs the mode variable every frame while a key script walks the menus; screenshots beside the log name the screen.
 
 ## Next work
 
