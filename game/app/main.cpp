@@ -242,7 +242,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -323,6 +323,7 @@ struct App {
         loadSheet(ret + "dc_puzzle_digits", dcPuzzleDigits);
         loadSheet(ret + "dc_puzzle_plate", dcPuzzlePlate);
         loadSheet(ret + "dc_puzzle_labels", dcPuzzleLabels);
+        loadSheet(ret + "dc_pause", dcPause);
         loadSheet(ret + "dc_cursors", dcCursors);
         loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
         loadSheet(ret + "dc_battle_hud", dcBattleHud);
@@ -2519,6 +2520,20 @@ struct PuzzleMode : Screen {
         if (phonePause) a.blit(a.phonePauseButton, 5, phoneX + 58, phoneY + 616, 2.0f);
         else if (ipadPauseAvailable(a) && !dcPanelDrawn) a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // the real Dreamcast Puzzle screen has no Pause plate
         drawFailureFocus(a);
+        if (paused && dreamcastPuzzleControls(a) && a.dcPause.tex) {   // Flycast Puzzle pause frame: no dimming, nine quads on the 640 x 480 screen (drawn here at 1.6 times that), far to near: the PAUSED board, the bubbles with the cat, then the labels
+            struct Part { SDL_Rect src; float x, y, w, h; bool flip; };
+            static const Part parts[] = {
+                {{0, 0, 256, 256}, 132, 144, 256, 256, false}, {{256, 0, 128, 256}, 388, 144, 128, 256, false},
+                {{0, 256, 128, 64}, 133, 199, 128, 64, false}, {{384, 128, 32, 64}, 255, 199, 32, 64, false},
+                {{128, 256, 128, 64}, 379, 199, 128, 64, false}, {{416, 128, 32, 64}, 353, 199, 32, 64, true},
+                {{384, 0, 64, 128}, 285, 196, 64, 128, true},
+                {{256, 256, 128, 32}, 144, 205, 128, 32, false}, {{384, 256, 128, 32}, 400, 205, 128, 32, false}};
+            for (const Part& pt : parts) {
+                const SDL_Rect dst{(int)std::lround(pt.x * 1.6f), (int)std::lround(pt.y * 1.6f), (int)std::lround(pt.w * 1.6f), (int)std::lround(pt.h * 1.6f)};
+                SDL_RenderCopyEx(a.ren, a.dcPause.tex, &pt.src, &dst, 0.0, nullptr, pt.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+            }
+            return;
+        }
         if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
             SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0xc0); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all);
             if (phonePause) {

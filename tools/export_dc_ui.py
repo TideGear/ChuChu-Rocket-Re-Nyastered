@@ -115,6 +115,18 @@ def main(prs_png, out, png=None):
         labels = Image.new('RGBA', (256, 32 * len(names)))
         for i, n in enumerate(names): labels.paste(Image.open(n).convert('RGBA'), (0, i * 32))
         sheet('dc_puzzle_labels', labels)
+    # The Puzzle pause screen (Flycast Puzzle pause frame): the two PAUSED board pieces (the square left one is stored rotated like the other menu sheets), the cat, the two speech bubbles
+    # with their tips, and the RESUME and QUIT labels, packed into one 512 x 320 sheet; regions are fixed in main.cpp (dcPauseRegions).
+    names = ['pauseboard0', 'pauseboard1', 'yellowneko', 'fukidasi10', 'fukidasi12', 'fukidasi9', 'fukidasi11', 'tudukeru', 'yameru']
+    paths = {n: os.path.join(prs_png, f'PUZZLEPAUSE_{n}.png') for n in names}
+    if all(os.path.exists(v) for v in paths.values()):
+        rot = lambda im: im.transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        pl = {n: Image.open(v).convert('RGBA') for n, v in paths.items()}
+        atlas = Image.new('RGBA', (512, 320))
+        for n, pos in (('pauseboard0', (0, 0)), ('pauseboard1', (256, 0)), ('yellowneko', (384, 0)), ('fukidasi10', (384, 128)), ('fukidasi12', (416, 128)),
+                       ('fukidasi9', (0, 256)), ('fukidasi11', (128, 256)), ('tudukeru', (256, 256)), ('yameru', (384, 256))):
+            atlas.paste(rot(pl[n]) if n == 'pauseboard0' else pl[n], pos)   # the 128 x 256 right piece is already upright
+        sheet('dc_pause', atlas)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
