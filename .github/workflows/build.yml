@@ -43,7 +43,7 @@ jobs:
             macos-x64) expected=x86_64 ;;
             *) exit 1 ;;
           esac
-          lipo -verify_arch "$expected" build/ccr
+          lipo build/ccr -verify_arch "$expected"
       - name: Unit tests that need no game data
         run: |
           ./build/userdata_test
