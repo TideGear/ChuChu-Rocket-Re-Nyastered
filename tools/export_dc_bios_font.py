@@ -12,6 +12,7 @@ import os, struct, sys
 from PIL import Image
 
 ZERO, COLON, STRIDE = 25016, 10832, 72
+ANSI_BASE, ANSI_STEP = 0x20, 36   # 12 x 24 glyphs for characters 0x20..0x7e, rows of 12 bits packed MSB first
 
 def glyph(rom, offset):
     rows = []
@@ -20,6 +21,13 @@ def glyph(rom, offset):
         rows.append([(v >> (23 - c)) & 1 for c in range(24)])
     out = [[rows[r][c] | (rows[r][c - 1] if c else 0) for c in range(24)] for r in range(24)]
     return [[out[r][c] | (out[r - 1][c] if r else 0) for c in range(24)] for r in range(24)]
+
+def ansi_glyph(rom, ch):
+    off = ANSI_BASE + (ch - 0x20) * ANSI_STEP
+    bits = ''.join(f'{b:08b}' for b in rom[off:off + ANSI_STEP])
+    rows = [[int(bits[r * 12 + c]) for c in range(12)] for r in range(24)]
+    out = [[rows[r][c] | (rows[r][c - 1] if c else 0) for c in range(12)] for r in range(24)]
+    return [[out[r][c] | (out[r - 1][c] if r else 0) for c in range(12)] for r in range(24)]
 
 def main(bios, out):
     data = open(bios, 'rb').read()
@@ -38,6 +46,19 @@ def main(bios, out):
         f.write(struct.pack('<I', 11))
         for i in range(11): f.write(struct.pack('<9f', 24 * i / 264, 0, 24 * (i + 1) / 264, 1, 0, 0, 0, 0, 0))
     print('dc_select_clock 264x24')
+    # Verified in the Puzzle hint bubble (Flycast frame 2390): "Where to go?" is these glyphs at a 12 px advance, 0 differing pixels.
+    atlas = Image.new('RGBA', (12 * 95, 24))
+    for k in range(95):
+        px = ansi_glyph(rom, 0x20 + k)
+        cell = Image.new('RGBA', (12, 24))
+        cell.putdata([(255, 255, 255, 255) if px[r][c] else (0, 0, 0, 0) for r in range(24) for c in range(12)])
+        atlas.paste(cell, (12 * k, 0))
+    with open(os.path.join(out, 'dc_bios_ansi.tex.bin'), 'wb') as f:
+        f.write(struct.pack('<2I', atlas.width, atlas.height)); f.write(atlas.tobytes())
+    with open(os.path.join(out, 'dc_bios_ansi.frames.bin'), 'wb') as f:
+        f.write(struct.pack('<I', 95))
+        for i in range(95): f.write(struct.pack('<9f', 12 * i / 1140, 0, 12 * (i + 1) / 1140, 1, 0, 0, 0, 0, 0))
+    print('dc_bios_ansi 1140x24')
 
 if __name__ == '__main__':
     if len(sys.argv) != 3: raise SystemExit(__doc__)

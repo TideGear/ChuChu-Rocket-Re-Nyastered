@@ -244,7 +244,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcSelectClock, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -320,6 +320,7 @@ struct App {
         loadSheet(ret + "dc_mode_select", dcModeSelect);
         loadSheet(ret + "dc_challenge_select", dcChallengeSelect);
         loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
+        loadSheet(ret + "dc_bios_ansi", dcBiosAnsi);   // optional: BIOS ANSI glyphs for the hint text
         loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
         loadSheet(ret + "dc_challenge_failure", dcChallengeFailure);
         loadSheet(ret + "dc_challenge_result", dcChallengeResult);
@@ -2716,8 +2717,14 @@ struct PuzzleMode : Screen {
         else a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv && labelRow < 0) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
-            if (discNames) { std::string t = stages.list[cur].title; while (!t.empty() && (t.back() == ' ' || t.back() == '\0')) t.pop_back(); const int h = 28; a.text(t, 727 - a.textWidth(t, h) / 2, 613 - h / 2, h, 0); }
-            const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, dcBubble ? 727.0f : 720.0f, dcBubble ? 613.0f : 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }   // Dreamcast: centred in the bubble with the port's font (the original renders the string left-aligned in its own bitmap font)
+            std::string hint; if (discNames) { hint = stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == ' ')) hint.pop_back(); } else if (const std::string* hs = a.hdString(0x1e8 + cur)) hint = *hs;
+            const bool biosHint = dcBubble && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95 && !hint.empty();
+            if (biosHint) {   // the game draws the hint with the BIOS ANSI font, left-aligned in a 1:1 texture glyphs at (336, 370) of 640 x 480 (texture at y 368, text row 2), 12 px per character, colour (32, 32, 64); the port's layout is 1.6 times that
+                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 32, 32, 64);
+                for (size_t k = 0; k < hint.size() && k < 59; ++k) { const unsigned char c = hint[k]; if (c <= 0x20 || c > 0x7e) continue; const SDL_Rect d{(int)std::lround((336 + 12 * (int)k) * 1.6), (int)std::lround(370 * 1.6), 20, 39}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); }
+                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
+            } else if (discNames) { std::string t = hint; const int h = 28; a.text(t, 727 - a.textWidth(t, h) / 2, 613 - h / 2, h, 0); }
+            const std::string* nm = (biosHint || discNames) ? nullptr : a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, dcBubble ? 727.0f : 720.0f, dcBubble ? 613.0f : 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }   // Dreamcast: centred in the bubble with the port's font (the original renders the string left-aligned in its own bitmap font)
         const bool phonePause = phonePauseAvailable(a);
         if (phonePause) a.blit(a.phonePauseButton, 5, phoneX + 58, phoneY + 616, 2.0f);
         else if (ipadPauseAvailable(a) && !dcPanelDrawn) a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // the real Dreamcast Puzzle screen has no Pause plate
