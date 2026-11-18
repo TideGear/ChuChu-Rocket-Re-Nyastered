@@ -2492,15 +2492,17 @@ struct PuzzleMode : Screen {
             std::string lower = *levelName; for (char& c : lower) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
             for (int k = 0; k < 5; ++k) if (lower.find(kinds[k]) != std::string::npos) labelRow = k;
             if (labelRow >= 0) {
-                const SDL_Rect plateDst{5, 445, 369, 51}, labelSrc{0, labelRow * 32, 256, 32}, labelDst{25, 454, 287, 36};
+                const SDL_Rect plateDst{5, 445, 369, 50}, labelSrc{0, labelRow * 32, 256, 32}, labelDst{25, 454, 287, 36};
                 SDL_RenderCopy(a.ren, a.dcPuzzlePlate.tex, nullptr, &plateDst); SDL_RenderCopy(a.ren, a.dcPuzzleLabels.tex, &labelSrc, &labelDst);
             }
         }
         if (labelRow < 0) a.drawFrame5(90, 410, 180);
-        a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
+        const bool dcBubble = dcLeft && a.dcPuzzlePlate.tex;   // the hint bubble reuses the plate texture at x 316-828, y 365.2-416.4 of 640 x 480 (the full 512 x 64 texture, so rows 0-43 span 35 px); the text is a separate 512 x 256 sprite at (336, 370)
+        if (dcBubble) { const SDL_Rect bubble{506, 584, 819, 56}; SDL_RenderCopy(a.ren, a.dcPuzzlePlate.tex, nullptr, &bubble); }
+        else a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv && labelRow < 0) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
-            const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, 720.0f, 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }
+            const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, dcBubble ? 727.0f : 720.0f, dcBubble ? 613.0f : 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }   // Dreamcast: centred in the bubble with the port's font (the original renders the string left-aligned in its own bitmap font)
         const bool phonePause = phonePauseAvailable(a);
         if (phonePause) a.blit(a.phonePauseButton, 5, phoneX + 58, phoneY + 616, 2.0f);
         else if (ipadPauseAvailable(a) && !dcPanelDrawn) a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // the real Dreamcast Puzzle screen has no Pause plate
