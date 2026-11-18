@@ -151,6 +151,11 @@ def export_challenge_failure(prs_png, out):
     tiles = [Image.open(path).convert('RGBA') for path in paths]
     for i in (7, *range(8, len(tiles))):
         tiles[i] = tiles[i].transpose(Image.Transpose.TRANSPOSE)
+    # These screen quads use packed UV endpoints 255/256 (frame 4250).
+    # Bake their bilinear sampling into each tile before packing the atlas.
+    tiles = [tile.transform(tile.size, Image.Transform.AFFINE,
+                            (255 / 256, 0, 0, 0, 255 / 256, 0),
+                            Image.Resampling.BILINEAR) for tile in tiles]
     export_atlas(out, 'dc_challenge_failure', tiles)
 
 def main(prs_png, out, png=None):
