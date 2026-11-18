@@ -12,6 +12,26 @@ class NoteGate:
     elapsed: int
     remaining: int
 
+    @classmethod
+    def from_note(cls, base, group, channel, note, velocity, gate, scale,
+                  gate_extension=0, sequence_time=0):
+        """Ordinary free-slot insertion, ARM 0x6b34..0x6bd8.
+
+        Timing operands are captured fixed-point driver fields, not milliseconds.
+        Allocation, full-table stealing and FIFO submission belong to the caller.
+        """
+        for name, value, maximum in (
+            ('base', base, 255), ('group', group, 7), ('channel', channel, 15),
+            ('note', note, 255), ('velocity', velocity, 255),
+            ('gate', gate, 0xffffffff), ('scale', scale, 0xffffffff),
+            ('gate_extension', gate_extension, 0xffffffff),
+            ('sequence_time', sequence_time, 0xffffffff)):
+            if not isinstance(value, int) or not 0 <= value <= maximum:
+                raise ValueError(f'Invalid {name}')
+        command = ((base | 1) << 24 | group << 20 | channel << 16 |
+                   note << 8 | velocity) & 0xfeffffff
+        return cls(command, 1, (gate * scale + gate_extension + sequence_time) & 0xffffffff)
+
     def advance(self, increment, paused=False):
         """Return the expired command, or None; clear an expired record."""
         if any(not isinstance(v, int) or not 0 <= v <= 0xffffffff
