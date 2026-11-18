@@ -1020,8 +1020,9 @@ struct App {
         if (!m) return false;
         const float turn = (float)(ang & 0xffff) * (360.0f / 65536.0f);
         // Matched against Flycast Normal Puzzle 01 and 02 (docs/dreamcast_models.md): the mouse turns by -angle; the cat keeps the earlier 180 - angle until a real frame checks it.
-        const float yaw = en.mouse ? -turn : 180.0f - turn;
-        const float scale = cell * (en.mouse ? 0.072f : 0.096f);   // the cat's 0.052 was 1.85 times too small against Flycast Team Battle frame 3600 (orange pixel area ratio 3.4); a single frame, so provisional
+        static const int catYawMode = getenv("CCR_CAT_YAW") ? atoi(getenv("CCR_CAT_YAW")) : 0;   // comparison only: 0 = 180 - a, 1 = -a, 2 = a, 3 = 180 + a
+        const float yaw = en.mouse ? -turn : catYawMode == 1 ? -turn : catYawMode == 2 ? turn : catYawMode == 3 ? 180.0f + turn : 180.0f - turn;
+        const float scale = cell * (en.mouse ? 0.072f : 0.085f);   // 0.085 against Flycast Normal 25 (isolated cats: 0.066 was too small, 0.096 too large); the cat's pose is still wrong
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
         // The original tilts both characters by -8192 (45 degrees) before drawing (0x8c0193e0, 0x8c0117c0); CCR_CHAR_PITCH overrides for comparisons.
         static const float pitchOverride = getenv("CCR_CHAR_PITCH") ? static_cast<float>(atof(getenv("CCR_CHAR_PITCH"))) : 45.0f;
@@ -2545,8 +2546,9 @@ struct PuzzleMode : Screen {
         if (!phonePuzzleHudAvailable(a)) {
         if (!dcPanelDrawn) { float x = (float)OX + 40.0f; a.blit(a.hdPhud, 2, x, 690.0f); for (int k = 0; k < 10; k++) { x += 64.0f; a.blit(a.hdPhud, 3, x, 690.0f); } x += 64.0f; a.blit(a.hdPhud, 4, x, 690.0f); }
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
-        { static const int ord[4] = {3, 1, 2, 0}; float x = dcPanelDrawn ? 253.0f : (float)OX + 64.0f; const float iy = dcPanelDrawn ? 667.0f : 706.0f; const float isc = dcPanelDrawn ? 0.8f : 0.6f;   // Dreamcast: first icon quad x 142-174, y 401-433 of 640 x 480 (x1.6); the slot pitch for further arrows is not measured yet
-          for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.arrowIcon(x, iy, d, 0, isc); x += 60.0f; } } }
+        { static const int ordIpad[4] = {3, 1, 2, 0}, ordDc[4] = {2, 3, 0, 1};   // Flycast Normal 25: the panel shows up, then right (order beyond those two unverified)
+          const int* ord = dcPanelDrawn ? ordDc : ordIpad; float x = dcPanelDrawn ? 253.0f : (float)OX + 64.0f; const float iy = dcPanelDrawn ? 667.0f : 706.0f; const float isc = dcPanelDrawn ? 0.8f : 0.6f;   // Dreamcast: first icon quad x 142-174, y 401-433 of 640 x 480 (x1.6); the slot pitch for further arrows is not measured yet
+          for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.arrowIcon(x, iy, d, 0, isc); x += dcPanelDrawn ? 54.4f : 60.0f; } } }   // Dreamcast: icons 34 px apart on the 640 x 480 screen (x 142-174 and 176-208)
         }
         const std::string* levelName = !(gApp && gApp->stageSet != 0) && cur < 100 ? a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)) : nullptr;
         int labelRow = -1;
