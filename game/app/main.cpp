@@ -3118,9 +3118,28 @@ struct ChallengeSelectMode : Screen {
         const int remainder = static_cast<int>(seconds % 60);
         const int digits[] = {minutes / 10, minutes % 10, remainder / 10, remainder % 10};
         static constexpr int x[] = {197, 221, 269, 293};
-        SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 165, 165, 165);
-        for (int i = 0; i < 4; ++i) image(a, Digit + digits[i], x[i], y);
-        SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 255, 255, 255);
+        // Flycast frame 2100: the game draws "00:00" into a 512 x 256 ARGB1555 texture (word 040c8d00, one colour 0xd294 = 165 grey, 1-bit alpha) mapped 1:1 at (193,308); the zero below is that bitmap (16 x 20).
+        // Digits 1..9 are not yet captured, so they keep the provisional FOURADV art.
+        static const char* const zero[20] = {"....########....", "..############..", "..###......###..", ".###........###.", ".##..........##.", "###..........###", "##............##", "##............##", "##............##", "##............##",
+                                             "##............##", "##............##", "##............##", "##............##", "###..........###", ".##..........##.", ".###........###.", "..###......###..", "..############..", "....########...."};
+        SDL_SetRenderDrawColor(a.ren, 165, 165, 165, 255);
+        for (int i = 0; i < 4; ++i) {
+            if (digits[i] == 0) {
+                for (int row = 0; row < 20; ++row)
+                    for (int col = 0; col < 16;) {
+                        if (zero[row][col] != '#') { ++col; continue; }
+                        int end = col;
+                        while (end < 16 && zero[row][end] == '#') ++end;
+                        const SDL_Rect run{x[i] + col, y + row, end - col, 1};
+                        SDL_RenderFillRect(a.ren, &run);
+                        col = end;
+                    }
+                continue;
+            }
+            SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 165, 165, 165);
+            image(a, Digit + digits[i], x[i], y);
+            SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 255, 255, 255);
+        }
         SDL_SetRenderDrawColor(a.ren, 165, 165, 165, 255);
         const SDL_Rect dots[] = {{252, y + 4, 2, 4}, {252, y + 14, 2, 4}};
         SDL_RenderFillRects(a.ren, dots, 2);
