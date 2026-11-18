@@ -503,11 +503,12 @@ struct App {
         return true;
     }
     void walls3d(const Stage& st, int wallColor, FieldLayout field) {
-        const Model3D* wallM = models3d.find("wall"); if (!wallM) return; const float k = field.cell / kCell; const int mat = 35 + std::max(0, std::min(2, wallColor));
+        const Model3D* wallM = models3d.find("wall"); if (!wallM) return;
+        const FieldLayout plane = field.wallPlane(); const float k = plane.cell / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor));   // pieces sit on the magnified wall plane (218 / 215 in Dreamcast Battle)
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.draw(ren, *wallM, field.x(c + 0.5f), field.y(r), k, 0.0f, 90.0f, 0.6f, -1, mat);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.drawDcWall(ren, *wallM, mat, {plane.x(c + 0.5f), plane.y(r)}, k, 0.0f);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.draw(ren, *wallM, field.x(c), field.y(r + 0.5f), k, 90.0f, 90.0f, 0.6f, -1, mat);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.drawDcWall(ren, *wallM, mat, {plane.x(c), plane.y(r + 0.5f)}, k, -90.0f);
         }
     }
     void board(const Stage& st, int floorColor, int wallColor, FieldLayout field = {}) {

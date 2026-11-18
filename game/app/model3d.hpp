@@ -124,6 +124,27 @@ public:
                            static_cast<int>(vertices.size()), nullptr, 0);
     }
 
+    // Wall pieces exactly as the Dreamcast board task submits them (Flycast Puzzle 01, PowerVR stream at state offset 0x253eb0): the bar mesh lies flat in the model's xz plane at
+    // height 3, is turned about the vertical axis (0 for horizontal edges, -90 degrees for vertical ones; with that the lighting below matches all ten real vertices of both)
+    // and drawn at pixelsPerUnit = wall-plane cell / 15. Each vertex carries its own intensity 0.3 + max(0, 0.5 * ny - 0.25 * nz) of the turned normal (checked to four decimals
+    // against the real base intensities 0.3846 .. 0.8394), multiplied with the texture; no extra brightness factor.
+    void drawDcWall(SDL_Renderer* ren, const Model3D& wall, int material, SDL_FPoint center, float pixelsPerUnit, float yawDeg) const {
+        if (wall.tris.empty() || material < 0 || material >= (int)wall.matTex.size() || wall.matTex[material] >= textures.size()) return;
+        const float a = yawDeg * 0.017453292f, c = cosf(a), s = sinf(a);
+        std::vector<SDL_Vertex> vertices; vertices.reserve(wall.tris.size() * 3);
+        for (const auto& tri : wall.tris) {
+            for (int i = 0; i < 3; ++i) {
+                const auto& v = tri.v[i];
+                const float x = v.x * c + v.z * s, z = -v.x * s + v.z * c;
+                const float nx = v.nx * c + v.nz * s, nz = -v.nx * s + v.nz * c; (void)nx;
+                const float light = std::min(1.0f, 0.3f + std::max(0.0f, 0.5f * v.ny - 0.25f * nz));
+                const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * light));
+                vertices.push_back({{center.x + x * pixelsPerUnit, center.y + z * pixelsPerUnit}, {shade, shade, shade, 255}, {1.0f - v.v, v.u}});   // the pack's textures are stored transposed (as for the lids), so the stream's (u, v) is sampled as (v, u)
+            }
+        }
+        SDL_RenderGeometry(ren, textures[wall.matTex[material]], vertices.data(), static_cast<int>(vertices.size()), nullptr, 0);
+    }
+
     // Draws the model centred at (cx, cy) on screen. Scale is in pixels per model unit and angles are in degrees.
     void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float brightness = 1.0f, int frame = -1, int forceMat = -1, uint64_t skipMats = 0) const {
         const std::vector<float>* pose = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
