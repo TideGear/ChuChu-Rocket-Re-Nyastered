@@ -5,7 +5,7 @@
   "repo": "TideGear/ChuChu-Rocket-Re-Nyastered",
   "game": {
     "kind": "folder",
-    "label": "A folder with your own copies of ChuChu Rocket!, loose or as ZIPs. Add at least one iPad, iPhone or Android release for the graphics; the Dreamcast disc, the GBA ROM and the Dreamcast Express pack add music, boards and menus."
+    "label": "A folder with your own copies of ChuChu Rocket!, loose or as ZIPs. A Dreamcast disc image alone is enough to play; iPad, iPhone or Android releases, the GBA ROM and the Dreamcast Express pack add more. Optional: put your own Dreamcast BIOS dump (2 MiB .bin) in the folder to match the original's clock and hint text exactly."
   },
   "start": {
     "program": [
