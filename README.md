@@ -38,7 +38,7 @@ The goal is a faithful Windows, Android arm64 and web reimplementation. Each pha
 | **F. Platforms and play** | Windows build, fixed 60 Hz simulation with interpolation, headless 2D GPU measurements at 4K, local hotseat for up to four players, controller remapping with a hold-to-quit combo, and headless WebAssembly runs. Deterministic replays and loopback UDP lockstep have been tested. | Verify sustained and uncapped 4K performance as rendering is completed, implement wireless local play via mobile devices and online play, build and test the Android arm64 app, and finish the web app’s asset import and PWA checks in a headless browser and on iOS Safari. |
 | **G. Documentation and setup** | Cross-version matrix, asset provenance, original-file requirements, and a portable Zig build. Setup unpacks originals and records their hashes. Versioned Windows releases with checksums, portable mode (`portable.txt`), a commented `settings.ini` and `controls.ini`, and a rotating gameplay log. | Linux and macOS builds (only a compile check so far), complete the evidence and provenance for each version, automate the remaining asset exports, and verify the full setup-to-play process on a clean machine. |
 
-See the [roadmap and dated work log](docs/roadmap.md), [verification results](docs/verification.md), [per-version matrix](docs/version_matrix.md) and [known gaps](docs/known_gaps.md) for the evidence behind each row, and the [requirement audit](docs/audit.md) for the current status of every goal requirement and every claim in the version-comparison document.
+See the [roadmap and dated work log](docs/roadmap.md), [verification results](docs/verification.md), [per-version matrix](docs/version_matrix.md) for the evidence behind each row, and the [requirement audit](docs/audit.md) for the current status of every goal requirement and every claim in the version-comparison document.
 
 ## Build and setup (Windows)
 
@@ -86,7 +86,7 @@ For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu 
 ### What if I have fewer releases?
 
 - **Phone-only setups** use the available menu and gameplay art. Some HUD panels and effects still require the iPad assets. In Puzzle, use Space or the controller's Start button to run the puzzle.
-- **Dreamcast only** supplies both sets of boards and the original models, textures and music. Setup can extract these and compile the executable. To launch with just that disc, the port needs to render the Dreamcast gameplay assets, including the field, characters and HUD. Dreamcast-only play remains planned.
+- **Dreamcast only** supplies the 100 main puzzles, 25 Battle boards, 25 Challenge boards, and original models, textures and music. A fresh Windows build and setup from the USA CUE/BIN tracks produced playable Puzzle, Battle, Team Battle and Challenge headless runs without mobile files. The disc-only interface uses original Mode Select and Challenge selection art. See the [audit](docs/audit.md) for remaining presentation and platform gaps.
 - **Game Boy Advance only** supplies puzzles. A GBA graphics path is still needed for standalone play.
 - **All four platforms shipped Battle.** The old Dreamcast requirement came from the stage exporter. Setup now recognizes the byte-identical mobile Battle maps. The GBA Battle boards are still outside the stage importer. `CCR_CPU=gba` enables the port's GBA-style AI with any exported Battle boards and needs no GBA ROM. [Stage format notes](docs/stages.md)
 - **Missing optional files** reduce the available art, music or stage sets. The mobile Ogg soundtrack plays if Dreamcast CD tracks are absent. For presentation the port uses the iPad assets when available, then the Android phone art. With neither set, it opens a simple Puzzle and Battle menu.
@@ -108,7 +108,7 @@ The default launch plays the iPad startup logos when available. Pass `title` to 
 
 When setup exports a Dreamcast model pack, new settings enable its 3D characters and board art by default. You can turn them off in Options > Settings or set `models_3d = false` in `settings.ini`.
 
-The [presentation audit](docs/presentation_audit.md) tracks missing startup screens, effects, and animation. Live gameplay currently uses mobile sprites. The [Dreamcast models](docs/dreamcast_models.md) have been extracted and rendered offline.
+The [presentation audit](docs/presentation_audit.md) tracks missing startup screens, effects, and animation. Dreamcast-only setup supplies the live board models, character meshes, and disc UI sheets. The [Dreamcast rendering notes](docs/dreamcast_models.md) document the Flycast comparisons and remaining gaps.
 
 ## Where each asset and rule comes from
 [docs/provenance.md](docs/provenance.md) lists, per asset class and per piece, the version used and the measurements behind the choice (music: Dreamcast CD audio; title logo: Dreamcast; backgrounds and sprites: iPad HD pack; strings: Android resources; rules: each version's own code). [docs/version_matrix.md](docs/version_matrix.md) compares every subsystem across all versions.

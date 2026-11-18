@@ -1,12 +1,11 @@
-# Requirement audit against docs/goal.md (2026-11-16, interim)
+# Requirement audit
 
 Status words: **done** (implemented and checked, evidence named), **partial** (what exists and what is missing), **open** (nothing built). This is a working audit, not a completion claim.
 
 ## A. Presentation and UI
-- Dreamcast Battle HUD: **partial**. Four-player Battle uses the disc panels, score digits, clock, rocket column, CPU name plates, human intro tags and score crowns. Flycast replay and headless port captures cover the countdown, nonzero scores, tag bob and fall, and score crown blink. Tag placement follows the port's cursor projection. The in-field leader crown, match win marks, board alignment, background, and Team, roulette and result variants remain open.
-- Dreamcast player cursor trails: **partial**. Flycast Battle frames 3124, 3130 and 3140 contain the trail tasks from `0x8c014100` and the textured quads from `0x8c01406a`. The port uses the disc textures and the original 24-tick fade in Battle and Puzzle. Four-player Battle controller cursors start at their rocket cells and use the observed quad anchor and trail plane. Full moving-controller parity, CPU cursors, original Puzzle and Team captures, other inputs, and the separate placement ghost remain open.
-- Dreamcast four-player Battle board projection: **partial**. The port uses the floor bounds from Flycast's PowerVR stream and projects walls onto the original nearer plane. Cell-aligned rendering and pointer hit testing share the board's measured dimensions. Other modes, height-dependent character and object projection, lighting and occlusion remain open.
-- Dreamcast parked rockets: **partial**. Four-player Battle draws the disc lid meshes as paired domes with measured projection and lighting. Flycast frame 3100 supplies matching vertices and port captures show the disc art. The pulse update was traced. Square bases, closing and launch effects, other modes and precise overlap with other objects remain open.
+- Dreamcast gameplay presentation is **partial**. Live Puzzle, Battle, Team Battle and Challenge use the disc models, measured floor and wall projection, near-depth-tested parked domes, and per-vertex lighting. Verified captures include the standard Battle and Team HUDs, Puzzle Normal 01/02 and 08, Challenge A1, and pause screens in all four modes. The [rendering notes](dreamcast_models.md) give exact measurements and scope. Shared depth across separate field objects, event/result variations, other stage groups, and animation timing remain open.
+- Dreamcast player cursor trails are **partial**. Battle frames 3124, 3130 and 3140 show the original 24-tick trail from `0x8c014100` and `0x8c01406a`, which the port uses. Moving-controller parity, hardware, CPU and alternate-mode trails, and the placement ghost need coverage.
+- Dreamcast-only Mode Select and Stage Challenge selection are **partial**. The Mode Select 4P Battle and Challenge selections are compared at 640×480, and the Challenge selector was compared on A1, B1 and B2. Dreamcast startup, Puzzle stage-select art, Battle player setup, and unavailable Mode Select routes still need work. Challenge clock glyphs and clear marks, final-stage gating, transition timing and sound need original-code verification.
 - Startup, main menu, Options (Sounds, Language, Credits, How to Play), Help: **partial** (iPad HD 1.0 layouts reproduced and diffed against the original for several screens; The Basics, Costumes, roulette wheel art, celebration rockets, phone/larger-device HUD layouts, tutorial highlights, split-screen are open; see roadmap "Phase A leftovers").
 - Settings page and controller remap: **done** (screenshot read; pad remap untested on hardware).
 - Pad prompts in the HUD: **open** (`padButtonLabel` exists).
@@ -25,11 +24,9 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - DLC skins, CHD/GDI input with per-input dump verification: **open**. .VMS/.VMI reader and writer for puzzle packs: **done**: core reader/writer (`core/vms.hpp`, `vms_test`, `tools/vms_pack.py`) and in-app import (packs in `<data>/imports/*.VMS` appear as the Imported Packs stage set, checked headlessly with DEPuzzle.VMS and a character pack present). Export from the app, DLC character skins and PuzzleP's arrow stock remain open.
 ## E. Sound, animation, assets
 - Full inventory with version/address/asset ID/gates: **open** (pieces in roadmap and docs/*.md).
-- **OPEN (user test 2026-11-17): Dreamcast Stage Challenge stage select** (real frame `local/dc_ref/cs1/p__02100.bmp`): the port loads straight into stage 1 with no menu.
-- **OPEN (user test 2026-11-17): placeholder text.** Challenge still draws built-in 5x7 font lines (intro, in-play counters, result, failure, 'not ported'). Sweep every mode for `a.text(...)` placeholders and replace with original art; list each here.
-- **OPEN (user test 2026-11-17): sound inventory per mode** (Challenge first: intro, countdown, goal, clear, fail, voices, menu and stage-select cursor and enter, BGM per screen) from the SH-4 code and `MANATEE.DRV`; phase E. Expanded 2026-11-17 by the user: audit ALL Dreamcast sound and music (when played, how played, loop, stop, fade, cancel), see docs/HANDOFF.md 'Sound and music audit' for the plan.
-- Dreamcast screens vs real Flycast frames (headless captures beside one frame each, not pixel diffs; details in `docs/dreamcast_models.md`, 2026-11-17): **partial**. Matched: Puzzle Normal 01 and 02 (panels, stage label and digits, level plate and label, bottom panel, hint-bubble frame, measured floor plane, domes, pad cursor and bracket, mouse pose, UVs and light, floor colour for the first group), Stage Challenge A1 intro column and Play frame (time column, board, red dome), the pause screens of Puzzle, Challenge, four-player Battle (with win boxes and win marks) and Team Battle, and the Team Battle HUD. Open: Puzzle hint text font (the original's run-time bitmap text), stock-arrow slot pitch, exact plate sheet (4 percent narrower), pointer size, mouse brightness; Challenge intro card (run-time texture), controller cursor, result screens, other Challenge types; cat texture mapping and pose; Team Battle details (ties, question-mark ChuChu, plate in the top-right); Puzzle on other groups and Hard, Mania, Original, Special; Puzzle Edit (a pause frame is saved in `local/dc_ref/pz3`); Roulette and the remaining menus.
-- Dreamcast 3D models in live play (user priority 2026-11-17): **partial**; lighting: models carry vertex normals and are lit per vertex (light fitted to the mobile art, error 0.080; the game's own light vector not read); board: floor and walls drawn from the disc's models/textures (holes, markers, arrows still mobile art);: cat (24-frame head morph exported), basic mouse (8 keyframes by the clock rule), four rocket colours, rocket lids, exhaust and a wall piece are exported and drawn (`ccr <assets> models`; cats and mice in Puzzle/Battle behind the `models_3d` setting). Open: camera/scale/lighting from the original, the cat's frame rule, per-state animations, rockets/walls/floor in the field, effects, golden mice, and a Dreamcast-only 2D path (field, HUD, menus).
+- Challenge intro, in-play counters, results and failure still use placeholder text. Replace them with disc art and audit every mode's remaining `a.text(...)` presentation.
+- Dreamcast sound is **partial**. Trace the original call sites and MANATEE.DRV for cue, pitch, volume, channel, priority, looping, fade and cancellation. Start with Challenge selection, countdown, goal, clear and fail.
+- Dreamcast model inventory is **partial**. The [mesh inventory](dreamcast_meshes.md) and [captured poses](dreamcast_mesh_poses.md) track the observed families. Character clock rules, costumes, KapuKapu, the focus ring and unseen meshes remain open.
 ## F. Platforms, controls, play
 - 60 Hz fixed simulation: **done**; interpolated rendering **done**; mouse aim, WASD/arrows: **done**; four-player hotseat: **done**.
 - Press-to-join in local Battle: **implemented and checked headlessly**. Virtual SDL controllers claimed human slots in button order, skipped CPU slots, and reclaimed a slot after disconnect. Physical controllers remain untested.
@@ -38,7 +35,6 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - 4K GPU measurement: **done for the hidden-window Battle renderer** (2D 8.1 ms/frame; 3D 4.20 ms at simulated 60 Hz and 4.54 ms at simulated 240 Hz, load-guarded CLEAN runs, `docs/verification.md`). Display presentation and frame pacing remain **open**.
 - Linux/macOS releases: v2026.11.20 has `linux-x64`, `macos-arm64` and `macos-x64` archives from the tag workflow. The Intel runner uses `macos-15-intel` and the workflow checks both macOS architectures before packaging. Local platform testing and launcher archive selection remain unverified.
 - Linux/macOS: **partial; a real user report (2026-11-17) showed v2026.11.17 could not extract on Linux (Windows-only `--prepare`); fixed in a3287c6, not yet confirmed on a real Linux PC**.
-- (older note) Linux/macOS: **partial** (main.cpp compiles for x86_64/aarch64 Linux and macOS with zig; `.github/workflows/build.yml`: Linux **built and unit-tested green on a GitHub runner** (no human run of the game on Linux); macOS job cancelled before starting (no runner provided), so macOS is unverified).
 - Android arm64 emulator test: **open**. Existing `battle_test`, `determinism_test` and `score_test` artifacts are AArch64 ELF64 executables with the Android dynamic linker. The SDK has no emulator image or configured virtual device. A fresh build of the settings and controller tests hit a permission error launching the NDK compiler.
 - WebAssembly PWA headless browser test: **open**. The PWA manifest and service worker now use the emitted `ccr.html` entry point. A Node worker test checked the cache entries against the local WebAssembly build and served the launch page, JavaScript, and WebAssembly with network fetch disabled. Browser installation and offline startup with user-provided assets remain unverified.
 ## G. Releases and docs
@@ -46,11 +42,11 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Portable mode, commented settings, rotating logs: **done** (userdata_test; headless app check).
 - Version matrix, asset provenance, README, unofficial-project statement: **partial** (README and distribution notes exist; matrix not regenerated for this audit).
 
-## Next, in order
-1. Re-record whole-battle goldens through the real task-mask loop; port the mask into the battle sim by default.
-2. Finish stage 24 seed 3000; Challenge HUD/result art; Team Battle result screen.
-3. Puzzle Edit screen and VMS/VMI export; unlock-all and gating; VMS import and skins; CHD/GDI.
-4. Linux/macOS CI builds, 4K measurement, Android and PWA test runs.
+## Next work
+
+- Finish the Dreamcast presentation gaps above, beginning with Challenge intro and results. Keep capture and Ghidra details in the [handoff](HANDOFF.md).
+- Resolve the remaining Challenge seed 3000 divergence, finish Puzzle Edit and in-app export, and verify unlocks, DLC skins and Dreamcast input formats.
+- Test native Linux/macOS, Android and PWA operation beyond builds and harnesses.
 
 ## Claims from "ChuChu Rocket Version Comparison (AI Deep Research)" and where they stand
 The goal text covers them only through its general version-comparison duties; this list keeps each one visible. See also `docs/research_check.md` (2026-11-13).
@@ -61,7 +57,7 @@ The goal text covers them only through its general version-comparison duties; th
 | GBA KapuKapu grow after 50 mice eaten | **open** |
 | GBA multiplayer handicap system | **open** |
 | Mobile builds do or do not carry the GBA events | **open** (mobile selector has eight outcomes and identical weight tables, so no extra events found there) |
-| Dreamcast Puzzle Edit with VMU save and online sharing | **partial** (storage and sharing format decoded from Android; no screen, no VMS export) |
+| Dreamcast Puzzle Edit with VMU save and online sharing | **partial** (storage decoded from Android and the Dreamcast writer matches the original packs; editor UI and in-app export are open) |
 | GBA Puzzle Edit with link-cable trading; Character Edit (four custom sprite groups) | **open** (goal.md covers it only through its "also cover what the claims imply" line) |
 | Chao swap after all 25 Stage Challenge stages; Pian swap after all 25 Mania puzzles | **open** (unlockables phase) |
 | NiGHTS hat via a DS plus Project Rub | **open**, hardware-dependent, likely not testable |

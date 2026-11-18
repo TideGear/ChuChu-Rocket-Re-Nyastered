@@ -1,4 +1,4 @@
-**KEEP THIS FILE UNDER 5,000 CHARACTERS (check wc -m after every edit; trim before adding).**
+**KEEP THIS FILE UNDER 6,000 CHARACTERS (check wc -m after every edit; trim before adding).**
 
 Build a faithful, best-of-all-versions ChuChu Rocket! Re-Nyastered in portable C++/SDL for Windows, Android arm64 and web. Use the local game versions in docs/version_matrix.md. Keep game data local and releases source-only. setup.cmd verifies inputs, extracts assets and builds the port. Support setup and play from a Dreamcast image alone. Match Dreamcast visuals and UI wherever possible, preferring its assets.
 Support every feature of every version where possible and sensible. Where versions differ (rules, speeds, CPU, roulette events, content), make each a selectable rule set in Options > Settings; every option gets a menu entry. Dreamcast online compatibility only if the community asks.
@@ -18,4 +18,11 @@ E. Sound, animation, assets. Inventory every sound, voice, song, animation, effe
 F. Platforms, controls, play. Fixed 60 Hz simulation, interpolated render. Mouse aims continuously; WASD/arrows place arrows. Match Dreamcast controller input and cursor travel. Keep four-player hotseat, controller remapping, pad prompts, press-to-join, controller-only quit. Add wireless local play via mobile devices, online lockstep modeled on SERVER_/CLIENT_, with a desync test. Ship native Linux/macOS builds. Test Android arm64 in an emulator (ask before installing an image) and the WebAssembly PWA headlessly; user tests iOS.
 G. Releases and docs. Publish versioned GitHub releases for RecompLauncher. Portable data mode, commented settings, rotating gameplay logs; saves stay compatible across releases. Maintain the version matrix, asset provenance, README build steps. State the port is an unofficial fan project unaffiliated with SEGA.
 Finish when every phase is implemented, verified, documented, audited.
-Docs upkeep. In docs/audit.md mark every requirement and claim in docs/ChuChu Rocket Version Comparison (AI Deep Research).md verified, partial, open or not testable with evidence. Re-check before closing. Update the version matrix and roadmap per finding. Keep README.md current and re-read before release.
+Documentation
+
+- Plan and status: `goal.md`, `HANDOFF.md`, `audit.md`, `roadmap.md`, and `verification.md`. The audit owns current coverage. The roadmap retains implementation and test evidence. Use the handoff for the next task and capture commands.
+- Presentation: `presentation_audit.md`, `ui_art.md`, `audio.md`, `animation.md`, `dreamcast_models.md`, `dreamcast_meshes.md`, `dreamcast_mesh_poses.md`.
+- Behavior and content: `modes.md`, `rules_arrows.md`, `rules_battle.md`, `rules_events.md`, `rules_movement.md`, `cpu_ai.md`, `roulette.md`, `gba_notes.md`, `stages.md`, `dlc.md`, `unlockables.md`.
+- Sources and distribution: `version_matrix.md`, `asset_quality.md`, `provenance.md`, `distribution.md`, `research_check.md`, `ChuChu Rocket Version Comparison (AI Deep Research).md`, and repository `README.md`.
+
+Track every requirement and research claim in the audit with evidence and verified, partial, open, or not testable status. Keep the version matrix and README current, and check them before release.

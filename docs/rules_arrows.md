@@ -18,3 +18,9 @@ Slot fields: +0 direction, +1 hit counter, +4 time-to-live in frames (-1 = empty
   low 2 bits = arrow direction (`FI_CheckAndCorrectAngle` uses `flags & 3`).
 
 Open: TTL fade timing for rendering, the puzzle-mode arrow limit (stage arrow counts), mice passing over arrows (no damage).
+
+## Touch and controller placement
+
+- Android and iOS `Input::getArrowType` (Android `0x6ce24`) compare squared touch-pixel displacement to `0.25f * t`, where `t` is the float at screen metrics +0x28. Dominant axis gives direction and a tie is vertical. In Puzzle, touch-up can first delete the arrow on the origin cell. The port uses window pixels and a provisional `t = 1.0`. The metrics writer and drag-preview path are unverified.
+- Dreamcast cursor update `0x8c014220` reads pad record `0x8c1aee88 + 52 * player`. Held bits at +8 are Right 0x80, Left 0x40, Down 0x20 and Up 0x10. Cell bytes live at task +45/+46, with −1 for free cursor. Stick axes at pad +28/+30 are signed bytes shifted left 8, with a 9e−5 scaling factor and 0.09 dead zone. The cell pitch is 15 world units, with centre `(cell + 0.5) * 15 - 1.8`.
+- Dreamcast arrow input `0x8c01442a` reads newly pressed bits at pad +16 and the direction masks in the 32-byte entries at `0x8c0859ec`. A places south, X west, Y north and B east. Game type 3 calls `0x8c0109b0`; the regular arrow call is `0x8c0109a0`. Trigger taunts and the original Dreamcast keyboard mapping need verification.
