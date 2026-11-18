@@ -46,7 +46,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Version matrix, asset provenance, README, unofficial-project statement: **partial** (README and distribution notes exist; matrix not regenerated for this audit).
 
 ## Dreamcast mode inventory (read from the game's mode table, 2026-11-18)
-The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes; each entry points to a descriptor whose first word is the mode's init function. Entries 23-39 and up are data, not modes. Status words as above; every row stays open until its screens are matched against Flycast frames.
+The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `0x8c019088` rejects values >= 23 and stores the mode at `0x8c1af108`, read from RAM dumps of the captured screens); each entry points to a descriptor whose first word is the mode's init function. Entries 23-39 and up are data, not modes. Status words as above; every row stays open until its screens are matched against Flycast frames.
 | Mode | Init function | What it is | Status |
 |---|---|---|---|
 | 0 | 0x8c0235ea | SEGA logo | **partial**: layout and fades match Flycast (mean error 0.97); music request not played |
@@ -56,18 +56,18 @@ The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes; each entry p
 | 4 | 0x8c022432 | unidentified | open |
 | 5 | 0x8c022f24 | unidentified | open |
 | 6 | 0x8c02cd80 | unidentified | open |
-| 7 | 0x8c024290 | unidentified | open |
-| 8 | 0x8c02dc50 | unidentified | open |
-| 9 | 0x8c034fa0 | unidentified | open |
-| 10 | 0x8c04ffc0 | unidentified | open |
+| 7 | 0x8c024290 | menus: Mode Select, 4P Battle Select Players and Stage Select, Challenge select (mode variable 7 in all captured menu frames; init loads `yuka01-03` and `kabetx01-03`, VMU removal messages) | partial: Mode Select, Challenge select and Battle setup compared; Puzzle select, Options, Help, Network entries open |
+| 8 | 0x8c02dc50 | Puzzle Edit (mode variable 8 in the Edit/pause capture `pz3`; init loads `yuka01/03`, `kabetx01/03`) | open: pause overlay seen; the editor screens are not compared |
+| 9 | 0x8c034fa0 | network (string `  Disconnecting...  `) | open, not testable offline |
+| 10 | 0x8c04ffc0 | network setup (strings about setting up the Dreamcast for network access) | open, not testable offline |
 | 11 | 0x8c051b9a | unidentified | open |
-| 12, 13 | 0x8c0278cc | shared init (field with `yuka01` floor; Puzzle/Battle play) | partial: Puzzle, Battle, Team Battle and Challenge A1 captures compared |
-| 14 | 0x8c02a33e | unidentified | open |
-| 15 | 0x8c02b97e | unidentified | open |
+| 12, 13 | 0x8c0278cc | shared init with `yuka01` floor: 12 = Battle play, Team Battle and the attract demo (mode variable 12 in the battle, HUD and demo captures); 13 unseen | partial: Battle and Team Battle captures compared; demo and mode 13 open |
+| 14 | 0x8c02a33e | Challenge play, pause, failure and clear screens (mode variable 14 in those captures) | partial: A1 play, failure (4.3), clear banner and select compared; other stage types and results open |
+| 15 | 0x8c02b97e | Puzzle play (mode variable 15 in the Normal 01 capture) | partial: Normal 01, 02, 08 compared; Hard, Special, Mania and results open |
 | 16 | 0x8c058292 | tutorial per the style variable (`FUN_8c016bd4`) | open |
-| 17 | 0x8c0507e0 | unidentified | open |
+| 17 | 0x8c0507e0 | unlock and password messages ("You can now select Chao / Pians / Mania / Special / Hard", "The password is:") | open |
 | 18-22 | 0x8c05cfba, 0x8c05d39a, 0x8c05d55a, 0x8c05dc80, 0x8c05df12 | unidentified | open |
-Screens already compared outside this table (Mode Select, Challenge select/intro/failure/result, Puzzle HUD) belong to the modes above that are not yet named. Next: identify each mode by the PRS archives and textures its init loads, then give every screen of every mode its own row.
+Modes 3-6, 11, 16 (tutorial per the style variable) and 18-22 are still unidentified (no strings in their init code, none reached by the captures yet). Next: trigger them in Flycast (tutorial, options, help, credits, roulette, results, VMU screens), read `0x8c1af108` for each, then give every screen of every mode its own row.
 
 ## Next work
 
