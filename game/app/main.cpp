@@ -749,6 +749,23 @@ struct App {
             if (cpuLevel[p] >= 0) sprite(30, 132 + 120 * p, 370, 128, 32);
     }
 
+    // The Dreamcast pause overlay (Flycast Puzzle pause frame and Battle pause frame): no dimming, nine quads on the 640 x 480 screen drawn here at 1.6 times that, far to near:
+    // the PAUSED board, the bubbles with the cat, then the labels. Battle's is the same shifted up 60 pixels (dy = -60).
+    void drawDcPause(float dy) {
+        if (!dcPause.tex) return;
+        struct Part { SDL_Rect src; float x, y, w, h; bool flip; };
+        static const Part parts[] = {
+            {{0, 0, 256, 256}, 132, 144, 256, 256, false}, {{256, 0, 128, 256}, 388, 144, 128, 256, false},
+            {{0, 256, 128, 64}, 133, 199, 128, 64, false}, {{384, 128, 32, 64}, 255, 199, 32, 64, false},
+            {{128, 256, 128, 64}, 379, 199, 128, 64, false}, {{416, 128, 32, 64}, 353, 199, 32, 64, true},
+            {{384, 0, 64, 128}, 285, 196, 64, 128, true},
+            {{256, 256, 128, 32}, 144, 205, 128, 32, false}, {{384, 256, 128, 32}, 400, 205, 128, 32, false}};
+        for (const Part& pt : parts) {
+            const SDL_Rect dst{(int)std::lround(pt.x * 1.6f), (int)std::lround((pt.y + dy) * 1.6f), (int)std::lround(pt.w * 1.6f), (int)std::lround(pt.h * 1.6f)};
+            SDL_RenderCopyEx(ren, dcPause.tex, &pt.src, &dst, 0.0, nullptr, pt.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+        }
+    }
+
     void drawDcScoreCrowns(int tick, const Scoreboard& score, const int (&ranks)[4]) {
         if ((tick & 31) <= 10 || std::all_of(score.player, score.player + 4,
                                              [](int value) { return value == 0; })) return;
@@ -2520,18 +2537,8 @@ struct PuzzleMode : Screen {
         if (phonePause) a.blit(a.phonePauseButton, 5, phoneX + 58, phoneY + 616, 2.0f);
         else if (ipadPauseAvailable(a) && !dcPanelDrawn) a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // the real Dreamcast Puzzle screen has no Pause plate
         drawFailureFocus(a);
-        if (paused && dreamcastPuzzleControls(a) && a.dcPause.tex) {   // Flycast Puzzle pause frame: no dimming, nine quads on the 640 x 480 screen (drawn here at 1.6 times that), far to near: the PAUSED board, the bubbles with the cat, then the labels
-            struct Part { SDL_Rect src; float x, y, w, h; bool flip; };
-            static const Part parts[] = {
-                {{0, 0, 256, 256}, 132, 144, 256, 256, false}, {{256, 0, 128, 256}, 388, 144, 128, 256, false},
-                {{0, 256, 128, 64}, 133, 199, 128, 64, false}, {{384, 128, 32, 64}, 255, 199, 32, 64, false},
-                {{128, 256, 128, 64}, 379, 199, 128, 64, false}, {{416, 128, 32, 64}, 353, 199, 32, 64, true},
-                {{384, 0, 64, 128}, 285, 196, 64, 128, true},
-                {{256, 256, 128, 32}, 144, 205, 128, 32, false}, {{384, 256, 128, 32}, 400, 205, 128, 32, false}};
-            for (const Part& pt : parts) {
-                const SDL_Rect dst{(int)std::lround(pt.x * 1.6f), (int)std::lround(pt.y * 1.6f), (int)std::lround(pt.w * 1.6f), (int)std::lround(pt.h * 1.6f)};
-                SDL_RenderCopyEx(a.ren, a.dcPause.tex, &pt.src, &dst, 0.0, nullptr, pt.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
-            }
+        if (paused && dreamcastPuzzleControls(a) && a.dcPause.tex) {   // Flycast Puzzle pause frame (docs/dreamcast_models.md)
+            a.drawDcPause(0.0f);
             return;
         }
         if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
@@ -2915,7 +2922,8 @@ struct BattleMode : Screen {
         char b[200]; snprintf(b, sizeof b, "battle %s: stage %d, round winner player %d%s, wins %d-%d-%d-%d, scores %d %d %d %d", matchOver ? "match over" : "round over", cur, roundWinner + 1, drawFlag ? " (draw)" : "", wins[0], wins[1], wins[2], wins[3], game.score.player[0], game.score.player[1], game.score.player[2], game.score.player[3]);
         a.log.write(1, b);
     }
-    void tickBattle(App& a) { if (paused) return;
+    void tickBattle(App& a) { static const int pauseAt = getenv("CCR_PAUSE_TICK") ? atoi(getenv("CCR_PAUSE_TICK")) : -1; if (pauseAt >= 0 && game.frame == pauseAt) paused = true;   // headless test hook: pause at a Battle frame
+        if (paused) return;
         if (mode >= 4 && loggedMode_ != mode) { loggedMode_ = mode; logRound(a); } else if (mode < 4) loggedMode_ = 0;
         if (intro >= 120 && mode == 2 && !game.rollPending()) {
             for (int p = 0; p < 4; ++p) {
@@ -3048,6 +3056,7 @@ struct BattleMode : Screen {
             if (congra) { a.drawImage(0x90, 0, a.layF(0x208), a.layF(0x20c), 0, 1.0f, 255); a.drawImage(0x62, roundWinner, a.layF(0x214), a.layF(0x218), 0, 2.0f, 255); }   // DispCongraDrawPriority 0x1f990 (the congratulation rockets, CongraRocketCons, are not ported)
             for (auto& f : flashes_) a.drawImage(0x87, 4, f.x, f.y - a.layF(0x22c), 0, f.scale, 0x40); }
         SDL_RenderSetViewport(a.ren, nullptr);
+        if (paused && dcProjection && a.dcPause.tex) a.drawDcPause(-60.0f);   // Flycast Battle pause frame: the Puzzle overlay 60 pixels higher (the "Player 1" plate and the win boxes are not drawn yet)
     }
 };
 
