@@ -151,17 +151,17 @@ public:
     // sy with Z. Lighting per vertex: 0.3 + max(0, light . R n). `blend` > 0 mixes pose frame `frame` with pose frame `frame + 1` (the cat's head morph and walk pose are interpolated by
     // the fractional part of its phase); mice pass blend 0 and use one of their eight keyframe models.
     void drawDcCharacter(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, float translateZ,
-                         const float (&light)[3], int frame, float blend, int uvMode) const {
+                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0) const {
         if (m.tris.empty()) return;
         const float ya = yawDeg * 0.017453292f, cy = cosf(ya), sy = sinf(ya);
         constexpr float kTilt = -45.0f * 0.017453292f; const float ct = cosf(kTilt), st = sinf(kTilt);
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit + translateZ;
         const std::vector<float>* a = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
         const std::vector<float>* b = (frame >= 0 && !m.frames.empty() && blend > 0.0f) ? &m.frames[(frame + 1) % (int)m.frames.size()] : nullptr;
-        struct Tri { float depth; int tex; SDL_Vertex v[3]; };
+        struct Tri { float depth; int tex; bool translucent; bool over; SDL_Vertex v[3]; SDL_Color extra[3]; };
         std::vector<Tri> out; out.reserve(m.tris.size());
         for (size_t ti = 0; ti < m.tris.size(); ++ti) {
-            const auto& tri = m.tris[ti]; Tri o; float depthSum = 0;
+            const auto& tri = m.tris[ti]; Tri o; o.over = false; float depthSum = 0;
             for (int k = 0; k < 3; ++k) {
                 float vx = tri.v[k].x, vy = tri.v[k].y, vz = tri.v[k].z, nx = tri.v[k].nx, ny = tri.v[k].ny, nz = tri.v[k].nz;
                 if (a) {
@@ -174,20 +174,34 @@ public:
                 const float n1x = nx * cy + nz * sy, n1z = -nx * sy + nz * cy;
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
-                const float lum = std::min(1.0f, 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z));
+                const float rawLum = 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z);   // can exceed 1.0 (mice reach 1.08); the PowerVR multiplies the texture and saturates
+                const float lum = std::min(1.0f, rawLum);
                 const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * lum));
+                const Uint8 extra = static_cast<Uint8>(std::lround(255.0f * std::min(1.0f, std::max(0.0f, rawLum - 1.0f)))); o.extra[k] = {extra, extra, extra, 255}; if (extra) o.over = true;
                 const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - tri.v[k].v, tri.v[k].u} : SDL_FPoint{tri.v[k].u, tri.v[k].v};
                 o.v[k].position = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale};
                 o.v[k].color = {shade, shade, shade, 255}; o.v[k].tex_coord = uv; depthSum += depth;
             }
-            const int mi = tri.mat; o.depth = depthSum / 3; o.tex = mi < (int)m.matTex.size() ? (int)m.matTex[mi] : -1; out.push_back(o);
+            const int mi = tri.mat; o.translucent = (translucentMaterials >> (mi & 31)) & 1u; o.depth = depthSum / 3; o.tex = mi < (int)m.matTex.size() ? (int)m.matTex[mi] : -1; out.push_back(o);
         }
-        std::stable_sort(out.begin(), out.end(), [](const Tri& p, const Tri& q) { return p.depth > q.depth; });   // far to near
+        std::stable_sort(out.begin(), out.end(), [](const Tri& p, const Tri& q) { if (p.translucent != q.translucent) return !p.translucent; return p.depth > q.depth; });   // opaque first, then the translucent list (the PowerVR draws its lists in that order), each far to near
         std::vector<SDL_Vertex> batch;
         for (size_t i = 0; i < out.size();) {
             size_t j = i; batch.clear();
-            while (j < out.size() && out[j].tex == out[i].tex) { batch.insert(batch.end(), out[j].v, out[j].v + 3); j++; }
+            while (j < out.size() && out[j].tex == out[i].tex && out[j].translucent == out[i].translucent) { batch.insert(batch.end(), out[j].v, out[j].v + 3); j++; }
             if (out[i].tex >= 0 && out[i].tex < (int)textures.size()) SDL_RenderGeometry(ren, textures[out[i].tex], batch.data(), (int)batch.size(), nullptr, 0);
+            i = j;
+        }
+        // Intensities above 1.0: add texture * (intensity - 1) on top (additive blend), as the PowerVR's saturating multiply brightens the texture.
+        for (size_t i = 0; i < out.size();) {
+            size_t j = i; batch.clear();
+            static const bool noOver = getenv("CCR_NO_OVERBRIGHT") != nullptr;   // comparison switch
+            while (j < out.size() && out[j].tex == out[i].tex) { if (out[j].over && !noOver) for (int k = 0; k < 3; ++k) { SDL_Vertex v = out[j].v[k]; v.color = out[j].extra[k]; batch.push_back(v); } j++; }
+            if (!batch.empty() && out[i].tex >= 0 && out[i].tex < (int)textures.size()) {
+                SDL_SetTextureBlendMode(textures[out[i].tex], SDL_BLENDMODE_ADD);
+                SDL_RenderGeometry(ren, textures[out[i].tex], batch.data(), (int)batch.size(), nullptr, 0);
+                SDL_SetTextureBlendMode(textures[out[i].tex], SDL_BLENDMODE_BLEND);
+            }
             i = j;
         }
     }

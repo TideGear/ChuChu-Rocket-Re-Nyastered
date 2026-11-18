@@ -1025,7 +1025,7 @@ struct App {
         static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.5f, -0.25f};
         float phase = 0.0f; int frame = -1;
         if (!en.mouse) { phase = (i < cphase.size() ? cphase[i] * 1.2f : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
-        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0);
+        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 0u);   // the mouse's eyes (material 0, c_mouse01) are in the translucent list in the real stream
         return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
