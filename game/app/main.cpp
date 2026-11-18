@@ -1020,9 +1020,9 @@ struct App {
         if (!m) return false;
         const float turn = (float)(ang & 0xffff) * (360.0f / 65536.0f);
         // Matched against Flycast Normal Puzzle 01 and 02 (docs/dreamcast_models.md): the mouse turns by -angle; the cat keeps the earlier 180 - angle until a real frame checks it.
-        static const int catYawMode = getenv("CCR_CAT_YAW") ? atoi(getenv("CCR_CAT_YAW")) : 0;   // comparison only: 0 = 180 - a, 1 = -a, 2 = a, 3 = 180 + a
+        static const int catYawMode = getenv("CCR_CAT_YAW") ? atoi(getenv("CCR_CAT_YAW")) : 1;   // the field cat callback 0x8c011060 applies njRotateY(-angle) like the mouse: 1 = -a is the default; comparison values 0 = 180 - a, 2 = a, 3 = 180 + a, 4 = 0, 5 = 180
         const float yaw = en.mouse ? -turn : catYawMode == 1 ? -turn : catYawMode == 2 ? turn : catYawMode == 3 ? 180.0f + turn : catYawMode == 4 ? 0.0f : catYawMode == 5 ? 180.0f : 180.0f - turn;
-        const float scale = cell * (en.mouse ? 0.072f : 0.085f);   // 0.085 against Flycast Normal 25 (isolated cats: 0.066 was too small, 0.096 too large); the cat's pose is still wrong
+        const float scale = cell * (en.mouse ? 0.072f : 0.075f);   // 0.075 against Flycast Normal 25 once the yaw was fixed (0.066 was too small, 0.085 a little large)
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
         // The original tilts both characters by -8192 (45 degrees) before drawing (0x8c0193e0, 0x8c0117c0); CCR_CHAR_PITCH overrides for comparisons.
         static const float pitchOverride = getenv("CCR_CHAR_PITCH") ? static_cast<float>(atof(getenv("CCR_CHAR_PITCH"))) : 45.0f;
