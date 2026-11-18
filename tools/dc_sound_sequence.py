@@ -1,9 +1,9 @@
-"""Linear MANATEE command scheduling, without voice allocation or synthesis.
+"""MANATEE command scheduling, without voice allocation or synthesis.
 
 One isolated group, available FIFO capacity and ordinary free-slot gates only.
-Full gate tables, continuation records and looping are unsupported.
+Full gate tables, continuation records and alternate-sequence branching are unsupported.
 """
-from dc_sound_timing import LinearSequenceClock
+from dc_sound_timing import SequenceClock
 from dc_sound_gate import NoteGate
 
 
@@ -11,7 +11,7 @@ class SequenceCommands:
     def __init__(self, sequence, group=1, priority=0):
         if not 0 <= group < 8 or not 0 <= priority <= 255:
             raise ValueError('Invalid sequence group or priority')
-        self.clock = LinearSequenceClock(sequence)
+        self.clock = SequenceClock(sequence)
         self.group = group
         self.priority = priority & 0xf8
         self.gates = [NoteGate(0, 0, 0) for _ in range(64)]

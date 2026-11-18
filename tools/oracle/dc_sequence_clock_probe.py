@@ -1,8 +1,9 @@
-"""Compare a fresh linear sequence's event timing with original scheduler calls.
+"""Compare a fresh sequence's events, loops and commands with original scheduler calls.
 
 Runs original context initialization/start and scheduler, draining the command
 FIFO without voice dispatch. Compares events, command words and all 64 gates
-through sequence end and pending-gate expiry, not audio or CPU cycles.
+through sequence end/pending-gate expiry or bounded infinite-loop repeats,
+not audio or CPU cycles.
 """
 import argparse
 import struct
@@ -15,13 +16,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from arm7_bus import Arm7Bus
 from dc_sound_pitch import PitchTable
-from dc_sound_timing import LinearSequenceClock
+from dc_sound_timing import SequenceClock
 from dc_sound_sequence import SequenceCommands
 from mlt_extract import sections
 from mlt_sequences import inventory
 
 
-def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=False):
+def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=False, loop_passes=2):
     PitchTable(driver)
     sequence = next(b for b in inventory(mlt) if b['bank'] == bank_index)['sequences'][sequence_index]
     if short_tail_control:
@@ -36,7 +37,7 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
         modified[position:position + width] = bytes(width)
         mlt = bytes(modified)
         sequence = next(b for b in inventory(mlt) if b['bank'] == bank_index)['sequences'][sequence_index]
-    native = LinearSequenceClock(sequence)
+    native = SequenceClock(sequence)
     command_model = SequenceCommands(sequence)
     section = next(s for s in sections(mlt) if s['tag'] == 'SMSB' and s['bank'] == bank_index)
     sequence_address = section['address'] + sequence['file_offset'] - section['offset']
@@ -84,6 +85,16 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
             actual_scale = struct.unpack('<I', uc.mem_read(0x1105c, 4))[0]
             if (actual_time, actual_scale) != (native.timing.time, native.timing.scale):
                 raise AssertionError(('Timing state differs', tick, actual_time, native.timing.time))
+            actual_loops = struct.unpack('<I', uc.mem_read(0x1106c, 4))[0]
+            if actual_loops != native.loop_repeats:
+                raise AssertionError(('Loop count differs', tick, actual_loops, native.loop_repeats))
+            actual_remaining = uc.mem_read(0x11068, 1)[0]
+            actual_start = struct.unpack('<I', uc.mem_read(0x11074, 4))[0]
+            expected_start = (sequence_address + native.events[native.loop_start]['offset'] + 1
+                              if native.loop_start is not None else 0)
+            if (actual_remaining, actual_start) != (native.loop_remaining, expected_start):
+                raise AssertionError(('Loop state differs', tick, actual_remaining, actual_start,
+                                      native.loop_remaining, expected_start))
         expected_commands = command_model.update()
         write, read = struct.unpack('<2I', uc.mem_read(0x12000, 8))
         actual_commands = []
@@ -102,6 +113,9 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
         # Isolate scheduling from voice dispatch, keeping FIFO capacity available.
         uc.mem_write(0x12004, bytes(uc.mem_read(0x12000, 4)))
         count += len(observed)
+        if native.loop_remaining == 128 and native.loop_repeats >= loop_passes:
+            return dict(updates=tick, sequence_end=None, pending_at_end=None,
+                        loop_repeats=native.loop_repeats, events=count, commands=command_count)
         if native.ended:
             flags = uc.mem_read(0x11051, 1)[0]
             if flags & 1:
@@ -123,17 +137,21 @@ if __name__ == '__main__':
     parser.add_argument('--sequence', type=int, default=19)
     parser.add_argument('--all', action='store_true', help='verify every sequence in the MLT')
     parser.add_argument('--short-tail-control', action='store_true', help='synthetic control: zero the final note step')
+    parser.add_argument('--loop-passes', type=int, default=2, help='infinite-loop repetitions to verify')
     args = parser.parse_args()
     if args.all and args.short_tail_control:
         parser.error('Choose --all or --short-tail-control, not both')
+    if args.loop_passes < 1:
+        parser.error('--loop-passes must be positive')
     driver, mlt = args.driver.read_bytes(), args.mlt.read_bytes()
     if args.all:
-        results = [verify(driver, mlt, bank['bank'], sequence['index'])
+        results = [verify(driver, mlt, bank['bank'], sequence['index'], loop_passes=args.loop_passes)
                    for bank in inventory(mlt) for sequence in bank['sequences']
                    if not sequence.get('empty')]
         print(dict(sequences=len(results), events=sum(r['events'] for r in results),
                    updates=sum(r['updates'] for r in results), commands=sum(r['commands'] for r in results),
-                   post_end_updates=sum(r['updates'] - r['sequence_end'] for r in results),
+                   looped_sequences=sum(r['sequence_end'] is None for r in results),
+                   post_end_updates=sum(r['updates'] - r['sequence_end'] for r in results if r['sequence_end'] is not None),
                    sequences_with_pending_tails=sum(bool(r['pending_at_end']) for r in results)))
     else:
-        print(verify(driver, mlt, args.bank, args.sequence, args.short_tail_control))
+        print(verify(driver, mlt, args.bank, args.sequence, args.short_tail_control, args.loop_passes))

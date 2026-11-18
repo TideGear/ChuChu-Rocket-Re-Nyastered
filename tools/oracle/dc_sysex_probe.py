@@ -14,6 +14,10 @@ def fixture(length, step, wide):
     length_word = length | (0x8000 if wide else 0)
     sequence = (b'SMSD' + struct.pack('<2I', 136, 400) + b'\xf0' +
                 length_word.to_bytes(2, 'big') + payload + step.to_bytes(2 if wide else 1, 'big') + b'\x83')
+    return bank_fixture(sequence)
+
+
+def bank_fixture(sequence):
     bank = b'SMSB' + struct.pack('<4I', 1, 24 + len(sequence), 1, 20) + sequence + b'END!'
     header = b'SMLT' + struct.pack('<2I', 2, 1) + bytes(20)
     entry = b'SMSB' + struct.pack('<5I', 0, 0x88000, len(bank), 64, len(bank)) + bytes(8)

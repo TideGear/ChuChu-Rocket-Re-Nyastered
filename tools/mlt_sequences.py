@@ -88,6 +88,9 @@ def events(data, limit=100000):
             step = read(2 if length_word & 0x8000 else 1)
         else:
             raise ValueError(f'Unsupported SMSD status {status:#x} at {start:#x}')
+        if row['type'] == 'loop':
+            row['encoded_step'] = step
+            row['step_prefix'] = step_ext
         row['step'] = step + step_ext
         step_ext = 0
         tick += row['step']

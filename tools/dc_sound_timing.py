@@ -63,21 +63,25 @@ class SequenceTiming:
         return self.time
 
 
-class LinearSequenceClock:
-    """Schedule parsed, non-looping SMSD events in driver updates.
+class SequenceClock:
+    """Schedule parsed SMSD events and ordinary loop markers in driver updates.
 
     Event effects and voice allocation are separate. References already expanded
-    by mlt_sequences are accepted; loops need their original handler. System-
+    by mlt_sequences are accepted. Loop behavior follows ARM 0x6e58..0x6edc;
+    alternate-sequence branching (context flag bit 1) is not modeled. System-
     exclusive payload dispatch belongs to the command scheduler.
     """
     def __init__(self, sequence):
-        supported = {'tempo', 'control', 'program', 'pressure', 'pitch', 'note', 'end', 'sysex'}
+        supported = {'tempo', 'control', 'program', 'pressure', 'pitch', 'note', 'end', 'sysex', 'loop'}
         if any(event['type'] not in supported for event in sequence['events']):
-            raise ValueError('Unsupported non-linear sequence event')
+            raise ValueError('Unsupported sequence event')
         self.timing = SequenceTiming(*sequence['header'])
         self.events = sequence['events']
         self.position = 0
         self.ended = False
+        self.loop_start = None
+        self.loop_remaining = 0
+        self.loop_repeats = 0
 
     def update(self, increment=0x4000, on_event=None):
         word(increment)
@@ -90,6 +94,8 @@ class LinearSequenceClock:
             return []
         due = []
         while self.position < len(self.events):
+            if len(due) >= 100000:
+                raise ValueError('Sequence exceeds bounded events per update')
             event = self.events[self.position]
             self.position += 1
             due.append(event)
@@ -98,9 +104,24 @@ class LinearSequenceClock:
                 break
             if event['type'] == 'tempo':
                 self.timing.tempo = event['value']
+            step = event.get('step', 0)
+            if event['type'] == 'loop':
+                if self.loop_start is None:
+                    self.loop_start = self.position - 1
+                    self.loop_remaining = event['value'] or 128
+                    self.loop_repeats = 0
+                elif self.loop_remaining:
+                    self.loop_repeats = (self.loop_repeats + 1) & 0xffffffff
+                    if self.loop_remaining != 128:
+                        self.loop_remaining -= 1
+                    self.position = self.loop_start + 1
+                    opening = self.events[self.loop_start]
+                    step = opening.get('encoded_step', opening['step']) + event.get('step_prefix', 0)
+                else:
+                    self.loop_start = None
             if on_event is not None:
                 on_event(event, self.timing)
-            remaining = self.timing.advance(event['step'])
+            remaining = self.timing.advance(step)
             # CMP/BLE at 0x70c8 uses a signed comparison to zero.
             if 0 < remaining < 0x80000000:
                 break
