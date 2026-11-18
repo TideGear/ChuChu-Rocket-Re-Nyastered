@@ -26,6 +26,7 @@ inline ModelLight& modelLight() {
 }
 struct ModelPack {
     std::vector<SDL_Texture*> textures; std::vector<Model3D> models;
+    std::vector<std::vector<uint8_t>> cpuPixels; std::vector<SDL_Point> cpuSize;   // RGBA bytes of every texture, for the software rasteriser (softRender)
     ModelPack() = default;
     ModelPack(const ModelPack&) = delete;
     ModelPack& operator=(const ModelPack&) = delete;
@@ -33,14 +34,14 @@ struct ModelPack {
     void clear() {
         for (auto* texture : textures) SDL_DestroyTexture(texture);
         textures.clear();
-        models.clear();
+        models.clear(); cpuPixels.clear(); cpuSize.clear();
     }
     const Model3D* find(const std::string& n) const { for (const auto& m : models) if (m.name == n) return &m; return nullptr; }
     bool load(SDL_Renderer* ren, const std::string& path) {
         ModelPack loaded;
         if (!loaded.read(ren, path)) return false;
         textures.swap(loaded.textures);
-        models.swap(loaded.models);
+        models.swap(loaded.models); cpuPixels.swap(loaded.cpuPixels); cpuSize.swap(loaded.cpuSize);
         return true;
     }
 private:
@@ -56,7 +57,7 @@ private:
             if (!rd(&w, 2) || !rd(&h, 2) || !w || !h || h > remaining() / (size_t(w) * 4)) return false;
             SDL_Texture* t = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, w, h);
             if (!t) return false;
-            textures.push_back(t);
+            textures.push_back(t); cpuPixels.emplace_back(d.data() + p, d.data() + p + (size_t)w * h * 4); cpuSize.push_back({w, h});
             if (SDL_UpdateTexture(t, nullptr, d.data() + p, w * 4) != 0 ||
                 SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND) != 0) return false;
             p += (size_t)w * h * 4;
@@ -124,6 +125,75 @@ public:
                            static_cast<int>(vertices.size()), nullptr, 0);
     }
 
+    // Software rasteriser with the PowerVR's per-pixel behaviour (the SDL geometry renderer has no depth buffer, and a painter's order cannot reproduce the real overlaps, such as a wall's end
+    // caps, or a mouse's foot meeting its body): depth test on the interpolated 1/w (greater is nearer, later wins ties), perspective-correct texture coordinates, bilinear filtering with
+    // clamping (the real tsp words say bilinear and clamp), per-vertex intensity multiplied with the texture and saturated at 255 (intensities above 1.0 are real), and a second pass for the
+    // translucent list (depth-tested against the opaque pixels, no depth write, source-alpha blend). Rendered at the output resolution into a small buffer covering the triangles.
+    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; };
+    void softRender(SDL_Renderer* ren, const std::vector<SoftTri>& tris) const {
+        if (tris.empty()) return;
+        int ow = 0, oh = 0, lw = 0, lh = 0; SDL_GetRendererOutputSize(ren, &ow, &oh); SDL_RenderGetLogicalSize(ren, &lw, &lh);
+        if (!lw || !lh) { lw = ow; lh = oh; }
+        const float sc = std::max(0.25f, std::min(ow / (float)lw, oh / (float)lh));
+        float minx = 1e9f, miny = 1e9f, maxx = -1e9f, maxy = -1e9f;
+        for (const auto& t : tris) for (int k = 0; k < 3; ++k) { minx = std::min(minx, t.p[k].x); maxx = std::max(maxx, t.p[k].x); miny = std::min(miny, t.p[k].y); maxy = std::max(maxy, t.p[k].y); }
+        if (!(maxx > minx) || !(maxy > miny)) return;
+        const int x0 = (int)std::floor(minx * sc) - 1, y0 = (int)std::floor(miny * sc) - 1, W = (int)std::ceil(maxx * sc) + 1 - x0, H = (int)std::ceil(maxy * sc) + 1 - y0;
+        if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return;
+        static std::vector<uint32_t> color; static std::vector<float> depth;
+        color.assign((size_t)W * H, 0u); depth.assign((size_t)W * H, -1.0f);
+        auto sample = [&](int tex, float u, float v, float out[4]) {
+            if (tex < 0 || tex >= (int)cpuPixels.size()) { out[0] = out[1] = out[2] = 0; out[3] = 255; return; }
+            const int tw = cpuSize[tex].x, th = cpuSize[tex].y; const uint8_t* px = cpuPixels[tex].data();
+            const float fx = u * tw - 0.5f, fy = v * th - 0.5f; const int ix = (int)std::floor(fx), iy = (int)std::floor(fy); const float ax = fx - ix, ay = fy - iy;
+            for (int c = 0; c < 4; ++c) {
+                auto at = [&](int x, int y) { x = std::max(0, std::min(tw - 1, x)); y = std::max(0, std::min(th - 1, y)); return (float)px[((size_t)y * tw + x) * 4 + c]; };
+                out[c] = (at(ix, iy) * (1 - ax) + at(ix + 1, iy) * ax) * (1 - ay) + (at(ix, iy + 1) * (1 - ax) + at(ix + 1, iy + 1) * ax) * ay;
+            }
+        };
+        for (int pass = 0; pass < 2; ++pass) {
+            for (const auto& t : tris) {
+                if (t.translucent != (pass == 1)) continue;
+                float X[3], Y[3]; for (int k = 0; k < 3; ++k) { X[k] = t.p[k].x * sc - x0; Y[k] = t.p[k].y * sc - y0; }
+                const float det = (X[1] - X[0]) * (Y[2] - Y[0]) - (X[2] - X[0]) * (Y[1] - Y[0]);
+                if (std::fabs(det) < 1e-6f) continue;
+                const int bx0 = std::max(0, (int)std::floor(std::min({X[0], X[1], X[2]}))), bx1 = std::min(W - 1, (int)std::ceil(std::max({X[0], X[1], X[2]})));
+                const int by0 = std::max(0, (int)std::floor(std::min({Y[0], Y[1], Y[2]}))), by1 = std::min(H - 1, (int)std::ceil(std::max({Y[0], Y[1], Y[2]})));
+                for (int y = by0; y <= by1; ++y) for (int x = bx0; x <= bx1; ++x) {
+                    const float px = x + 0.5f, py = y + 0.5f;
+                    const float b1 = ((px - X[0]) * (Y[2] - Y[0]) - (X[2] - X[0]) * (py - Y[0])) / det, b2 = ((X[1] - X[0]) * (py - Y[0]) - (px - X[0]) * (Y[1] - Y[0])) / det, b0 = 1.0f - b1 - b2;
+                    if (b0 < -1e-4f || b1 < -1e-4f || b2 < -1e-4f) continue;
+                    const float iw = b0 * t.iw[0] + b1 * t.iw[1] + b2 * t.iw[2]; if (iw <= 0) continue;
+                    float& zb = depth[(size_t)y * W + x];
+                    if (iw < zb) continue;                                           // nearer (greater 1/w) wins; equal depth: the later polygon wins
+                    const float w0 = b0 * t.iw[0], w1 = b1 * t.iw[1], w2 = b2 * t.iw[2], ws = w0 + w1 + w2;
+                    const float u = (w0 * t.u[0] + w1 * t.u[1] + w2 * t.u[2]) / ws, v = (w0 * t.v[0] + w1 * t.v[1] + w2 * t.v[2]) / ws;
+                    const float lum = b0 * t.light[0] + b1 * t.light[1] + b2 * t.light[2];
+                    float c[4]; sample(t.tex, u, v, c);
+                    uint32_t& dst = color[(size_t)y * W + x];
+                    const float r = std::min(255.0f, c[0] * lum), g = std::min(255.0f, c[1] * lum), bl = std::min(255.0f, c[2] * lum);
+                    if (!t.translucent) { dst = (uint32_t)(r + 0.5f) | (uint32_t)(g + 0.5f) << 8 | (uint32_t)(bl + 0.5f) << 16 | 0xFF000000u; zb = iw; }
+                    else {
+                        const float a = c[3] / 255.0f; const float dr = (float)(dst & 255), dg = (float)(dst >> 8 & 255), db = (float)(dst >> 16 & 255), da = (float)(dst >> 24) / 255.0f;
+                        const float oa = a + da * (1 - a); const float orr = oa > 0 ? (r * a + dr * da * (1 - a)) / oa : 0, og = oa > 0 ? (g * a + dg * da * (1 - a)) / oa : 0, ob = oa > 0 ? (bl * a + db * da * (1 - a)) / oa : 0;
+                        dst = (uint32_t)(orr + 0.5f) | (uint32_t)(og + 0.5f) << 8 | (uint32_t)(ob + 0.5f) << 16 | (uint32_t)(oa * 255.0f + 0.5f) << 24;
+                    }
+                }
+            }
+        }
+        static SDL_Texture* buffer = nullptr; static int bw = 0, bh = 0;
+        if (!buffer || bw < W || bh < H) {
+            if (buffer) SDL_DestroyTexture(buffer);
+            bw = std::max(bw, std::max(W, 128)); bh = std::max(bh, std::max(H, 128));
+            buffer = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, bw, bh);
+            if (!buffer) { bw = bh = 0; return; }
+            SDL_SetTextureBlendMode(buffer, SDL_BLENDMODE_BLEND);
+        }
+        SDL_SetTextureScaleMode(buffer, SDL_ScaleModeNearest);
+        const SDL_Rect src{0, 0, W, H}; SDL_UpdateTexture(buffer, &src, color.data(), W * 4);
+        const SDL_FRect dst{x0 / sc, y0 / sc, W / sc, H / sc}; SDL_RenderCopyF(ren, buffer, &src, &dst);
+    }
+
     // A board piece (wall bar, generator or hole pad) exactly as the Dreamcast board task submits it (Flycast Puzzle 01 stream, wall piece at state offset 0x253eb0; fitted with zero residual):
     // the piece origin sits on the floor grid (no separate wall plane), the mesh is turned about the vertical axis (0 for horizontal edges, -90 degrees for vertical ones) and every vertex is
     // projected with its own height, sx = camera.x + k * 218 * X / (218 - Y), so a wall's lower side face shows under the bar (the 218 / 215 "wall plane" is this perspective at height 3).
@@ -133,8 +203,7 @@ public:
         if (piece.tris.empty()) return;
         const float a = yawDeg * 0.017453292f, c = cosf(a), s = sinf(a);
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
-        struct Tri { float depth; int tex; SDL_Vertex v[3]; };
-        std::vector<Tri> out; out.reserve(piece.tris.size() * 2);
+        std::vector<SoftTri> out; out.reserve(piece.tris.size() * 2);
         struct P { float x, y, z, u, v, light; };
         for (const auto& tri : piece.tris) {
             const int mi = material >= 0 ? material : tri.mat;
@@ -145,7 +214,7 @@ public:
                 const float nz = -v.nx * s + v.nz * c;
                 in[i] = {v.x * c + v.z * s, v.y, -v.x * s + v.z * c, 1.0f - v.v, v.u, std::min(1.0f, 0.3f + std::max(0.0f, 0.5f * v.ny - 0.25f * nz))};
             }
-            // Clip at the floor plane (height 0): the real floor hides what lies below it (the depth test), and SDL has no depth buffer.
+            // Clip at the floor plane (height 0): the real floor is drawn first and hides what lies below it; the floor is not in this buffer.
             for (int i = 0; i < 3; ++i) {
                 const P& a = in[i]; const P& b = in[(i + 1) % 3];
                 const bool ain = a.y >= 0.0f, bin = b.y >= 0.0f;
@@ -153,24 +222,15 @@ public:
                 if (ain != bin) { const float t = a.y / (a.y - b.y); poly[n++] = {a.x + (b.x - a.x) * t, 0.0f, a.z + (b.z - a.z) * t, a.u + (b.u - a.u) * t, a.v + (b.v - a.v) * t, a.light + (b.light - a.light) * t}; }
             }
             for (int k = 1; k + 1 < n; ++k) {
-                Tri o; o.tex = tex; float depthSum = 0; const P* q[3] = {&poly[0], &poly[k], &poly[k + 1]};
+                SoftTri o{}; o.tex = tex; o.translucent = false; const P* q[3] = {&poly[0], &poly[k], &poly[k + 1]};
                 for (int i = 0; i < 3; ++i) {
-                    const float depth = 218.0f - q[i]->y, scale = pixelsPerUnit * 218.0f / depth; const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * q[i]->light));
-                    o.v[i] = {{camera.x + (ox + q[i]->x) * scale, camera.y + (oz + q[i]->z) * scale}, {shade, shade, shade, 255}, {q[i]->u, q[i]->v}};
-                    depthSum += depth;
+                    const float depth = 218.0f - q[i]->y, scale = pixelsPerUnit * 218.0f / depth;
+                    o.p[i] = {camera.x + (ox + q[i]->x) * scale, camera.y + (oz + q[i]->z) * scale}; o.iw[i] = 1.0f / depth; o.u[i] = q[i]->u; o.v[i] = q[i]->v; o.light[i] = q[i]->light;
                 }
-                o.depth = depthSum / 3; out.push_back(o);
+                out.push_back(o);
             }
         }
-        // The PowerVR depth-tests opaque polygons per pixel; far to near by average depth is the closest painter's order (stable, so equal depths keep the model's order).
-        std::stable_sort(out.begin(), out.end(), [](const Tri& p, const Tri& q) { return p.depth > q.depth; });
-        std::vector<SDL_Vertex> batch;
-        for (size_t i = 0; i < out.size();) {
-            size_t j = i; batch.clear();
-            while (j < out.size() && out[j].tex == out[i].tex) { batch.insert(batch.end(), out[j].v, out[j].v + 3); j++; }
-            if (out[i].tex >= 0 && out[i].tex < (int)textures.size()) SDL_RenderGeometry(ren, textures[out[i].tex], batch.data(), (int)batch.size(), nullptr, 0);
-            i = j;
-        }
+        softRender(ren, out);
     }
 
     // A character (mouse or cat) exactly as the Dreamcast field callbacks draw it (0x8c0193e0 for mice, 0x8c011060 for cats; verified by fitting the real PowerVR vertices of 40 mice and
@@ -186,10 +246,9 @@ public:
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit + translateZ;
         const std::vector<float>* a = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
         const std::vector<float>* b = (frame >= 0 && !m.frames.empty() && blend > 0.0f) ? &m.frames[(frame + 1) % (int)m.frames.size()] : nullptr;
-        struct Tri { float depth; int tex; bool translucent; bool over; SDL_Vertex v[3]; SDL_Color extra[3]; };
-        std::vector<Tri> out; out.reserve(m.tris.size());
+        std::vector<SoftTri> out; out.reserve(m.tris.size());
         for (size_t ti = 0; ti < m.tris.size(); ++ti) {
-            const auto& tri = m.tris[ti]; Tri o; o.over = false; float depthSum = 0;
+            const auto& tri = m.tris[ti]; SoftTri o{}; o.tex = (tri.mat < m.matTex.size()) ? (int)m.matTex[tri.mat] : -1; o.translucent = (translucentMaterials >> (tri.mat & 31)) & 1u;
             for (int k = 0; k < 3; ++k) {
                 float vx = tri.v[k].x, vy = tri.v[k].y, vz = tri.v[k].z, nx = tri.v[k].nx, ny = tri.v[k].ny, nz = tri.v[k].nz;
                 if (a) {
@@ -202,36 +261,14 @@ public:
                 const float n1x = nx * cy + nz * sy, n1z = -nx * sy + nz * cy;
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
-                const float rawLum = 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z);   // can exceed 1.0 (mice reach 1.08); the PowerVR multiplies the texture and saturates
-                const float lum = std::min(1.0f, rawLum);
-                const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * lum));
-                const Uint8 extra = static_cast<Uint8>(std::lround(255.0f * std::min(1.0f, std::max(0.0f, rawLum - 1.0f)))); o.extra[k] = {extra, extra, extra, 255}; if (extra) o.over = true;
+                o.light[k] = 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z);   // can exceed 1.0 (mice reach 1.08); the rasteriser saturates the product like the PowerVR
+                o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
                 const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - tri.v[k].v, tri.v[k].u} : SDL_FPoint{tri.v[k].u, tri.v[k].v};
-                o.v[k].position = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale};
-                o.v[k].color = {shade, shade, shade, 255}; o.v[k].tex_coord = uv; depthSum += depth;
+                o.u[k] = uv.x; o.v[k] = uv.y;
             }
-            const int mi = tri.mat; o.translucent = (translucentMaterials >> (mi & 31)) & 1u; o.depth = depthSum / 3; o.tex = mi < (int)m.matTex.size() ? (int)m.matTex[mi] : -1; out.push_back(o);
+            out.push_back(o);
         }
-        std::stable_sort(out.begin(), out.end(), [](const Tri& p, const Tri& q) { if (p.translucent != q.translucent) return !p.translucent; return p.depth > q.depth; });   // opaque first, then the translucent list (the PowerVR draws its lists in that order), each far to near
-        std::vector<SDL_Vertex> batch;
-        for (size_t i = 0; i < out.size();) {
-            size_t j = i; batch.clear();
-            while (j < out.size() && out[j].tex == out[i].tex && out[j].translucent == out[i].translucent) { batch.insert(batch.end(), out[j].v, out[j].v + 3); j++; }
-            if (out[i].tex >= 0 && out[i].tex < (int)textures.size()) SDL_RenderGeometry(ren, textures[out[i].tex], batch.data(), (int)batch.size(), nullptr, 0);
-            i = j;
-        }
-        // Intensities above 1.0: add texture * (intensity - 1) on top (additive blend), as the PowerVR's saturating multiply brightens the texture.
-        for (size_t i = 0; i < out.size();) {
-            size_t j = i; batch.clear();
-            static const bool noOver = getenv("CCR_NO_OVERBRIGHT") != nullptr;   // comparison switch
-            while (j < out.size() && out[j].tex == out[i].tex) { if (out[j].over && !noOver) for (int k = 0; k < 3; ++k) { SDL_Vertex v = out[j].v[k]; v.color = out[j].extra[k]; batch.push_back(v); } j++; }
-            if (!batch.empty() && out[i].tex >= 0 && out[i].tex < (int)textures.size()) {
-                SDL_SetTextureBlendMode(textures[out[i].tex], SDL_BLENDMODE_ADD);
-                SDL_RenderGeometry(ren, textures[out[i].tex], batch.data(), (int)batch.size(), nullptr, 0);
-                SDL_SetTextureBlendMode(textures[out[i].tex], SDL_BLENDMODE_BLEND);
-            }
-            i = j;
-        }
+        softRender(ren, out);
     }
 
     // Draws the model centred at (cx, cy) on screen. Scale is in pixels per model unit and angles are in degrees.
