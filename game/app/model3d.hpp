@@ -124,25 +124,53 @@ public:
                            static_cast<int>(vertices.size()), nullptr, 0);
     }
 
-    // Wall pieces exactly as the Dreamcast board task submits them (Flycast Puzzle 01, PowerVR stream at state offset 0x253eb0): the bar mesh lies flat in the model's xz plane at
-    // height 3, is turned about the vertical axis (0 for horizontal edges, -90 degrees for vertical ones; with that the lighting below matches all ten real vertices of both)
-    // and drawn at pixelsPerUnit = wall-plane cell / 15. Each vertex carries its own intensity 0.3 + max(0, 0.5 * ny - 0.25 * nz) of the turned normal (checked to four decimals
-    // against the real base intensities 0.3846 .. 0.8394), multiplied with the texture; no extra brightness factor.
-    void drawDcWall(SDL_Renderer* ren, const Model3D& wall, int material, SDL_FPoint center, float pixelsPerUnit, float yawDeg) const {
-        if (wall.tris.empty() || material < 0 || material >= (int)wall.matTex.size() || wall.matTex[material] >= textures.size()) return;
+    // A board piece (wall bar, generator or hole pad) exactly as the Dreamcast board task submits it (Flycast Puzzle 01 stream, wall piece at state offset 0x253eb0; fitted with zero residual):
+    // the piece origin sits on the floor grid (no separate wall plane), the mesh is turned about the vertical axis (0 for horizontal edges, -90 degrees for vertical ones) and every vertex is
+    // projected with its own height, sx = camera.x + k * 218 * X / (218 - Y), so a wall's lower side face shows under the bar (the 218 / 215 "wall plane" is this perspective at height 3).
+    // Lighting per vertex: 0.3 + max(0, 0.5 * ny - 0.25 * nz) of the turned normal (exact to four decimals on the real vertices), multiplied with the texture. `material` >= 0 forces one
+    // material. The pack's textures are stored transposed, so the stream's (u, v) is sampled as (v, u).
+    void drawDcPiece(SDL_Renderer* ren, const Model3D& piece, int material, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg) const {
+        if (piece.tris.empty()) return;
         const float a = yawDeg * 0.017453292f, c = cosf(a), s = sinf(a);
-        std::vector<SDL_Vertex> vertices; vertices.reserve(wall.tris.size() * 3);
-        for (const auto& tri : wall.tris) {
+        const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
+        struct Tri { float depth; int tex; SDL_Vertex v[3]; };
+        std::vector<Tri> out; out.reserve(piece.tris.size() * 2);
+        struct P { float x, y, z, u, v, light; };
+        for (const auto& tri : piece.tris) {
+            const int mi = material >= 0 ? material : tri.mat;
+            const int tex = mi < (int)piece.matTex.size() ? (int)piece.matTex[mi] : -1;
+            P poly[4]; int n = 0; P in[3];
             for (int i = 0; i < 3; ++i) {
                 const auto& v = tri.v[i];
-                const float x = v.x * c + v.z * s, z = -v.x * s + v.z * c;
-                const float nx = v.nx * c + v.nz * s, nz = -v.nx * s + v.nz * c; (void)nx;
-                const float light = std::min(1.0f, 0.3f + std::max(0.0f, 0.5f * v.ny - 0.25f * nz));
-                const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * light));
-                vertices.push_back({{center.x + x * pixelsPerUnit, center.y + z * pixelsPerUnit}, {shade, shade, shade, 255}, {1.0f - v.v, v.u}});   // the pack's textures are stored transposed (as for the lids), so the stream's (u, v) is sampled as (v, u)
+                const float nz = -v.nx * s + v.nz * c;
+                in[i] = {v.x * c + v.z * s, v.y, -v.x * s + v.z * c, 1.0f - v.v, v.u, std::min(1.0f, 0.3f + std::max(0.0f, 0.5f * v.ny - 0.25f * nz))};
+            }
+            // Clip at the floor plane (height 0): the real floor hides what lies below it (the depth test), and SDL has no depth buffer.
+            for (int i = 0; i < 3; ++i) {
+                const P& a = in[i]; const P& b = in[(i + 1) % 3];
+                const bool ain = a.y >= 0.0f, bin = b.y >= 0.0f;
+                if (ain) poly[n++] = a;
+                if (ain != bin) { const float t = a.y / (a.y - b.y); poly[n++] = {a.x + (b.x - a.x) * t, 0.0f, a.z + (b.z - a.z) * t, a.u + (b.u - a.u) * t, a.v + (b.v - a.v) * t, a.light + (b.light - a.light) * t}; }
+            }
+            for (int k = 1; k + 1 < n; ++k) {
+                Tri o; o.tex = tex; float depthSum = 0; const P* q[3] = {&poly[0], &poly[k], &poly[k + 1]};
+                for (int i = 0; i < 3; ++i) {
+                    const float depth = 218.0f - q[i]->y, scale = pixelsPerUnit * 218.0f / depth; const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * q[i]->light));
+                    o.v[i] = {{camera.x + (ox + q[i]->x) * scale, camera.y + (oz + q[i]->z) * scale}, {shade, shade, shade, 255}, {q[i]->u, q[i]->v}};
+                    depthSum += depth;
+                }
+                o.depth = depthSum / 3; out.push_back(o);
             }
         }
-        SDL_RenderGeometry(ren, textures[wall.matTex[material]], vertices.data(), static_cast<int>(vertices.size()), nullptr, 0);
+        // The PowerVR depth-tests opaque polygons per pixel; far to near by average depth is the closest painter's order (stable, so equal depths keep the model's order).
+        std::stable_sort(out.begin(), out.end(), [](const Tri& p, const Tri& q) { return p.depth > q.depth; });
+        std::vector<SDL_Vertex> batch;
+        for (size_t i = 0; i < out.size();) {
+            size_t j = i; batch.clear();
+            while (j < out.size() && out[j].tex == out[i].tex) { batch.insert(batch.end(), out[j].v, out[j].v + 3); j++; }
+            if (out[i].tex >= 0 && out[i].tex < (int)textures.size()) SDL_RenderGeometry(ren, textures[out[i].tex], batch.data(), (int)batch.size(), nullptr, 0);
+            i = j;
+        }
     }
 
     // A character (mouse or cat) exactly as the Dreamcast field callbacks draw it (0x8c0193e0 for mice, 0x8c011060 for cats; verified by fitting the real PowerVR vertices of 40 mice and

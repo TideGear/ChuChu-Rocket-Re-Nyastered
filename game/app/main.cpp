@@ -503,11 +503,11 @@ struct App {
     }
     void walls3d(const Stage& st, int wallColor, FieldLayout field) {
         const Model3D* wallM = models3d.find("wall"); if (!wallM) return;
-        const FieldLayout plane = field.wallPlane(); const float k = plane.cell / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor));   // pieces sit on the magnified wall plane (218 / 215 in Dreamcast Battle)
+        const float k = field.cell / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor)); const SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.drawDcWall(ren, *wallM, mat, {plane.x(c + 0.5f), plane.y(r)}, k, 0.0f);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c + 0.5f), field.y(r)}, camera, k, 0.0f);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.drawDcWall(ren, *wallM, mat, {plane.x(c), plane.y(r + 0.5f)}, k, -90.0f);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c), field.y(r + 0.5f)}, camera, k, -90.0f);
         }
     }
     void board(const Stage& st, int floorColor, int wallColor, FieldLayout field = {}) {
@@ -520,11 +520,11 @@ struct App {
             if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay, field.scale());
             else if (t >= 5 && t <= 8) {
                 const Model3D* po = three ? models3d.find("hole_out") : nullptr; const Model3D* pi = three ? models3d.find("hole_in") : nullptr; const float k = field.cell / kCell;
-                if (po && pi) { models3d.draw(ren, *po, ax, ay, k, 0.0f, 90.0f); models3d.draw(ren, *pi, ax, ay, k, 0.0f, 90.0f); }
+                if (po && pi) { const float kk = field.cell / 15.0f; models3d.drawDcPiece(ren, *po, -1, {ax, ay}, {GW / 2.0f, GH / 2.0f}, kk, 0.0f); models3d.drawDcPiece(ren, *pi, -1, {ax, ay}, {GW / 2.0f, GH / 2.0f}, kk, 0.0f); (void)k; }   // pads: exact transform (scale 1, tilt 0, perspective); the textures of these two models are not yet verified against a real frame
                 else blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
             }
         }
-        if (three) { walls3d(st, wallColor, field.wallPlane()); return; }
+        if (three) { walls3d(st, wallColor, field); return; }   // walls3d applies the wall plane itself (it was applied twice before)
         // HD 1.0 createPlayfield draws horizontal and vertical edge rows in
         // alternation. Keep its wall footprint and use the higher-resolution art.
         auto wall = [&](int frame, int x, int y, int w, int h) {
