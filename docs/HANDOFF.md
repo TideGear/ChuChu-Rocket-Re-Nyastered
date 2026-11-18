@@ -16,6 +16,8 @@ Read [goal.md](goal.md) for scope and [audit.md](audit.md) for status. Use [Drea
 
 ## Headless captures
 
+Audio follow-up: `tools/dc_sound_gate.py` reproduces ordinary pending gates. `dc_gate_probe.py` now compares each native record against original ARM on every update, verified for channels 1 (50 updates) and 3 (10), including pause. Next derive gate insertion and sample-clock scheduling; pending-gate checks do not establish fresh sequence playback. See audio.md for unsupported continuation and FIFO paths.
+
 Run `build\game\flyhost.exe <core> local\dcsys <save-dir> <cue> <frames> <prefix> <shot[,shot...]> "<keys>"`. Core is `C:\Users\Tideg\My Drive\RetroArch\Cores\flycast_libretro.dll`. The disc is in `local/dc_ref/disc`. `FLY_DUMP=1` adds RAM and state. `FLYHOST_RES=1280x960` sharpens the image while preserving 640×480 stream coordinates. Flycast inputs are libretro names. `B` confirms and `A` goes back on the Challenge selector. `R2` is Puzzle Start/Dash.
 
 - Mode Select: `START@1350-1360;START@1510-1520`. Shot 2750.

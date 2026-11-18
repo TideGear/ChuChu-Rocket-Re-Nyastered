@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from arm7_bus import Arm7Bus
 from dc_aica_state import inspect
 from dc_sound_pitch import PitchTable
+from dc_sound_gate import NoteGate
 from mlt_extract import sections
 from mlt_sequences import inventory
 
@@ -37,6 +38,7 @@ def trace(driver, state, mlt, channel=1):
     if len(matching) != 1:
         raise ValueError('Expected one queued gate for the selected voice')
     gate_address, (_, elapsed, remaining) = matching[0]
+    native_gate = NoteGate(word, elapsed, remaining)
     context = 0x11000 + group * 0x50
     increment = struct.unpack_from('<I', ram, context + 0x3c)[0]
     if not increment:
@@ -83,10 +85,28 @@ def trace(driver, state, mlt, channel=1):
         if uc.reg_read(UC_ARM_REG_PC) != 0x1ff000:
             raise AssertionError(f'Routine {address:#x} did not return')
 
+    # Pause bit 1 bypasses this group's gate countdown (ARM 0x6968).
+    uc.mem_write(context + 1, bytes([ram[context + 1] | 2]))
+    call(0x68d4)
+    if native_gate.advance(increment, paused=True) is not None:
+        raise AssertionError('Paused native gate emitted a command')
+    if struct.unpack('<3I', uc.mem_read(gate_address, 12)) != (word, elapsed, remaining):
+        raise AssertionError('Original paused gate advanced')
+    uc.mem_write(0, ram)
+    uc.mem_write(0x800000, state[report['register_offset']:report['register_offset'] + 0x8000])
+    queued.clear()
+    dispatched.clear()
+
     for tick in range(1, expected_tick + 1):
         clock = struct.unpack('<I', uc.mem_read(0x12418, 4))[0]
         uc.mem_write(0x12418, struct.pack('<I', clock + 1))
         call(0x68d4)
+        native_command = native_gate.advance(increment)
+        actual_gate = struct.unpack('<3I', uc.mem_read(gate_address, 12))
+        if actual_gate != (native_gate.command, native_gate.elapsed, native_gate.remaining):
+            raise AssertionError(('Native gate differs from original', tick, actual_gate, native_gate))
+        if native_command != (word if tick == expected_tick else None):
+            raise AssertionError('Native gate command timing differs')
         for _ in range(256):
             if uc.mem_read(0x12000, 4) == uc.mem_read(0x12004, 4):
                 break
@@ -104,7 +124,8 @@ def trace(driver, state, mlt, channel=1):
     return dict(channel=channel, group=group, midi_channel=midi_channel, note=note,
                 velocity=velocity, sequence=sequence, gate_address=gate_address,
                 remaining=remaining, increment=increment, prior_updates=elapsed,
-                key_off_update=expected_tick, command=word,
+                key_off_update=expected_tick, command=word, native_gate_updates_verified=expected_tick,
+                paused_gate_verified=True,
                 unaligned_reads=bus.reads, unaligned_writes=bus.writes)
 
 
