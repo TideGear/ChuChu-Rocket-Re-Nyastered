@@ -29,10 +29,14 @@ def ansi_glyph(rom, ch):
     out = [[rows[r][c] | (rows[r][c - 1] if c else 0) for c in range(12)] for r in range(24)]
     return [[out[r][c] | (out[r - 1][c] if r else 0) for c in range(12)] for r in range(24)]
 
+def is_bios(data):
+    """True for a 2 MiB image whose ROM font holds the verified full-width zero (116 lit pixels after thickening)."""
+    return len(data) == 2097152 and sum(map(sum, glyph(data[0x100000:0x200000], ZERO))) == 116
+
 def main(bios, out):
     data = open(bios, 'rb').read()
-    if len(data) != 2097152:
-        raise SystemExit('Expected a 2 MiB Dreamcast BIOS image')
+    if not is_bios(data):
+        raise SystemExit('Not a Dreamcast BIOS image with the expected ROM font')
     rom = data[0x100000:0x200000]
     sheet = Image.new('RGBA', (24 * 11, 24))
     for index, offset in enumerate([ZERO + STRIDE * k for k in range(10)] + [COLON]):

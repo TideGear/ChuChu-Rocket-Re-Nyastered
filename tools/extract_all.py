@@ -377,6 +377,17 @@ def main():
         if 'base_graphics_source' in manifest:
             break
     manifest['stage_sources'] = export_playable_stages(assets)
+    # Optional: a Dreamcast BIOS image the user placed with the game files supplies the ROM font the original draws its clocks and hints with (never shipped).
+    import export_dc_bios_font
+    for candidate in sorted(Path(gf).glob('*.bin')) + sorted(Path(gf).glob('*/*.bin')):
+        try:
+            if candidate.stat().st_size == 2097152 and export_dc_bios_font.is_bios(candidate.read_bytes()):
+                export_dc_bios_font.main(str(candidate), str(Path(assets, 'ret_all')))
+                manifest['dreamcast_bios_font'] = candidate.name
+                print('[bios] ROM font exported from', candidate.name, flush=True)
+                break
+        except OSError:
+            continue
     dlc = Path(assets, 'dlc')
     if dlc.is_dir() and any(path.name.lower() == 'depuzzle.vms' for path in dlc.iterdir()):
         output = Path(assets, 'gba', 'dlc_stages.bin')
