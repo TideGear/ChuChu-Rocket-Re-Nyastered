@@ -2496,11 +2496,12 @@ struct PuzzleMode : Screen {
         }
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
         const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
-        if (showCursor && (sim.coll[aimY][aimX] & 0xF00)) a.cursor(aimX, aimY, 0, cticks, true, pf(a));
+        if (showCursor && ((dreamcastPuzzleControls(a) && !mouseCursor) || (sim.coll[aimY][aimX] & 0xF00))) a.cursor(aimX, aimY, 0, cticks, true, pf(a));   // Flycast Puzzle 01 and 02: the pad cursor's corner bracket sits on cell (6, 4) even over a mouse, so the Dreamcast pad cursor always shows it
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a));
         if (showCursor) {
             cursorTrail.draw(a, 0);
             if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks, false, pf(a).scale());
+            else if (dreamcastPuzzleControls(a)) { const float fraction = paused ? 1.0f : alpha; a.drawDcBattlePadCursor(padAim.logicalX(fraction, pf(a)), padAim.logicalY(fraction, pf(a)), 0, cticks); }   // same corner-anchored pad cursor as Battle (Flycast Puzzle frames show it that way)
             else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha, pf(a));
         }
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
