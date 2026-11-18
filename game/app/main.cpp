@@ -960,7 +960,9 @@ struct App {
                          int mouseFrame, float cell) {
         const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(mouseFrame)) : models3d.find("cat");
         if (!m) return false;
-        const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
+        const float turn = (float)(ang & 0xffff) * (360.0f / 65536.0f);
+        // Matched against Flycast Normal Puzzle 01 and 02 (docs/dreamcast_models.md): the mouse turns by -angle; the cat keeps the earlier 180 - angle until a real frame checks it.
+        const float yaw = en.mouse ? -turn : 180.0f - turn;
         const float scale = cell * (en.mouse ? 0.072f : 0.052f);
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
         // The original tilts both characters by -8192 (45 degrees) before drawing (0x8c0193e0, 0x8c0117c0); CCR_CHAR_PITCH overrides for comparisons.
@@ -2429,7 +2431,7 @@ struct PuzzleMode : Screen {
         a.stars.draw(a);
         if (hasBoardTasks) {
             const int set = gApp ? gApp->stageSet : 0;
-            a.board(stages.list[cur].st, set == 1 ? 1 : (cur & 3) + 2, set == 1 ? 1 : 2);
+            a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2);   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
             for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
         }
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
