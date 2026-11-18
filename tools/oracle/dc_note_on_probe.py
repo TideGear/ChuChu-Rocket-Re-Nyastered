@@ -17,6 +17,8 @@ from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM
 from unicorn.arm_const import UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R5, UC_ARM_REG_R8, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from arm7_bus import Arm7Bus
 from dc_sound_controls import modulation_word
 from dc_sound_pitch import PitchTable
 from dc_aica_state import inspect
@@ -25,6 +27,7 @@ from dc_aica_state import inspect
 def verify(driver, state, mlt):
     PitchTable(driver)  # Reject unverified driver revisions before executing code.
     uc = Uc(UC_ARCH_ARM, UC_MODE_ARM)
+    bus = Arm7Bus(uc)
     uc.mem_map(0, 0x200000)
     uc.mem_map(0x210000, 0x1000)
     uc.mem_map(0x800000, 0x10000)
@@ -75,6 +78,7 @@ def verify(driver, state, mlt):
         uc.reg_write(UC_ARM_REG_SP, 0x210ff0)
         uc.reg_write(UC_ARM_REG_LR, 0x1ff000)
         uc.emu_start(0xd68, 0x1ff000, count=100000)
+        bus.flush()
         if uc.reg_read(UC_ARM_REG_PC) != 0x1ff000:
             raise AssertionError('Original note-on command did not return')
         raw = uc.mem_read(0x800000, 72)

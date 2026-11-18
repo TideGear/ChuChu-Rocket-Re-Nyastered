@@ -29,6 +29,7 @@ class SampleStream:
         self.channel = channel
         self.ram = sound_ram
         self.state = dict(channel['runtime'])
+        self.output_samples = 0
         self.lfo = channel['lfo_raw']
         if ((self.lfo >> 8) & 3) == 3:
             raise ValueError('Random pitch LFO is not yet validated')
@@ -133,13 +134,24 @@ class SampleStream:
                 nibble = (self.ram[(address + (following >> 1)) & 0x1fffff] >> (4 * (following & 1))) & 15
                 state['s1'], _ = self.adpcm(nibble, sample, quant)
 
-    def render(self, count, filtered=False):
+    def key_off(self):
+        if self.state['amplitude_state'] != 3:
+            self.state['amplitude_state'] = 3
+            self.state['filter_state'] = 3
+
+    def render(self, count, filtered=False, key_off_samples=()):
         if count < 0:
             raise ValueError('Negative sample count')
         out = []
         self.attenuation = []
+        key_off_samples = set(key_off_samples)
+        if any(not isinstance(v, int) or v < 0 for v in key_off_samples):
+            raise ValueError('Key-off sample indices must be nonnegative integers')
         state = self.state
         for _ in range(count):
+            if self.output_samples in key_off_samples:
+                self.key_off()
+            self.output_samples += 1
             if not state['enabled']:
                 out.append(0)
                 self.attenuation.append(255)
@@ -192,8 +204,8 @@ class SampleStream:
         return out
 
 
-def direct_stereo(channel, sound_ram, count):
-    """Render a constant-envelope sample window, without DSP returns."""
+def direct_stereo(channel, sound_ram, count, key_off_samples=()):
+    """Render a captured sample window with optional key-offs, without DSP returns."""
     state = channel['runtime']
     words = channel['register_words']
     if words[10] & 64:
@@ -201,7 +213,7 @@ def direct_stereo(channel, sound_ram, count):
     if channel['lfo_raw'] & 7:
         raise ValueError('Amplitude LFO is not yet validated')
     model = SampleStream(channel, sound_ram)
-    signal = model.render(count, filtered=True)
+    signal = model.render(count, filtered=True, key_off_samples=key_off_samples)
     levels = [255] + [(15 - i) * 8 for i in range(1, 16)]
     attenuation = [channel['total_level'] + levels[channel['direct_level']]] * 2
     pan = channel['pan_raw']
