@@ -4,7 +4,7 @@ Read [goal.md](goal.md) for scope and [audit.md](audit.md) for status. Use [Drea
 
 ## Current Dreamcast work
 
-- Arrow cursor alignment is fixed for the Dreamcast artwork. The texture's top-left tip now follows the active point used to select cells. Mouse trails share that anchor. Headless Challenge capture used aim (350,170) at 640×480. Challenge now opens controllers and reuses the existing cursor movement and face-button placement, with the disc corner bracket and initial cell (5,3). Check physical controller input, reconnect and pause, plus mouse feel.
+- Arrow cursor alignment is fixed for the Dreamcast artwork. The texture's top-left tip now follows the active point used to select cells. Mouse trails share that anchor. Headless Challenge capture used aim (350,170) at 640×480. Challenge now opens controllers and reuses the existing cursor movement and face-button placement, with the disc corner bracket and initial cell (5,3). The optional challenge_controller_test passed virtual D-pad/analog input, placement, pause/resume, disconnect and reconnect. Check physical controller and mouse feel next.
 
 - Windows setup and live play work with the tested USA CUE/BIN disc alone. Fresh extraction, build, Battle, Team Battle, Challenge A1 and Puzzle captures passed. Other image formats and platforms need their own checks. The D: build junction was readable but compilation needed a writable local build directory.
 - Mode Select, Stage Challenge select and the Challenge intro cards use disc art. A1 and B2 intro crops are checked against Flycast. Existing caches need the UI exporter rerun to create `dc_challenge_intro`. Stage selection still needs exact clock glyphs and clear marks, plus unlock and transition verification.

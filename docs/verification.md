@@ -87,3 +87,7 @@ GBA CPU in the playable battle (2026-11-13): `BattleGame::gbaCpu` (`CCR_CPU=gba`
 
 ## iOS CPU diff on the older builds (2026-11-14)
 The v1.1 (OS 3.0), ORBiT and iPhone 1.0.2 harness runs used to die in `SmpTskExeServer` on an unmapped write: the cause was `Core::vibrate` (0x17d8c in v1.1), which in those builds writes straight to a UIKit object. The harness now turns it into a no-op (`tools/oracle/ios_battle.py`) and `ios_cpu_diff.py` on `local/testdata/cpu_golden.txt` (10 recorded battles of the Android goldens) is **identical for v112, hd10, v11, orbit and 102** (10 of 10 each, every placement frame/player/cell/direction).
+
+## Challenge controller integration
+
+Build the optional target `challenge_controller_test`, then run `challenge_controller_test <assets>`. It uses SDL's virtual controller and the app's Challenge screen load, event and tick methods with extracted stage data. The test covers an already connected pad on entry, intro confirmation, countdown, held D-pad and analog movement, face-button arrow placement, pause/resume, prevention of placement while paused, disconnect cleanup and replacement-controller attachment. The Windows CMake target passed against the disc-only cache. It initializes only SDL's controller subsystem and opens no screen or audio device. Physical controller mapping, feel and hardware timing remain unverified.
