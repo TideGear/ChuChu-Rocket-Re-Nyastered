@@ -1,8 +1,8 @@
-"""AICA sample stepping, periodic pitch LFO and fixed filter validation.
+"""AICA sample stepping, amplitude envelopes, pitch LFO and fixed filters.
 
 Consumes captured channel state. Direct output includes pan/attenuation, sample
-end/loops and an already-active amplitude release. Filter envelopes must remain
-constant. New sequencer commands and note attack are not modeled. This is not a
+end/loops, amplitude attack/decay/release and timestamped key-offs. Filter
+envelopes must remain constant. Note-on initialization is not modeled. This is not a
 finished sound-effect renderer. Hardware field/step reference: Flycast core
 3a5267a, core/hw/aica/sgc_if.cpp; compare with original core snapshots.
 """
@@ -20,6 +20,12 @@ DECAY_MS = (-1, -1, 118200, 101300, 88600, 70900, 59100, 50700, 44300, 35500,
             920, 790, 690, 550, 460, 390, 340, 270, 230, 200, 170, 140, 110,
             98, 85, 68, 57, 49, 43, 34, 28, 25, 22, 18, 14, 12, 11, 8.5, 7.1,
             6.1, 5.4, 4.3, 3.6, 3.1)
+
+ATTACK_MS = (-1, -1, 8100, 6900, 6000, 4800, 4000, 3400, 3000, 2400, 2000,
+             1700, 1500, 1200, 1000, 860, 760, 600, 500, 430, 380, 300, 250,
+             220, 190, 150, 130, 110, 95, 76, 63, 55, 47, 38, 31, 27, 24,
+             19, 15, 13, 12, 9.4, 7.9, 6.8, 6, 4.7, 3.8, 3.4, 3, 2.4, 2,
+             1.8, 1.6, 1.3, 1.1, .93, .85, .65, .53, .44, .40, .35, 0, 0)
 
 
 class SampleStream:
@@ -48,16 +54,27 @@ class SampleStream:
             exponent = f32(exponent / 1200)
             self.pitch_scale.append(int(f32(1024 * f32(math.pow(2, exponent)))))
         words = channel['register_words']
-        if self.state['amplitude_state'] not in (2, 3) or (self.state['amplitude_state'] == 2 and (words[4] >> 11) & 31):
-            raise ValueError('Attack/decay transitions are not yet validated')
-        release_rate = (words[5] & 31) * 2
+        if self.state['amplitude_state'] not in range(4):
+            raise ValueError('Invalid amplitude envelope state')
+        rate_scale = 0
         key_scale = (words[5] >> 10) & 15
         if key_scale < 15:
             signed_octave = (octave ^ 8) - 8
-            release_rate += (channel['fns'] >> 9) & 1
-            release_rate += max(0, (key_scale + signed_octave) * 2)
-        milliseconds = f32(DECAY_MS[min(63, release_rate)])
-        self.release_delta = int(math.floor(((1024 << 16) - 1) / (44.1 * milliseconds) + 0.5)) if milliseconds > 0 else 0
+            rate_scale += (channel['fns'] >> 9) & 1
+            rate_scale += max(0, (key_scale + signed_octave) * 2)
+
+        def decay_delta(rate):
+            milliseconds = f32(DECAY_MS[min(63, rate * 2 + rate_scale)])
+            return int(math.floor(((1024 << 16) - 1) / (44.1 * milliseconds) + 0.5)) if milliseconds > 0 else 0
+
+        self.release_delta = decay_delta(words[5] & 31)
+        self.decay1_delta = decay_delta((words[4] >> 6) & 31)
+        self.decay2_delta = decay_delta((words[4] >> 11) & 31)
+        self.decay2_value = ((words[5] >> 5) & 31) << 5
+        milliseconds = f32(ATTACK_MS[min(63, (words[4] & 31) * 2 + rate_scale)])
+        self.attack_delta = (0 if milliseconds < 0 else 65536 if milliseconds == 0 else
+                             int(math.floor(65536 / (1 - 1 / math.pow(640, 1 / (44.1 * milliseconds))) + .5)))
+        self.loop_link = bool(words[5] & 0x4000)
         self.filter_active = not (words[10] & 32) and (any(v < 0x1ff8 for v in words[11:16]) or (words[10] & 31) != 4)
         if self.filter_active:
             value = self.state['filter_value'] >> 16
@@ -161,7 +178,22 @@ class SampleStream:
             signal = self.filter(sample << 4)
             out.append(signal if filtered else sample)
             self.attenuation.append(min(255, state['amplitude_value'] >> 18))
-            if state['amplitude_state'] == 3:
+            if state['amplitude_state'] == 0 and self.attack_delta:
+                state['amplitude_value'] -= ((state['amplitude_value'] << 16) // self.attack_delta) + 1
+                if state['amplitude_value'] >> 16 <= 0:
+                    state['amplitude_value'] = 0
+                    if not self.loop_link:
+                        state['amplitude_state'] = 1
+            elif state['amplitude_state'] == 1:
+                state['amplitude_value'] += self.decay1_delta
+                if state['amplitude_value'] >> 16 >= self.decay2_value:
+                    state['amplitude_state'] = 2
+            elif state['amplitude_state'] == 2:
+                state['amplitude_value'] += self.decay2_delta
+                if state['amplitude_value'] >> 16 >= 0x3ff:
+                    state['amplitude_value'] = 0x3ff << 16
+                    state['amplitude_state'] = 3
+            elif state['amplitude_state'] == 3:
                 state['amplitude_value'] += self.release_delta
                 if state['amplitude_value'] >> 16 >= 0x3ff:
                     state['amplitude_value'] = 0x3ff << 16
@@ -182,6 +214,8 @@ class SampleStream:
                 start, end = self.channel['loop_start'], self.end()
                 for step in range(advance):
                     position = state['position'] + 1
+                    if self.loop_link and state['amplitude_state'] == 0 and position >= start:
+                        state['amplitude_state'] = 1
                     if position >= end:
                         if start > end:
                             stop = position >= start

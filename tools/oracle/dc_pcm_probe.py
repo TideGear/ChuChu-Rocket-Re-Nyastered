@@ -6,7 +6,7 @@ verify <isolated.state> <loaded.MLT> <core.wav>
 The prepare control mutes other channel runtimes and all DSP/CD output returns.
 It retains the selected channels' captured source position, filter history and
 LFO phase. Resume the isolated state with flyhost/FLYHOST_WAV, then verify its
-output. Verified cases include PCM16 and ADPCM sustain/release. --keys-csv
+output. Verified cases include PCM16 amplitude controls and ADPCM decay/release. --keys-csv
 applies recorded key-off transitions; other sequencer commands remain unsupported.
 --force-loop is an explicit synthetic LPCTL control, not original program data.
 """
@@ -39,6 +39,39 @@ def prepare(state, mlt, channels, force_loop=False):
             at = report['register_offset'] + 128 * index
             control = struct.unpack_from('<H', output, at)[0]
             struct.pack_into('<H', output, at, control | 0x200)
+    return output
+
+
+def prepare_envelope_controls(state, mlt, source_channel=0):
+    """Synthetic amplitude cases on channels 8..15; preserve stream/filter phase.
+
+    This tests envelope arithmetic, not original note-on initialization. Each
+    tuple is (AR,D1R,D2R,DL,RR,LPSLNK); KRS=15 isolates raw rate selection.
+    """
+    report = inspect(state, mlt)
+    source = next(c for c in report['channels'] if c['channel'] == source_channel)
+    if not source['runtime']['enabled']:
+        raise ValueError('Envelope controls require an enabled source')
+    if source['runtime']['position'] + 128 >= min(source['loop_end'], 65536):
+        raise ValueError('Source has insufficient room for the synthetic loop-link point')
+    output = prepare(state, mlt, {source_channel}, force_loop=True)
+    registers, runtimes = report['register_offset'], report['runtime_offset']
+    register_data = bytes(output[registers + 128 * source_channel:registers + 128 * source_channel + 128])
+    runtime_data = bytes(output[runtimes + 72 * source_channel:runtimes + 72 * source_channel + 72])
+    output[runtimes + 72 * source_channel + 71] = 0
+    cases = ((31, 0, 0, 8, 20, False), (18, 18, 22, 8, 20, False),
+             (0, 18, 22, 8, 20, False), (31, 31, 31, 0, 31, False),
+             (20, 0, 0, 8, 20, False), (18, 18, 0, 0, 20, False),
+             (0, 18, 22, 8, 20, True), (31, 18, 22, 8, 20, True))
+    for index, (attack, decay1, decay2, level, release, linked) in enumerate(cases, 8):
+        reg, runtime = registers + index * 128, runtimes + index * 72
+        output[reg:reg + 128] = register_data
+        output[runtime:runtime + 72] = runtime_data
+        struct.pack_into('<I', output, reg + 16, attack | decay1 << 6 | decay2 << 11)
+        struct.pack_into('<I', output, reg + 20, release | level << 5 | 15 << 10 | int(linked) << 14)
+        if linked:
+            struct.pack_into('<I', output, reg + 8, source['runtime']['position'] + 128)
+        struct.pack_into('<iI', output, runtime + 38, 640 << 16, 0)
     return output
 
 
@@ -102,6 +135,7 @@ if __name__ == '__main__':
     parser.add_argument('--channels', default='0,2')
     parser.add_argument('--force-loop', action='store_true', help='synthetic control: enable the selected sample loops')
     parser.add_argument('--keys-csv', type=Path, help='sample/key transitions from the instrumented core')
+    parser.add_argument('--envelope-controls', action='store_true', help='synthetic amplitude controls from one source channel')
     args = parser.parse_args()
     state, mlt = args.state.read_bytes(), args.mlt.read_bytes()
     if args.operation == 'prepare':
@@ -109,6 +143,11 @@ if __name__ == '__main__':
             channels = {int(value) for value in args.channels.split(',')}
         except ValueError:
             parser.error('channels must be comma-separated integers')
-        args.output.write_bytes(prepare(state, mlt, channels, args.force_loop))
+        if args.envelope_controls:
+            if len(channels) != 1:
+                parser.error('--envelope-controls needs exactly one source channel')
+            args.output.write_bytes(prepare_envelope_controls(state, mlt, next(iter(channels))))
+        else:
+            args.output.write_bytes(prepare(state, mlt, channels, args.force_loop))
     else:
         verify(state, mlt, args.output, args.keys_csv)

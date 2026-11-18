@@ -69,7 +69,7 @@ The tested failure voices use group 2, MIDI channels 2/1, keys 69/72, velocity 9
 
 The tested core identifies itself as Flycast revision `3a5267a`. Its [channel serialization and synthesis source](https://github.com/flyinghead/flycast/blob/3a5267a/core/hw/aica/sgc_if.cpp) confirms 72-byte packed runtime records after the channel registers in the tested 0x356 state layout. `dc_aica_state.py` now reads sample position/fraction, current samples, LFO phase/counter, amplitude state and filter history, checking runtime sample addresses against registers.
 
-`tools/aica_pcm.py` models sampled stepping, periodic pitch modulation, interpolation, constant filter envelopes, pan/attenuation, and already-active amplitude release. `tools/oracle/dc_pcm_probe.py` creates controlled references:
+`tools/aica_pcm.py` models sampled stepping, periodic pitch modulation, interpolation, constant filters, pan/attenuation, amplitude attack/decay/release and timestamped key-offs. `tools/oracle/dc_pcm_probe.py` creates controlled references:
 
 - `prepare <source.state> <loaded.MLT> <isolated.state> --channels 0,2` disables other channel runtimes and mutes the 18 DSP/CD return controls, retaining selected voices' captured position/history. `--force-loop` is an explicit synthetic LPCTL control.
 - Resume that state with `FLYHOST_STATE`/`FLYHOST_WAV`, then run `verify <isolated.state> <loaded.MLT> <core.wav>`. Comparison requires zero error, not an envelope/similarity threshold.
@@ -81,12 +81,16 @@ The tested core identifies itself as Flycast revision `3a5267a`. Its [channel se
 | Synthetic PCM16 loop control, both voices | 58,525 | `pcm-step-reference/loop.*` |
 | ADPCM program 22, including a measured key-off and release | 43,811 | `adpcm-reference/channel1.wav` with `keyoff-trace/keys.csv` |
 | Four program-29 ADPCM result-jingle voices through loops, release and silence | 88,283 | `adpcm-reference/jingle-release.*` |
+| Eight synthetic PCM16 amplitude cases: attack, both decay phases, release, zero-rate and loop-linked attack | 21,740 | `envelope-reference/controls.*` |
+| Captured program-29 jingle voice 33, decay then measured key-off/release | 22,071 | `envelope-reference/jingle-decay.*`, `jingle-keys.csv` |
 
 All paths above are under `local/handoff-check`. The jingle source is `success-audio-source/s_00200.state`, captured by resuming C1's `challenge-clear/d_03500.state`. Its four release voices (26, 27, 33, 34) use the sample at 0x78f7e, loop range 27,169..37,384, and different pitches. The normal ADPCM loop restores its saved predictor/quantizer at the loop start. The standalone ADPCM decoder now also clamps the decoded delta before adding history, matching AICA behavior.
 
 Runtime comparisons cover source position/fraction, decoded samples, LFO, filter history, ADPCM predictor/cache and amplitude release at four endpoints for all four jingle voices. Persistent fields match; the emulated loop-status flag can differ because the original driver clears it by reading status. The existing five-frame PCM runtime comparisons also pass. A one-unit mutation to one recorded sample is rejected.
 
-Limits: these references begin mid-voice. Attack/decay transitions, changing filters, generating new sequencer commands, effect/CD returns, PCM8, ADPCM stream mode and non-triangle modulated waveforms remain unverified. Timestamped key-offs can now be applied; their measured input is described below. Native sequencing must still generate commands without a reference trace. Next verify start/release across other rates, sequence timing, then DSP/full mixing and native integration. No Dreamcast SFX are wired into gameplay yet.
+Amplitude updates follow the tested core's `AegStep`, `EG_EffRate` and rate tables, preserving float-to-double rate conversion, exponential attack, decay thresholds and loop-start-linked attack exit. `prepare ... --channels 0 --envelope-controls` copies the source stream/filter phase into eight synthetic voices (8..15), starts attenuation at 0x280 and selects explicit envelope controls with KRS=15. It does not verify note-on initialization. All runtime fields match for eight voices at frames 0/4/14/29 (32 records); cases exercise instant/gradual/frozen attack, decay1/decay2, release/disable and LPSLNK. The real decay source is `success-audio-source/s_00100.state`, isolated channel 33; its measured key-off is sample 17,356. Its full runtime fields also match at all four endpoints. Earlier PCM sustain and both ADPCM release references still pass.
+
+Limits: complete note-on initialization, changing filters, effect/CD returns, PCM8, ADPCM stream mode, every envelope rate/key-scale combination and modulated non-triangle waveforms remain unverified. Native command scheduling is checked separately below; sample-clock integration still uses recorded key-off timestamps. Next connect voice setup to synthesis and verify changing filters, then DSP/full mixing and gameplay integration. No Dreamcast SFX are wired into gameplay yet.
 
 ## Key-off cause and sample timing (2026-11-18)
 
