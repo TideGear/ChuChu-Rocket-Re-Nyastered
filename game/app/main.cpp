@@ -981,7 +981,7 @@ struct App {
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
                           float alpha, const float* puku = nullptr, FieldLayout field = {},
-                          bool dcProjection = false) {
+                          bool dcProjection = false, int soloRocket = 0) {
         // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
         const int mouseFrame = std::max(0, sim.now - 1) & 7;
         fieldObjects.clear();
@@ -995,7 +995,7 @@ struct App {
         } else {
             for (int y = 0; y < kRows; ++y)
                 for (int x = 0; x < kCols; ++x)
-                    if (sim.coll[y][x] & kRocket) rocket(x, y, 0);
+                    if (sim.coll[y][x] & kRocket) rocket(x, y, dcProjection ? soloRocket : 0);   // Dreamcast domes: Puzzle's single rocket is the blue lid, Challenge A1's is red (Flycast frames)
         }
 
         while (prev.size() < sim.ents.size()) prev.push_back({sim.ents[prev.size()].x, sim.ents[prev.size()].z});
@@ -2604,7 +2604,7 @@ struct ChallengeMode : Screen {
         const bool dc = dcLayout(a); const FieldLayout field = pf(a);
         a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
         for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
-        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc);
+        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 2);
         if (supportedNow() && phase() == ChallengeGame::Play && mouseCursor && aim.inside) a.cursorAt(aim.x, aim.y, 0, cticks, false, field.scale());
         SDL_RenderSetViewport(a.ren, nullptr);
         std::string line;
@@ -2629,7 +2629,7 @@ struct ChallengeMode : Screen {
         }
         else if (ph == ChallengeGame::Success || ph == ChallengeGame::Result) line = ph == ChallengeGame::Result ? "CLEAR!  " + std::to_string(clearSec) + " SEC  BEST " + std::to_string(bestSeconds) + (newBest ? " NEW" : "") + "  CLICK FOR NEXT" : "CLEAR!";
         else line = std::string("MISS: ") + (why ? why : "") + "   CLICK RETRY  ESC QUIT";
-        if (!dc || (ph != ChallengeGame::Intro && ph != ChallengeGame::Countdown)) a.text(line, dc ? 180 : 24, 14, 30);   // the real Dreamcast Challenge screen shows no text line; the port keeps one for score and results
+        if (!dc || (ph != ChallengeGame::Intro && ph != ChallengeGame::Countdown)) a.text(line, dc ? 210 : 24, dc ? 660 : 14, 30);   // the real Dreamcast Challenge screen shows no text line; the port keeps one for score and results
     }
 };
 
