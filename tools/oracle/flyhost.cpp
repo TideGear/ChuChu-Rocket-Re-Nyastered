@@ -96,6 +96,10 @@ static bool env(unsigned cmd, void* data) {
             variable->value = "per-pixel (accurate)";
             return true;
         }
+        if (const char* res = getenv("FLYHOST_RES"); res && strcmp(variable->key, "reicast_internal_resolution") == 0) {   // e.g. 1280x960 or 1920x1440: sharper screenshots (the PowerVR stream stays 640 x 480)
+            variable->value = res;
+            return true;
+        }
         return false;
     }
     case 17: *(bool*)data = false; return true;                                    // GET_VARIABLE_UPDATE
