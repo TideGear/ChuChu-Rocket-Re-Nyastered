@@ -151,6 +151,14 @@ def main(prs_png, out, png=None):
         atlas = Image.new('RGBA', (640, 128))
         for b, x in zip(tb, (0, 256, 320, 576)): atlas.paste(Image.open(b).convert('RGBA'), (x, 0))
         sheet('dc_pause_team', atlas)
+    # The pause win marks (Flycast Battle and Team Battle pause frames): 64 x 64 rockets, white (drawn grey for rounds not yet won) then blue, yellow (the orange player), red, green,
+    # blue and red together (team 1) and yellow and green together (team 2), stored rotated like the other menu sheets.
+    marks = [os.path.join(prs_png, f'PLAYERCLEAR_s064_lok_{n}.png') for n in ('white', 'blue', 'yellow', 'red', 'green', 'rebl', 'yegr')]
+    if all(os.path.exists(m) for m in marks):
+        atlas = Image.new('RGBA', (64 * len(marks), 64))
+        for i, m in enumerate(marks):
+            atlas.paste(Image.open(m).convert('RGBA').transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT), (64 * i, 0))
+        sheet('dc_pause_marks', atlas)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.

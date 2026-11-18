@@ -242,7 +242,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -326,6 +326,7 @@ struct App {
         loadSheet(ret + "dc_pause", dcPause);
         loadSheet(ret + "dc_pause_boxes", dcPauseBoxes);
         loadSheet(ret + "dc_pause_team", dcPauseTeam);
+        loadSheet(ret + "dc_pause_marks", dcPauseMarks);
         loadSheet(ret + "dc_cursors", dcCursors);
         loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
         loadSheet(ret + "dc_battle_hud", dcBattleHud);
@@ -3114,6 +3115,16 @@ struct BattleMode : Screen {
                 const SDL_Rect big{160 * p, 0, 128, 128}, end{160 * p + 128, 0, 32, 128};
                 const SDL_Rect bigDst{(int)std::lround((16 + 152 * p) * 1.6f), 512, 205, 205}, endDst{(int)std::lround((144 + 152 * p) * 1.6f), 512, 51, 205};
                 SDL_RenderCopy(a.ren, a.dcPauseBoxes.tex, &big, &bigDst); SDL_RenderCopy(a.ren, a.dcPauseBoxes.tex, &end, &endDst);
+            }
+            if (a.dcPauseMarks.tex) {   // three 64 x 64 rockets per box (Flycast pause frames): the sheet's grey rocket for rounds not won, the player's colour for each win (marks: white, blue, yellow, red, green, rebl, yegr)
+                const int count = game.teamMode ? 2 : 4;
+                for (int p = 0; p < count; ++p) for (int k = 0; k < 3; ++k) {
+                    const bool won = k < wins[p];
+                    const int tile = won ? (game.teamMode ? 5 + p : 1 + p) : 0;
+                    const float x = game.teamMode ? 191.0f + 150.0f * p + 40.0f * k : 38.0f + 152.0f * p + 40.0f * k, y = game.teamMode ? 395.0f : 361.0f;
+                    const SDL_Rect src{64 * tile, 0, 64, 64}, dst{(int)std::lround(x * 1.6f), (int)std::lround(y * 1.6f), 102, 102};
+                    SDL_RenderCopy(a.ren, a.dcPauseMarks.tex, &src, &dst);
+                }
             }
             a.drawDcPause(-60.0f, 270.0f);
         }   // Flycast Battle pause frame: the Puzzle overlay 60 pixels higher (the "Player 1" plate and the win boxes are not drawn yet)
