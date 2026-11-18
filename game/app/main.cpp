@@ -242,7 +242,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -320,6 +320,7 @@ struct App {
         loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
         loadSheet(ret + "dc_puzzle_panel", dcPuzzlePanel);
         loadSheet(ret + "dc_puzzle_stage", dcPuzzleStage);
+        loadSheet(ret + "dc_puzzle_digits", dcPuzzleDigits);
         loadSheet(ret + "dc_cursors", dcCursors);
         loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
         loadSheet(ret + "dc_battle_hud", dcBattleHud);
@@ -2440,7 +2441,11 @@ struct PuzzleMode : Screen {
         }
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
         const bool dcLeft = dreamcastPuzzleControls(a) && a.dcPuzzleStage.tex;   // real draw list: the 128 x 64 "stage" quad at (5, 325) of 640 x 480, drawn here at 1.6 times that
-        if (dcLeft) { const SDL_Rect dst{8, 520, 205, 102}; SDL_RenderCopy(a.ren, a.dcPuzzleStage.tex, nullptr, &dst); int n = cur % 25 + 1; a.blit(a.hdStageNum, n / 10, 102.0f, 641.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 150.0f, 641.0f, 1.3f); }   // digit art is still the iPad sheet; the real digits are 51 x 51 quads at x 38 and 68, y 375
+        if (dcLeft) { const SDL_Rect dst{8, 520, 205, 102}; SDL_RenderCopy(a.ren, a.dcPuzzleStage.tex, nullptr, &dst); int n = cur % 25 + 1;
+            if (a.dcPuzzleDigits.tex) {   // real draw list: 51 x 51 quads at x 38.2 and 68.2, y 375.2 of 640 x 480 (the glyphs are PUZZLECLEAR_new0..9)
+                const SDL_Rect src0{(n / 10) * 64, 0, 64, 64}, src1{(n % 10) * 64, 0, 64, 64}, dst0{61, 600, 82, 82}, dst1{109, 600, 82, 82};
+                SDL_RenderCopy(a.ren, a.dcPuzzleDigits.tex, &src0, &dst0); SDL_RenderCopy(a.ren, a.dcPuzzleDigits.tex, &src1, &dst1);
+            } else { a.blit(a.hdStageNum, n / 10, 102.0f, 641.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 150.0f, 641.0f, 1.3f); } }
         else
         { int n = cur % 25 + 1; a.blit(a.hdPhud, 1, 90.0f, 520.0f, 1.3f); a.blit(a.hdStageNum, n / 10, 70.0f, 584.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 120.0f, 584.0f, 1.3f); }   // renderPuzzleHudiPad: "stage" label (0x5c frame 1) at (90, 520) and the number (image 0x84, (stage mod 25) + 1, tens at (70, 584), ones at (120, 584)), all at scale 1.3; the stage-name frame and text are not drawn yet
         if (phonePuzzleHudAvailable(a)) {
