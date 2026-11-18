@@ -476,9 +476,9 @@ struct App {
     void walls3d(const Stage& st, int wallColor, int ox, int oy) {
         const Model3D* wallM = models3d.find("wall"); if (!wallM) return; const float k = (float)CELL / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor));
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c]) models3d.draw(ren, *wallM, ox + (c + 0.5f) * CELL, oy + r * (float)CELL, k, 0.0f, 90.0f, 0.74f, -1, mat);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.draw(ren, *wallM, ox + (c + 0.5f) * CELL, oy + r * (float)CELL, k, 0.0f, 90.0f, 0.6f, -1, mat);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c]) models3d.draw(ren, *wallM, ox + c * (float)CELL, oy + (r + 0.5f) * CELL, k, 90.0f, 90.0f, 0.74f, -1, mat);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.draw(ren, *wallM, ox + c * (float)CELL, oy + (r + 0.5f) * CELL, k, 90.0f, 90.0f, 0.6f, -1, mat);
         }
     }
     void board(const Stage& st, int floorColor, int wallColor, int ox = OX, int oy = OY) {
