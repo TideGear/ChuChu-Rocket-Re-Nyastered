@@ -219,6 +219,44 @@ def export_dc_battle_setup(prs_png, out):
     for k in range(23, 28): tiles[k] = tiles[k].transpose(T)
     export_atlas(out, 'dc_battle_setup', tiles)
 
+def export_dc_fallback_fonts(out):
+    """No-BIOS look-alikes for the text the Dreamcast draws with its BIOS ROM font (see tools/export_dc_bios_font.py, which overwrites these files when the user supplies a BIOS):
+    dc_bios_ansi (95 glyphs of 12 x 24, characters 0x20..0x7e) and dc_select_clock (digits 0-9 and the colon in 24 x 24 cells). Rasterised from Share Tech Mono (SIL OFL, tools/fonts/),
+    the closest free monospace face found (squared, even-width strokes; scored against the BIOS glyphs next to Anonymous Pro, Oxygen Mono, Fira Mono, Space Mono, Inconsolata)."""
+    import numpy as np
+    from PIL import ImageDraw, ImageFont
+    ttf = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts', 'ShareTechMono-Regular.ttf')
+    if not os.path.isfile(ttf): return
+    font = ImageFont.truetype(ttf, 26)
+    def sheet_files(name, cells, w, h):
+        atlas = Image.new('RGBA', (w * len(cells), h))
+        for k, cell in enumerate(cells): atlas.paste(cell, (w * k, 0))
+        with open(os.path.join(out, name + '.tex.bin'), 'wb') as f:
+            f.write(struct.pack('<2I', atlas.width, atlas.height)); f.write(atlas.tobytes())
+        with open(os.path.join(out, name + '.frames.bin'), 'wb') as f:
+            f.write(struct.pack('<I', len(cells)))
+            for k in range(len(cells)): f.write(struct.pack('<9f', w * k / atlas.width, 0, w * (k + 1) / atlas.width, 1, 0, 0, 0, 0, 0))
+        print(name, '%dx%d' % atlas.size, '(fallback)')
+    def white(mask):
+        cell = Image.new('RGBA', mask.size, (255, 255, 255, 0)); cell.putalpha(mask); return cell
+    glyphs = []
+    for c in range(0x20, 0x7f):
+        mask = Image.new('L', (13, 24), 0)
+        ImageDraw.Draw(mask).text((0, 20), chr(c), font=font, fill=255, anchor='ls')
+        glyphs.append(white(mask.resize((12, 24), Image.Resampling.BILINEAR)))
+    sheet_files('dc_bios_ansi', glyphs, 12, 24)
+    cells = []
+    small = ImageFont.truetype(ttf, 27)   # the original's 24 x 24 digits are 1-bit with 2 px strokes: render light, keep the aspect nearly natural, then threshold
+    for d in '0123456789':
+        mask = Image.new('L', (32, 40), 0)
+        ImageDraw.Draw(mask).text((4, 32), d, font=small, fill=255, anchor='ls')
+        ink = mask.crop(mask.getbbox()); ink = ink.resize((15 if d != '1' else ink.width, 20), Image.Resampling.BILINEAR).point(lambda v: 255 if v > 175 else 0)
+        cell = Image.new('L', (24, 24), 0); cell.paste(ink, ((24 - ink.width) // 2, 1)); cells.append(white(cell))
+    colon = Image.new('L', (24, 24), 0); dr = ImageDraw.Draw(colon)
+    for top in (5, 15): dr.rectangle((11, top, 12, top + 3), fill=255)
+    cells.append(white(colon))
+    sheet_files('dc_select_clock', cells, 24, 24)
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -318,6 +356,7 @@ def main(prs_png, out, png=None):
     export_challenge_select(prs_png, png, out)
     export_dc_startup(prs_png, png, out)
     export_dc_battle_setup(prs_png, out)
+    export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)
     export_challenge_result(prs_png, out)

@@ -49,3 +49,6 @@ Measured: the Dreamcast logo (`TITLE_newtitle0`, ChuChu Rocket! speech-bubble lo
 - **Puzzle sets**: main 100 and extra stages from the GBA ROM and mobile packs; Dreamcast Express (`DEPuzzle`) with the arrow stock decoded from the Dreamcast slot format ([dlc.md](dlc.md)). PuzzleP is not offered (stock unverified).
 - **Dreamcast sound effects**: decoded (4-bit AICA ADPCM) but not used in play: the sample rate is unknown ([audio.md](audio.md)); the mobile effect files are used.
 - **GBA**: stages (2,566 boards) and the CPU player (transcribed from the ROM, diff-tested per routine) only; GBA art and sound are not used yet.
+
+## Fallback text font (2026-11-18)
+`tools/fonts/ShareTechMono-Regular.ttf` (Share Tech Mono, Carrois Type Design, SIL Open Font License 1.1, licence in `tools/fonts/OFL-ShareTechMono.txt`) is rasterised by `tools/export_dc_ui.py` into the no-BIOS stand-ins for the Dreamcast's BIOS ROM font (`dc_bios_ansi` hint glyphs, `dc_select_clock` digits). It scored best of eight free monospace fonts against the BIOS glyph bitmaps by eye and by pixel mismatch (Anonymous Pro, Oxygen Mono, Fira Mono, Space Mono, Inconsolata, Roboto Mono, Source Code Pro). The font file is unmodified and only rasterised; a user-supplied BIOS replaces the stand-ins with the exact glyphs.
