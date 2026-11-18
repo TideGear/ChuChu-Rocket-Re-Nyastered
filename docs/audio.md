@@ -113,3 +113,15 @@ The `SOSP` descriptors of `DP2SOUND.MLT` carry, besides bank/start/length, a byt
 Set `FLYHOST_WAV=<output.wav>` when running `tools/oracle/flyhost.cpp` to record the core's stereo 16-bit PCM at its declared sample rate. The companion `<output.wav>.frames.csv` records each video frame's first and end sample offsets. Both audio callback forms feed the same file. The host checks write/finalization errors and RIFF size limits. It continues to run without opening an audio device.
 
 A 4,310-frame Challenge navigation/run/failure capture produced 3,259,242 stereo frames at 44,100 Hz with nonzero audio across menu and gameplay segments. A separate 180-frame run verified contiguous CSV ranges and exact equality between its last sample index and the WAV sample count (145,000). The delivered sample count exceeds nominal video time in these runs, so cue comparisons must use the frame index. These checks verify capture infrastructure. Cue identification, looping, fades and playback parity remain open.
+
+## Dreamcast Challenge transition requests
+
+The Ghidra decompile and direct SH-4 execution of the three transition routines agree on the following calls to sound dispatcher 0x8c01203a. Run `tools/oracle/dc_challenge_sound.py <Flycast .ram>` with the interpreter's numpy dependency. The probe executes each routine and the dispatcher, stubs its two cleanup calls, and records AICA submissions without playing audio.
+
+| Transition routine | State written at 0x8c22d804 | Requested cues in order | AICA bank/sequence |
+|---|---|---|---|
+| 0x8c02a81a | 4, success | 21, 28 | (0,21), (0,28) |
+| 0x8c02a8a0 | 5, result | 27, 28 | (0,27), (0,28) |
+| 0x8c02a8d0 | 6, failure | 27 | (0,27) |
+
+Both clear C1 frame 4350 and failed A1 frame 4250 RAM snapshots passed. The dispatcher maps cues below 29 to bank 0 in 0x8c012024, then submits through 0x8c0ed2f0. These are direct-routine checks, with no proof yet of every live entry route or timing. The port's mobile-clip hook currently requests 21 for both Success and Result and 27 for Failure. Mapping those numeric IDs directly to mobile clips is insufficient for Dreamcast parity. Decode sequences 21, 27 and 28 and validate them against indexed Flycast audio before changing playback.
