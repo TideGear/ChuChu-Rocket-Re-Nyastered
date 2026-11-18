@@ -465,9 +465,9 @@ struct App {
     void loadFontMetrics() { FILE* f = fopen((root + "/ret_all/r0023.frames.bin").c_str(), "rb"); if (!f) return; uint32_t n = 0; if (fread(&n, 4, 1, f) != 1) { fclose(f); return; }
         for (uint32_t i = 0; i < n && i < 256; i++) { uint8_t rec[36]; if (fread(rec, 1, 36, f) != 36) break; int16_t v[10]; memcpy(v, rec + 16, 20); gm[i] = {v[0], v[1], v[4], v[5]}; } fclose(f); }
     int textWidth(const std::string& s, int hgt) { if (!font.tex) { const int px = std::max(1, hgt / 7); return (int)s.size() * 6 * px; } float sc = hgt / 39.0f, w = 0; for (unsigned char c : s) w += gm[c].h ? (gm[c].xo + gm[c].w) * sc : 20 * sc; return (int)w; }
-    void text(const std::string& s, int x, int y, int hgt) {
-        if (!font.tex) {   // built-in bitmap font: one 5x7 glyph per character, white
-            const int px = std::max(1, hgt / 7); int pen = x; SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+    void text(const std::string& s, int x, int y, int hgt, int gray = 255) {
+        if (!font.tex) {   // built-in bitmap font: one 5x7 glyph per character, white unless gray is given
+            const int px = std::max(1, hgt / 7); int pen = x; SDL_SetRenderDrawColor(ren, gray, gray, gray, 255);
             for (unsigned char c : s) { if (const uint8_t* g = font57(c)) for (int row = 0; row < 7; row++) for (int col = 0; col < 5; col++) if (g[row] >> (4 - col) & 1) { SDL_Rect d{pen + col * px, y + row * px, px, px}; SDL_RenderFillRect(ren, &d); } pen += 6 * px; }
             return; }
         float sc = hgt / 39.0f, pen = (float)x;
@@ -2695,11 +2695,15 @@ struct PuzzleMode : Screen {
           for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.arrowIcon(x, iy, d, 0, isc); x += dcPanelDrawn ? 54.4f : 60.0f; } } }   // Dreamcast: icons 34 px apart on the 640 x 480 screen (x 142-174 and 176-208)
         }
         const std::string* levelName = !(gApp && gApp->stageSet != 0) && cur < 100 ? a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)) : nullptr;
+        // Disc-only installs have no iPad text: the Dreamcast stage record carries the title (PZSTAGE100 record +1131) and the 25-stage group order is Normal, Hard, Special, Mania (label rows 0, 1, 4, 2 of dc_puzzle_labels).
+        const bool discNames = !levelName && !(gApp && gApp->stageSet != 0) && cur < 100 && cur < (int)stages.list.size() && stages.list[cur].src == 4;
         int labelRow = -1;
-        if (dcLeft && levelName && a.dcPuzzlePlate.tex && a.dcPuzzleLabels.tex) {   // the real list: the 512 x 64 plate texture squeezed into 230 x 45 at (3.1, 278.3) and the 256 x 32 label into 179 x 22 at (15.4, 283.5) of 640 x 480; shown at 1.6 times that
+        if (dcLeft && (levelName || discNames) && a.dcPuzzlePlate.tex && a.dcPuzzleLabels.tex) {   // the real list: the 512 x 64 plate texture squeezed into 230 x 45 at (3.1, 278.3) and the 256 x 32 label into 179 x 22 at (15.4, 283.5) of 640 x 480; shown at 1.6 times that
             static const char* const kinds[] = {"normal", "hard", "mania", "original", "special"};
-            std::string lower = *levelName; for (char& c : lower) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-            for (int k = 0; k < 5; ++k) if (lower.find(kinds[k]) != std::string::npos) labelRow = k;
+            if (levelName) {
+                std::string lower = *levelName; for (char& c : lower) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+                for (int k = 0; k < 5; ++k) if (lower.find(kinds[k]) != std::string::npos) labelRow = k;
+            } else { static const int groupRow[4] = {0, 1, 4, 2}; labelRow = groupRow[cur / 25]; }
             if (labelRow >= 0) {
                 const SDL_Rect plateDst{5, 445, 369, 50}, labelSrc{0, labelRow * 32, 256, 32}, labelDst{25, 454, 287, 36};
                 SDL_RenderCopy(a.ren, a.dcPuzzlePlate.tex, nullptr, &plateDst); SDL_RenderCopy(a.ren, a.dcPuzzleLabels.tex, &labelSrc, &labelDst);
@@ -2711,6 +2715,7 @@ struct PuzzleMode : Screen {
         else a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv && labelRow < 0) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
+            if (discNames) { std::string t = stages.list[cur].title; while (!t.empty() && (t.back() == ' ' || t.back() == '\0')) t.pop_back(); const int h = 28; a.text(t, 727 - a.textWidth(t, h) / 2, 613 - h / 2, h, 0); }
             const std::string* nm = a.hdString(0x1e8 + cur); if (nm) a.printString(*nm, dcBubble ? 727.0f : 720.0f, dcBubble ? 613.0f : 650.0f, 0, 0, 0, 255, 1.0f, 0, true); }   // Dreamcast: centred in the bubble with the port's font (the original renders the string left-aligned in its own bitmap font)
         const bool phonePause = phonePauseAvailable(a);
         if (phonePause) a.blit(a.phonePauseButton, 5, phoneX + 58, phoneY + 616, 2.0f);
