@@ -702,24 +702,14 @@ struct App {
 
     // The Battle task (0x8c0272a0) submits these sprites at fixed screen
     // coordinates. SDL draws them from far to near instead of sorting by 1/w.
-    void drawDcBattleHud(const Scoreboard& score, const int (&cpuLevel)[4],
-                         int remainingFrames, int roundFrames) {
+    // The left column shared by the Dreamcast Battle and Challenge screens (Flycast frames 3100 and Challenge A1): purple strip, planet clock, and the nine-rocket time gauge.
+    void drawDcTimerColumn(int remainingFrames, int roundFrames) {
         auto sprite = [&](int frame, float x, float y, float width, float height) {
             dcBattleSprite(frame, x, y, width, height);
         };
         sprite(5, 32, 0, 128, 256);
         sprite(6, 32, 256, 128, 256);
-        for (int p = 0; p < 4; ++p) sprite(p, 127 + 120 * p, 368, 128, 88);
         sprite(4, -16, 16, 256, 128);
-        for (int p = 0; p < 4; ++p) {
-            const int value = std::max(0, score.player[p]);
-            const int digits[] = {(value / 100) % 10, (value / 10) % 10, value % 10};
-            for (int i = 0; i < 3; ++i)
-                sprite(20 + digits[i], 139 + 120 * p + 32 * i, 403, 32, 32);
-        }
-        // CPU name plates (0x8c029a20) sit between the digits and the frame.
-        for (int p = 0; p < 4; ++p)
-            if (cpuLevel[p] >= 0) sprite(30, 132 + 120 * p, 370, 128, 32);
         const int seconds = (remainingFrames + 59) / 60;
         const int timer[] = {seconds / 60 % 10, 10, seconds / 10 % 6, seconds % 10};
         for (int i = 0; i < 4; ++i) sprite(9 + timer[i], 36 + 16 * i, 55, 16, 32);
@@ -738,6 +728,24 @@ struct App {
         SDL_SetTextureColorMod(dcBattleHud.tex, 255, 255, 255);
         SDL_SetTextureAlphaMod(dcBattleHud.tex, 255);
         SDL_SetTextureBlendMode(dcBattleHud.tex, SDL_BLENDMODE_BLEND);
+    }
+
+    void drawDcBattleHud(const Scoreboard& score, const int (&cpuLevel)[4],
+                         int remainingFrames, int roundFrames) {
+        auto sprite = [&](int frame, float x, float y, float width, float height) {
+            dcBattleSprite(frame, x, y, width, height);
+        };
+        drawDcTimerColumn(remainingFrames, roundFrames);
+        for (int p = 0; p < 4; ++p) sprite(p, 127 + 120 * p, 368, 128, 88);
+        for (int p = 0; p < 4; ++p) {
+            const int value = std::max(0, score.player[p]);
+            const int digits[] = {(value / 100) % 10, (value / 10) % 10, value % 10};
+            for (int i = 0; i < 3; ++i)
+                sprite(20 + digits[i], 139 + 120 * p + 32 * i, 403, 32, 32);
+        }
+        // CPU name plates (0x8c029a20) sit between the digits and the frame.
+        for (int p = 0; p < 4; ++p)
+            if (cpuLevel[p] >= 0) sprite(30, 132 + 120 * p, 370, 128, 32);
     }
 
     void drawDcScoreCrowns(int tick, const Scoreboard& score, const int (&ranks)[4]) {
@@ -2535,6 +2543,9 @@ struct PuzzleMode : Screen {
 struct ChallengeMode : Screen {
     Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
+    // Dreamcast layout (Flycast Challenge A1): the same measured floor plane as Battle and Puzzle, and the Battle task's left column (strip, clock, nine-rocket time gauge).
+    bool dcLayout(App& a) { return a.useModels3d() && a.useDcBattleHud(); }
+    FieldLayout pf(App& a) { return dcLayout(a) ? dcBattleField : FieldLayout{}; }
     // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
     struct Save { uint32_t mask = 0, best[25] = {}; };
     static Save loadSave(const std::string& root) { Save s; if (FILE* f = fopen((root + "/challenge.bin").c_str(), "rb")) { if (fread(&s, sizeof s, 1, f) != 1) s = Save(); fclose(f); } return s; }
@@ -2556,7 +2567,7 @@ struct ChallengeMode : Screen {
     int music() override { return 9; }
     void place(App& a, int dir) { if (phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
     void event(App& a, const SDL_Event& e) override {
-        if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN) { aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y); mouseCursor = true; }
+        if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN) { aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, pf(a)); mouseCursor = true; }
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             if (phase() == ChallengeGame::Intro) skipIntro();                                   // flag 1: a tap skips the intro
             else if (game.phase == ChallengeGame::Failure) { begin(cur); a.playSfx(2); }              // flag 8: restart the stage
@@ -2570,7 +2581,7 @@ struct ChallengeMode : Screen {
             if (phase() == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) skipIntro();
             else if (game.phase == ChallengeGame::Failure && (k == SDLK_RETURN || k == SDLK_r)) { begin(cur); a.playSfx(2); }
             else if (game.phase == ChallengeGame::Result && (k == SDLK_RETURN || k == SDLK_SPACE)) nextStageRequested = true;
-            else if (arrowKey(k) >= 0) { if (!a.headless) aim.update(a, 0, 0); place(a, arrowKey(k)); }
+            else if (arrowKey(k) >= 0) { if (!a.headless) aim.update(a, 0, 0, pf(a)); place(a, arrowKey(k)); }
         }
     }
     void tick(App& a) override {
@@ -2590,15 +2601,22 @@ struct ChallengeMode : Screen {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255); SDL_RenderClear(a.ren);
         a.stars.draw(a);
-        a.board(stages.list[cur].st, 1, 1);                                                          // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
-        for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
-        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f);
-        if (supportedNow() && phase() == ChallengeGame::Play && mouseCursor && aim.inside) a.cursorAt(aim.x, aim.y, 0, cticks);
+        const bool dc = dcLayout(a); const FieldLayout field = pf(a);
+        a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
+        for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
+        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc);
+        if (supportedNow() && phase() == ChallengeGame::Play && mouseCursor && aim.inside) a.cursorAt(aim.x, aim.y, 0, cticks, false, field.scale());
         SDL_RenderSetViewport(a.ren, nullptr);
         std::string line;
         const int ph = phase(), pf = battle ? bgame.phaseFrame : game.phaseFrame, pt = battle ? bgame.playTick : game.playTick;
         const char* why = battle ? bgame.failReason : game.failReason;
         const int clearSec = battle ? bgame.clearSeconds() : game.clearSeconds();
+        if (dc && supportedNow()) {
+            const bool longRound = battle && bgame.type == 5;
+            const int total = longRound ? 3600 : 1800;
+            const int remaining = !battle ? ChallengeGame::kLimitTicks - game.playTick : longRound ? 3600 - bgame.game.clock : ChallengeBattleGame::kLimitTicks - bgame.playTick;
+            a.drawDcTimerColumn(std::max(0, remaining), total);
+        }
         if (!supportedNow()) line = "THIS CHALLENGE STAGE IS NOT PORTED YET  ESC BACK";
         else if (ph == ChallengeGame::Intro) line = "STAGE CHALLENGE " + std::to_string(cur + 1) + "  CLICK TO START";
         else if (ph == ChallengeGame::Countdown) line = std::to_string(1 + (ChallengeGame::kCountdownFrames - pf) / 36) + "...";
@@ -2611,7 +2629,7 @@ struct ChallengeMode : Screen {
         }
         else if (ph == ChallengeGame::Success || ph == ChallengeGame::Result) line = ph == ChallengeGame::Result ? "CLEAR!  " + std::to_string(clearSec) + " SEC  BEST " + std::to_string(bestSeconds) + (newBest ? " NEW" : "") + "  CLICK FOR NEXT" : "CLEAR!";
         else line = std::string("MISS: ") + (why ? why : "") + "   CLICK RETRY  ESC QUIT";
-        a.text(line, 24, 14, 30);
+        if (!dc || (ph != ChallengeGame::Intro && ph != ChallengeGame::Countdown)) a.text(line, dc ? 180 : 24, 14, 30);   // the real Dreamcast Challenge screen shows no text line; the port keeps one for score and results
     }
 };
 
