@@ -103,6 +103,18 @@ def main(prs_png, out, png=None):
         with open(os.path.join(out, 'dc_puzzle_digits.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', 640, 64)); f.write(atlas.tobytes())
         with open(os.path.join(out, 'dc_puzzle_digits.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
         print('dc_puzzle_digits 640x64')
+    # The Puzzle level plate (the bubble sheet without its tail) and the five 256 x 32 difficulty labels (normal, hard, mania, original, special), stacked.
+    def sheet(name, im):
+        with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', im.width, im.height)); f.write(im.tobytes())
+        with open(os.path.join(out, name + '.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
+        print(name, '%dx%d' % im.size)
+    bubble = os.path.join(prs_png, 'PUZZLE_puzzlefukidasi.png')
+    if os.path.exists(bubble): sheet('dc_puzzle_plate', Image.open(bubble).convert('RGBA').crop((0, 0, 512, 45)))
+    names = [os.path.join(prs_png, f'PUZZLE_{n}.png') for n in ('normal', 'hard', 'mania', 'original', 'special')]
+    if all(os.path.exists(n) for n in names):
+        labels = Image.new('RGBA', (256, 32 * len(names)))
+        for i, n in enumerate(names): labels.paste(Image.open(n).convert('RGBA'), (0, i * 32))
+        sheet('dc_puzzle_labels', labels)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
