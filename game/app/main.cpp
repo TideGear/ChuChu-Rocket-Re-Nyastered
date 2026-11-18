@@ -1019,19 +1019,14 @@ struct App {
                          int mouseFrame, float cell) {
         const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(mouseFrame)) : models3d.find("cat");
         if (!m) return false;
+        // Exact transform, light and scale read from the real PowerVR vertices (docs/dreamcast_models.md, 2026-11-17): scale 1.0 model unit per world unit, yaw -angle, tilt -45 about X,
+        // translate z 3.0 (mouse) or 2.5 (cat), perspective 218 / (218 - height). The cat's phase rule is still provisional (the original blends two head morph frames by the fractional phase).
         const float turn = (float)(ang & 0xffff) * (360.0f / 65536.0f);
-        // Matched against Flycast Normal Puzzle 01 and 02 (docs/dreamcast_models.md): the mouse turns by -angle; the cat keeps the earlier 180 - angle until a real frame checks it.
-        static const int catYawMode = getenv("CCR_CAT_YAW") ? atoi(getenv("CCR_CAT_YAW")) : 1;   // the field cat callback 0x8c011060 applies njRotateY(-angle) like the mouse: 1 = -a is the default; comparison values 0 = 180 - a, 2 = a, 3 = 180 + a, 4 = 0, 5 = 180
-        const float yaw = en.mouse ? -turn : catYawMode == 1 ? -turn : catYawMode == 2 ? turn : catYawMode == 3 ? 180.0f + turn : catYawMode == 4 ? 0.0f : catYawMode == 5 ? 180.0f : 180.0f - turn;
-        const float scale = cell * (en.mouse ? 0.072f : 0.075f);   // 0.075 against Flycast Normal 25 once the yaw was fixed (0.066 was too small, 0.085 a little large)
-        const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
-        // The original tilts both characters by -8192 (45 degrees) before drawing (0x8c0193e0, 0x8c0117c0); CCR_CHAR_PITCH overrides for comparisons.
-        static const float pitchOverride = getenv("CCR_CHAR_PITCH") ? static_cast<float>(atof(getenv("CCR_CHAR_PITCH"))) : 45.0f;
-        static const float catPitch = getenv("CCR_CAT_PITCH") ? static_cast<float>(atof(getenv("CCR_CAT_PITCH"))) : -999.0f;   // comparison only
-        const float pitch = (!en.mouse && catPitch > -900.0f) ? catPitch : pitchOverride;
-        static const uint64_t catSkip = getenv("CCR_CAT_SKIP") ? (uint64_t)strtoull(getenv("CCR_CAT_SKIP"), nullptr, 0) : 0;   // comparison only: bit n skips material n of the cat
-        models3d.draw(ren, *m, x, z + cell * 0.22f, scale, yaw, pitch, 1.0f, en.mouse ? -1 : catFrame, -1, en.mouse ? 0 : catSkip);
-        (void)i; return true;
+        static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.5f, -0.25f};
+        float phase = 0.0f; int frame = -1;
+        if (!en.mouse) { phase = (i < cphase.size() ? cphase[i] * 1.2f : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
+        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0);
+        return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
                           float alpha, const float* puku = nullptr, FieldLayout field = {},

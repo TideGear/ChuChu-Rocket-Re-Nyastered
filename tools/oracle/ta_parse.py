@@ -10,7 +10,9 @@ def parse(st, start, end):
         if t == 4 or t == 5:                       # polygon / sprite header (8 words)
             cur = dict(off=o, ctrl=w[0], isp=w[1], tsp=w[2], tex=w[3], verts=[], strips=[], sprite=(t == 5)); polys.append(cur); o += 32
         elif t == 7 and cur is not None:           # vertex (8 words)
-            f = struct.unpack_from('<8f', st, o); v = (w[0],) + f[1:]; o += 32
+            f = struct.unpack_from('<8f', st, o); packed = struct.unpack_from('<I', st, o + 16)[0]
+            pu = struct.unpack('<f', struct.pack('<I', packed & 0xFFFF0000))[0]; pv = struct.unpack('<f', struct.pack('<I', (packed << 16) & 0xFFFFFFFF))[0]   # 16-bit UV (ctrl bit 0): U in the high half, V in the low half
+            v = (w[0],) + f[1:] + (pu, pv); o += 32
             if not cur['strips'] or cur.get('closed'): cur['strips'].append([]); cur['closed'] = False
             cur['strips'][-1].append(v)
             if len(cur['strips']) == 1: cur['verts'].append(v)    # 'verts' keeps the first strip, as before
