@@ -4,6 +4,7 @@
 // keys: A B X Y START UP DOWN LEFT RIGHT L R, frame ranges inclusive.
 // FLYHOST_PER_PIXEL=1 requests Flycast's per-pixel alpha sorting for comparison captures.
 // FLYHOST_WAV=<path> records stereo PCM at the core's sample rate.
+// FLYHOST_STATE=<path> resumes a raw state from this host/core; frame numbers restart at zero.
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -256,6 +257,7 @@ int main(int argc, char** argv) {
     FN(void (*)(), retro_init) FN(bool (*)(const retro_game_info*), retro_load_game) FN(void (*)(retro_system_av_info*), retro_get_system_av_info) FN(void (*)(), retro_run)
     FN(void (*)(), retro_unload_game) FN(void (*)(), retro_deinit)
     FN(void* (*)(unsigned), retro_get_memory_data) FN(size_t (*)(unsigned), retro_get_memory_size) FN(size_t (*)(), retro_serialize_size) FN(bool (*)(void*, size_t), retro_serialize)
+    FN(bool (*)(const void*, size_t), retro_unserialize)
     FN(void (*)(unsigned, unsigned), retro_set_controller_port_device)
     retro_set_environment(env); retro_set_video_refresh(video); retro_set_audio_sample(audio1); retro_set_audio_sample_batch(audioN); retro_set_input_poll(poll); retro_set_input_state(input);
     retro_init();
@@ -265,6 +267,25 @@ int main(int argc, char** argv) {
     for (unsigned port = 1; port < 4; ++port) retro_set_controller_port_device(port, 0);
     retro_system_av_info av{}; retro_get_system_av_info(&av); gMaxW = av.geometry.max_width; gMaxH = av.geometry.max_height; fprintf(stderr, "av %ux%u max %ux%u fps %.2f\n", av.geometry.base_width, av.geometry.base_height, gMaxW, gMaxH, av.timing.fps);
     if (!gHwSet) { fprintf(stderr, "the core did not request a hardware context\n"); return 5; }
+    makeFbo(); if (gHw.context_reset) gHw.context_reset(); gGlReady = true;
+    if (const char* path = getenv("FLYHOST_STATE")) {
+        const size_t size = retro_serialize_size();
+        if (!size || size > 256u * 1024u * 1024u) {
+            fprintf(stderr, "invalid core state size\n"); return 6;
+        }
+        FILE* input = fopen(path, "rb");
+        if (!input) { fprintf(stderr, "cannot open resume state\n"); return 6; }
+        std::vector<uint8_t> state(size);
+        const size_t read = fread(state.data(), 1, size, input);
+        const int extra = fgetc(input);
+        const bool valid = read == size && extra == EOF && !ferror(input);
+        const bool closed = fclose(input) == 0;
+        if (!valid || !closed || !retro_unserialize(state.data(), size)) {
+            fprintf(stderr, "resume state has wrong size, is unreadable, or was rejected by the core\n");
+            return 6;
+        }
+        fprintf(stderr, "resumed raw state; capture/input frames start at zero\n");
+    }
     if (!gAudio.open(getenv("FLYHOST_WAV"), av.timing.sample_rate)) {
         fprintf(stderr, "cannot start WAV capture\n");
         retro_unload_game();
@@ -283,7 +304,6 @@ int main(int argc, char** argv) {
             return 6;
         }
     }
-    makeFbo(); if (gHw.context_reset) gHw.context_reset(); gGlReady = true;
     bool capturesOk = true;
     for (gFrame = 0; gFrame < frames; gFrame++) {
         const uint32_t firstSample = gAudio.framesWritten();

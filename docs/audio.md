@@ -57,6 +57,14 @@ Next: verify driver tempo, controller-to-bend paths, modulation, envelopes and c
 
 Ghidra independently decompiled the driver into `local/handoff-check/sound-banks/decomp/manatee-arm.bin.c` (58 discovered functions). The writable project is `local/handoff-check/sound-banks/ghidra-project/ccr_dc_sound`; use installed `D:/ghidra-trial/ghidra/ghidra_12.2_PUBLIC/support/analyzeHeadless.bat`. Reimport the driver after removing its first 32 bytes, processor `ARM:LE:32:v4`, base 0, pre-script `tools/SeedDcSound.java`, post-script `tools/ExportC.java <output directory>`. The existing SH-4 decompile remains the source for game-side cue callers. Keep projects and generated decompiles local.
 
+## Original note-on and modulation setup (2026-11-18)
+
+`tools/dc_sound_controls.py` implements the depth scaling in ARM setup block 0x1188..0x11ec: MIDI modulation scales the split's pitch and amplitude LFO depths; frequency, waveform and reset bits pass through. Note-on clears the reset bit separately at 0x1674..0x167c.
+
+`tools/oracle/dc_note_on_probe.py <MANATEE.DRV> <failure.state> <loaded.MLT>` compares all 8,192 combinations of controller values 0..127 and both depth fields 0..7 with the original ARM block. It then executes the complete note-on command at ARM 0xd68 for the two captured program-27 voices, using their actual group, MIDI channel, key, velocity, program and controllers. Voice allocations are cleared in this direct fixture. All 18 meaningful channel register words match the live frame-4250 channels: sample, loops, amplitude/filter envelopes, pitch, LFO, DSP send, pan and total level. Only KYONEX is excluded; this trigger is cleared by real hardware after the command, which Unicorn does not emulate. No driver calls are stubbed.
+
+The tested failure voices use group 2, MIDI channels 2/1, keys 69/72, velocity 90, modulation 120, volume 95, and pan 88/40. Both produce LFO word 0x72e0 and total level 27. This verifies driver register preparation for these two voices. Hardware modulation phase, filter/envelope evolution, DSP effects, mixing, cancellation and final waveform parity remain open. Do not equate matching register initialization with matching audible output.
+
 ## Sound-effect ids (2026-11-13)
 Android 1.15 `ChuSECall(id, _)` (0x3d508) calls `AppData::playSFX(table[id].first)`; the 8-byte table at 0x63a00 maps ids 0..28 to themselves (ids 29..39 map to 40..50, the extra effects). Id 7 (cat enters rocket) is dropped when it fires less than 3 global ticks after its previous call. The app now follows this (battle hook: arrow placed 1, mouse home 6, cat in rocket 7 with the 3-tick rule, roulette 10, refused 0x13). Still to do: the sound index -> file mapping for ids >= 29, per-screen music selection and loop points, and the same tables for iOS/Dreamcast.
 
@@ -129,6 +137,10 @@ App: `App::playSong` (restarts only on a different song), songs loaded on demand
 Set `FLYHOST_WAV=<output.wav>` when running `tools/oracle/flyhost.cpp` to record the core's stereo 16-bit PCM at its declared sample rate. The companion `<output.wav>.frames.csv` records each video frame's first and end sample offsets. Both audio callback forms feed the same file. The host checks write/finalization errors and RIFF size limits. It continues to run without opening an audio device.
 
 A 4,310-frame Challenge navigation/run/failure capture produced 3,259,242 stereo frames at 44,100 Hz with nonzero audio across menu and gameplay segments. A separate 180-frame run verified contiguous CSV ranges and exact equality between its last sample index and the WAV sample count (145,000). The delivered sample count exceeds nominal video time in these runs, so cue comparisons must use the frame index. These checks verify capture infrastructure. Cue identification, looping, fades and playback parity remain open.
+
+`FLYHOST_STATE=<raw .state>` now resumes a state produced by the same host/core. Capture and scripted-input frame numbers restart at zero. The host initializes the hidden graphics context before loading, requires the exact current core state size, checks reads/close/core acceptance, and opens WAV output only after loading succeeds.
+
+A 150-frame replay from `local/handoff-check/failure-motion/g_04205.state` produced `local/handoff-check/failure-audio-resume/failure.wav`, with 113,091 stereo samples at 44,100 Hz and 150 contiguous CSV frame ranges. Replay frame 44's AICA register words match the prior original frame-4250 capture. A truncated-state control returned exit 6 without creating a WAV. Use this shorter indexed recording for the failure cue rather than the older full-session WAV without an index. Other reference sequences still need indexed captures.
 
 ## Dreamcast Challenge transition requests
 
