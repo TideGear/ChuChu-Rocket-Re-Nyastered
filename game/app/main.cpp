@@ -3239,9 +3239,10 @@ struct ChallengeSelectMode : Screen {
         image(a, Description + (selected == kFinal ? 5 : titleOfType[selected % 5]), 374, 174);
         for (int i = 0; i < kStages; ++i)
             image(a, i == selected ? SelectedCapsule : Capsule, capsuleX(i), capsuleY(i));
-        image(a, Labels, 32, 112);
+        // Flycast sorts these translucent quads by depth: capsules and clear marks sit at 1/w 0.4, the labels at 0.667, so the white stage names draw over the marks. The C1 mark quad is 32 x 32 at (151,112), the capsule at (144,115).
         for (int i = 0; i < kStages; ++i)
-            if (progress.mask & (1u << i)) image(a, Check, capsuleX(i) + 7, capsuleY(i) - 3);   // Flycast: the C1 mark quad is 32 x 32 at (151,112), the capsule at (144,115)
+            if (progress.mask & (1u << i)) image(a, Check, capsuleX(i) + 7, capsuleY(i) - 3);
+        image(a, Labels, 32, 112);
         uint64_t total = 0;
         for (uint32_t seconds : progress.best) total += seconds;
         clock(a, progress.best[selected], 309);
