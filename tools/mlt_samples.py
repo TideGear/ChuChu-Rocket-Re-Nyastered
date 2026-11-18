@@ -6,14 +6,13 @@ usage: mlt_samples.py <bank.MLT> <out dir> [rate=22050]   (derived data, never c
 import os, struct, sys, wave
 sys.path.insert(0, os.path.dirname(__file__))
 from aica_adpcm import decode, write_wav
+from mlt_extract import sections as container_sections
 
 def sections(m):
     out = {}
-    for i in range(0, 0x120, 32):
-        tag = m[i:i + 4]
-        if tag in (b'SOSB', b'SMPB', b'SMDB', b'SMSB', b'SFPB', b'SFOB', b'SFPW'):
-            off, size = struct.unpack_from('<II', m, i + 8)
-            out.setdefault(tag, []).append((off, size))
+    for row in container_sections(m):
+        if row['offset'] != 0xffffffff:
+            out.setdefault(row['tag'].encode('ascii'), []).append((row['offset'], row['size']))
     return out
 
 def directory(m):
@@ -26,6 +25,9 @@ def directory(m):
 
 def main(path, out, rate=22050):
     m = open(path, 'rb').read(); sec = sections(m); os.makedirs(out, exist_ok=True)
+    if not all(tag in sec for tag in (b'SOSB', b'SMPB', b'SMDB')):
+        raise ValueError('This exploratory decoder requires SOSB, SMPB and SMDB payloads')
+    print('EXPERIMENTAL: sample references, format and playback rate remain unverified; do not use these WAVs in the game')
     banks = {0: sec[b'SOSB'][0], 1: sec[b'SMPB'][0], 2: sec[b'SMDB'][0]}
     recs = directory(m); done = 0
     for k, r in enumerate(recs):

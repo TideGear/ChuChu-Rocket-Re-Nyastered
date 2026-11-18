@@ -1,15 +1,50 @@
-"""Split an SMLT bank container (Sega sound: DPETC/DP2SOUND.MLT, ENGLISH/CHU2_SE.MLT...) into its sections. Layout (measured): 0x20-byte header
-('SMLT', ver, count), then count x 0x20-byte entries: tag(4) 0 offset(4) size(4) ... Sections: SOSB, SMPB (AICA sample data), SMDB (...), etc.
-usage: mlt_extract.py <file.MLT> <outdir>"""
-import os, struct, sys
+"""Extract file-backed sections from Dreamcast SMLT containers.
+
+Each 32-byte entry holds tag, bank, sound-RAM address, allocation size,
+file offset and file size. Offset 0xffffffff reserves RAM without file data.
+Usage: mlt_extract.py <bank.MLT> <output directory>
+"""
+import os
+import struct
+import sys
+
+
+def sections(data):
+    if len(data) < 32 or data[:4] != b'SMLT':
+        raise ValueError('Not an SMLT container')
+    count = struct.unpack_from('<I', data, 8)[0]
+    if count > (len(data) - 32) // 32:
+        raise ValueError('Truncated SMLT section table')
+    rows = []
+    table_end = 32 + count * 32
+    for index in range(count):
+        entry = 32 + index * 32
+        tag = data[entry:entry + 4].decode('ascii')
+        bank, address, allocated, offset, size = struct.unpack_from('<5I', data, entry + 4)
+        if offset != 0xffffffff:
+            if offset < table_end or size > len(data) - offset:
+                raise ValueError(f'Section {index} {tag} extends outside the file')
+            if size < 4 or data[offset:offset + 4] != data[entry:entry + 4]:
+                raise ValueError(f'Section {index} {tag} payload signature mismatch')
+        rows.append(dict(index=index, tag=tag, bank=bank, address=address,
+                         allocated=allocated, offset=offset, size=size))
+    return rows
+
+
 def main(path, out):
-    d = open(path, 'rb').read(); assert d[:4] == b'SMLT'
-    n = struct.unpack_from('<I', d, 8)[0]; os.makedirs(out, exist_ok=True); rows = []
-    for i in range(n):
-        o = 0x20 + 0x20 * i; tag = d[o:o + 4].decode('latin1'); a, b, c = struct.unpack_from('<III', d, o + 8)
-        rows.append((tag, a, b, c, d[o + 20:o + 32].hex()))
-    for k, (tag, a, b, c, rest) in enumerate(rows):
-        print(tag, hex(a), hex(b), hex(c), rest)
-        open(os.path.join(out, '%02d_%s.bin' % (k, tag)), 'wb').write(d[a:a + b])        # offset, size (measured on both banks: sections tile the file)
-    return rows, d
-if __name__ == '__main__': main(sys.argv[1], sys.argv[2])
+    data = open(path, 'rb').read()
+    rows = sections(data)
+    os.makedirs(out, exist_ok=True)
+    for row in rows:
+        print(row)
+        if row['offset'] == 0xffffffff:
+            continue
+        name = f"{row['index']:02d}_{row['tag']}.bin"
+        with open(os.path.join(out, name), 'wb') as stream:
+            start = row['offset']
+            stream.write(data[start:start + row['size']])
+    return rows, data
+
+
+if __name__ == '__main__':
+    main(sys.argv[1], sys.argv[2])
