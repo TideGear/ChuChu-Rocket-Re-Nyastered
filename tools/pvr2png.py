@@ -110,7 +110,7 @@ if __name__ == '__main__':
                 img = decode(data)
             except Exception as e:
                 img = None
-            rel = os.path.relpath(root, src).replace('\\', '_')
+            rel = os.path.relpath(root, src).replace(os.sep, '_').replace('/', '_').replace('\\', '_')   # also on Linux/macOS, where the separator is '/'
             if img is None:
                 bad += 1; continue
             os.makedirs(dst, exist_ok=True)
