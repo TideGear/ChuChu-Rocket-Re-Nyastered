@@ -193,6 +193,32 @@ def export_dc_startup(prs_png, png, out):
     rocket = os.path.join(prs_png, 'TITLE_titlerocket.png')
     export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket)])   # frame 5: the flying rocket, 128 x 256 upright
 
+def export_dc_battle_setup(prs_png, out):
+    """Dreamcast 4P Battle 'Select Players' and 'Stage Select' art (Flycast frames 1900/2300, packets matched to disc textures with 0 differing values).
+    Frames: 0 players background 640 x 512 (BATTLE_playerselect0..7, stored transposed); 1 stage background 640 x 480 (BATTLE_stargeselect0..7, tile 3 transposed);
+    2-3 header 4P Battle (stageselecttitle2/3), 4-5 header Team Battle (stageselecttitle4/5), 6 'Select Players' strip, 7 Human, 8 Computer, 9 plate, 10 white button, 11 orange button,
+    12-17 Weak, Hates cats, Loves mice, Tough, Random, None, 18 orange capsule, 19 blue capsule, 20 stage numbers 256 x 256 (transposed), 21 point-match panel, 22 info strip, 23-27 point digits 1-5 (transposed), 28 type list, 29 list frame."""
+    def path(n): return os.path.join(prs_png, n + '.png')
+    names = [f'BATTLE_playerselect{i}' for i in range(8)] + [f'BATTLE_stargeselect{i}' for i in range(8)] + [
+        'BATTLE_stageselecttitle2', 'BATTLE_stageselecttitle3', 'BATTLE_stageselecttitle4', 'BATTLE_stageselecttitle5', 'BATTLE_titletuketasi',
+        'BATTLE_ningen', 'BATTLE_cpu', 'BATTLE_panel1', 'BATTLE_panel2', 'BATTLE_panel3', 'BATTLE_yowai', 'BATTLE_kirai', 'BATTLE_suki', 'BATTLE_tuyoi',
+        'BATTLE_randamu', 'BATTLE_nasi', 'BATTLE_orangedaen', 'BATTLE_bluedaen', 'BATTLE_playernumber', 'BATTLEPOINT_battleselect', 'BATTLEPOINT_selectsetumei3'] + [
+        f'BATTLEPOINT_battle{i}' for i in range(1, 6)] + ['BATTLE_panel0', 'BATTLE_waku']
+    if not all(os.path.isfile(path(n)) for n in names): return
+    def read(n): return Image.open(path(n)).convert('RGBA')
+    T = Image.Transpose.TRANSPOSE
+    players = Image.new('RGBA', (640, 512))
+    for i, at in enumerate(((0, 0), (256, 0), (0, 256), (256, 256), (512, 0), (512, 128), (512, 256), (512, 384))):
+        players.alpha_composite(read(f'BATTLE_playerselect{i}').transpose(T), at)
+    stage = Image.new('RGBA', (640, 480))
+    for i, at in enumerate(((0, 0), (512, 0), (0, 256), (512, 256), (0, 384), (512, 384), (0, 448), (512, 448))):
+        t = read(f'BATTLE_stargeselect{i}')
+        stage.alpha_composite(t.transpose(T) if i == 3 else t, at)
+    tiles = [players, stage] + [read(n) for n in names[16:]]
+    tiles[20] = tiles[20].transpose(T)
+    for k in range(23, 28): tiles[k] = tiles[k].transpose(T)
+    export_atlas(out, 'dc_battle_setup', tiles)
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -291,6 +317,7 @@ def main(prs_png, out, png=None):
         sheet('dc_pause_marks', atlas)
     export_challenge_select(prs_png, png, out)
     export_dc_startup(prs_png, png, out)
+    export_dc_battle_setup(prs_png, out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)
     export_challenge_result(prs_png, out)
