@@ -244,7 +244,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -319,6 +319,7 @@ struct App {
         dpressOk = loadSheet(ret + "dpress", dpress);
         loadSheet(ret + "dc_mode_select", dcModeSelect);
         loadSheet(ret + "dc_challenge_select", dcChallengeSelect);
+        loadSheet(ret + "dc_startup", dcStartup);
         loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
         loadSheet(ret + "dc_bios_ansi", dcBiosAnsi);   // optional: BIOS ANSI glyphs for the hint text
         loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
@@ -1216,6 +1217,46 @@ struct ModelViewerMode : Screen {
         if (const Model3D* m = pack.find("lid1")) pack.draw(a.ren, *m, 120.0f, 250.0f, 12.0f, yaw, 25.0f);
         if (const Model3D* m = pack.find("wall")) pack.draw(a.ren, *m, 940.0f, 250.0f, 6.0f, yaw, 25.0f);
         a.text("DREAMCAST MODELS  CAT (24 FRAME HEAD MORPH)  MOUSE (8 FRAME WALK)  ESC BACK", 24, 14, 24);
+    }
+};
+
+// Dreamcast startup (SH-4 tasks 0x8c02356a SEGA, 0x8c0236c0 Sonic Team, then Title; tools/oracle/dc_startup.py): SEGA holds 132 ticks, fades and switches at 144; Sonic Team holds until tick 365 or a press, fades,
+// and Title follows 13 ticks later. Layout from Flycast frames 600/800/1200 (docs/HANDOFF.md): SEGA canvas 768 x 512 at (-64, 0), Sonic Team bubble 256 x 256 at (193, 160) on (118, 200, 253), Title tiles, logo at (16, 64), prompt at (176, 360).
+// Fade lengths, the prompt's blink timing, the flying rocket and the music are not traced yet.
+struct DcStartupMode : Screen {
+    int phase = 0, tickInPhase = 0, fadeOutAt = -1; bool leave = false;
+    static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() == 5; }
+    void event(App&, const SDL_Event& e) override {
+        const bool press = (e.type == SDL_KEYDOWN && !e.key.repeat) || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN || e.type == SDL_CONTROLLERBUTTONDOWN;
+        if (!press) return;
+        if (phase == 1 && fadeOutAt < 0) fadeOutAt = tickInPhase;
+        else if (phase == 2 && tickInPhase > 12) leave = true;
+    }
+    void tick(App&) override {
+        ++tickInPhase;
+        if (phase == 0 && tickInPhase >= 144) { phase = 1; tickInPhase = 0; }
+        else if (phase == 1) {
+            if (fadeOutAt < 0 && tickInPhase >= 365) fadeOutAt = tickInPhase;
+            if (fadeOutAt >= 0 && tickInPhase >= fadeOutAt + 13) { phase = 2; tickInPhase = 0; }
+        }
+    }
+    const char* next() override { return std::exchange(leave, false) ? "MENU" : nullptr; }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
+        const Sheet& s = a.dcStartup;
+        auto copy = [&](int frame, int x, int y) { const SDL_Rect& r = s.fr[frame]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, s.tex, &r, &d); };
+        int black = 0;   // overlay alpha
+        if (phase == 0) { SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_RenderClear(a.ren); copy(0, -64, 0); if (tickInPhase >= 132) black = std::min(255, (tickInPhase - 132) * 255 / 12); }
+        else if (phase == 1) {
+            SDL_SetRenderDrawColor(a.ren, 118, 200, 253, 255); SDL_RenderClear(a.ren); copy(1, 193, 160);
+            if (tickInPhase < 24) black = 255 - tickInPhase * 255 / 24;
+            if (fadeOutAt >= 0) black = std::max(black, std::min(255, (tickInPhase - fadeOutAt) * 255 / 12));
+        } else {
+            SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren); copy(2, 0, 0); copy(3, 16, 64);
+            if (tickInPhase >= 90 && ((tickInPhase - 90) / 30) % 2 == 0) copy(4, 176, 360);
+            if (tickInPhase < 12) black = 255 - tickInPhase * 255 / 12;
+        }
+        if (black > 0) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)black); SDL_RenderFillRect(a.ren, nullptr); }
     }
 };
 
@@ -3852,7 +3893,8 @@ int main(int argc, char** argv) {
     std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
         app.log.write(2, ("screen " + name).c_str());
-        if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
+        if (name == "STARTUP" && !app.titleOk && DcStartupMode::available(app)) mode = std::make_unique<DcStartupMode>();
+        else if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
         else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "CHALLENGE_SELECT" && ChallengeSelectMode::available(app)) {

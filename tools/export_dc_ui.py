@@ -171,6 +171,27 @@ def export_challenge_result(prs_png, out):
                             Image.Resampling.BILINEAR) for tile in tiles]
     export_atlas(out, 'dc_challenge_result', tiles)
 
+def export_dc_startup(prs_png, png, out):
+    """Dreamcast SEGA logo, Sonic Team bubble and Title screen art, laid out from Flycast frames 600/800/1200 (docs/HANDOFF.md).
+    Frames: 0 SEGA canvas 768 x 512 (SEGALOGO tiles, stored transposed, 3 x 2 grid, drawn at (-64, 0)); 1 Sonic Team bubble 256 x 256 (LOGO, transposed, at (193, 160));
+    2 Title background 640 x 480 (TITLE_titlegamen0..7 at (0,0) (512,0) (0,256) (512,256) (0,384) (512,384) (0,448) (512,448); tile 3 is transposed);
+    3 Title logo 512 x 256 (at (16, 64)); 4 PRESS START 512 x 32 (at (176, 360))."""
+    seg = [os.path.join(prs_png, f'SEGALOGO_segalogo{i}.png') for i in range(6)]
+    logo = os.path.join(png, 'ENGLISH__LOGO.png') if png else ''
+    title = [os.path.join(prs_png, f'TITLE_titlegamen{i}.png') for i in range(8)]
+    extra = [os.path.join(prs_png, 'TITLE_newtitle0.png'), os.path.join(prs_png, 'TITLE_pressstart.png')]
+    if not (png and all(os.path.isfile(f) for f in seg + title + extra + [logo])):
+        return
+    def read(path): return Image.open(path).convert('RGBA')
+    sega = Image.new('RGBA', (768, 512), (255, 255, 255, 255))
+    for i, f in enumerate(seg):
+        sega.alpha_composite(read(f).transpose(Image.Transpose.TRANSPOSE), ((i % 3) * 256, (i // 3) * 256))
+    bg = Image.new('RGBA', (640, 480))
+    for i, (f, at) in enumerate(zip(title, ((0, 0), (512, 0), (0, 256), (512, 256), (0, 384), (512, 384), (0, 448), (512, 448)))):
+        tile = read(f)
+        bg.alpha_composite(tile.transpose(Image.Transpose.TRANSPOSE) if i == 3 else tile, at)
+    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1])])
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -268,6 +289,7 @@ def main(prs_png, out, png=None):
             atlas.paste(Image.open(m).convert('RGBA').transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT), (64 * i, 0))
         sheet('dc_pause_marks', atlas)
     export_challenge_select(prs_png, png, out)
+    export_dc_startup(prs_png, png, out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)
     export_challenge_result(prs_png, out)
