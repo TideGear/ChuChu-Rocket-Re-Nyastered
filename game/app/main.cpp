@@ -455,7 +455,8 @@ struct App {
         const Model3D* floorM = models3d.find("floor"); const Model3D* wallM = models3d.find("wall"); if (!floorM || !wallM) return false;
         const float k = (float)CELL / 15.0f;
         (void)k;   // the game's floor quad has UVs 0..6 x 0..4.5 (u = (x + 90) / 30, v = (z + 67.5) / 30) and SDL's geometry call clamps UVs, so the 108 cells are drawn as quarter-texture quads (same mapping)
-        const int mat = 29 + std::max(0, std::min(5, getenv("CCR_FLOOR3D") ? atoi(getenv("CCR_FLOOR3D")) : floorColor)); if (mat >= (int)floorM->matTex.size()) return false;
+        const int dcFloor = wallColor == 0 ? 0 : floorColor;   // Dreamcast Battle and Team Battle boards all use yuka01 (purple and tan), read from the 25 stage-select previews of the real game; other modes keep the mobile rule until their Dreamcast frames are checked
+        const int mat = 29 + std::max(0, std::min(5, getenv("CCR_FLOOR3D") ? atoi(getenv("CCR_FLOOR3D")) : dcFloor)); if (mat >= (int)floorM->matTex.size()) return false;
         SDL_Texture* tex = models3d.textures[floorM->matTex[mat]];
         std::vector<SDL_Vertex> verts; verts.reserve(12 * 9 * 6);
         // Neutral floor modulation measured from the Dreamcast Normal Puzzle 01 capture.
@@ -961,7 +962,7 @@ struct ModelViewerMode : Screen {
         if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 1.0f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
         const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
         if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
-        if (getenv("CCR_CANDS")) { if (const Model3D* m = pack.find("rocket_blue")) { for (int i = 0; i < 6; i++) pack.draw(a.ren, *m, 90.0f + 170.0f * i, 260.0f, 14.0f, 0.0f, 30.0f + 12.0f * i); } a.text("ROCKET PITCH 30 42 54 66 78 90", 24, 14, 24); return; }
+        if (getenv("CCR_CANDS")) { static const char* nm[6] = {"c_ab290", "c_ab180", "c_ab674", "c_ab03c", "c_a302c", "c_b0c7c"}; for (int i = 0; i < 6; i++) if (const Model3D* m = pack.find(nm[i])) { float mx = 1.0f; for (const auto& t : m->tris) for (int k = 0; k < 3; k++) mx = std::max(mx, std::max(std::fabs(t.v[k].x), std::fabs(t.v[k].z))); const float sc = 70.0f / mx; pack.draw(a.ren, *m, 90.0f + 170.0f * i, 220.0f, sc, 0.0f, 90.0f); pack.draw(a.ren, *m, 90.0f + 170.0f * i, 520.0f, sc, 30.0f, 40.0f); } a.text("CANDIDATES ab290 ab180 ab674 ab03c a302c b0c7c", 24, 14, 24); return; }
         if (getenv("CCR_CAMFIT")) {   // pitch comparison against the Dreamcast frame: cat and mouse at pitches 30..80 (columns), cat yaw 180 and mouse yaw 0 (their fronts)
             const Model3D* cat = pack.find("cat"); const Model3D* mo = pack.find("mouse0");
             for (int i = 0; i < 6; i++) { const float pitch = 20.0f + 10.0f * i; if (cat) { pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 130.0f, 5.2f, 180.0f, pitch, 1.0f, 17); pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 330.0f, 5.2f, 0.0f, pitch, 1.0f, 17); } if (mo) { pack.draw(a.ren, *mo, 90.0f + 160.0f * i, 500.0f, 7.0f, 180.0f, pitch); } }
