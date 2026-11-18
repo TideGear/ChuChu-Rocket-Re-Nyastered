@@ -191,6 +191,7 @@ int main(int argc, char** argv) {
     FN(void (*)(retro_audio_sample_batch_t), retro_set_audio_sample_batch) FN(void (*)(retro_input_poll_t), retro_set_input_poll) FN(void (*)(retro_input_state_t), retro_set_input_state)
     FN(void (*)(), retro_init) FN(bool (*)(const retro_game_info*), retro_load_game) FN(void (*)(retro_system_av_info*), retro_get_system_av_info) FN(void (*)(), retro_run)
     FN(void (*)(), retro_unload_game) FN(void (*)(), retro_deinit)
+    FN(void* (*)(unsigned), retro_get_memory_data) FN(size_t (*)(unsigned), retro_get_memory_size) FN(size_t (*)(), retro_serialize_size) FN(bool (*)(void*, size_t), retro_serialize)
     FN(void (*)(unsigned, unsigned), retro_set_controller_port_device)
     retro_set_environment(env); retro_set_video_refresh(video); retro_set_audio_sample(audio1); retro_set_audio_sample_batch(audioN); retro_set_input_poll(poll); retro_set_input_state(input);
     retro_init();
@@ -205,6 +206,11 @@ int main(int argc, char** argv) {
     for (gFrame = 0; gFrame < frames; gFrame++) {
         retro_run();
         if (gShots.count(gFrame) && !saveShot(gFrame)) capturesOk = false;
+        if (gShots.count(gFrame) && getenv("FLY_DUMP")) {   // also write the video RAM, main RAM and a full save state (PowerVR registers included) beside the screenshot
+            char nm[512]; const char* kinds[2] = {"ram", "vram"}; const unsigned ids[2] = {2, 3};
+            for (int k = 0; k < 2; ++k) { void* m = retro_get_memory_data(ids[k]); const size_t n = retro_get_memory_size(ids[k]); snprintf(nm, sizeof nm, "%s%05d.%s", argv[6], gFrame, kinds[k]); if (m && n) { FILE* f = fopen(nm, "wb"); if (f) { fwrite(m, 1, n, f); fclose(f); } } fprintf(stderr, "dump %s: %zu bytes\n", kinds[k], m ? n : (size_t)0); }
+            const size_t sn = retro_serialize_size(); std::vector<uint8_t> st(sn); if (sn && retro_serialize(st.data(), sn)) { snprintf(nm, sizeof nm, "%s%05d.state", argv[6], gFrame); FILE* f = fopen(nm, "wb"); if (f) { fwrite(st.data(), 1, sn, f); fclose(f); } fprintf(stderr, "dump state: %zu bytes\n", sn); }
+        }
     }
     retro_unload_game();
     if (gHw.context_destroy) gHw.context_destroy();
