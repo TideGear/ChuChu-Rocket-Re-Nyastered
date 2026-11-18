@@ -5,12 +5,45 @@ Step advancement: 0x711c..0x7140. Multiplication wraps before shifting.
 This does not map driver updates to audio samples or allocate voices.
 """
 from dataclasses import dataclass
+import struct
 
 
 def word(value):
     if not isinstance(value, int) or not 0 <= value <= 0xffffffff:
         raise ValueError('Expected an unsigned 32-bit timing word')
     return value
+
+
+def start_inactive_context(context, bank, bank_address, index, priority, clock):
+    """Apply successful ARM 0x891c sequence start to an inactive context.
+
+    Active-context replacement invokes cleanup outside this function's scope.
+    Untouched context bytes are retained just as in the original routine.
+    """
+    if len(context) != 0x50 or context[1] & 1:
+        raise ValueError('Expected an inactive 0x50-byte context')
+    if len(bank) < 16 or bank[:4] != b'SMSB':
+        raise ValueError('Expected SMSB bank data')
+    _, size, count = struct.unpack_from('<3I', bank, 4)
+    if size > len(bank) or 16 + count * 4 > size:
+        raise ValueError('Invalid SMSB bounds')
+    if not isinstance(index, int) or not 0 <= index < count:
+        raise ValueError('Sequence index outside bank')
+    offset = struct.unpack_from('<I', bank, 16 + index * 4)[0]
+    if offset < 16 + count * 4 or offset + 12 > size or bank[offset:offset + 4] != b'SMSD':
+        raise ValueError('Missing or invalid SMSD sequence')
+    word(bank_address), word(priority), word(clock)
+    resolution, tempo = struct.unpack_from('<2I', bank, offset + 4)
+    result = bytearray(context)
+    result[0] = priority & 0xf8
+    result[1] = (result[1] | 1) & 0xfd
+    fields = {4: bank_address + size - 4, 8: resolution,
+              12: SequenceTiming(resolution, tempo).scale,
+              16: bank_address + offset + 12, 20: bank_address + offset,
+              0x34: 0, 0x38: tempo, 0x40: clock}
+    for address, value in fields.items():
+        struct.pack_into('<I', result, address, value & 0xffffffff)
+    return bytes(result)
 
 
 @dataclass
