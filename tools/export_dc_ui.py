@@ -140,6 +140,19 @@ def export_challenge_intro(prs_png, out):
     export_atlas(out, 'dc_challenge_intro',
                  tiles[:6] + [tile.transpose(Image.Transpose.TRANSPOSE) for tile in tiles[6:]])
 
+def export_challenge_failure(prs_png, out):
+    names = ['yellowrocket', 'bluerocket', 'challengemiss', 'rocketmoji24',
+             'rocketmoji26', 'netsousa00', 'titleline0', 'titleline1']
+    names += ['new' + letter for letter in 'abcde'] + ['new' + str(i) for i in range(1, 6)]
+    names += ['newfin']
+    paths = [os.path.join(prs_png, 'CHALLENGECLEAR_' + name + '.png') for name in names]
+    if not all(os.path.isfile(path) for path in paths):
+        return
+    tiles = [Image.open(path).convert('RGBA') for path in paths]
+    for i in (7, *range(8, len(tiles))):
+        tiles[i] = tiles[i].transpose(Image.Transpose.TRANSPOSE)
+    export_atlas(out, 'dc_challenge_failure', tiles)
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -231,6 +244,7 @@ def main(prs_png, out, png=None):
         sheet('dc_pause_marks', atlas)
     export_challenge_select(prs_png, png, out)
     export_challenge_intro(prs_png, out)
+    export_challenge_failure(prs_png, out)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
