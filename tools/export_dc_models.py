@@ -17,10 +17,15 @@ BATTLE_TEX = ['BATTLEMODELS_' + n for n in ['sphere_tx', 'ins', 'bluemado', 'ita
               'rokefuta01', 'rokefuta02', 'rokefuta03', 'rokefuta04', 'newk1', 'newk1s', 'newk2', 'newk2s', 'newk3', 'newk3s', 'newk4', 'newk4s', 's01', 'rfire01', 'rfire04', 'rfire03',
               'rfire02', 'yuka01', 'yuka02', 'yuka03', 'yuka04', 'yuka05', 'yuka06', 'kabetx01', 'kabetx02', 'kabetx03']]
 # (name, root object file offset, texture list). The board pieces are single models: 0xa21e8 is one 180 x 135 quad (the whole 12 x 9 board floor, yuka01), 0xa20fc a wall piece (kabetx01).
+# FOURADV texture list in the executable's order (NJS_TEXNAME array at 0x8c0ba160): the in-game HUD of the four-player modes is a 3D scene of flat models using it
+HUD_TEX = ['FOURADV_' + n for n in ['disp01k', 'disp02k', 'disp03', 'tensu'] + ['nums%02d' % i for i in range(10)]]
+HUD_OFFS = (0xaa370, 0xaa46c, 0xaa760, 0xaaa54, 0xab03c, 0xab180, 0xab290, 0xab674, 0xabe04, 0xac3e4, 0xade98, 0xb0c7c, 0xb0db4, 0xb0eec, 0xb1024, 0xb1178, 0xb1274, 0xb1370, 0xb146c, 0xb15c0, 0xb16bc)
 MODELS = [('cat', 0x778c4, CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o in enumerate((0x7efb8, 0x7fe38, 0x80cb8, 0x81b38, 0x829b8, 0x83838, 0x846b8, 0x85538))] + [
     ('rocket_blue', 0x9a340, BATTLE_TEX), ('rocket_orange', 0x9b490, BATTLE_TEX), ('rocket_red', 0x9c5e0, BATTLE_TEX), ('rocket_green', 0x9d730, BATTLE_TEX),
     ('lid1', 0x987b8, BATTLE_TEX), ('lid2', 0x98b20, BATTLE_TEX), ('lid3', 0x98e88, BATTLE_TEX), ('lid4', 0x991f0, BATTLE_TEX), ('fire', 0xa0258, BATTLE_TEX),
-    ('wall', 0xa20fc, BATTLE_TEX), ('floor', 0xa21e8, BATTLE_TEX), ('c_ab290', 0xab290, BATTLE_TEX), ('c_ab180', 0xab180, BATTLE_TEX), ('c_ab674', 0xab674, BATTLE_TEX), ('c_ab03c', 0xab03c, BATTLE_TEX), ('c_a302c', 0xa302c, BATTLE_TEX), ('c_b0c7c', 0xb0c7c, BATTLE_TEX), ('hole_out', 0xa2990, BATTLE_TEX), ('hole_in', 0xa2628, BATTLE_TEX)]   # NOTE the names are historical: these two are the round generator pad (rim 'outs' 15.9 x 15.6, inner disc 'ins' 15 x 15), not the hole
+    ('wall', 0xa20fc, BATTLE_TEX), ('floor', 0xa21e8, BATTLE_TEX), ('hole_out', 0xa2990, BATTLE_TEX), ('hole_in', 0xa2628, BATTLE_TEX)]   # NOTE the names are historical: these two are the round generator pad (rim 'outs' 15.9 x 15.6, inner disc 'ins' 15 x 15), not the hole
+
+MODELS += [('h_%x' % o, o, HUD_TEX) for o in HUD_OFFS]
 
 def rot(v, a, flags):
     ax, ay, az = [t * 2 * math.pi / 65536.0 for t in a]
@@ -105,7 +110,7 @@ def main(root, exe):
     out_models = []
     for name, off, texlist in MODELS:
         order = pack.tree(off); tris = pack.assemble(order)
-        full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('c_')    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
+        full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_')    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
         mats = [tex(texlist[m]) if m < len(texlist) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
         frames = pack.cat_frames(order) if name == 'cat' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
