@@ -1,4 +1,4 @@
-"""Prepare isolated core states and compare exact PCM16 waveform windows.
+"""Prepare isolated core states and compare exact sampled waveform windows.
 
 prepare <source.state> <loaded.MLT> <isolated.state> --channels 0,2
 verify <isolated.state> <loaded.MLT> <core.wav>
@@ -6,7 +6,9 @@ verify <isolated.state> <loaded.MLT> <core.wav>
 The prepare control mutes other channel runtimes and all DSP/CD output returns.
 It retains the selected channels' captured source position, filter history and
 LFO phase. Resume the isolated state with flyhost/FLYHOST_WAV, then verify its
-output. Only fixed-envelope PCM16 windows currently pass model validation.
+output. Verified cases include PCM16 and ADPCM sustain/release. New commands
+arriving from the original sequencer are not applied by the rendering model.
+--force-loop is an explicit synthetic LPCTL control, not original program data.
 """
 import argparse
 import struct
@@ -20,7 +22,7 @@ from aica_pcm import direct_stereo
 from dc_aica_state import inspect
 
 
-def prepare(state, mlt, channels):
+def prepare(state, mlt, channels, force_loop=False):
     report = inspect(state, mlt)
     available = {c['channel'] for c in report['channels'] if c['runtime']['enabled']}
     if not channels or not channels <= available:
@@ -31,6 +33,11 @@ def prepare(state, mlt, channels):
             output[report['runtime_offset'] + 72 * index + 71] = 0
     returns = report['register_offset'] + 0x2000
     output[returns:returns + 18 * 4] = bytes(18 * 4)
+    if force_loop:
+        for index in channels:
+            at = report['register_offset'] + 128 * index
+            control = struct.unpack_from('<H', output, at)[0]
+            struct.pack_into('<H', output, at, control | 0x200)
     return output
 
 
@@ -76,6 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('mlt', type=Path)
     parser.add_argument('output', type=Path)
     parser.add_argument('--channels', default='0,2')
+    parser.add_argument('--force-loop', action='store_true', help='synthetic control: enable the selected sample loops')
     args = parser.parse_args()
     state, mlt = args.state.read_bytes(), args.mlt.read_bytes()
     if args.operation == 'prepare':
@@ -83,6 +91,6 @@ if __name__ == '__main__':
             channels = {int(value) for value in args.channels.split(',')}
         except ValueError:
             parser.error('channels must be comma-separated integers')
-        args.output.write_bytes(prepare(state, mlt, channels))
+        args.output.write_bytes(prepare(state, mlt, channels, args.force_loop))
     else:
         verify(state, mlt, args.output)

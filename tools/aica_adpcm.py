@@ -7,7 +7,7 @@ def decode(data, nibble_low_first=True):
     for b in data:
         for k in ((b & 15, b >> 4) if nibble_low_first else (b >> 4, b & 15)):
             mag = k & 7; sign = -1 if k & 8 else 1
-            diff = ((2 * mag + 1) * step) >> 3
+            diff = min(32767, ((2 * mag + 1) * step) >> 3)
             sig = max(-32768, min(32767, sig + sign * diff))
             step = max(127, min(24576, (step * STEP[mag]) >> 8))
             out.append(sig)

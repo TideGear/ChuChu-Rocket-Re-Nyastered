@@ -69,14 +69,24 @@ The tested failure voices use group 2, MIDI channels 2/1, keys 69/72, velocity 9
 
 The tested core identifies itself as Flycast revision `3a5267a`. Its [channel serialization and synthesis source](https://github.com/flyinghead/flycast/blob/3a5267a/core/hw/aica/sgc_if.cpp) confirms 72-byte packed runtime records after the channel registers in the tested 0x356 state layout. `dc_aica_state.py` now reads sample position/fraction, current samples, LFO phase/counter, amplitude state and filter history, checking runtime sample addresses against registers.
 
-`tools/aica_pcm.py` models PCM16 sample stepping, periodic pitch modulation, interpolation, a constant filter-envelope window, and direct pan/attenuation. `tools/oracle/dc_pcm_probe.py` creates controlled reference states and compares their output exactly:
+`tools/aica_pcm.py` models sampled stepping, periodic pitch modulation, interpolation, constant filter envelopes, pan/attenuation, and already-active amplitude release. `tools/oracle/dc_pcm_probe.py` creates controlled references:
 
-- `prepare <source.state> <loaded.MLT> <isolated.state> --channels 0,2` disables unselected channel runtimes and mutes the 18 DSP/CD return controls. It retains selected voices' captured position and history.
-- Resume that state with `FLYHOST_STATE` and `FLYHOST_WAV`, then run `verify <isolated.state> <loaded.MLT> <core.wav>`.
-- From the A1 frame-4250 state, channels 0, 2, and their combined direct mix each matched **14,383 stereo frames with zero sample error**, across three 20-frame captures. Files are `local/handoff-check/pcm-step-reference/channel0-long.*`, `channel2-long.*`, and `channel0_2-long.*`.
-- An earlier five-frame run also matched stream position/fraction, source samples, LFO state and filter history at three saved endpoints for both channels. Flipping one recorded sample by one unit causes the waveform verifier to reject it.
+- `prepare <source.state> <loaded.MLT> <isolated.state> --channels 0,2` disables other channel runtimes and mutes the 18 DSP/CD return controls, retaining selected voices' captured position/history. `--force-loop` is an explicit synthetic LPCTL control.
+- Resume that state with `FLYHOST_STATE`/`FLYHOST_WAV`, then run `verify <isolated.state> <loaded.MLT> <core.wav>`. Comparison requires zero error, not an envelope/similarity threshold.
 
-Scope: sustained, already-running PCM16 voices with triangle pitch LFO, fixed amplitude/filter envelopes, full-volume stereo output, and muted DSP/CD returns. This does not verify note attack/release, sample-end/loop handling, ADPCM, changing filters, other LFO waveforms or the complete game mix. Unsupported windows are rejected rather than approximated. Next extend verified rendering through start/stop and ADPCM, then DSP/mixing and native integration.
+| Reference case | Stereo sample pairs matched exactly | Local reference |
+|---|---:|---|
+| PCM16 channels 0, 2, and their combined sustain, separately | 14,383 each | `pcm-step-reference/channel0-long.*`, `channel2-long.*`, `channel0_2-long.*` |
+| Both PCM16 voices through sample end and subsequent silence | 87,952 | `pcm-step-reference/end-reference.wav` |
+| Synthetic PCM16 loop control, both voices | 58,525 | `pcm-step-reference/loop.*` |
+| ADPCM program 22 before a later driver key-off | 3,347 | `adpcm-reference/channel1-prefix.wav` |
+| Four program-29 ADPCM result-jingle voices through loops, release and silence | 88,283 | `adpcm-reference/jingle-release.*` |
+
+All paths above are under `local/handoff-check`. The jingle source is `success-audio-source/s_00200.state`, captured by resuming C1's `challenge-clear/d_03500.state`. Its four release voices (26, 27, 33, 34) use the sample at 0x78f7e, loop range 27,169..37,384, and different pitches. The normal ADPCM loop restores its saved predictor/quantizer at the loop start. The standalone ADPCM decoder now also clamps the decoded delta before adding history, matching AICA behavior.
+
+Runtime comparisons cover source position/fraction, decoded samples, LFO, filter history, ADPCM predictor/cache and amplitude release at four endpoints for all four jingle voices. Persistent fields match; the emulated loop-status flag can differ because the original driver clears it by reading status. The existing five-frame PCM runtime comparisons also pass. A one-unit mutation to one recorded sample is rejected.
+
+Limits: these references begin mid-voice. Attack/decay transitions, changing filters, new sequencer commands, effect/CD returns, PCM8, ADPCM stream mode and non-triangle modulated waveforms remain unverified. The full 60-frame program-22 effect comparison correctly fails once the live voice enters release: a driver key-off is inferred from that state change, but its caller and exact sample time remain untraced. The current model does not apply that new command. The earlier prefix passes. Do not replace that failure with a fitted duration. Next trace/apply command timing, verify start/release across other rates, then DSP/full mixing and native integration. No Dreamcast SFX are wired into gameplay yet.
 
 ## Sound-effect ids (2026-11-13)
 Android 1.15 `ChuSECall(id, _)` (0x3d508) calls `AppData::playSFX(table[id].first)`; the 8-byte table at 0x63a00 maps ids 0..28 to themselves (ids 29..39 map to 40..50, the extra effects). Id 7 (cat enters rocket) is dropped when it fires less than 3 global ticks after its previous call. The app now follows this (battle hook: arrow placed 1, mouse home 6, cat in rocket 7 with the 3-tick rule, roulette 10, refused 0x13). Still to do: the sound index -> file mapping for ids >= 29, per-screen music selection and loop points, and the same tables for iOS/Dreamcast.

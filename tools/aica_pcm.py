@@ -1,8 +1,9 @@
-"""PCM16 stream stepping, periodic pitch LFO and fixed filter validation.
+"""AICA sample stepping, periodic pitch LFO and fixed filter validation.
 
-Consumes captured channel state. Output precedes amplitude, attenuation, effects
-and stereo mixing. Only constant filter-envelope windows are accepted. This is
-not a finished sound-effect renderer. Hardware field/step reference: Flycast core
+Consumes captured channel state. Direct output includes pan/attenuation, sample
+end/loops and an already-active amplitude release. Filter envelopes must remain
+constant. New sequencer commands and note attack are not modeled. This is not a
+finished sound-effect renderer. Hardware field/step reference: Flycast core
 3a5267a, core/hw/aica/sgc_if.cpp; compare with original core snapshots.
 """
 import math
@@ -13,10 +14,18 @@ def f32(value):
     return struct.unpack('<f', struct.pack('<f', value))[0]
 
 
-class Pcm16Stream:
+DECAY_MS = (-1, -1, 118200, 101300, 88600, 70900, 59100, 50700, 44300, 35500,
+            29600, 25300, 22200, 17700, 14800, 12700, 11100, 8900, 7400, 6300,
+            5500, 4400, 3700, 3200, 2800, 2200, 1800, 1600, 1400, 1100,
+            920, 790, 690, 550, 460, 390, 340, 270, 230, 200, 170, 140, 110,
+            98, 85, 68, 57, 49, 43, 34, 28, 25, 22, 18, 14, 12, 11, 8.5, 7.1,
+            6.1, 5.4, 4.3, 3.6, 3.1)
+
+
+class SampleStream:
     def __init__(self, channel, sound_ram):
-        if channel['pcm_mode'] != 0 or not channel['runtime']['enabled']:
-            raise ValueError('An enabled PCM16 channel is required')
+        if channel['pcm_mode'] not in (0, 1, 2, 3) or not channel['runtime']['enabled']:
+            raise ValueError('An enabled sampled channel is required')
         self.channel = channel
         self.ram = sound_ram
         self.state = dict(channel['runtime'])
@@ -38,10 +47,20 @@ class Pcm16Stream:
             exponent = f32(exponent / 1200)
             self.pitch_scale.append(int(f32(1024 * f32(math.pow(2, exponent)))))
         words = channel['register_words']
+        if self.state['amplitude_state'] not in (2, 3) or (self.state['amplitude_state'] == 2 and (words[4] >> 11) & 31):
+            raise ValueError('Attack/decay transitions are not yet validated')
+        release_rate = (words[5] & 31) * 2
+        key_scale = (words[5] >> 10) & 15
+        if key_scale < 15:
+            signed_octave = (octave ^ 8) - 8
+            release_rate += (channel['fns'] >> 9) & 1
+            release_rate += max(0, (key_scale + signed_octave) * 2)
+        milliseconds = f32(DECAY_MS[min(63, release_rate)])
+        self.release_delta = int(math.floor(((1024 << 16) - 1) / (44.1 * milliseconds) + 0.5)) if milliseconds > 0 else 0
         self.filter_active = not (words[10] & 32) and (any(v < 0x1ff8 for v in words[11:16]) or (words[10] & 31) != 4)
         if self.filter_active:
             value = self.state['filter_value'] >> 16
-            if self.state['filter_state'] != 2 or self.state['filter_value'] != value << 16 or any(v != value for v in words[11:16]):
+            if self.state['filter_state'] not in (2, 3) or self.state['filter_value'] != value << 16 or any(v != value for v in words[11:16]):
                 raise ValueError('Changing filter envelopes are not yet validated')
             resonance = (2048, 1536, 1024, 512, 0, -256, -512, -768, -1024, -1280,
                          -1536, -1792, -2048, -2176, -2304, -2432, -2560, -2688,
@@ -68,16 +87,75 @@ class Pcm16Stream:
         state['filter_previous1'] = min(524287, max(-524288, value))
         return state['filter_previous1']
 
+    def end(self):
+        value = self.channel['loop_end']
+        return (value + 3) & ~3 if self.channel['pcm_mode'] == 3 else value
+
+    @staticmethod
+    def adpcm(nibble, previous, quant):
+        magnitude = nibble & 7
+        delta = min(32767, (quant * (2 * magnitude + 1)) >> 3)
+        sample = previous + (-delta if nibble & 8 else delta)
+        quant = min(24576, max(127, (quant * (230, 230, 230, 230, 307, 409, 512, 614)[magnitude]) >> 8))
+        return min(32767, max(-32768, sample)), quant
+
+    def decode(self, last):
+        state = self.state
+        mode = self.channel['pcm_mode']
+        if mode < 2 and not last:
+            return
+        position, address = state['position'], state['sample_address']
+        start, end = self.channel['loop_start'], self.end()
+        following = position + 1
+        if following >= end and end > start:
+            following = start
+        if mode == 0:
+            state['s0'] = struct.unpack_from('<h', self.ram, (address + 2 * position) & 0x1ffffe)[0]
+            state['s1'] = struct.unpack_from('<h', self.ram, (address + 2 * following) & 0x1ffffe)[0]
+        elif mode == 1:
+            state['s0'] = struct.unpack_from('<b', self.ram, (address + position) & 0x1fffff)[0] << 8
+            state['s1'] = struct.unpack_from('<b', self.ram, (address + following) & 0x1fffff)[0] << 8
+        else:
+            previous, quant = state['s0'], state['adpcm_quant']
+            if position == start:
+                if not state['adpcm_in_loop']:
+                    state['adpcm_loop_quant'], state['adpcm_loop_previous'] = quant, previous
+                    state['adpcm_in_loop'] = True
+                elif mode == 2:
+                    quant, previous = state['adpcm_loop_quant'], state['adpcm_loop_previous']
+            nibble = (self.ram[(address + (position >> 1)) & 0x1fffff] >> (4 * (position & 1))) & 15
+            sample, quant = self.adpcm(nibble, previous, quant)
+            state['s0'], state['adpcm_quant'] = sample, quant
+            state['s1'] = 0
+            if last:
+                if following == start and state['adpcm_in_loop'] and mode == 2:
+                    quant, sample = state['adpcm_loop_quant'], state['adpcm_loop_previous']
+                nibble = (self.ram[(address + (following >> 1)) & 0x1fffff] >> (4 * (following & 1))) & 15
+                state['s1'], _ = self.adpcm(nibble, sample, quant)
+
     def render(self, count, filtered=False):
         if count < 0:
             raise ValueError('Negative sample count')
         out = []
+        self.attenuation = []
         state = self.state
         for _ in range(count):
+            if not state['enabled']:
+                out.append(0)
+                self.attenuation.append(255)
+                continue
             fraction = state['fraction']
             sample = ((state['s0'] * (1024 - fraction)) >> 10) + ((state['s1'] * fraction) >> 10)
             signal = self.filter(sample << 4)
             out.append(signal if filtered else sample)
+            self.attenuation.append(min(255, state['amplitude_value'] >> 18))
+            if state['amplitude_state'] == 3:
+                state['amplitude_value'] += self.release_delta
+                if state['amplitude_value'] >> 16 >= 0x3ff:
+                    state['amplitude_value'] = 0x3ff << 16
+                    state['enabled'] = False
+                    state['position'] = 0
+                    continue
             phase = state['lfo_phase']
             wave = (self.lfo >> 8) & 3
             if wave == 0:
@@ -89,12 +167,24 @@ class Pcm16Stream:
             accumulated = fraction + ((self.rate * self.pitch_scale[level]) >> 10)
             advance, state['fraction'] = divmod(accumulated, 1024)
             if advance:
-                position = state['position'] + advance
-                if position >= self.channel['loop_end']:
-                    raise ValueError('Loop/end transition is outside this verified stream window')
-                state['position'] = position
-                offset = state['sample_address'] + 2 * position
-                state['s0'], state['s1'] = struct.unpack_from('<2h', self.ram, offset)
+                start, end = self.channel['loop_start'], self.end()
+                for step in range(advance):
+                    position = state['position'] + 1
+                    if position >= end:
+                        if start > end:
+                            stop = position >= start
+                        else:
+                            stop = not self.channel['loop']
+                            state['looped'] = 1
+                            position = start
+                        if stop:
+                            state['looped'] = 1
+                            state['enabled'] = False
+                            state['amplitude_state'] = 3
+                            state['amplitude_value'] = 0x3ff << 16
+                            position = 0
+                    state['position'] = position
+                    self.decode(last=step == advance - 1)
             state['lfo_counter'] -= 1
             if state['lfo_counter'] == 0:
                 state['lfo_counter'] = self.period
@@ -103,18 +193,20 @@ class Pcm16Stream:
 
 
 def direct_stereo(channel, sound_ram, count):
-    """Render the verified constant-envelope PCM16 window, without DSP returns."""
+    """Render a constant-envelope sample window, without DSP returns."""
     state = channel['runtime']
     words = channel['register_words']
-    if state['amplitude_value'] != 0 or state['amplitude_state'] != 2 or (words[4] >> 11) & 31:
-        raise ValueError('Changing amplitude envelopes are not yet validated')
+    if words[10] & 64:
+        raise ValueError('Attenuation bypass is not yet validated')
     if channel['lfo_raw'] & 7:
         raise ValueError('Amplitude LFO is not yet validated')
-    model = Pcm16Stream(channel, sound_ram)
+    model = SampleStream(channel, sound_ram)
     signal = model.render(count, filtered=True)
     levels = [255] + [(15 - i) * 8 for i in range(1, 16)]
     attenuation = [channel['total_level'] + levels[channel['direct_level']]] * 2
     pan = channel['pan_raw']
     attenuation[1 if pan & 16 else 0] += levels[(~pan) & 15]
-    gains = [int(32768 / math.pow(2, min(a, 255) / 16)) for a in attenuation]
-    return [tuple((sample * gain) >> 19 for gain in gains) for sample in signal], model.state
+    gains = [int(32768 / math.pow(2, a / 16)) for a in range(256)]
+    output = [tuple((sample * gains[min(255, ofs + a)]) >> 19 for a in attenuation)
+              for sample, ofs in zip(signal, model.attenuation)]
+    return output, model.state

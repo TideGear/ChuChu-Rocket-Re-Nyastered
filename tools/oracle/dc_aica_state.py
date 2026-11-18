@@ -75,10 +75,14 @@ def inspect(state, mlt):
         if enabled > 1 or sample != (address & ~1 if (control >> 7) & 3 == 0 else address):
             raise ValueError('Flycast runtime record does not match channel registers')
         runtime = dict(sample_address=sample, position=position, fraction=fraction,
-                       s0=s0, s1=s1, lfo_counter=counter, lfo_phase=phase, enabled=bool(enabled))
+                       s0=s0, s1=s1, lfo_counter=counter, lfo_phase=phase, enabled=bool(enabled),
+                       looped=state[runtime_at + 20])
         runtime.update(zip(('amplitude_value', 'amplitude_state', 'filter_value', 'filter_state',
                             'filter_previous1', 'filter_previous2', 'filter_fraction'),
                            struct.unpack_from('<iIII3i', state, runtime_at + 38)))
+        runtime.update(zip(('adpcm_quant', 'adpcm_loop_quant', 'adpcm_loop_previous'),
+                           struct.unpack_from('<3i', state, runtime_at + 21)))
+        runtime['adpcm_in_loop'] = bool(state[runtime_at + 33])
         channels.append(dict(channel=index, key_on=bool(control & 0x4000),
             sample_address=address, pcm_mode=(control >> 7) & 3,
             loop=bool(control & 0x200), loop_start=words[2], loop_end=words[3],
