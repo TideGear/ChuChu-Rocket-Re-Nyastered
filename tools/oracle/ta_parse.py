@@ -8,10 +8,13 @@ def parse(st, start, end):
     while o + 32 <= end:
         w = struct.unpack_from('<8I', st, o); t = w[0] >> 29
         if t == 4 or t == 5:                       # polygon / sprite header (8 words)
-            cur = dict(off=o, ctrl=w[0], isp=w[1], tsp=w[2], tex=w[3], verts=[], sprite=(t == 5)); polys.append(cur); o += 32
+            cur = dict(off=o, ctrl=w[0], isp=w[1], tsp=w[2], tex=w[3], verts=[], strips=[], sprite=(t == 5)); polys.append(cur); o += 32
         elif t == 7 and cur is not None:           # vertex (8 words)
-            f = struct.unpack_from('<8f', st, o); cur['verts'].append((w[0],) + f[1:]); o += 32
-            if w[0] & 0x10000000: cur = None
+            f = struct.unpack_from('<8f', st, o); v = (w[0],) + f[1:]; o += 32
+            if not cur['strips'] or cur.get('closed'): cur['strips'].append([]); cur['closed'] = False
+            cur['strips'][-1].append(v)
+            if len(cur['strips']) == 1: cur['verts'].append(v)    # 'verts' keeps the first strip, as before
+            if w[0] & 0x10000000: cur['closed'] = True            # end of strip: the next vertices start a new strip under the SAME header (the TA keeps the last global parameter)
         elif w[0] == 0: o += 32
         else: o += 32
     return polys
