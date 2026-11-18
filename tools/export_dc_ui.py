@@ -145,6 +145,12 @@ def main(prs_png, out, png=None):
             atlas.paste(rot(Image.open(boxes[2 * pl]).convert('RGBA')), (160 * pl, 0))
             atlas.paste(Image.open(boxes[2 * pl + 1]).convert('RGBA'), (160 * pl + 128, 0))
         sheet('dc_pause_boxes', atlas)
+    # The Team Battle pause score panels (TEAMPAUSE_teamwinbox1..4, already upright): 256 x 128 and 64 x 128 pieces side by side (blue and red team, then orange and green team).
+    tb = [os.path.join(prs_png, f'TEAMPAUSE_teamwinbox{i}.png') for i in range(1, 5)]
+    if all(os.path.exists(b) for b in tb):
+        atlas = Image.new('RGBA', (640, 128))
+        for b, x in zip(tb, (0, 256, 320, 576)): atlas.paste(Image.open(b).convert('RGBA'), (x, 0))
+        sheet('dc_pause_team', atlas)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
