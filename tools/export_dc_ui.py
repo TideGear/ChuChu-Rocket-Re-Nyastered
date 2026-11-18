@@ -133,6 +133,16 @@ def main(prs_png, out, png=None):
             t = os.path.join(prs_png, f'PUZZLEPAUSE_challengesetumei{i}.png')
             if os.path.exists(t): atlas.paste(Image.open(t).convert('RGBA'), (256, 320 + 32 * i))
         sheet('dc_pause', atlas)
+    # The Battle pause score panels (BATTLEPAUSE_newwinbox1..8): four 128 x 128 panels (stored rotated like the other menu sheets) each followed by a 32 x 128 end piece
+    # (upright as exported), in player order blue, orange, red, green, packed in one 640 x 128 sheet (160 px per player).
+    boxes = [os.path.join(prs_png, f'BATTLEPAUSE_newwinbox{i}.png') for i in range(1, 9)]
+    if all(os.path.exists(b) for b in boxes):
+        rot = lambda im: im.transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        atlas = Image.new('RGBA', (640, 128))
+        for pl in range(4):
+            atlas.paste(rot(Image.open(boxes[2 * pl]).convert('RGBA')), (160 * pl, 0))
+            atlas.paste(Image.open(boxes[2 * pl + 1]).convert('RGBA'), (160 * pl + 128, 0))
+        sheet('dc_pause_boxes', atlas)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
