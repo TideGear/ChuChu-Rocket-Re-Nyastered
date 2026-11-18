@@ -149,7 +149,7 @@ static int16_t input(unsigned port, unsigned device, unsigned, unsigned id) {
     return 0;
 }
 static int keyId(const std::string& k) {   // RETRO_DEVICE_ID_JOYPAD_*
-    static const std::map<std::string, int> m = {{"B", 0}, {"Y", 1}, {"SELECT", 2}, {"START", 3}, {"UP", 4}, {"DOWN", 5}, {"LEFT", 6}, {"RIGHT", 7}, {"A", 8}, {"X", 9}, {"L", 10}, {"R", 11}};
+    static const std::map<std::string, int> m = {{"B", 0}, {"Y", 1}, {"SELECT", 2}, {"START", 3}, {"UP", 4}, {"DOWN", 5}, {"LEFT", 6}, {"RIGHT", 7}, {"A", 8}, {"X", 9}, {"L", 10}, {"R", 11}, {"L2", 12}, {"R2", 13}};   // the Dreamcast triggers are libretro L2 and R2
     auto it = m.find(k); return it == m.end() ? -1 : it->second;
 }
 int main(int argc, char** argv) {
