@@ -15,7 +15,13 @@ def default_cache():
     base = os.environ.get('XDG_CONFIG_HOME') or str(Path.home() / '.config')   # same folder as the launcher's {config}
     return Path(base) / 'ChuChuRocketReNyastered'
 
-def say(text): print(text, flush=True)
+_LOG = None   # set once the data folder is known: every message is also kept in setup.log so a failed run can be reported
+def say(text):
+    print(text, flush=True)
+    if _LOG is not None:
+        try:
+            with open(_LOG, 'a', encoding='utf8') as f: f.write(str(text) + '\n')
+        except OSError: pass
 
 def main():
     ap = argparse.ArgumentParser()
@@ -32,6 +38,9 @@ def main():
     old = cache.parent / 'ReNyastered'   # the folder name used before the rename: move it once if the new one does not exist
     if not a.cache and not cache.exists() and old.exists(): shutil.move(str(old), str(cache))
     cache.mkdir(parents=True, exist_ok=True)
+    global _LOG; _LOG = cache / 'setup.log'
+    try: _LOG.write_text('setup started %s (python %s, %s)\ngame files: %s\n' % (__import__('time').strftime('%Y-%m-%d %H:%M:%S'), sys.version.split()[0], sys.platform, game), encoding='utf8')
+    except OSError: _LOG = None
     say('progress 0.02 Checking Python')
     if sys.version_info < (3, 10): say('Python 3.10 or later is required (found %s).' % sys.version.split()[0]); return 1
     try: import PIL  # noqa: F401
@@ -58,7 +67,7 @@ def main():
         staging.mkdir()
         say('progress 0.15 Extracting from your game files (this can take several minutes)')
         log = cache / 'setup.log'
-        with open(log, 'w') as lf:
+        with open(log, 'a') as lf:
             code = subprocess.call([sys.executable, str(HERE / 'extract_all.py'), '--game-files', str(game), '--cache', str(staging), '--exclude-cache', str(cache)], stdout=lf, stderr=subprocess.STDOUT)
         if code != 0:
             say('Extraction failed. See %s' % log); say('\n'.join(log.read_text(errors='replace').splitlines()[-10:])); return 1
@@ -95,4 +104,7 @@ def main():
         if staging.exists() and not recoverable: shutil.rmtree(staging, ignore_errors=True)
         lock.close()
 
-if __name__ == '__main__': sys.exit(main())
+if __name__ == '__main__':
+    code = main()
+    if code and _LOG is not None: print('Setup did not finish. Details (please attach this file to a bug report): %s' % _LOG, flush=True)
+    sys.exit(code)
