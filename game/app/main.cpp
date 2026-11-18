@@ -1028,7 +1028,8 @@ struct App {
         static const float pitchOverride = getenv("CCR_CHAR_PITCH") ? static_cast<float>(atof(getenv("CCR_CHAR_PITCH"))) : 45.0f;
         static const float catPitch = getenv("CCR_CAT_PITCH") ? static_cast<float>(atof(getenv("CCR_CAT_PITCH"))) : -999.0f;   // comparison only
         const float pitch = (!en.mouse && catPitch > -900.0f) ? catPitch : pitchOverride;
-        models3d.draw(ren, *m, x, z + cell * 0.22f, scale, yaw, pitch, 1.0f, en.mouse ? -1 : catFrame);
+        static const uint64_t catSkip = getenv("CCR_CAT_SKIP") ? (uint64_t)strtoull(getenv("CCR_CAT_SKIP"), nullptr, 0) : 0;   // comparison only: bit n skips material n of the cat
+        models3d.draw(ren, *m, x, z + cell * 0.22f, scale, yaw, pitch, 1.0f, en.mouse ? -1 : catFrame, -1, en.mouse ? 0 : catSkip);
         (void)i; return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
