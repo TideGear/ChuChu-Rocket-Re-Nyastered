@@ -179,7 +179,7 @@ def export_dc_startup(prs_png, png, out):
     seg = [os.path.join(prs_png, f'SEGALOGO_segalogo{i}.png') for i in range(6)]
     logo = os.path.join(png, 'ENGLISH__LOGO.png') if png else ''
     title = [os.path.join(prs_png, f'TITLE_titlegamen{i}.png') for i in range(8)]
-    extra = [os.path.join(prs_png, 'TITLE_newtitle0.png'), os.path.join(prs_png, 'TITLE_pressstart.png')]
+    extra = [os.path.join(prs_png, 'TITLE_newtitle0.png'), os.path.join(prs_png, 'TITLE_pressstart.png'), os.path.join(prs_png, 'TITLE_titlerocket.png')]
     if not (png and all(os.path.isfile(f) for f in seg + title + extra + [logo])):
         return
     def read(path): return Image.open(path).convert('RGBA')
@@ -190,7 +190,8 @@ def export_dc_startup(prs_png, png, out):
     for i, (f, at) in enumerate(zip(title, ((0, 0), (512, 0), (0, 256), (512, 256), (0, 384), (512, 384), (0, 448), (512, 448)))):
         tile = read(f)
         bg.alpha_composite(tile.transpose(Image.Transpose.TRANSPOSE) if i == 3 else tile, at)
-    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1])])
+    rocket = os.path.join(prs_png, 'TITLE_titlerocket.png')
+    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket)])   # frame 5: the flying rocket, 128 x 256 upright
 
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)

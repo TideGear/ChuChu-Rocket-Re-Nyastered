@@ -1227,7 +1227,7 @@ struct ModelViewerMode : Screen {
 // the prompt appears at u = 89 and is hidden for 8 of every 30 ticks from u = 145. Not traced yet: the flying rocket, `newtitle1/2` and music 18.
 struct DcStartupMode : Screen {
     int phase = 0, t = 0, request = -1; bool leave = false;
-    static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() == 5; }
+    static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() == 6; }
     void event(App&, const SDL_Event& e) override {
         const bool press = (e.type == SDL_KEYDOWN && !e.key.repeat) || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN || e.type == SDL_CONTROLLERBUTTONDOWN;
         if (!press) return;
@@ -1255,7 +1255,22 @@ struct DcStartupMode : Screen {
             black = request < 0 || t < request + 5 ? 1.0f - step(t - 4) : step(t - request - 4);
             if (request >= 0 && t < request + 5) black = 0.0f;
         } else {
-            SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren); copy(2, 0, 0); copy(3, 16, 64);
+            SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren); copy(2, 0, 0);
+            // The flying rocket (Flycast, logged every frame): one circle, centre (261, 173), radius 113.719, heading angle theta = 187 - u degrees (from u = 8, 1 degree per frame, one lap per 360 ticks until the title ends),
+            // radial angle 304.249 - theta; its 128 x 256 quad has corner C at the position, A = C + 128 (-dy, -dx), D = C + 256 (-dx, dy), B = A + 256 (-dx, dy), with (dx, dy) = (cos theta, sin theta).
+            if (t >= 8 && t < 608) {
+                static const int orient = getenv("CCR_ROCKET_ORIENT") ? atoi(getenv("CCR_ROCKET_ORIENT")) : 1;   // 1 = u flipped, checked against four Flycast frames
+                const float th = (187.0f - (float)t) * 0.017453292f, psi = 304.249f * 0.017453292f - th, dx = cosf(th), dy = sinf(th);
+                const float cx = 261.0f + 113.718953f * cosf(psi), cy = 173.0f + 113.718953f * sinf(psi);
+                const SDL_FPoint pc{cx, cy}, pa{cx + 128 * -dy, cy + 128 * -dx}, pd{cx + 256 * -dx, cy + 256 * dy}, pb{pa.x + 256 * -dx, pa.y + 256 * dy};
+                const SDL_Rect& r = sh.fr[5]; const float u0 = (float)r.x / sh.w, v0 = (float)r.y / sh.h, u1 = (float)(r.x + r.w) / sh.w, v1 = (float)(r.y + r.h) / sh.h;
+                const bool su = orient & 1, sv = orient & 2; const float cu = su ? u1 : u0, au = su ? u0 : u1, cv = sv ? v1 : v0, dv = sv ? v0 : v1;
+                const SDL_Color white{255, 255, 255, 255};
+                SDL_Vertex v[4] = {{pa, white, {au, cv}}, {pb, white, {au, dv}}, {pc, white, {cu, cv}}, {pd, white, {cu, dv}}};
+                const int idx[6] = {0, 1, 2, 2, 1, 3};
+                SDL_RenderGeometry(a.ren, sh.tex, v, 4, idx, 6);
+            }
+            copy(3, 16, 64);
             const bool hidden = t >= 145 && (t - 145) % 30 < 8;
             if (t >= 89 && !hidden) copy(4, 176, 360);
             black = t < 10 ? 1.0f : 1.0f - step(t - 8);

@@ -321,6 +321,14 @@ int main(int argc, char** argv) {
         retro_run();
         if (audioFrames && fprintf(audioFrames, "%d,%u,%u\n", gFrame, firstSample, gAudio.framesWritten()) < 0)
             capturesOk = false;
+        if (const char* w = getenv("FLY_WATCH")) {   // FLY_WATCH=<hex main-RAM offset>:<bytes>:<first frame> appends frame number + that RAM range to <prefix>watch.bin every frame from the first frame
+            unsigned off = 0, len = 0, first = 0;
+            if (sscanf(w, "%x:%u:%u", &off, &len, &first) == 3 && gFrame >= (int)first) {
+                void* m = retro_get_memory_data(2); const size_t n = retro_get_memory_size(2);
+                char nm[512]; snprintf(nm, sizeof nm, "%swatch.bin", argv[6]);
+                if (m && off + len <= n) { FILE* f = fopen(nm, "ab"); if (f) { const int32_t fr = gFrame; fwrite(&fr, 4, 1, f); fwrite((const uint8_t*)m + off, 1, len, f); fclose(f); } }
+            }
+        }
         if (gShots.count(gFrame) && !saveShot(gFrame)) capturesOk = false;
         if (gShots.count(gFrame) && getenv("FLY_DUMP")) {   // also write the video RAM, main RAM and a full save state (PowerVR registers included) beside the screenshot
             char nm[512]; const char* kinds[2] = {"ram", "vram"}; const unsigned ids[2] = {2, 3};
