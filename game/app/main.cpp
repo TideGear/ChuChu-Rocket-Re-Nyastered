@@ -1002,6 +1002,18 @@ struct App {
     void cursor(int cx, int cy, int player, int ticks, bool bracket = false, FieldLayout field = {}) {
         cursorAt(field.x(cx + 0.5f), field.y(cy + 0.5f), player, ticks, bracket, field.scale());
     }
+    void mouseCursorAt(float x, float y, int player, int ticks, float fieldScale) {
+        if (useDcCursors()) { cursorAt(x, y, player, ticks, false, fieldScale); return; }
+        const int frame = player & 3;
+        if (frame >= (int)cur.fr.size()) return;
+        const float phase = ((player << 14) + 0x1000 * ticks) * 6.283185307f / 65536.0f;
+        float scale = fieldScale * (1.0f + 0.1f * std::sin(phase));
+        if (frame < (int)cur.fit.size()) scale *= cur.fit[frame];
+        // The mobile frame table centers the graphic (-33,-33). For mouse
+        // input its top-left arrow tip must follow MouseAim, as the DC art does.
+        blit(cur, frame, x - cur.off[frame].x * scale, y - cur.off[frame].y * scale,
+             fieldScale * (1.0f + 0.1f * std::sin(phase)));
+    }
     void cursorGhost(float x, float y, int player, Uint8 opacity, float cell) {
         SDL_SetTextureAlphaMod(dcCursorTrail.tex, opacity);
         dcCursorAt(dcCursorTrail, x, y, player, cell);
@@ -2633,7 +2645,7 @@ struct PuzzleMode : Screen {
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a));
         if (showCursor) {
             cursorTrail.draw(a, 0);
-            if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks, false, pf(a).scale());
+            if (mouseCursor) a.mouseCursorAt(aim.x, aim.y, 0, cticks, pf(a).scale());
             else if (dreamcastPuzzleControls(a)) { const float fraction = paused ? 1.0f : alpha; a.drawDcBattlePadCursor(padAim.logicalX(fraction, pf(a)), padAim.logicalY(fraction, pf(a)), 0, cticks); }   // same corner-anchored pad cursor as Battle (Flycast Puzzle frames show it that way)
             else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha, pf(a));
         }
@@ -2961,7 +2973,7 @@ struct ChallengeMode : Screen {
         a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 2);
         const bool fieldCursor = supportedNow() && phase() <= ChallengeGame::Play;
         if (fieldCursor && mouseCursor && aim.inside)
-            a.cursorAt(aim.x, aim.y, 0, cticks, false, field.scale());
+            a.mouseCursorAt(aim.x, aim.y, 0, cticks, field.scale());
         else if (fieldCursor && dc) {
             const float x = padAim.logicalX(1.0f, field), y = padAim.logicalY(1.0f, field);
             a.drawDcBattlePadCursor(x, y, 0, cticks);
@@ -3510,7 +3522,7 @@ struct BattleMode : Screen {
         for (int p = 0; p < 4; ++p) {
             if (lv[p] >= 0) continue;
             if (p == 0 && mouseCursor) {
-                if (aim.inside) a.cursorAt(aim.x, aim.y, p, game.frame, false, field.scale());
+                if (aim.inside) a.mouseCursorAt(aim.x, aim.y, p, game.frame, field.scale());
             } else if (dcProjection) {
                 a.drawDcBattlePadCursor(padAim[p].logicalX(cursorAlpha, field),
                                         padAim[p].logicalY(cursorAlpha, field), p, taskAge);
