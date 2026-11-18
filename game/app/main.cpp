@@ -491,10 +491,12 @@ struct App {
         const SDL_Color floorLight{204, 204, 204, 255};   // exact: the real floor quad's vertex intensity is 0.8000 (0.3 + 0.5 * normal up)
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
             const float x0 = field.x(c), y0 = field.y(r);
-            const float x1 = field.x(c + 1), y1 = field.y(r + 1);
+            // Each cell is stretched by a fraction of an output pixel on its right and lower side (with its UVs): the SDL triangle fill leaves one-pixel cracks along some shared edges, and the real floor is one quad with none.
+            constexpr float kOverlap = 0.6f;
+            const float x1 = field.x(c + 1) + kOverlap, y1 = field.y(r + 1) + kOverlap;
             // The Dreamcast starts the checkerboard in the right-hand texture quarter.
             const float u0 = ((c + 1) & 1) * 0.5f, v0 = (r & 1) * 0.5f;
-            const float u1 = u0 + 0.5f, v1 = v0 + 0.5f;
+            const float u1 = std::min(1.0f, u0 + 0.5f * (1.0f + kOverlap / (field.cell))), v1 = std::min(1.0f, v0 + 0.5f * (1.0f + kOverlap / (field.cell)));   // SDL's software fill drops triangles whose UVs leave [0, 1]
             SDL_Vertex a{{x0, y0}, floorLight, {u0, v0}}, b{{x1, y0}, floorLight, {u1, v0}}, d{{x1, y1}, floorLight, {u1, v1}}, e{{x0, y1}, floorLight, {u0, v1}};
             verts.push_back(a); verts.push_back(b); verts.push_back(d); verts.push_back(a); verts.push_back(d); verts.push_back(e);
         }
@@ -767,7 +769,9 @@ struct App {
             {{384, 0, 64, 128}, 285, 196, 64, 128, true},
             {{256, 256, 128, 32}, 144, 205, 128, 32, false}, {{384, 256, 128, 32}, 400, 205, 128, 32, false}};
         for (const Part& pt : parts) {
-            const SDL_Rect dst{(int)std::lround(pt.x * 1.6f), (int)std::lround((pt.y + dy) * 1.6f), (int)std::lround(pt.w * 1.6f), (int)std::lround(pt.h * 1.6f)};
+            // The two board pieces abut at x 388; their edge texels blend to transparent under bilinear scaling and leave a hairline, so each piece is drawn one logical pixel wider (towards its neighbour).
+            const int grow = (pt.src.w >= 128 && pt.src.h == 256) ? 1 : 0;
+            const SDL_Rect dst{(int)std::lround(pt.x * 1.6f) - (pt.x > 300 && grow ? 1 : 0), (int)std::lround((pt.y + dy) * 1.6f), (int)std::lround(pt.w * 1.6f) + grow, (int)std::lround(pt.h * 1.6f)};
             SDL_RenderCopyEx(ren, dcPause.tex, &pt.src, &dst, 0.0, nullptr, pt.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
         }
         if (playerPlateY >= 0) {   // "Player 1" plate, 256 x 64 at x 230 (Battle y 270, Challenge y 400 in Flycast frames)
@@ -2380,7 +2384,7 @@ struct PuzzleMode : Screen {
     // Fit the 480 × 320 handset UI at integer scale on the shared gameplay canvas.
     static constexpr int phoneX = (GW - 960) / 2, phoneY = (GH - 640) / 2;
     // Real draw list (Flycast frame 2390, 640 x 480): the R panel is a 128 x 128 quad at (5, 32), the L panel one at (5, 160); the exported sheets are cropped to 126 x 128 and 126 x 73, drawn here at 1.6 times that screen.
-    static constexpr SDL_Rect dcStartRect{8, 51, 202, 205};
+    static constexpr SDL_Rect dcStartRect{8, 51, 202, 206};   // one extra row overlaps the L panel: the sheet's last row is half transparent and the bilinear edge left a navy hairline between the panels
     static constexpr SDL_Rect dcCancelRect{8, 256, 202, 117};
     bool dreamcastPuzzleControls(const App& a) const {
         return a.settings.models3d && a.dcPuzzleStart.tex && a.dcPuzzleCancel.tex && !phonePuzzleHudAvailable(a);
