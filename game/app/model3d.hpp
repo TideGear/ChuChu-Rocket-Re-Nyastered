@@ -261,7 +261,7 @@ public:
                 const float n1x = nx * cy + nz * sy, n1z = -nx * sy + nz * cy;
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
-                o.light[k] = 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z);   // can exceed 1.0 (mice reach 1.08); the rasteriser saturates the product like the PowerVR
+                o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z));   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
                 const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - tri.v[k].v, tri.v[k].u} : SDL_FPoint{tri.v[k].u, tri.v[k].v};
                 o.u[k] = uv.x; o.v[k] = uv.y;
