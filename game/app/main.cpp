@@ -244,7 +244,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcSelectClock, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -319,6 +319,7 @@ struct App {
         dpressOk = loadSheet(ret + "dpress", dpress);
         loadSheet(ret + "dc_mode_select", dcModeSelect);
         loadSheet(ret + "dc_challenge_select", dcChallengeSelect);
+        loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
         loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
         loadSheet(ret + "dc_challenge_failure", dcChallengeFailure);
         loadSheet(ret + "dc_challenge_result", dcChallengeResult);
@@ -3123,6 +3124,15 @@ struct ChallengeSelectMode : Screen {
         const int remainder = static_cast<int>(seconds % 60);
         const int digits[] = {minutes / 10, minutes % 10, remainder / 10, remainder % 10};
         static constexpr int x[] = {197, 221, 269, 293};
+        if (a.dcSelectClock.tex && a.dcSelectClock.fr.size() == 11) {
+            // BIOS ROM font glyphs (tools/export_dc_bios_font.py, user-supplied BIOS): the game's "00:00" is five 24 x 24 cells at x 193 + 24k, colour 165 grey, rows from y - 1.
+            SDL_SetTextureColorMod(a.dcSelectClock.tex, 165, 165, 165);
+            const int cellX[] = {193, 217, 265, 289}, cellIndex[] = {digits[0], digits[1], digits[2], digits[3]};
+            for (int i = 0; i < 4; ++i) { const SDL_Rect& s = a.dcSelectClock.fr[cellIndex[i]]; const SDL_Rect d{cellX[i], y - 1, 24, 24}; SDL_RenderCopy(a.ren, a.dcSelectClock.tex, &s, &d); }
+            { const SDL_Rect& s = a.dcSelectClock.fr[10]; const SDL_Rect d{241, y - 1, 24, 24}; SDL_RenderCopy(a.ren, a.dcSelectClock.tex, &s, &d); }
+            SDL_SetTextureColorMod(a.dcSelectClock.tex, 255, 255, 255);
+            return;
+        }
         // Flycast frame 2100: the game draws "00:00" into a 512 x 256 ARGB1555 texture (word 040c8d00, one colour 0xd294 = 165 grey, 1-bit alpha) mapped 1:1 at (193,308); the zero below is that bitmap (16 x 20).
         // Digits 1..9 are not yet captured, so they keep the provisional FOURADV art.
         static const char* const zero[20] = {"....########....", "..############..", "..###......###..", ".###........###.", ".##..........##.", "###..........###", "##............##", "##............##", "##............##", "##............##",
