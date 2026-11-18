@@ -751,7 +751,7 @@ struct App {
 
     // The Dreamcast pause overlay (Flycast Puzzle pause frame and Battle pause frame): no dimming, nine quads on the 640 x 480 screen drawn here at 1.6 times that, far to near:
     // the PAUSED board, the bubbles with the cat, then the labels. Battle's is the same shifted up 60 pixels (dy = -60).
-    void drawDcPause(float dy) {
+    void drawDcPause(float dy, float playerPlateY = -1.0f) {
         if (!dcPause.tex) return;
         struct Part { SDL_Rect src; float x, y, w, h; bool flip; };
         static const Part parts[] = {
@@ -763,6 +763,10 @@ struct App {
         for (const Part& pt : parts) {
             const SDL_Rect dst{(int)std::lround(pt.x * 1.6f), (int)std::lround((pt.y + dy) * 1.6f), (int)std::lround(pt.w * 1.6f), (int)std::lround(pt.h * 1.6f)};
             SDL_RenderCopyEx(ren, dcPause.tex, &pt.src, &dst, 0.0, nullptr, pt.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+        }
+        if (playerPlateY >= 0) {   // "Player 1" plate, 256 x 64 at x 230 (Battle y 270, Challenge y 400 in Flycast frames)
+            const SDL_Rect src{0, 320, 256, 64}, dst{368, (int)std::lround(playerPlateY * 1.6f), 410, 102};
+            SDL_RenderCopy(ren, dcPause.tex, &src, &dst);
         }
     }
 
@@ -2566,6 +2570,7 @@ struct ChallengeMode : Screen {
     Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
     // Dreamcast layout (Flycast Challenge A1): the same measured floor plane as Battle and Puzzle, and the Battle task's left column (strip, clock, nine-rocket time gauge).
+    bool paused = false;   // P key (the original's START) or CCR_PAUSE_TICK in headless tests
     bool dcLayout(App& a) { return a.useModels3d() && a.useDcBattleHud(); }
     FieldLayout pf(App& a) { return dcLayout(a) ? dcBattleField : FieldLayout{}; }
     // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
@@ -2599,6 +2604,8 @@ struct ChallengeMode : Screen {
         }
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             const SDL_Keycode k = e.key.keysym.sym;
+            if (k == SDLK_p && supportedNow() && phase() == ChallengeGame::Play) { paused = !paused; return; }
+            if (paused) return;
             if (k == SDLK_ESCAPE) { back = true; return; }                                             // flag 2: quit
             if (phase() == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) skipIntro();
             else if (game.phase == ChallengeGame::Failure && (k == SDLK_RETURN || k == SDLK_r)) { begin(cur); a.playSfx(2); }
@@ -2609,6 +2616,9 @@ struct ChallengeMode : Screen {
     void tick(App& a) override {
         if (nextStageRequested) { nextStageRequested = false; begin(cur + 1); return; }
         if (!supportedNow()) return;
+        static const int pauseAt = getenv("CCR_PAUSE_TICK") ? atoi(getenv("CCR_PAUSE_TICK")) : -1;
+        if (pauseAt >= 0 && cticks == pauseAt) paused = true;
+        if (paused) return;
         ++cticks;
         Sim& sm = simRef();
         prev.resize(sm.ents.size());
@@ -2651,6 +2661,16 @@ struct ChallengeMode : Screen {
         }
         else if (ph == ChallengeGame::Success || ph == ChallengeGame::Result) line = ph == ChallengeGame::Result ? "CLEAR!  " + std::to_string(clearSec) + " SEC  BEST " + std::to_string(bestSeconds) + (newBest ? " NEW" : "") + "  CLICK FOR NEXT" : "CLEAR!";
         else line = std::string("MISS: ") + (why ? why : "") + "   CLICK RETRY  ESC QUIT";
+        if (paused && dc && a.dcPause.tex) {   // Flycast Challenge A1 pause frame: the Puzzle overlay 32 pixels lower, a "Player 1" plate at y 400 and the stage type's title on the plate sheet at (184, 104)
+            a.drawDcPause(32.0f, 400.0f);
+            static const int titleOfType[6] = {1, 2, 0, 3, 4, 5};   // type 0 Get mice (verified on A1); the rest follow the rules: 2 cats eat mice = Lunch time, 3 = 100 mice, 4 = Cat soccer, 5 = Final battle, 1 = Run away (by elimination)
+            const int title = titleOfType[std::clamp(battle ? bgame.type : game.type, 0, 5)];
+            if (title >= 0 && a.dcPuzzlePlate.tex) {
+                const SDL_Rect plateDst{294, 166, 819, 70}, textSrc{256, 320 + 32 * title, 256, 32}, textDst{328, 173, 410, 51};
+                SDL_RenderCopy(a.ren, a.dcPuzzlePlate.tex, nullptr, &plateDst); SDL_RenderCopy(a.ren, a.dcPause.tex, &textSrc, &textDst);
+            }
+            return;
+        }
         if (!dc || (ph != ChallengeGame::Intro && ph != ChallengeGame::Countdown)) a.text(line, dc ? 210 : 24, dc ? 660 : 14, 30);   // the real Dreamcast Challenge screen shows no text line; the port keeps one for score and results
     }
 };
@@ -3056,7 +3076,7 @@ struct BattleMode : Screen {
             if (congra) { a.drawImage(0x90, 0, a.layF(0x208), a.layF(0x20c), 0, 1.0f, 255); a.drawImage(0x62, roundWinner, a.layF(0x214), a.layF(0x218), 0, 2.0f, 255); }   // DispCongraDrawPriority 0x1f990 (the congratulation rockets, CongraRocketCons, are not ported)
             for (auto& f : flashes_) a.drawImage(0x87, 4, f.x, f.y - a.layF(0x22c), 0, f.scale, 0x40); }
         SDL_RenderSetViewport(a.ren, nullptr);
-        if (paused && dcProjection && a.dcPause.tex) a.drawDcPause(-60.0f);   // Flycast Battle pause frame: the Puzzle overlay 60 pixels higher (the "Player 1" plate and the win boxes are not drawn yet)
+        if (paused && dcProjection && a.dcPause.tex) a.drawDcPause(-60.0f, 270.0f);   // Flycast Battle pause frame: the Puzzle overlay 60 pixels higher (the "Player 1" plate and the win boxes are not drawn yet)
     }
 };
 

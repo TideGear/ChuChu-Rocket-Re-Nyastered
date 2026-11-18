@@ -122,10 +122,16 @@ def main(prs_png, out, png=None):
     if all(os.path.exists(v) for v in paths.values()):
         rot = lambda im: im.transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         pl = {n: Image.open(v).convert('RGBA') for n, v in paths.items()}
-        atlas = Image.new('RGBA', (512, 320))
+        atlas = Image.new('RGBA', (512, 512))
         for n, pos in (('pauseboard0', (0, 0)), ('pauseboard1', (256, 0)), ('yellowneko', (384, 0)), ('fukidasi10', (384, 128)), ('fukidasi12', (416, 128)),
                        ('fukidasi9', (0, 256)), ('fukidasi11', (128, 256)), ('tudukeru', (256, 256)), ('yameru', (384, 256))):
             atlas.paste(rot(pl[n]) if n == 'pauseboard0' else pl[n], pos)   # the 128 x 256 right piece is already upright
+        # Below the pieces: the "Player 1" plate (PLAYERCLEAR_player1, 256 x 64, drawn when Battle or Challenge is paused) and the six Challenge title lines (256 x 32 each).
+        plate = os.path.join(prs_png, 'PLAYERCLEAR_player1.png')
+        if os.path.exists(plate): atlas.paste(Image.open(plate).convert('RGBA'), (0, 320))
+        for i in range(6):
+            t = os.path.join(prs_png, f'PUZZLEPAUSE_challengesetumei{i}.png')
+            if os.path.exists(t): atlas.paste(Image.open(t).convert('RGBA'), (256, 320 + 32 * i))
         sheet('dc_pause', atlas)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
