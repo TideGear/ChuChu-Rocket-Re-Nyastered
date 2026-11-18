@@ -3181,7 +3181,7 @@ struct ChallengeSelectMode : Screen {
             image(a, i == selected ? SelectedCapsule : Capsule, capsuleX(i), capsuleY(i));
         image(a, Labels, 32, 112);
         for (int i = 0; i < kStages; ++i)
-            if (progress.mask & (1u << i)) image(a, Check, capsuleX(i) + 26, capsuleY(i));
+            if (progress.mask & (1u << i)) image(a, Check, capsuleX(i) + 7, capsuleY(i) - 3);   // Flycast: the C1 mark quad is 32 x 32 at (151,112), the capsule at (144,115)
         uint64_t total = 0;
         for (uint32_t seconds : progress.best) total += seconds;
         clock(a, progress.best[selected], 309);

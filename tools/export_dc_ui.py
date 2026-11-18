@@ -121,6 +121,7 @@ def export_challenge_select(prs_png, png, out):
     header.paste(read(title), (0, 0))
     header.paste(tiles[0], (512, 0))
     tiles[3] = tiles[3].transpose(Image.Transpose.TRANSPOSE)
+    tiles[6] = tiles[6].transpose(Image.Transpose.TRANSPOSE)   # the cleared-stage mark (Flycast quad 151..183 x 112..144 for C1)
     clock = []
     for digit in digits:
         # White number on an opaque black field. Exclude the black padding.
