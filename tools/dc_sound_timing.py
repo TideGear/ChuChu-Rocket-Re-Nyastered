@@ -61,3 +61,44 @@ class SequenceTiming:
         self.time = (word(self.time) + self.scale * word(step) + word(self.step_extension)) & 0xffffffff
         self.step_extension = 0
         return self.time
+
+
+class LinearSequenceClock:
+    """Schedule parsed, non-looping SMSD events in driver updates.
+
+    Event effects and voice allocation are separate. References already expanded
+    by mlt_sequences are accepted; loops and sysex need their original handlers.
+    """
+    def __init__(self, sequence):
+        supported = {'tempo', 'control', 'program', 'pressure', 'pitch', 'note', 'end'}
+        if any(event['type'] not in supported for event in sequence['events']):
+            raise ValueError('Unsupported non-linear sequence event')
+        self.timing = SequenceTiming(*sequence['header'])
+        self.events = sequence['events']
+        self.position = 0
+        self.ended = False
+
+    def update(self, increment=0x4000):
+        word(increment)
+        if self.ended:
+            return []
+        previous = self.timing.time
+        self.timing.time = (previous - increment) & 0xffffffff
+        # SUBS/BHI at 0x6a68: unsigned greater-than before subtraction.
+        if previous > increment:
+            return []
+        due = []
+        while self.position < len(self.events):
+            event = self.events[self.position]
+            self.position += 1
+            due.append(event)
+            if event['type'] == 'end':
+                self.ended = True
+                break
+            if event['type'] == 'tempo':
+                self.timing.tempo = event['value']
+            remaining = self.timing.advance(event['step'])
+            # CMP/BLE at 0x70c8 uses a signed comparison to zero.
+            if 0 < remaining < 0x80000000:
+                break
+        return due
