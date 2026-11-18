@@ -23,6 +23,40 @@ def export_player_sheet(prs_png, out, sources, name, transpose=False):
         for i in range(4):
             f.write(struct.pack('<9f', i / 4, 0, (i + 1) / 4, 1, 0, 0, 0, 0, 0))
 
+def export_battle_hud(prs_png, out):
+    sources = ['GAMEMENU_' + name for name in
+               ('disp01', 'disp02', 'disp03', 'time_num', 'rocket01', 'rocket02')]
+    sources += [f'PLAYERCLEAR_winno{i}' for i in range(10)] + ['PLAYERCLEAR_namecpu']
+    paths = [os.path.join(prs_png, name + '.png') for name in sources]
+    if not all(os.path.isfile(path) for path in paths):
+        return
+    images = [Image.open(path).convert('RGBA') for path in paths]
+    scores, timer_panel, column, clock, rocket_on, rocket_off, *digits = [
+        image.transpose(Image.Transpose.TRANSPOSE) for image in images[:-1]]
+    # The Battle NJS_TEXANIM table at 0x8c0b9a80 supplies the UV rectangles.
+    tiles = [scores.crop((x, y, x + 128, y + 80))
+             for y in (0, 80) for x in (0, 128)]
+    tiles += [timer_panel.crop((0, 128, 256, 256)),
+              column.crop((0, 0, 128, 256)), column.crop((128, 0, 256, 256)),
+              rocket_on, rocket_off]
+    tiles += [clock.crop((x, y, x + 16, y + 32))
+              for y, count in ((0, 8), (32, 3)) for x in range(0, 16 * count, 16)]
+    tiles += digits + [images[-1]]
+    width = max(tile.width for tile in tiles)
+    height = sum(tile.height for tile in tiles)
+    atlas = Image.new('RGBA', (width, height))
+    with open(os.path.join(out, 'dc_battle_hud.frames.bin'), 'wb') as f:
+        f.write(struct.pack('<I', len(tiles)))
+        y = 0
+        for tile in tiles:
+            atlas.paste(tile, (0, y))
+            f.write(struct.pack('<9f', 0, y / height, tile.width / width,
+                                (y + tile.height) / height, 0, 0, 0, 0, 0))
+            y += tile.height
+    with open(os.path.join(out, 'dc_battle_hud.tex.bin'), 'wb') as f:
+        f.write(struct.pack('<2I', width, height))
+        f.write(atlas.tobytes())
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     for src, name, src_dir in (
@@ -48,5 +82,6 @@ def main(prs_png, out, png=None):
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}s.png' for i in range(1, 5)],
                         'dc_cursor_trail', transpose=True)
+    export_battle_hud(prs_png, out)
 
 if __name__ == '__main__': main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)

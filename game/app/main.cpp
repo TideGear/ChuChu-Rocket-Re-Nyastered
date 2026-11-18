@@ -223,7 +223,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcCursors, dcCursorTrail;
+    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -301,6 +301,7 @@ struct App {
         loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
         loadSheet(ret + "dc_cursors", dcCursors);
         loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
+        loadSheet(ret + "dc_battle_hud", dcBattleHud);
         padOk = (dlogoOk || imgSheet(7)) && loadSheet(ret + "bg0877", pbg) &&
                 loadSheet(ret + "pprompt", pprompt) && loadSheet(ret + "procket", procket) &&
                 loadSheet(ret + "pdeco", pdeco) && loadSheet(ret + "pbtn", pbtn) && loadSheet(ret + "bg0879", pmbg);
@@ -660,6 +661,53 @@ struct App {
         Sheet* sh = imgSheet(id); if (!sh || frame < 0 || frame >= (int)sh->fr.size()) return; const SDL_Rect& fr = sh->fr[frame]; const SDL_Point& of = sh->off[frame];
         SDL_Rect dst{(int)std::lround(x + of.x * scale), (int)std::lround(y + of.y * scale), (int)std::lround(fr.w * scale), (int)std::lround(fr.h * scale)};
         SDL_SetTextureAlphaMod(sh->tex, (Uint8)alpha); SDL_RenderCopyEx(ren, sh->tex, &fr, &dst, 0.0, nullptr, (SDL_RendererFlip)((flags & 2 ? SDL_FLIP_HORIZONTAL : 0) | (flags & 4 ? SDL_FLIP_VERTICAL : 0))); SDL_SetTextureAlphaMod(sh->tex, 255); }
+
+    bool useDcBattleHud() {
+        return dcBattleHud.tex && dcBattleHud.fr.size() == 31 &&
+               (mobileSheetsMissing || useModels3d());
+    }
+
+    // The Battle task (0x8c0272a0) submits these sprites at fixed screen
+    // coordinates. SDL draws them from far to near instead of sorting by 1/w.
+    void drawDcBattleHud(const Scoreboard& score, const int (&cpuLevel)[4],
+                         int remainingFrames, int roundFrames) {
+        auto sprite = [&](int frame, float x, float y, float width, float height) {
+            constexpr float scale = GW / 640.0f;
+            const SDL_FRect dst{x * scale, y * scale, width * scale, height * scale};
+            SDL_RenderCopyF(ren, dcBattleHud.tex, &dcBattleHud.fr[frame], &dst);
+        };
+        sprite(5, 32, 0, 128, 256);
+        sprite(6, 32, 256, 128, 256);
+        for (int p = 0; p < 4; ++p) sprite(p, 127 + 120 * p, 368, 128, 88);
+        sprite(4, -16, 16, 256, 128);
+        for (int p = 0; p < 4; ++p) {
+            const int value = std::max(0, score.player[p]);
+            const int digits[] = {(value / 100) % 10, (value / 10) % 10, value % 10};
+            for (int i = 0; i < 3; ++i)
+                sprite(20 + digits[i], 139 + 120 * p + 32 * i, 403, 32, 32);
+        }
+        // CPU name plates (0x8c029a20) sit between the digits and the frame.
+        for (int p = 0; p < 4; ++p)
+            if (cpuLevel[p] >= 0) sprite(30, 132 + 120 * p, 370, 128, 32);
+        const int seconds = (remainingFrames + 59) / 60;
+        const int timer[] = {seconds / 60 % 10, 10, seconds / 10 % 6, seconds % 10};
+        for (int i = 0; i < 4; ++i) sprite(9 + timer[i], 36 + 16 * i, 55, 16, 32);
+        const int lit = std::min(9, 10 * remainingFrames / std::max(1, roundFrames));
+        // The rocket vertices use source-alpha additive blending.
+        SDL_SetTextureBlendMode(dcBattleHud.tex, SDL_BLENDMODE_ADD);
+        for (int i = 0; i < 9; ++i) {
+            const bool on = i < lit;
+            const int brightness = on ? 255 : 128;
+            SDL_SetTextureColorMod(dcBattleHud.tex, i < 3 ? brightness : 0,
+                                   i < 3 ? 113 * brightness / 255 : brightness,
+                                   (i < 3 ? 57 : 227) * brightness / 255);
+            SDL_SetTextureAlphaMod(dcBattleHud.tex, brightness);
+            sprite(on ? 7 : 8, 55, 395 - 30 * i, 32, 32);
+        }
+        SDL_SetTextureColorMod(dcBattleHud.tex, 255, 255, 255);
+        SDL_SetTextureAlphaMod(dcBattleHud.tex, 255);
+        SDL_SetTextureBlendMode(dcBattleHud.tex, SDL_BLENDMODE_BLEND);
+    }
 
     // HD 1.0 iPad renderFourBattleHud and renderTeamBattleHud (-788),
     // followed by score4pb2D or scoreteam2D (-784) before the field (-780).
@@ -2734,7 +2782,10 @@ struct BattleMode : Screen {
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         a.stars.draw(a);
-        a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
+        const bool dcHud = !game.teamMode && mode < 4 && a.useDcBattleHud();
+        const int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock);
+        const int seconds = (left + 59) / 60;
+        if (!dcHud) a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
         for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
         for (int p = 0; p < 4; ++p) {
@@ -2744,6 +2795,7 @@ struct BattleMode : Screen {
             if (game.sim.coll[y][x] & 0xF00) a.cursor(x, y, p, game.frame, true);
         }
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku);
+        if (dcHud) a.drawDcBattleHud(game.score, lv, left, game.roundFrames);
         const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
         if (intro > 0 && !game.over)
             a.drawBattleRankOverlay(game.teamMode, paused, intro + game.frame, game.score, ranks,
@@ -2755,9 +2807,9 @@ struct BattleMode : Screen {
                 if (aim.inside) a.cursorAt(aim.x, aim.y, p, game.frame);
             } else padAim[p].draw(a, p, game.frame, paused ? 1.0f : alpha);
         }
-        { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
+        if (!dcHud) { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
-          int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock); int secs = (left + 59) / 60; int mm = secs / 60, ss = secs % 60;
+          int mm = seconds / 60, ss = seconds % 60;
           const float y = 84.0f; float x = 78.0f; const float step = 14.0f;
           if (a.hdTime.tex) {
               a.blit(a.hdTime, mm % 10, x, y, 0.8f);
