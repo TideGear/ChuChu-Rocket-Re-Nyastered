@@ -2254,9 +2254,9 @@ struct PuzzleMode : Screen {
     CursorTrail cursorTrail;
     bool mouseCursor = false;
     int failureFrames = 0;
-    PadAim padAim{82.5f, 67.5f};
+    PadAim padAim{97.5f, 67.5f};   // Flycast Normal Puzzle 01 and 02: the pad cursor starts on cell (6, 4), its pointer at the cell centre
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
-    int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 5, curY = 4; SDL_GameController* pad = nullptr;
+    int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 6, curY = 4; SDL_GameController* pad = nullptr;
     void putAt(int cx, int cy, int d) { sim.removeArrow(cx, cy); if (d >= 0 && used(d) < stock[d]) sim.placeArrow(cx, cy, d); }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
     bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
@@ -2269,17 +2269,19 @@ struct PuzzleMode : Screen {
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
+    // Dreamcast Puzzle uses the same measured floor plane as Battle (Flycast Normal Puzzle 01/02: floor quad x 136.929-594.606, y 22.604-365.861 of 640 x 480).
+    FieldLayout pf(const App& a) const { return dreamcastPuzzleControls(a) ? dcBattleField : FieldLayout{}; }
     int used(int d) const { int n = 0; for (auto& a : sim.arrows) if (a.live && a.dir == d) n++; return n; }
     ~PuzzleMode() override { if (pad) SDL_GameControllerClose(pad); }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
             aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
-                          e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y);
+                          e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, pf(a));
             mouseCursor = true;
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (paused && k != SDLK_ESCAPE) return;
-            if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0);
+            if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0, pf(a));
             if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); }
@@ -2288,7 +2290,7 @@ struct PuzzleMode : Screen {
                 putAt(aim.cellX(), aim.cellY(), arrowKey(k));
             } }
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && hudButton(a, e)) {}   // HD 1.0 PuzzleGameScreen::handleInput: rect 3 Start (flag 1), rect 4 Cancel (flag 2)
-        else if (e.type == SDL_MOUSEBUTTONDOWN && state == 0 && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e);
+        else if (e.type == SDL_MOUSEBUTTONDOWN && state == 0 && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e, pf(a));
         else if (e.type == SDL_MOUSEBUTTONUP && state == 0 && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); putAt(cx, cy, d); }   // a tap (d = -1) deletes the arrow on the cell
         else if (e.type == SDL_CONTROLLERDEVICEADDED && !pad) pad = SDL_GameControllerOpen(e.cdevice.which);
         else if (e.type == SDL_CONTROLLERDEVICEREMOVED && pad &&
@@ -2376,7 +2378,7 @@ struct PuzzleMode : Screen {
             curX = static_cast<int>(padAim.x / kCell);
             curY = static_cast<int>(padAim.y / kCell);
         }
-        cursorTrail.tick(mouseCursor ? aim.x : padAim.logicalX(), mouseCursor ? aim.y : padAim.logicalY(),
+        cursorTrail.tick(mouseCursor ? aim.x : padAim.logicalX(1.0f, pf(a)), mouseCursor ? aim.y : padAim.logicalY(1.0f, pf(a)),
                          state == 0 && (!mouseCursor || aim.inside), mouseCursor);
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
         if (state == 3) {
@@ -2431,17 +2433,17 @@ struct PuzzleMode : Screen {
         a.stars.draw(a);
         if (hasBoardTasks) {
             const int set = gApp ? gApp->stageSet : 0;
-            a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2);   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
-            for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits);
+            a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
+            for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, pf(a));
         }
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
         const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
-        if (showCursor && (sim.coll[aimY][aimX] & 0xF00)) a.cursor(aimX, aimY, 0, cticks, true);
-        if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
+        if (showCursor && (sim.coll[aimY][aimX] & 0xF00)) a.cursor(aimX, aimY, 0, cticks, true, pf(a));
+        if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a));
         if (showCursor) {
             cursorTrail.draw(a, 0);
-            if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks);
-            else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha);
+            if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks, false, pf(a).scale());
+            else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha, pf(a));
         }
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
         const bool dcLeft = dreamcastPuzzleControls(a) && a.dcPuzzleStage.tex;   // real draw list: the 128 x 64 "stage" quad at (5, 325) of 640 x 480, drawn here at 1.6 times that
