@@ -488,8 +488,7 @@ struct App {
         const int mat = 29 + std::max(0, std::min(5, getenv("CCR_FLOOR3D") ? atoi(getenv("CCR_FLOOR3D")) : dcFloor)); if (mat >= (int)floorM->matTex.size()) return false;
         SDL_Texture* tex = models3d.textures[floorM->matTex[mat]];
         std::vector<SDL_Vertex> verts; verts.reserve(12 * 9 * 6);
-        // Neutral floor modulation measured from the Dreamcast Normal Puzzle 01 capture.
-        const SDL_Color floorLight{202, 202, 202, 255};
+        const SDL_Color floorLight{204, 204, 204, 255};   // exact: the real floor quad's vertex intensity is 0.8000 (0.3 + 0.5 * normal up)
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
             const float x0 = field.x(c), y0 = field.y(r);
             const float x1 = field.x(c + 1), y1 = field.y(r + 1);
@@ -1025,7 +1024,7 @@ struct App {
         static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.5f, -0.25f};
         float phase = 0.0f; int frame = -1;
         if (!en.mouse) { phase = (i < cphase.size() ? cphase[i] * 1.2f : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
-        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 0u);   // the mouse's eyes (material 0, c_mouse01) are in the translucent list in the real stream
+        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
         return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
