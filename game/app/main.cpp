@@ -962,7 +962,7 @@ struct ModelViewerMode : Screen {
         if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 1.0f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
         const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
         if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
-        if (getenv("CCR_CANDS")) { static const char* nm[6] = {"c_ab290", "c_ab180", "c_ab674", "c_ab03c", "c_a302c", "c_b0c7c"}; for (int i = 0; i < 6; i++) if (const Model3D* m = pack.find(nm[i])) { float mx = 1.0f; for (const auto& t : m->tris) for (int k = 0; k < 3; k++) mx = std::max(mx, std::max(std::fabs(t.v[k].x), std::fabs(t.v[k].z))); const float sc = 70.0f / mx; pack.draw(a.ren, *m, 90.0f + 170.0f * i, 220.0f, sc, 0.0f, 90.0f); pack.draw(a.ren, *m, 90.0f + 170.0f * i, 520.0f, sc, 30.0f, 40.0f); } a.text("CANDIDATES ab290 ab180 ab674 ab03c a302c b0c7c", 24, 14, 24); return; }
+        if (getenv("CCR_CANDS")) { int n = 0; for (int i = 0; i < 64; i++) { char nm[16]; snprintf(nm, sizeof nm, "h_%x", 0); (void)nm; } static const unsigned offs[21] = {0xaa370, 0xaa46c, 0xaa760, 0xaaa54, 0xab03c, 0xab180, 0xab290, 0xab674, 0xabe04, 0xac3e4, 0xade98, 0xb0c7c, 0xb0db4, 0xb0eec, 0xb1024, 0xb1178, 0xb1274, 0xb1370, 0xb146c, 0xb15c0, 0xb16bc}; for (unsigned o : offs) { char nm[24]; snprintf(nm, sizeof nm, "h_%x", o); if (const Model3D* m = pack.find(nm)) { float mx = 1.0f; for (const auto& t : m->tris) for (int k = 0; k < 3; k++) mx = std::max(mx, std::max(std::fabs(t.v[k].x), std::fabs(t.v[k].z))); const float sc = 60.0f / mx; const float cx = 90.0f + 170.0f * (n % 6), cy = 120.0f + 150.0f * (n / 6); pack.draw(a.ren, *m, cx, cy, sc, 0.0f, 90.0f); a.text(nm + 2, 18, (int)cx - 30, (int)cy + 62); n++; } } return; }
         if (getenv("CCR_CAMFIT")) {   // pitch comparison against the Dreamcast frame: cat and mouse at pitches 30..80 (columns), cat yaw 180 and mouse yaw 0 (their fronts)
             const Model3D* cat = pack.find("cat"); const Model3D* mo = pack.find("mouse0");
             for (int i = 0; i < 6; i++) { const float pitch = 20.0f + 10.0f * i; if (cat) { pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 130.0f, 5.2f, 180.0f, pitch, 1.0f, 17); pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 330.0f, 5.2f, 0.0f, pitch, 1.0f, 17); } if (mo) { pack.draw(a.ren, *mo, 90.0f + 160.0f * i, 500.0f, 7.0f, 180.0f, pitch); } }
@@ -2892,12 +2892,20 @@ int main(int argc, char** argv) {
         if (const char* ap = getenv("APPDATA")) { cand.push_back(std::string(ap) + "/ChuChuRocketReNyastered/assets"); cand.push_back(std::string(ap) + "/ReNyastered/assets"); }   // the second is the folder name used before 2026-11-17
         for (auto& c : cand) if (hasAssets(c)) { root = c; break; }
         if (root.empty()) {
-            const char* msg = "Game assets not found.\n\nRun setup.cmd (it extracts them from your own copies of the game), start ccr with the asset folder as its first argument, or set CCR_ASSETS.";
+#ifdef _WIN32
+            const char* msg = "Game assets not found.\n\nIn RecompLauncher run Easy Setup first and pick the folder with your original game files. Without the launcher, run setup.cmd from a source checkout, or start ccr with the asset folder as its first argument (or set CCR_ASSETS).";
+#else
+            const char* msg = "Game assets not found.\n\nThey are extracted once from your own copies of the game. In RecompLauncher run Easy Setup first and pick the folder with your original files. Without the launcher, run this once in a terminal:\n    ./ccr --prepare \"/folder/with/your/game/files\"\n(needs Python 3.10+ with Pillow; add --download-python to let setup install Pillow into a private environment), then start ccr again. The assets go to ~/.config/ChuChuRocketReNyastered/assets and setup.log there lists problems.";
+#endif
             printf("%s\n", msg); if (!getenv("CCR_SHOT") && !getenv("CCR_HEADLESS") && !getenv("CCR_BENCH") && SDL_Init(SDL_INIT_VIDEO) == 0) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ChuChu Rocket! Re-Nyastered", msg, nullptr); SDL_Quit(); } return 2;
         }
     }
     if (argc > 1 + shift && !strcmp(argv[1 + shift], "--launcher")) {
-        if (!hasAssets(root)) return 2;
+        if (!hasAssets(root)) {   // launched by RecompLauncher before setup finished (or setup failed): say so instead of exiting silently
+            const std::string m = "The extracted game assets were not found in:\n" + root + "\n\nIn RecompLauncher run Easy Setup (pick the folder with your original game files) and wait for it to finish; its log is setup.log in the same data folder.";
+            printf("%s\n", m.c_str()); if (!getenv("CCR_SHOT") && !getenv("CCR_HEADLESS") && !getenv("CCR_BENCH") && SDL_Init(SDL_INIT_VIDEO) == 0) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ChuChu Rocket! Re-Nyastered", m.c_str(), nullptr); SDL_Quit(); }
+            return 2;
+        }
         ++shift;
         if (!getenv("CCR_FULLSCREEN")) {
             const char* mode = getenv("RECOMPLAUNCHER_MODE");
