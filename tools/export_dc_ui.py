@@ -77,6 +77,7 @@ def main(prs_png, out, png=None):
         ('PUZZLEMENU_pzleft01.png', 'dc_puzzle_start', prs_png),
         ('PUZZLEMENU_pzleft02.png', 'dc_puzzle_cancel', prs_png),
         ('PUZZLEMENU_pzright.png', 'dc_puzzle_panel', prs_png),
+        ('PUZZLEMENU_stage.png', 'dc_puzzle_stage', prs_png),
     ):
         if not src_dir: continue
         p = os.path.join(src_dir, src)
@@ -87,7 +88,7 @@ def main(prs_png, out, png=None):
         if name in ('dc_puzzle_start', 'dc_puzzle_cancel', 'dc_puzzle_panel'):
             im = im.transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         # The bottom panel is two 256 x 96 quads of one texture (rows 0-95 and 96-191), so it keeps its full size.
-        if name != 'dc_puzzle_panel': im = im.crop(im.getbbox())
+        if name not in ('dc_puzzle_panel', 'dc_puzzle_stage'): im = im.crop(im.getbbox())
         w, h = im.size
         with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', w, h)); f.write(im.tobytes())
         with open(os.path.join(out, name + '.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
