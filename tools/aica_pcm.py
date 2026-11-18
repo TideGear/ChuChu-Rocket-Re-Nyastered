@@ -2,8 +2,8 @@
 
 Consumes captured channel state. Direct output includes pan/attenuation, sample
 end/loops, amplitude/filter envelope evolution and timestamped key-offs.
-Note-on initialization is not modeled. This is not a
-finished sound-effect renderer. Hardware field/step reference: Flycast core
+Register-based note starts preserve an explicit channel LFO clock. This is not
+a finished sound-effect renderer. Hardware field/step reference: Flycast core
 3a5267a, core/hw/aica/sgc_if.cpp; compare with original core snapshots.
 """
 import math
@@ -29,9 +29,31 @@ ATTACK_MS = (-1, -1, 8100, 6900, 6000, 4800, 4000, 3400, 3000, 2400, 2000,
 
 
 class SampleStream:
+    @classmethod
+    def from_registers(cls, channel, sound_ram, *, lfo_counter, lfo_phase):
+        """Start a sampled voice, preserving the caller's channel LFO clock.
+
+        KEY_ON does not reset that clock; register-write timing controls it.
+        The remaining runtime fields are initialized without a saved voice.
+        """
+        if not isinstance(lfo_phase, int) or not 0 <= lfo_phase <= 255:
+            raise ValueError('Invalid channel LFO phase')
+        initial = dict(channel)
+        initial['runtime'] = dict(sample_address=channel['sample_address'], position=0,
+            fraction=0, s0=0, s1=0, lfo_counter=lfo_counter, lfo_phase=lfo_phase,
+            enabled=True, looped=0, amplitude_value=0x3ff << 16, amplitude_state=3,
+            filter_value=channel['register_words'][11] << 16, filter_state=3,
+            filter_previous1=0, filter_previous2=0, filter_fraction=0,
+            adpcm_quant=127, adpcm_loop_quant=0, adpcm_loop_previous=0, adpcm_in_loop=False)
+        model = cls(initial, sound_ram)
+        model.key_on()
+        return model
+
     def __init__(self, channel, sound_ram):
         if channel['pcm_mode'] not in (0, 1, 2, 3) or not channel['runtime']['enabled']:
             raise ValueError('An enabled sampled channel is required')
+        if channel['register_words'][0] & 0x400:
+            raise ValueError('Noise voices are not yet supported')
         self.channel = channel
         self.ram = sound_ram
         self.state = dict(channel['runtime'])
@@ -176,6 +198,18 @@ class SampleStream:
             self.state['amplitude_state'] = 3
             self.state['filter_state'] = 3
 
+    def key_on(self):
+        """AICA KEY_ON ignores voices whose amplitude state is not release."""
+        state = self.state
+        if state['amplitude_state'] != 3:
+            return
+        state.update(enabled=True, amplitude_state=0, amplitude_value=640 << 16,
+                     filter_state=0, filter_value=self.channel['register_words'][11] << 16,
+                     filter_previous1=0, filter_previous2=0, filter_fraction=0,
+                     position=0, fraction=0, looped=0, s0=0, adpcm_quant=127,
+                     adpcm_loop_quant=0, adpcm_loop_previous=0, adpcm_in_loop=False)
+        self.decode(last=True)
+
     def render(self, count, filtered=False, key_off_samples=()):
         if count < 0:
             raise ValueError('Negative sample count')
@@ -259,15 +293,16 @@ class SampleStream:
         return out
 
 
-def direct_stereo(channel, sound_ram, count, key_off_samples=()):
-    """Render a captured sample window with optional key-offs, without DSP returns."""
+def direct_stereo(channel, sound_ram, count, key_off_samples=(), start=False):
+    """Render captured state or start from registers, without DSP returns."""
     state = channel['runtime']
     words = channel['register_words']
     if words[10] & 64:
         raise ValueError('Attenuation bypass is not yet validated')
     if channel['lfo_raw'] & 7:
         raise ValueError('Amplitude LFO is not yet validated')
-    model = SampleStream(channel, sound_ram)
+    model = (SampleStream.from_registers(channel, sound_ram, lfo_counter=state['lfo_counter'],
+                                         lfo_phase=state['lfo_phase']) if start else SampleStream(channel, sound_ram))
     signal = model.render(count, filtered=True, key_off_samples=key_off_samples)
     levels = [255] + [(15 - i) * 8 for i in range(1, 16)]
     attenuation = [channel['total_level'] + levels[channel['direct_level']]] * 2

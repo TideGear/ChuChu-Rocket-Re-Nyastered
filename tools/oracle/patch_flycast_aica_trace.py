@@ -3,7 +3,10 @@
 Usage: patch_flycast_aica_trace.py <source directory>
 This development-only insertion preserves synthesis and is disabled without
 FLYCAST_AICA_TRACE=<csv path>. Rebuild the core, then compare its WAV with the
-unmodified core before using the timestamps. No emulator sources are bundled.
+unmodified core before using the timestamps. Optional FLYCAST_AICA_KEY_ON=<hex
+channel mask> invokes original KEY_ON once before the first sample, explicitly
+changing the test fixture. Leave it unset for ordinary tracing or identity checks.
+No emulator sources are bundled.
 """
 import argparse
 import hashlib
@@ -20,6 +23,7 @@ std::FILE* ccr_trace_file = nullptr;
 bool ccr_trace_initialized = false;
 bool ccr_trace_baseline = false;
 unsigned long long ccr_trace_sample = 0;
+bool ccr_keyon_done = false;
 u32 ccr_trace_control[64] {};
 
 void ccr_trace_keys()
@@ -49,6 +53,21 @@ void ccr_trace_keys()
 }
 '''
 
+KEYON = r'''
+// Synthetic reference control: invoke the core's own complete KEY_ON routine.
+// Disabled unless an explicit hexadecimal channel mask is provided.
+void ccr_keyon_controls()
+{
+    if (ccr_keyon_done) return;
+    ccr_keyon_done = true;
+    const char* value = std::getenv("FLYCAST_AICA_KEY_ON");
+    if (!value) return;
+    const unsigned long long mask = std::strtoull(value, nullptr, 16);
+    for (unsigned index = 0; index < 64; ++index)
+        if (mask & (1ull << index)) Chans[index].KEY_ON();
+}
+'''
+
 
 def patch(root, msvc=False, glext=None):
     path = root / 'core/hw/aica/sgc_if.cpp'
@@ -63,9 +82,9 @@ def patch(root, msvc=False, glext=None):
     text = raw.decode('utf-8')
     text = text.replace('namespace aica::sgc\n{',
                         '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n\nnamespace aica::sgc\n{\n' + TRACE, 1)
-    text = text.replace('void AICA_Sample()\n{', 'void AICA_Sample()\n{\n\tccr_trace_keys();', 1)
+    text = text.replace('void AICA_Sample()\n{', KEYON + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_trace_keys();', 1)
     text = text.replace('void deserialize(Deserializer& deser)\n{',
-                        'void deserialize(Deserializer& deser)\n{\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;', 1)
+                        'void deserialize(Deserializer& deser)\n{\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_keyon_done = false;', 1)
     if text.count('ccr_trace_keys();') != 1 or text.count('ccr_trace_sample = 0;') != 2:
         raise ValueError('Trace anchors did not resolve uniquely')
     path.write_bytes(text.encode('utf-8'))

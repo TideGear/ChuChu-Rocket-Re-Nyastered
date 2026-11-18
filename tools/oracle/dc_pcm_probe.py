@@ -105,7 +105,40 @@ def prepare_filter_controls(state, mlt, source_channel=0):
     return output
 
 
-def verify(state, mlt, wav_path, keys_path=None):
+def prepare_keyon_controls(state, mlt, sources):
+    """Four isolated KEY_ON controls. Start with FLYCAST_AICA_KEY_ON=f00.
+
+    Clears captured voice records, pending gates, active sequence flags and FIFO
+    commands. This isolates synthesis; it is not game-loop playback verification.
+    """
+    if len(sources) != 2:
+        raise ValueError('KEY_ON controls require two enabled source channels')
+    report = inspect(state, mlt)
+    output = prepare(state, mlt, set(sources))
+    base, registers, runtimes = (report[k] for k in ('sound_ram_offset', 'register_offset', 'runtime_offset'))
+    output[base + 0x10000:base + 0x11000] = bytes(0x1000)
+    output[base + 0x11380:base + 0x11680] = bytes(0x300)
+    for group in range(8):
+        output[base + 0x11001 + group * 0x50] = 0
+    output[base + 0x12004:base + 0x12008] = output[base + 0x12000:base + 0x12004]
+    for index in range(64):
+        output[runtimes + 72 * index + 71] = 0
+    for index, source in enumerate(list(sources) * 2, 8):
+        reg, runtime = registers + index * 128, runtimes + index * 72
+        output[reg:reg + 128] = state[registers + source * 128:registers + source * 128 + 128]
+        output[runtime:runtime + 72] = state[runtimes + source * 72:runtimes + source * 72 + 72]
+        struct.pack_into('<iI', output, runtime + 38, 0x3ff << 16, 3)
+        output[runtime + 71] = 0
+        if index >= 10:
+            if struct.unpack_from('<I', output, reg + 12)[0] <= 128:
+                raise ValueError('KEY_ON controls need sample endpoints above 128')
+            struct.pack_into('<I', output, reg + 8, 128)
+            struct.pack_into('<I', output, reg + 16, 18 | 18 << 6)
+            struct.pack_into('<I', output, reg + 20, 20 | 8 << 5 | 15 << 10 | 0x4000)
+    return output
+
+
+def verify(state, mlt, wav_path, keys_path=None, start_channels=()):
     report = inspect(state, mlt)
     registers = report['register_offset']
     if any(state[registers + 0x2000:registers + 0x2048]):
@@ -137,10 +170,11 @@ def verify(state, mlt, wav_path, keys_path=None):
                     key_off.setdefault(index, []).append(sample)
                 previous[index] = on
     for channel in report['channels']:
-        if not channel['runtime']['enabled']:
+        starting = channel['channel'] in start_channels
+        if not channel['runtime']['enabled'] and not starting:
             continue
         events = key_off.get(channel['channel'], ())
-        rendered, final = direct_stereo(channel, ram, count, events)
+        rendered, final = direct_stereo(channel, ram, count, events, start=starting)
         for index, pair in enumerate(rendered):
             expected[2 * index] += pair[0]
             expected[2 * index + 1] += pair[1]
@@ -167,6 +201,8 @@ if __name__ == '__main__':
     parser.add_argument('--keys-csv', type=Path, help='sample/key transitions from the instrumented core')
     parser.add_argument('--envelope-controls', action='store_true', help='synthetic amplitude controls from one source channel')
     parser.add_argument('--filter-controls', action='store_true', help='synthetic changing filter controls from one source channel')
+    parser.add_argument('--start-channels', default='', help='verify synthetic KEY_ON at sample zero for these channels')
+    parser.add_argument('--keyon-controls', action='store_true', help='four KEY_ON controls from two source channels')
     args = parser.parse_args()
     state, mlt = args.state.read_bytes(), args.mlt.read_bytes()
     if args.operation == 'prepare':
@@ -174,7 +210,11 @@ if __name__ == '__main__':
             channels = {int(value) for value in args.channels.split(',')}
         except ValueError:
             parser.error('channels must be comma-separated integers')
-        if args.envelope_controls or args.filter_controls:
+        if args.keyon_controls:
+            if args.envelope_controls or args.filter_controls:
+                parser.error('Choose one synthetic control type')
+            args.output.write_bytes(prepare_keyon_controls(state, mlt, sorted(channels)))
+        elif args.envelope_controls or args.filter_controls:
             if args.envelope_controls and args.filter_controls:
                 parser.error('Choose amplitude or filter controls')
             if len(channels) != 1:
@@ -184,4 +224,10 @@ if __name__ == '__main__':
         else:
             args.output.write_bytes(prepare(state, mlt, channels, args.force_loop))
     else:
-        verify(state, mlt, args.output, args.keys_csv)
+        try:
+            starts = {int(value) for value in args.start_channels.split(',') if value}
+        except ValueError:
+            parser.error('--start-channels must be comma-separated integers')
+        if any(not 0 <= index < 64 for index in starts):
+            parser.error('--start-channels must be in 0..63')
+        verify(state, mlt, args.output, args.keys_csv, starts)
