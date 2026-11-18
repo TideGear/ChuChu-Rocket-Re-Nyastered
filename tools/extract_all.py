@@ -386,8 +386,11 @@ def main():
         except RuntimeError as error:
             manifest['dlc_export_error'] = str(error)
     sprites = ('r0930', 'r0447', 'r0503', 'r0484', 'r0729', 'r0726', 'r0749', 'r0023')
-    manifest['base_graphics_available'] = all(Path(assets, 'ret_all', sprite + suffix).is_file()
-                                              for sprite in sprites for suffix in ('.tex.bin', '.frames.bin'))
+    mobile_graphics = all(Path(assets, 'ret_all', sprite + suffix).is_file()
+                          for sprite in sprites for suffix in ('.tex.bin', '.frames.bin'))
+    dreamcast_graphics = Path(assets, 'dreamcast', 'models.bin').is_file()   # the disc's 3D model pack (cats, mice, rockets, floor, walls) lets the app run from a Dreamcast image alone
+    manifest['base_graphics_available'] = mobile_graphics or dreamcast_graphics
+    manifest['graphics_source'] = 'mobile' if mobile_graphics else ('dreamcast' if dreamcast_graphics else 'none')
     puzzle = any(Path(assets, path).is_file() for path in
                  ('gba/gba_stages.bin', 'mobile_puzzles.bin', 'dreamcast_puzzles.bin'))
     battle = Path(assets, 'battle_stages.bin').is_file()

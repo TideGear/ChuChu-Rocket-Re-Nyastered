@@ -58,6 +58,10 @@ static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
 static const int GW = 1024, GH = 768, OX = 184, OY = 32;
 static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {250, 170, 30, 255}, {240, 60, 60, 255}, {40, 190, 70, 255}};   // player order of the original art (arrow sheet r0645, cursor sheet r0732, rocket sheets r0651/r0663/r0675/r0687): blue, orange, red, green
 
+// Built-in 5x7 bitmap font (uppercase, digits, basic punctuation) used when no mobile glyph sheet exists (a Dreamcast-only install has none; the disc's own fonts are not wired yet).
+static const char kFontChars[] = "!%'()+,-./0123456789:<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+static const uint8_t kFont57[][7] = {{0x04,0x04,0x04,0x04,0x04,0x00,0x04},{0x19,0x1a,0x02,0x04,0x08,0x0b,0x13},{0x04,0x04,0x08,0x00,0x00,0x00,0x00},{0x02,0x04,0x08,0x08,0x08,0x04,0x02},{0x08,0x04,0x02,0x02,0x02,0x04,0x08},{0x00,0x04,0x04,0x1f,0x04,0x04,0x00},{0x00,0x00,0x00,0x00,0x06,0x04,0x08},{0x00,0x00,0x00,0x1f,0x00,0x00,0x00},{0x00,0x00,0x00,0x00,0x00,0x0c,0x0c},{0x01,0x02,0x02,0x04,0x08,0x08,0x10},{0x0e,0x11,0x13,0x15,0x19,0x11,0x0e},{0x04,0x0c,0x04,0x04,0x04,0x04,0x0e},{0x0e,0x11,0x01,0x02,0x04,0x08,0x1f},{0x1e,0x01,0x01,0x0e,0x01,0x01,0x1e},{0x02,0x06,0x0a,0x12,0x1f,0x02,0x02},{0x1f,0x10,0x1e,0x01,0x01,0x11,0x0e},{0x06,0x08,0x10,0x1e,0x11,0x11,0x0e},{0x1f,0x01,0x02,0x04,0x08,0x08,0x08},{0x0e,0x11,0x11,0x0e,0x11,0x11,0x0e},{0x0e,0x11,0x11,0x0f,0x01,0x02,0x0c},{0x00,0x0c,0x0c,0x00,0x0c,0x0c,0x00},{0x02,0x04,0x08,0x10,0x08,0x04,0x02},{0x00,0x00,0x1f,0x00,0x1f,0x00,0x00},{0x08,0x04,0x02,0x01,0x02,0x04,0x08},{0x0e,0x11,0x01,0x02,0x04,0x00,0x04},{0x0e,0x11,0x11,0x1f,0x11,0x11,0x11},{0x1e,0x11,0x11,0x1e,0x11,0x11,0x1e},{0x0e,0x11,0x10,0x10,0x10,0x11,0x0e},{0x1e,0x11,0x11,0x11,0x11,0x11,0x1e},{0x1f,0x10,0x10,0x1e,0x10,0x10,0x1f},{0x1f,0x10,0x10,0x1e,0x10,0x10,0x10},{0x0e,0x11,0x10,0x17,0x11,0x11,0x0f},{0x11,0x11,0x11,0x1f,0x11,0x11,0x11},{0x0e,0x04,0x04,0x04,0x04,0x04,0x0e},{0x07,0x02,0x02,0x02,0x02,0x12,0x0c},{0x11,0x12,0x14,0x18,0x14,0x12,0x11},{0x10,0x10,0x10,0x10,0x10,0x10,0x1f},{0x11,0x1b,0x15,0x15,0x11,0x11,0x11},{0x11,0x19,0x15,0x13,0x11,0x11,0x11},{0x0e,0x11,0x11,0x11,0x11,0x11,0x0e},{0x1e,0x11,0x11,0x1e,0x10,0x10,0x10},{0x0e,0x11,0x11,0x11,0x15,0x12,0x0d},{0x1e,0x11,0x11,0x1e,0x14,0x12,0x11},{0x0f,0x10,0x10,0x0e,0x01,0x01,0x1e},{0x1f,0x04,0x04,0x04,0x04,0x04,0x04},{0x11,0x11,0x11,0x11,0x11,0x11,0x0e},{0x11,0x11,0x11,0x11,0x11,0x0a,0x04},{0x11,0x11,0x11,0x15,0x15,0x1b,0x11},{0x11,0x11,0x0a,0x04,0x0a,0x11,0x11},{0x11,0x11,0x0a,0x04,0x04,0x04,0x04},{0x1f,0x01,0x02,0x04,0x08,0x10,0x1f}};
+static const uint8_t* font57(unsigned char c) { if (c >= 'a' && c <= 'z') c = (unsigned char)(c - 32); for (size_t i = 0; i + 1 < sizeof kFontChars; i++) if ((unsigned char)kFontChars[i] == c) return kFont57[i]; return nullptr; }
 struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; std::vector<SDL_Point> box; std::vector<SDL_Point> sz; };   // sz = frame record shorts 0, 1 (the size the panel calls use), box = shorts 2, 3   // box = frame record shorts 2, 3 (the draw box BHLib_RenderTexture callers use, minus 2)   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
 
 static constexpr int kMobilePuzzleSource = 5;
@@ -166,7 +170,7 @@ struct StarBackground {
 
 struct App {
     StarBackground stars;
-    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings; ModelPack models3d; bool models3dTried = false;
+    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings; ModelPack models3d; bool models3dTried = false, mobileSheetsMissing = false;
     bool useModels3d() { if (!models3dTried) { models3dTried = true; if (settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
     void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
     void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true;
@@ -280,8 +284,13 @@ struct App {
         std::string ret = root + "/ret_all/";
         gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_hlp_hdr", hlHdr); loadSheet(ret + "hd_hlp_tab", hlTab); loadSheet(ret + "hd_hlp_frm", hlFrm); loadSheet(ret + "hd_hlp_dia", hlDia); loadSheet(ret + "img/hd_35", plPanels); loadSheet(ret + "img/hd_36", plLabels); loadSheet(ret + "img/hd_12", plBottom); loadSheet(ret + "img/hd_28", plTiles); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
-        if (!(loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
-              loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font))) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all)\n", ret.c_str()); return false; }
+        const bool mobileSheets = loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
+              loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font);
+        if (!mobileSheets) {   // a Dreamcast-only install: the 3D model pack (cats, mice, rockets, floor, walls) carries the field and labels use the built-in bitmap font
+            FILE* mp = fopen((root + "/dreamcast/models.bin").c_str(), "rb");
+            if (!mp) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all) and no Dreamcast model pack\n", ret.c_str()); return false; }
+            fclose(mp); mobileSheetsMissing = true; printf("mobile sprite sheets not found: using the Dreamcast model pack and the built-in font\n");
+        }
         titleOk = loadSheet(ret + "a0090", tbg) && loadSheet(ret + "a0097", tprompt) &&
                   loadSheet(ret + "a0100", trocket) && loadSheet(ret + "a0042", tlogo);
         menuOk = loadSheet(ret + "a0134", mbg) && loadSheet(ret + "a0113", mbtn) && loadSheet(ret + "a0110", mdeco);
@@ -407,6 +416,7 @@ struct App {
     void pumpMusic(int song) { playSong(song); }
     // --- drawing helpers ---
     void number(int v, int x, int y, int hgt) {
+        if (!digits.tex || digits.fr.size() < 10) { text(std::to_string(v), x, y, hgt); return; }
         std::string s = std::to_string(v); int cx = x;
         for (char c : s) { const SDL_Rect& fr = digits.fr[c - '0']; int w = fr.w * hgt / fr.h; SDL_Rect d{cx, y, w, hgt}; SDL_RenderCopy(ren, digits.tex, &fr, &d); cx += w + 2; }
     }
@@ -415,8 +425,12 @@ struct App {
     struct GlyphMet { int w = 0, h = 0, xo = 0, yo = 0; }; GlyphMet gm[256];
     void loadFontMetrics() { FILE* f = fopen((root + "/ret_all/r0023.frames.bin").c_str(), "rb"); if (!f) return; uint32_t n = 0; if (fread(&n, 4, 1, f) != 1) { fclose(f); return; }
         for (uint32_t i = 0; i < n && i < 256; i++) { uint8_t rec[36]; if (fread(rec, 1, 36, f) != 36) break; int16_t v[10]; memcpy(v, rec + 16, 20); gm[i] = {v[0], v[1], v[4], v[5]}; } fclose(f); }
-    int textWidth(const std::string& s, int hgt) { float sc = hgt / 39.0f, w = 0; for (unsigned char c : s) w += gm[c].h ? (gm[c].xo + gm[c].w) * sc : 20 * sc; return (int)w; }
+    int textWidth(const std::string& s, int hgt) { if (!font.tex) { const int px = std::max(1, hgt / 7); return (int)s.size() * 6 * px; } float sc = hgt / 39.0f, w = 0; for (unsigned char c : s) w += gm[c].h ? (gm[c].xo + gm[c].w) * sc : 20 * sc; return (int)w; }
     void text(const std::string& s, int x, int y, int hgt) {
+        if (!font.tex) {   // built-in bitmap font: one 5x7 glyph per character, white
+            const int px = std::max(1, hgt / 7); int pen = x; SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+            for (unsigned char c : s) { if (const uint8_t* g = font57(c)) for (int row = 0; row < 7; row++) for (int col = 0; col < 5; col++) if (g[row] >> (4 - col) & 1) { SDL_Rect d{pen + col * px, y + row * px, px, px}; SDL_RenderFillRect(ren, &d); } pen += 6 * px; }
+            return; }
         float sc = hgt / 39.0f, pen = (float)x;
         for (unsigned char c : s) { const SDL_Rect& fr = font.fr[c]; const GlyphMet& g = gm[c]; if (!fr.h) { pen += 20 * sc; continue; }
             SDL_Rect d{(int)std::lround(pen + g.xo * sc), (int)std::lround(y + (g.yo - 12) * sc), (int)std::lround(g.w * sc), (int)std::lround(g.h * sc)}; SDL_RenderCopy(ren, font.tex, &fr, &d); pen += (g.xo + g.w) * sc; }
