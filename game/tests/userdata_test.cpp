@@ -12,6 +12,7 @@ int main() {
     Settings d = loadOrCreateSettings((tmp / "assets").string()); std::string text; CHECK(readFile((tmp / "assets/settings.ini").string(), text));
     CHECK(text.find("# Start in fullscreen") != std::string::npos); Settings r = parseSettings(text);
     CHECK(r.fullscreen == d.fullscreen && r.vsync == d.vsync && r.filter == d.filter && r.logLevel == d.logLevel && r.logMaxKb == d.logMaxKb && r.logKeepFiles == d.logKeepFiles);
+    CHECK(d.models3d && r.models3d && !parseSettings("models_3d = false").models3d);
     // edited values, comments, bad values
     Settings e = parseSettings("fullscreen = yes # comment\nvsync=off\nfilter = nearest\nwindow_width = 1280\nwindow_height=720\nlog_level = 9\nlog_keep_files = 0\nunknown = 1\nfilter2\n");
     CHECK(e.fullscreen && !e.vsync && e.filter == "nearest" && e.width == 1280 && e.height == 720 && e.logLevel == 2 && e.logKeepFiles == 1);

@@ -219,6 +219,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
+    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -286,6 +287,9 @@ struct App {
         menuOk = loadSheet(ret + "a0134", mbg) && loadSheet(ret + "a0113", mbtn) && loadSheet(ret + "a0110", mdeco);
         dlogoOk = loadSheet(ret + "dlogo", dlogo);
         dpressOk = loadSheet(ret + "dpress", dpress);
+        loadSheet(ret + "dc_arrows", dcArrows);
+        loadSheet(ret + "dc_puzzle_start", dcPuzzleStart);
+        loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
         padOk = (dlogoOk || imgSheet(7)) && loadSheet(ret + "bg0877", pbg) &&
                 loadSheet(ret + "pprompt", pprompt) && loadSheet(ret + "procket", procket) &&
                 loadSheet(ret + "pdeco", pdeco) && loadSheet(ret + "pbtn", pbtn) && loadSheet(ret + "bg0879", pmbg);
@@ -439,10 +443,16 @@ struct App {
         (void)k;   // the game's floor quad has UVs 0..6 x 0..4.5 (u = (x + 90) / 30, v = (z + 67.5) / 30) and SDL's geometry call clamps UVs, so the 108 cells are drawn as quarter-texture quads (same mapping)
         const int mat = 29 + std::max(0, std::min(5, floorColor)); if (mat >= (int)floorM->matTex.size()) return false;
         SDL_Texture* tex = models3d.textures[floorM->matTex[mat]];
-        std::vector<SDL_Vertex> verts; verts.reserve(12 * 9 * 6); const SDL_Color white{255, 255, 255, 255};
+        std::vector<SDL_Vertex> verts; verts.reserve(12 * 9 * 6);
+        // Neutral floor modulation measured from the Dreamcast Normal Puzzle 01 capture.
+        const SDL_Color floorLight{202, 202, 202, 255};
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
-            const float x0 = ox + c * (float)CELL, y0 = oy + r * (float)CELL, x1 = x0 + CELL, y1 = y0 + CELL, u0 = (c & 1) * 0.5f, v0 = (r & 1) * 0.5f, u1 = u0 + 0.5f, v1 = v0 + 0.5f;
-            SDL_Vertex a{{x0, y0}, white, {u0, v0}}, b{{x1, y0}, white, {u1, v0}}, d{{x1, y1}, white, {u1, v1}}, e{{x0, y1}, white, {u0, v1}};
+            const float x0 = ox + c * (float)CELL, y0 = oy + r * (float)CELL;
+            const float x1 = x0 + CELL, y1 = y0 + CELL;
+            // The Dreamcast starts the checkerboard in the right-hand texture quarter.
+            const float u0 = ((c + 1) & 1) * 0.5f, v0 = (r & 1) * 0.5f;
+            const float u1 = u0 + 0.5f, v1 = v0 + 0.5f;
+            SDL_Vertex a{{x0, y0}, floorLight, {u0, v0}}, b{{x1, y0}, floorLight, {u1, v0}}, d{{x1, y1}, floorLight, {u1, v1}}, e{{x0, y1}, floorLight, {u0, v1}};
             verts.push_back(a); verts.push_back(b); verts.push_back(d); verts.push_back(a); verts.push_back(d); verts.push_back(e);
         }
         SDL_RenderGeometry(ren, tex, verts.data(), (int)verts.size(), nullptr, 0);
@@ -451,9 +461,9 @@ struct App {
     void walls3d(const Stage& st, int wallColor, int ox, int oy) {
         const Model3D* wallM = models3d.find("wall"); if (!wallM) return; const float k = (float)CELL / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor));
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c]) models3d.draw(ren, *wallM, ox + (c + 0.5f) * CELL, oy + r * (float)CELL, k, 0.0f, 90.0f, 1.0f, -1, mat);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c]) models3d.draw(ren, *wallM, ox + (c + 0.5f) * CELL, oy + r * (float)CELL, k, 0.0f, 90.0f, 0.74f, -1, mat);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c]) models3d.draw(ren, *wallM, ox + c * (float)CELL, oy + (r + 0.5f) * CELL, k, 90.0f, 90.0f, 1.0f, -1, mat);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c]) models3d.draw(ren, *wallM, ox + c * (float)CELL, oy + (r + 0.5f) * CELL, k, 90.0f, 90.0f, 0.74f, -1, mat);
         }
     }
     void board(const Stage& st, int floorColor, int wallColor, int ox = OX, int oy = OY) {
@@ -491,10 +501,17 @@ struct App {
     // Arrow sprite (image 0x5f, frame = owner; the art points up, rotated clockwise by the heading); a struck arrow is drawn at 0.7 (AR_ArrowDrawPriority).
     void arrow(int x, int y, int dir, int owner, int hits = 0, int ttl = -1) {
         if (ttl >= 0 && !(ttl > 60 || (ttl > 0 && (ttl & 1)))) return;   // in the last 60 ticks the arrow flickers (drawn only on odd ticks)
-        static const double rot[4] = {180.0, 270.0, 0.0, 90.0};   // south, west, north, east
-        blit(arw, owner & 3, OX + (x + 0.5f) * CELL, OY + (y + 0.5f) * CELL, hits ? 0.7f : 1.0f, rot[dir & 3]);
+        arrowIcon(OX + (x + 0.5f) * CELL, OY + (y + 0.5f) * CELL, dir, owner, hits ? 0.7f : 1.0f);
     }
-    void arrowIcon(float cx, float cy, int dir, int owner, float sc) { static const double rot[4] = {180.0, 270.0, 0.0, 90.0}; blit(arw, owner & 3, cx, cy, sc, rot[dir & 3]); }
+    void arrowIcon(float cx, float cy, int dir, int owner, float sc) {
+        static const double rot[4] = {180.0, 270.0, 0.0, 90.0};
+        if (settings.models3d && dcArrows.tex && dcArrows.fr.size() == 4) {
+            // The Dreamcast texture points west and covers one cell.
+            blit(dcArrows, owner & 3, cx, cy, sc, rot[dir & 3] + 90.0);
+        } else {
+            blit(arw, owner & 3, cx, cy, sc, rot[dir & 3]);
+        }
+    }
     // Cursor (image 0x6b: frame = player; CU_CursorDrawPriority/DispCursorPriority): scale 1 + 0.1 sin(angle), angle = (player << 14) + 0x1000 per tick (CU_CursorCons, FUN_0002b344); over a cell with an object
     // (collision bits 0xF00) the square bracket (frame 4) is drawn with scale 1 + 0.075 sin(2 angle) (CU_CursorDrawPrioritySquare).
     // Render::drawFrame type 5 (HD 1.0 0x1a60c): image 0x78 (frame table record 720: 58 px tiles), tile = 58 - 2; n = width / tile pieces centred on x: frames 0, 1..., 2 at y
@@ -797,17 +814,20 @@ struct App {
     std::vector<FieldObject> fieldObjects;
     // Dreamcast 3D characters (docs/dreamcast_models.md): the basic mouse plays its eight keyframes by the low three bits of the shared clock (0x8c019b0c writes them, 0x8c019e26 draws the frame
     // directly); the cat plays its 24-frame walk cycle from the walk phase (provisional mapping). Orientation: the heading angle (heading << 14) turns the model about the vertical axis.
-    bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z) {
-        const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(gtime & 7)) : models3d.find("cat");
+    bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z, int mouseFrame) {
+        const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(mouseFrame)) : models3d.find("cat");
         if (!m) return false;
-        const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);   // both fronts are at yaw 180 (the real Dreamcast frames show the mouse's black eyes and the cat's spiral eyes from that side)
-        const float scale = CELL * (en.mouse ? 0.095f : 0.052f);
+        const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
+        const float scale = CELL * (en.mouse ? 0.072f : 0.052f);
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
-        models3d.draw(ren, *m, x, z + CELL * 0.22f, scale, yaw, 38.0f, 0.35f, en.mouse ? -1 : catFrame);
+        const float pitch = en.mouse ? 65.0f : 38.0f;
+        models3d.draw(ren, *m, x, z + CELL * 0.22f, scale, yaw, pitch, 1.0f, en.mouse ? -1 : catFrame);
         (void)i; return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
                           float alpha, const float* puku = nullptr) {
+        // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
+        const int mouseFrame = std::max(0, sim.now - 1) & 7;
         fieldObjects.clear();
         auto rocket = [&](int x, int y, int player) {
             float z = (y + 0.5f) * kCell;
@@ -860,16 +880,13 @@ struct App {
                 continue;
             }
             if (object.rocket) {
-                if (useModels3d()) {   // Dreamcast rocket models: one per player colour (blue, orange, red, green = itablue/itaorange/itared/itagreen)
-                    static const char* names[4] = {"rocket_blue", "rocket_orange", "rocket_red", "rocket_green"};
-                    if (const Model3D* m = models3d.find(names[i & 3])) { models3d.draw(ren, *m, x, z, CELL * 0.07f * (puku ? puku[i] : 1.0f), 0.0f, 54.0f); continue; }   // provisional: the real pad rocket is a studded ball with a ring of portholes (not identified); the launch rocket at a steep angle shows its portholes
-                }
+                // A parked rocket is a closed sphere. The exported 3D rockets are launch models.
                 blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f);
                 continue;
             }
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
-            if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z)) continue;
+            if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame)) continue;
             if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter, 255);
                 if (headless && getenv("CCR_CAT_HOLE_TRACE"))
@@ -927,7 +944,7 @@ struct ModelViewerMode : Screen {
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 70, 80, 110, 255); SDL_RenderClear(a.ren);
         const float yaw = (float)(tickCount % 360);
-        if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 0.35f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
+        if (const Model3D* cat = pack.find("cat")) pack.draw(a.ren, *cat, 280.0f, 560.0f, 12.0f, yaw, 10.0f, 1.0f, (tickCount / 3) % 24);   // the head morphs through its 24 frames
         const int frame = (tickCount / 3) % 8;   // the walk cycle: eight keyframe meshes
         if (const Model3D* mouse = pack.find("mouse" + std::to_string(frame))) pack.draw(a.ren, *mouse, 740.0f, 520.0f, 20.0f, yaw, 10.0f);
         if (getenv("CCR_CANDS")) { if (const Model3D* m = pack.find("rocket_blue")) { for (int i = 0; i < 6; i++) pack.draw(a.ren, *m, 90.0f + 170.0f * i, 260.0f, 14.0f, 0.0f, 30.0f + 12.0f * i); } a.text("ROCKET PITCH 30 42 54 66 78 90", 24, 14, 24); return; }
@@ -936,8 +953,8 @@ struct ModelViewerMode : Screen {
             for (int i = 0; i < 6; i++) { const float pitch = 20.0f + 10.0f * i; if (cat) { pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 130.0f, 5.2f, 180.0f, pitch, 1.0f, 17); pack.draw(a.ren, *cat, 90.0f + 160.0f * i, 330.0f, 5.2f, 0.0f, pitch, 1.0f, 17); } if (mo) { pack.draw(a.ren, *mo, 90.0f + 160.0f * i, 500.0f, 7.0f, 180.0f, pitch); } }
             a.text("PITCH 30 40 50 60 70 80", 24, 14, 24); return; }
         if (getenv("CCR_LIGHTFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) pack.draw(a.ren, *cat, 130.0f + 250.0f * i, 400.0f, 18.0f, 180.0f - 90.0f * i, 10.0f, 1.0f, 17); return; }
-        if (getenv("CCR_MOUSEFIT")) { if (const Model3D* mo = pack.find("mouse0")) for (int i = 0; i < 4; i++) pack.draw(a.ren, *mo, 140.0f + 240.0f * i, 330.0f, 22.0f, 90.0f * i, 12.0f, 0.35f); a.text("MOUSE YAW 0 90 180 270", 24, 14, 24); return; }
-        if (getenv("CCR_PITCHFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) { pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 330.0f, 9.0f, 180.0f, 10.0f + 10.0f * i, 0.35f, 0); pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 640.0f, 9.0f, 0.0f, 10.0f + 10.0f * i, 0.35f, 0); } a.text("PITCH 10 20 30 40  FRONT / BACK", 24, 14, 24); return; }
+        if (getenv("CCR_MOUSEFIT")) { if (const Model3D* mo = pack.find("mouse0")) for (int i = 0; i < 4; i++) pack.draw(a.ren, *mo, 140.0f + 240.0f * i, 330.0f, 22.0f, 90.0f * i, 12.0f, 1.0f); a.text("MOUSE YAW 0 90 180 270", 24, 14, 24); return; }
+        if (getenv("CCR_PITCHFIT")) { if (const Model3D* cat = pack.find("cat")) for (int i = 0; i < 4; i++) { pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 330.0f, 9.0f, 180.0f, 10.0f + 10.0f * i, 1.0f, 0); pack.draw(a.ren, *cat, 140.0f + 240.0f * i, 640.0f, 9.0f, 0.0f, 10.0f + 10.0f * i, 1.0f, 0); } a.text("PITCH 10 20 30 40  FRONT / BACK", 24, 14, 24); return; }
         static const char* rk[4] = {"rocket_blue", "rocket_orange", "rocket_red", "rocket_green"};
         for (int i = 0; i < 4; i++) if (const Model3D* m = pack.find(rk[i])) pack.draw(a.ren, *m, 120.0f + 230.0f * i, 690.0f, 7.0f, yaw * 0.5f + 40.0f * i, 25.0f);
         if (const Model3D* m = pack.find("lid1")) pack.draw(a.ren, *m, 120.0f, 250.0f, 12.0f, yaw, 25.0f);
@@ -1728,6 +1745,7 @@ struct OptionsMode : Screen {
     static bool ok(App& a) { return a.opBg.tex && a.opHdr.tex && a.mnBars.tex && a.mnMasc.tex && a.ssArrows.tex && a.hdFont1.tex; }
     bool shown(int i) const { return sub == 2 ? i < 6 : i != 6; }   // slot 3 (iPod Music, iOS-only) carries this port's own settings page   // iPod Music is iOS-only and Game Center is absent (AppData[5] == 0): not shown
     int capture = -1;   // sub 3: -1 list, 0..3 waiting for the controller button of arrow dir 0..3
+    std::array<int, 4> pendingArrowButtons{};
     int back() const { return sub == 2 ? 6 : sub == 1 ? 2 : 7; }
     static constexpr int PR = 8, PX = 225, PY0 = 173, PPITCH = 70;   // port settings rows
     static const char* dirName(int d) { static const char* n[4] = {"down", "left", "up", "right"}; return n[d]; }
@@ -1747,7 +1765,7 @@ struct OptionsMode : Screen {
         else if (i == 2) st.filter = st.filter == "linear" ? "nearest" : "linear";
         else if (i == 3) st.logLevel = (st.logLevel + 1) % 3;
         else if (i == 4) { capture = 0; return; }
-        else if (i == 7) { st.models3d = !st.models3d; a.models3d = ModelPack(); a.models3dTried = false; }
+        else if (i == 7) { st.models3d = !st.models3d; a.models3d.clear(); a.models3dTried = false; }
         else if (i == 6) st.unlockAll = !st.unlockAll;
         else if (i == 5) st.cpuStyle = st.cpuStyle == "gba" ? "dreamcast" : "gba";
         a.saveSettings(); a.log.write(1, ("setting changed: " + portLabel(a, i)).c_str()); }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
@@ -1760,7 +1778,20 @@ struct OptionsMode : Screen {
     void setVol(App& a, int which, float lx) { int v = (int)((lx - (float)sliderX(a)) * (255.0f / (float)SW)); v = std::max(0, std::min(255, v)); if (which == 0) a.musicVol = v; else a.sfxVol = v; }
     void event(App& a, const SDL_Event& e) override {
         if (phase == 0x12 && sub == 3) {
-            if (capture >= 0 && e.type == SDL_CONTROLLERBUTTONDOWN) { int b = e.cbutton.button; if (b < 11) { a.padMap.arrow[capture] = b; a.playSfx(2); if (++capture >= 4) { capture = -1; a.savePadMap(); a.log.write(1, "controller arrow buttons remapped"); } } return; }
+            if (capture >= 0 && e.type == SDL_CONTROLLERBUTTONDOWN) {
+                const int button = e.cbutton.button;
+                if (button < SDL_CONTROLLER_BUTTON_DPAD_UP) {
+                    pendingArrowButtons[capture++] = button;
+                    a.playSfx(2);
+                    if (capture == static_cast<int>(pendingArrowButtons.size())) {
+                        std::copy(pendingArrowButtons.begin(), pendingArrowButtons.end(), a.padMap.arrow);
+                        capture = -1;
+                        a.savePadMap();
+                        a.log.write(1, "controller arrow buttons remapped");
+                    }
+                }
+                return;
+            }
             if (capture >= 0 && e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) { capture = -1; return; }
             if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_ESCAPE) { a.playSfx(2); sub = 0; sel = 3; } else if (k == SDLK_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (k == SDLK_RETURN && capture < 0) { a.playSfx(2); portAct(a, sel); } return; }
             if (e.type == SDL_CONTROLLERBUTTONDOWN && capture < 0) { int b = e.cbutton.button; if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_A) { a.playSfx(2); portAct(a, sel); } else if (b == SDL_CONTROLLER_BUTTON_B) { a.playSfx(2); sub = 0; sel = 3; } return; }
@@ -2072,6 +2103,11 @@ struct PuzzleMode : Screen {
     }
     // Fit the 480 × 320 handset UI at integer scale on the shared gameplay canvas.
     static constexpr int phoneX = (GW - 960) / 2, phoneY = (GH - 640) / 2;
+    static constexpr SDL_Rect dcStartRect{8, 53, 165, 186};
+    static constexpr SDL_Rect dcCancelRect{8, 246, 165, 124};
+    bool dreamcastPuzzleControls(const App& a) const {
+        return a.settings.models3d && a.dcPuzzleStart.tex && a.dcPuzzleCancel.tex && !phonePuzzleHudAvailable(a);
+    }
     void drawPhonePause(App& a) const {
         auto art = [&](Sheet& sheet, int frame, int x, int y, bool mirror = false) {
             a.blitFlip(sheet, frame, phoneX + 2 * x, phoneY + 2 * y, 2.0f, mirror);
@@ -2108,8 +2144,10 @@ struct PuzzleMode : Screen {
             return true;
         }
         const bool phoneHud = phonePuzzleHudAvailable(a);
-        if (phoneHud ? handset(0, 0, 56, 40) : in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
-        if (phoneHud ? handset(0, 39, 56, 84) : in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
+        const bool dcControls = dreamcastPuzzleControls(a);
+        auto inRect = [&](const SDL_Rect& r) { return in(r.x, r.y, r.x + r.w, r.y + r.h); };
+        if (dcControls ? inRect(dcStartRect) : phoneHud ? handset(0, 0, 56, 40) : in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
+        if (dcControls ? inRect(dcCancelRect) : phoneHud ? handset(0, 39, 56, 84) : in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
         return false;
     }
@@ -2199,18 +2237,21 @@ struct PuzzleMode : Screen {
             phoneHudAt(2, 101.0f);
             for (int k = 0; k < 3; k++) phoneHudAt(3, 133.0f + 32.0f * k);
             phoneHudAt(4, 229.0f);
-            { static const int ord[4] = {3, 1, 2, 0}; static const int rot16[4] = {4, 12, 0, 8}; float y = 112.0f;
+            { static const int ord[4] = {3, 1, 2, 0}; float y = 112.0f;
               for (int k = 0; k < 4; k++) { const int d = ord[k], left = stock[d] - used(d); if (left <= 0) continue;
-                  a.blit(a.arw, 0, phoneX + 2 * 24.0f, phoneY + 2 * y, 0.8f, rot16[k] * 22.5);   // the port arrow art is already twice the handset resolution
+                  a.arrowIcon(phoneX + 2 * 24.0f, phoneY + 2 * y, d, 0, 0.8f);
                   { const int h = 47; const std::string t = std::to_string(left); SDL_SetTextureColorMod(a.font.tex, 0, 0, 0); a.text(t, (int)(phoneX + 2 * 48.0f) - a.textWidth(t, h) / 2, (int)(phoneY + 2 * y) - h / 2, h); SDL_SetTextureColorMod(a.font.tex, 255, 255, 255); } y += 36.0f; } }
+        } else if (dreamcastPuzzleControls(a)) {
+            SDL_RenderCopy(a.ren, a.dcPuzzleStart.tex, nullptr, &dcStartRect);
+            SDL_RenderCopy(a.ren, a.dcPuzzleCancel.tex, nullptr, &dcCancelRect);
         } else {
             a.blit(a.hdPhud, 0, 85.0f, 190.0f);
         }
         if (!phonePuzzleHudAvailable(a)) {
         { float x = (float)OX + 40.0f; a.blit(a.hdPhud, 2, x, 690.0f); for (int k = 0; k < 10; k++) { x += 64.0f; a.blit(a.hdPhud, 3, x, 690.0f); } x += 64.0f; a.blit(a.hdPhud, 4, x, 690.0f); }
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
-        { static const int ord[4] = {3, 1, 2, 0}; static const int rot16[4] = {4, 12, 0, 8}; float x = (float)OX + 64.0f;
-          for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.blit(a.arw, 0, x, 706.0f, 0.6f, rot16[k] * 22.5); x += 60.0f; } } }
+        { static const int ord[4] = {3, 1, 2, 0}; float x = (float)OX + 64.0f;
+          for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.arrowIcon(x, 706.0f, d, 0, 0.6f); x += 60.0f; } } }
         }
         a.drawFrame5(90, 410, 180); a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
@@ -2428,7 +2469,18 @@ struct BattleMode : Screen {
     struct Rocket { int player, state; float x, y, tx, scale, dscale; }; std::vector<Rocket> rockets_; struct Smoke { float x, y; int n; }; std::vector<Smoke> smokes_; struct Flash { float x, y, scale, delta; }; std::vector<Flash> flashes_;
     int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners;
     DragGesture drag; int lastCatSfx = -100; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
-    ~BattleMode() override { for (auto* pad : pads) if (pad) SDL_GameControllerClose(pad); }
+    std::vector<SDL_GameController*> unassignedPads;
+    ~BattleMode() override {
+        for (auto* pad : pads) if (pad) SDL_GameControllerClose(pad);
+        for (auto* pad : unassignedPads) SDL_GameControllerClose(pad);
+    }
+    static bool padMatches(SDL_GameController* pad, SDL_JoystickID id) {
+        return pad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id;
+    }
+    auto findUnassignedPad(SDL_JoystickID id) {
+        return std::find_if(unassignedPads.begin(), unassignedPads.end(),
+                            [id](SDL_GameController* pad) { return padMatches(pad, id); });
+    }
     void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
     bool keyPlayer(const SDL_KeyboardEvent& key) {
         const int direction = arrowKey(key.keysym.sym);
@@ -2494,16 +2546,39 @@ struct BattleMode : Screen {
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_CONTROLLERDEVICEADDED) {
             const auto id = SDL_JoystickGetDeviceInstanceID(e.cdevice.which);
-            for (auto* pad : pads) if (pad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == id) return;
-            for (auto& pad : pads) if (!pad) { pad = SDL_GameControllerOpen(e.cdevice.which); break; }
+            if (id < 0 || findUnassignedPad(id) != unassignedPads.end()) return;
+            for (auto* pad : pads) if (padMatches(pad, id)) return;
+            if (auto* pad = SDL_GameControllerOpen(e.cdevice.which)) unassignedPads.push_back(pad);
         }
         else if (e.type == SDL_CONTROLLERDEVICEREMOVED) {
-            for (auto& pad : pads) if (pad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cdevice.which) {
+            for (auto& pad : pads) if (padMatches(pad, e.cdevice.which)) {
                 SDL_GameControllerClose(pad);
                 pad = nullptr;
             }
+            const auto unassigned = findUnassignedPad(e.cdevice.which);
+            if (unassigned != unassignedPads.end()) {
+                SDL_GameControllerClose(*unassigned);
+                unassignedPads.erase(unassigned);
+            }
         }
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN) { for (int p = 0; p < 4; p++) if (pads[p] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[p])) == e.cbutton.which) padButton(p, e.cbutton.button); }
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+            for (int p = 0; p < 4; ++p) {
+                if (padMatches(pads[p], e.cbutton.which)) {
+                    padButton(p, e.cbutton.button);
+                    return;
+                }
+            }
+            const auto unassigned = findUnassignedPad(e.cbutton.which);
+            if (unassigned == unassignedPads.end()) return;
+            for (int p = 0; p < 4; ++p) {
+                if (!pads[p] && lv[p] < 0) {
+                    pads[p] = *unassigned;
+                    unassignedPads.erase(unassigned);
+                    if (p == 0) mouseCursor = false;
+                    return;
+                }
+            }
+        }
         else if (e.type == SDL_KEYDOWN && arrowKey(e.key.keysym.sym) >= 0) {
             if (!a.headless) aim.update(a, 0, 0);
             keyPlayer(e.key);
@@ -3139,7 +3214,7 @@ int main(int argc, char** argv) {
             for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
         mode->draw(app, 1.0f);
         const int result = saveFrame(app.ren, shot);
-        mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit();
+        mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); app.models3d.clear(); SDL_Quit();
         return result;
     }
     if (getenv("CCR_BENCH")) {   // headless render benchmark: CCR_BENCH=<frames> CCR_HZ=<simulated display rate> CCR_SIZE=WxH; fixed 60 Hz ticks, interpolated draws at the output size
@@ -3152,7 +3227,7 @@ int main(int argc, char** argv) {
         double sec = (double)(SDL_GetPerformanceCounter() - t0) / SDL_GetPerformanceFrequency(); int ow = 0, oh = 0; SDL_GetRendererOutputSize(app.ren, &ow, &oh);
         printf("output %dx%d simulated %.0f Hz: %d frames, %ld sim ticks (%.3f s simulated, %.1f ticks/s), draw %.2f ms/frame (%s renderer)\n", ow, oh, hz, frames, ticks, frames / hz, ticks / (frames / hz), drawMs / frames, getenv("CCR_GPU") ? "GPU" : "software");
         if (const char* out = getenv("CCR_OUT")) { SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, ow, oh, 32, SDL_PIXELFORMAT_ARGB8888); SDL_RenderReadPixels(app.ren, nullptr, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch); SDL_SaveBMP(s, out); SDL_FreeSurface(s); }
-        (void)sec; mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit(); return 0;
+        (void)sec; mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); app.models3d.clear(); SDL_Quit(); return 0;
     }
     Uint64 last = SDL_GetPerformanceCounter();
     std::function<void()> frame = [&]() {
@@ -3176,5 +3251,5 @@ int main(int argc, char** argv) {
 #else
     while (!app.quit) frame();
 #endif
-    app.log.write(1, "session end"); mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); SDL_Quit(); return 0;
+    app.log.write(1, "session end"); mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); app.models3d.clear(); SDL_Quit(); return 0;
 }

@@ -17,7 +17,7 @@ jobs:
         include:
           - { os: ubuntu-22.04, label: linux-x64 }
           - { os: macos-latest, label: macos-arm64 }
-          - { os: macos-13, label: macos-x64 }
+          - { os: macos-15-intel, label: macos-x64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +33,17 @@ jobs:
         run: cmake -S game -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --target ccr userdata_test padmap_test vms_test
+      - name: Verify macOS binary architecture
+        if: runner.os == 'macOS'
+        env:
+          ARCHIVE_LABEL: ${{ matrix.label }}
+        run: |
+          case "$ARCHIVE_LABEL" in
+            macos-arm64) expected=arm64 ;;
+            macos-x64) expected=x86_64 ;;
+            *) exit 1 ;;
+          esac
+          lipo -verify_arch "$expected" build/ccr
       - name: Unit tests that need no game data
         run: |
           ./build/userdata_test

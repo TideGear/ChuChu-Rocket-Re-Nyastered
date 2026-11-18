@@ -16,7 +16,7 @@ struct Settings {
     std::string filter = "linear";   // "linear" or "nearest" scaling
     int width = 0, height = 0;   // window size, 0 = default
     std::string cpuStyle = "dreamcast";   // computer opponents in Battle: "dreamcast" (the Dreamcast/iOS/Android placement rules) or "gba"
-    bool models3d = false;       // draw the characters as the Dreamcast 3D models (needs dreamcast/models.bin from setup) instead of the sprites
+    bool models3d = true;        // prefer Dreamcast visuals when setup provides dreamcast/models.bin
     bool unlockAll = false;      // open every puzzle group and costume without clearing the stages (the original opens group n after all 25 stages of group n-1 are cleared)
     int logLevel = 1;            // 0 = no log, 1 = sessions and results, 2 = also every screen change
     int logKeepFiles = 5;        // rotated log files kept
@@ -57,7 +57,7 @@ inline std::string settingsText(const Settings& s) {
         "# How the picture is scaled: linear (smooth) or nearest (sharp pixels).\nfilter = %s\n\n"
         "# Window size in pixels; 0 uses the default size.\nwindow_width = %d\nwindow_height = %d\n\n"
         "# Battle computer players: dreamcast or gba (the GBA game's placement rules).\ncpu_style = %s\n\n"
-        "# Draw cats and mice as the Dreamcast 3D models: true or false (needs the Dreamcast disc extracted by setup).\nmodels_3d = %s\n\n"
+        "# Use Dreamcast 3D characters and board art when setup provides the model pack.\nmodels_3d = %s\n\n"
         "# Open every puzzle group and costume without playing for them: true or false (the original unlocks them by clearing stages).\nunlock_all = %s\n\n"
         "# Log detail: 0 = off, 1 = sessions and match results, 2 = also every screen change.\nlog_level = %d\n\n"
         "# The log file (logs/ccr.log) rotates when it reaches this many kilobytes; this many old files are kept.\nlog_max_kb = %d\nlog_keep_files = %d\n",

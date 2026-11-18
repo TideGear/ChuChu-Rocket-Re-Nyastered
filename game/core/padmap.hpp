@@ -2,6 +2,7 @@
 // (A 0, B 1, X 2, Y 3, Back 4, Guide 5, Start 6, stick clicks 7/8, shoulders 9/10, d-pad 11..14) so this header needs no SDL.
 #pragma once
 #include "userdata.hpp"
+#include <cstdlib>
 #include <cstring>
 namespace ccr {
 struct PadMap {
@@ -22,7 +23,11 @@ inline PadMap parsePadMap(const std::string& text) {
         const std::string k = trim(line.substr(0, eq)), v = trim(line.substr(eq + 1)); if (v.empty()) continue; const int b = padButtonFromName(v);
         if (k == "arrow_down" && b >= 0) m.arrow[0] = b; else if (k == "arrow_left" && b >= 0) m.arrow[1] = b; else if (k == "arrow_up" && b >= 0) m.arrow[2] = b; else if (k == "arrow_right" && b >= 0) m.arrow[3] = b;
         else if (k == "pause" && b >= 0) m.pause = b; else if (k == "quit_button_1" && b >= 0) m.quitA = b; else if (k == "quit_button_2" && b >= 0) m.quitB = b;
-        else if (k == "quit_hold_ticks") m.quitHoldTicks = std::max(30, std::min(600, atoi(v.c_str())));
+        else if (k == "quit_hold_ticks") {
+            char* end = nullptr;
+            const long ticks = std::strtol(v.c_str(), &end, 10);
+            if (end == v.c_str() + v.size()) m.quitHoldTicks = static_cast<int>(std::clamp(ticks, 30L, 600L));
+        }
     }
     return m;
 }

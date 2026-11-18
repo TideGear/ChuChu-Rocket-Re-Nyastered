@@ -26,32 +26,62 @@ inline ModelLight& modelLight() {
 }
 struct ModelPack {
     std::vector<SDL_Texture*> textures; std::vector<Model3D> models;
-    ~ModelPack() { for (auto* t : textures) if (t) SDL_DestroyTexture(t); }
+    ModelPack() = default;
+    ModelPack(const ModelPack&) = delete;
+    ModelPack& operator=(const ModelPack&) = delete;
+    ~ModelPack() { clear(); }
+    void clear() {
+        for (auto* texture : textures) SDL_DestroyTexture(texture);
+        textures.clear();
+        models.clear();
+    }
     const Model3D* find(const std::string& n) const { for (const auto& m : models) if (m.name == n) return &m; return nullptr; }
     bool load(SDL_Renderer* ren, const std::string& path) {
+        ModelPack loaded;
+        if (!loaded.read(ren, path)) return false;
+        textures.swap(loaded.textures);
+        models.swap(loaded.models);
+        return true;
+    }
+private:
+    bool read(SDL_Renderer* ren, const std::string& path) {
         FILE* f = fopen(path.c_str(), "rb"); if (!f) return false;
         std::vector<uint8_t> d; uint8_t buf[65536]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) d.insert(d.end(), buf, buf + n); fclose(f);
-        size_t p = 0; auto rd = [&](void* o, size_t k) { if (p + k > d.size()) return false; memcpy(o, d.data() + p, k); p += k; return true; };
+        size_t p = 0;
+        auto remaining = [&] { return d.size() - p; };
+        auto rd = [&](void* o, size_t k) { if (k > remaining()) return false; memcpy(o, d.data() + p, k); p += k; return true; };
         char magic[4]; uint32_t nt; if (!rd(magic, 4) || memcmp(magic, "CCM3", 4) || !rd(&nt, 4)) return false;
         for (uint32_t i = 0; i < nt; i++) {
-            uint16_t w, h; if (!rd(&w, 2) || !rd(&h, 2) || p + (size_t)w * h * 4 > d.size()) return false;
+            uint16_t w, h;
+            if (!rd(&w, 2) || !rd(&h, 2) || !w || !h || h > remaining() / (size_t(w) * 4)) return false;
             SDL_Texture* t = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, w, h);
-            if (!t) return false; SDL_UpdateTexture(t, nullptr, d.data() + p, w * 4); SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND); p += (size_t)w * h * 4; textures.push_back(t);
+            if (!t) return false;
+            textures.push_back(t);
+            if (SDL_UpdateTexture(t, nullptr, d.data() + p, w * 4) != 0 ||
+                SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND) != 0) return false;
+            p += (size_t)w * h * 4;
         }
         uint32_t nm; if (!rd(&nm, 4)) return false;
         for (uint32_t i = 0; i < nm; i++) {
             Model3D m; char nm24[25] = {}; uint32_t ntri, nmat; if (!rd(nm24, 24) || !rd(&ntri, 4) || !rd(&nmat, 4)) return false; m.name = nm24;
-            m.matTex.resize(nmat); if (nmat && !rd(m.matTex.data(), 4 * nmat)) return false;
+            if (nmat > remaining() / 4) return false;
+            m.matTex.resize(nmat); if (nmat && !rd(m.matTex.data(), size_t(nmat) * 4)) return false;
+            constexpr size_t triangleBytes = 1 + 3 * 32;
+            if (ntri > remaining() / triangleBytes) return false;
             m.tris.resize(ntri);
             for (auto& t : m.tris) { if (!rd(&t.mat, 1)) return false; for (auto& v : t.v) if (!rd(&v, 32)) return false; }
-            uint32_t nf; if (!rd(&nf, 4)) return false; m.frames.resize(nf);
+            const size_t frameBytes = size_t(ntri) * 18 * 4;
+            uint32_t nf;
+            if (!rd(&nf, 4) || (nf && (!frameBytes || nf > remaining() / frameBytes))) return false;
+            m.frames.resize(nf);
             for (auto& fr : m.frames) { fr.resize((size_t)ntri * 18); if (!rd(fr.data(), fr.size() * 4)) return false; }
             models.push_back(std::move(m));
         }
         return true;
     }
-    // Draws the model centred at (cx, cy) on screen. scale: pixels per model unit; yaw/pitch in degrees; light: simple directional shade 0..1 (1 = none).
-    void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float shade = 1.0f, int frame = -1, int forceMat = -1, uint64_t skipMats = 0) const {
+public:
+    // Draws the model centred at (cx, cy) on screen. Scale is in pixels per model unit and angles are in degrees.
+    void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float brightness = 1.0f, int frame = -1, int forceMat = -1, uint64_t skipMats = 0) const {
         const std::vector<float>* pose = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
         const float ya = yawDeg * 0.017453292f, pa = pitchDeg * 0.017453292f, cyw = cosf(ya), syw = sinf(ya), cp = cosf(pa), sp = sinf(pa);
         struct T { float z; int tex; SDL_Vertex v[3]; };
@@ -71,14 +101,14 @@ struct ModelPack {
                 float ny = ny0 * cp - nz0 * sp, nz = ny0 * sp + nz0 * cp;
                 const float ndl = std::max(0.0f, nx * L.lx + ny * L.ly + nz * L.lz);
                 const float lum = std::min(1.0f, L.amb + L.diff * ndl);
-                const uint8_t c = (uint8_t)(255.0f * lum);
+                const uint8_t c = (uint8_t)(255.0f * lum * brightness);
                 o.v[k].position = SDL_FPoint{cx + x * scale, cy - y2 * scale};
                 o.v[k].color = SDL_Color{c, c, c, 255}; o.v[k].tex_coord = SDL_FPoint{t.v[k].u, t.v[k].v};
                 zsum += z2;
             }
             const int mi = forceMat >= 0 ? forceMat : t.mat; o.z = zsum / 3; o.tex = mi < (int)m.matTex.size() ? (int)m.matTex[mi] : 0; out.push_back(o);
         }
-        std::sort(out.begin(), out.end(), [](const T& a, const T& b) { return a.z > b.z; });   // far to near (the camera looks down -z in model space after the rotation)
+        std::stable_sort(out.begin(), out.end(), [](const T& a, const T& b) { return a.z < b.z; });   // Far to near, with positive view-space z toward the camera.
         std::vector<SDL_Vertex> batch;
         for (size_t i = 0; i < out.size();) {
             size_t j = i; batch.clear();

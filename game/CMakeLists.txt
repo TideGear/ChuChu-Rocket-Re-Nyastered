@@ -79,6 +79,10 @@ if(EMSCRIPTEN AND RN_WEB_APP)
   endif()
   target_link_options(ccr PRIVATE "--shell-file" "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
   set_target_properties(ccr PROPERTIES SUFFIX ".html")
+  set_property(TARGET ccr APPEND PROPERTY LINK_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
+    "${CMAKE_CURRENT_SOURCE_DIR}/web/manifest.webmanifest"
+    "${CMAKE_CURRENT_SOURCE_DIR}/web/sw.js")
   add_custom_command(TARGET ccr POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/web/manifest.webmanifest ${CMAKE_CURRENT_SOURCE_DIR}/web/sw.js $<TARGET_FILE_DIR:ccr>)
 endif()
 

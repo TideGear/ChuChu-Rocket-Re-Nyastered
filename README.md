@@ -55,11 +55,11 @@ Run `build.cmd --target ccr` to rebuild only the game. For an offline build, set
 
 **Unlock all.** Options > Settings has an "Unlock all" row (`unlock_all` in `settings.ini`): it opens every puzzle group without clearing the stages before it, as the original opens them only in order.
 
-**Controller.** Button assignments live in `controls.ini` (created with comments beside `settings.ini`): the four arrow buttons, pause, and the controller-only quit combo (hold Back + Start for two seconds to leave the game, e.g. back to RecompLauncher). Pad prompt names come from the same file.
+**Controller.** In local Battle, press a button on each controller in player order to claim the next available human slot. If a controller disconnects, press a button on a replacement to reclaim the open slot. Button assignments live in `controls.ini` beside `settings.ini`. Hold Back + Start for two seconds to quit with the default bindings.
 
 Runtime options include `CCR_CPU=gba` for GBA-style battle AI (also the `cpu_style` setting and a row on the Options Settings page), `CCR_LANG=en|fr|de|es|it`, `CCR_HUMANS=1..4` (quick-start launches only; the Battle setup screen chooses players), `CCR_SIZE=3840x2160` and `CCR_FULLSCREEN=1`. Use `CCR_HEADLESS`, `CCR_SHOT` or `CCR_BENCH` for silent runs without a visible window. The C++ tests are CMake targets in `game/`, including `determinism_test`, `battle_full_test`, `cpu_test` and `netplay_test`.
 
-Other platforms: the core and tests cross-compile for Android arm64 (NDK) and build for WebAssembly (Emscripten; see [docs/roadmap.md](docs/roadmap.md)); neither has been run on a device yet. The game source also compiles for x86_64 and arm64 Linux and macOS (checked with Zig, compile only; nothing has been linked or run there).
+Other platforms: the Android NDK build produces arm64 core test executables. The full Android app and emulator run are pending. The WebAssembly app builds with Emscripten, and browser installation and offline startup are still pending. See the [platform audit](docs/audit.md#f-platforms-controls-play) for verification status.
 
 **Linux and macOS (new, not yet confirmed on a real machine).** Releases include `...-linux-x64.tar.gz` and `...-macos-<arch>.tar.gz`. Extract one, install Python 3.10+ and Pillow (for example `sudo apt install python3 python3-pil` or `sudo pacman -S python python-pillow`), then run `./ccr --prepare "<folder with your original files>"` (or let RecompLauncher do it) and start `./ccr`. The data folder is `~/.config/ChuChuRocketReNyastered` (`~/Library/Application Support/...` on macOS). Dreamcast CHD and GDI backups are not accepted yet; use numbered `.bin` tracks with their `.cue`. Please report problems with the log from `logs/ccr.log` if one exists.
 
@@ -105,6 +105,8 @@ $assets = Join-Path $env:APPDATA 'ChuChuRocketReNyastered\assets'
 In Puzzle and Battle, aim with the mouse and press **WASD** or the **arrow keys** to place an arrow in the hovered cell. Mouse dragging also places arrows. On a controller, move with the left stick or D-pad and use the four face buttons in their directional positions, as on Dreamcast (rebind them in `controls.ini` or Options > Settings).
 
 The default launch plays the iPad startup logos when available. Pass `title` to skip the logos. If you supply a Dreamcast disc, setup also exports its title logo and Start prompt for the desktop build.
+
+When setup exports a Dreamcast model pack, new settings enable its 3D characters and board art by default. You can turn them off in Options > Settings or set `models_3d = false` in `settings.ini`.
 
 The [presentation audit](docs/presentation_audit.md) tracks missing startup screens, effects, and animation. Live gameplay currently uses mobile sprites. The [Dreamcast models](docs/dreamcast_models.md) have been extracted and rendered offline.
 

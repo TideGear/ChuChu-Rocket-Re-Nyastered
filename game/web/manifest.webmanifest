@@ -1,7 +1,7 @@
 {
   "name": "ChuChu Rocket! Re-Nyastered",
   "short_name": "ChuChu Re-Nyastered",
-  "start_url": "./index.html",
+  "start_url": "./ccr.html",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
