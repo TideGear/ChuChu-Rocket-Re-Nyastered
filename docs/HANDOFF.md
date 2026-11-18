@@ -1,6 +1,6 @@
 # Handoff (2026-11-17, end of session 2)
 
-Continuation: parked rocket domes now use the PowerVR-style depth and texture sampler. Battle and Team Battle generators use the round pad alone, as shown by the Flycast mesh inventory. The saved Battle frame comparison is recorded at the end of `docs/dreamcast_models.md`. Next audit menus, results and roulette for hairlines and draw order, and trace the Challenge goal pad placement. Continue with per-mode board textures and animation rules below.
+Continuation: parked rocket domes use the PowerVR-style depth and texture sampler. Battle and Team Battle generators use the round pad. Puzzle Normal 08 and Challenge A1 now draw the square pit mesh at hole tiles. The selected floor and wall textures were checked against Battle, Team Battle, Challenge A1 and Puzzle Normal 01. Measurements and frame offsets are at the end of `docs/dreamcast_models.md`. Next audit menus, results and roulette for hairlines and draw order, then trace the cat and mouse animation rules.
 
 Read first: `docs/goal.md` (plan, under 5,000 characters), `docs/audit.md` (the "Dreamcast screens vs real Flycast frames" entry is the current status), then the newest entries of `docs/dreamcast_models.md` (all Dreamcast findings, newest at the bottom). Standing goal: Dreamcast-image-only setup/play and a Dreamcast look matching Flycast. The `/goal` condition used this session ("match the look, then finish goal.md") cannot clear in one session; set a per-turn or per-screen goal next time.
 

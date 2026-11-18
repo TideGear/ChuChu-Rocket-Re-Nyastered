@@ -23,8 +23,8 @@ HUD_OFFS = (0xaa370, 0xaa46c, 0xaa760, 0xaaa54, 0xab03c, 0xab180, 0xab290, 0xab6
 MODELS = [('cat', 0x778c4, CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o in enumerate((0x7efb8, 0x7fe38, 0x80cb8, 0x81b38, 0x829b8, 0x83838, 0x846b8, 0x85538))] + [
     ('rocket_blue', 0x9a340, BATTLE_TEX), ('rocket_orange', 0x9b490, BATTLE_TEX), ('rocket_red', 0x9c5e0, BATTLE_TEX), ('rocket_green', 0x9d730, BATTLE_TEX),
     ('lid1', 0x987b8, BATTLE_TEX), ('lid2', 0x98b20, BATTLE_TEX), ('lid3', 0x98e88, BATTLE_TEX), ('lid4', 0x991f0, BATTLE_TEX), ('fire', 0xa0258, BATTLE_TEX),
-    # The pack names are historical. The Flycast stream shows the 'outs' pad at
-    # the Challenge goal and the 'ins' pad at Battle and Team Battle generators.
+    # The Flycast stream shows 'outs' at hole tiles in Challenge and 'ins' at
+    # generators in Battle and Team Battle. Keep the historical pack names.
     ('wall', 0xa20fc, BATTLE_TEX), ('floor', 0xa21e8, BATTLE_TEX),
     ('hole_out', 0xa2990, BATTLE_TEX), ('hole_in', 0xa2628, BATTLE_TEX)]
 

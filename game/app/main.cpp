@@ -480,7 +480,7 @@ struct App {
     // generator cell the ring frame table[(col >> 2) + 3 * (row / 3)] (frames 26..34); then every wall edge as a bar of frame wallColor (horizontal, edge row 0..9) or wallColor + 3 (vertical, edge column 0..12), anchored at the edge centre.
     // Colours by game type (Render::createPlayfieldPreview, 0x38458): free-for-all and team battle: floor {1,3,4,5}[stage & 3], wall 0; challenge: floor 1, wall 1; puzzle: floor (group & 3) + 2, wall 2.
     // Dreamcast board (models_3d): the floor is the game's single 180 x 135 quad textured with yuka01-06 (floor colour N = yuka N+1), each wall edge a kabetx01-03 piece (wall colour N = kabetx N+1),
-    // both seen from straight above like the mobile board; holes, spawn markers and rocket rings still use the mobile atlas on top of the 3D floor (their Dreamcast models are not identified).
+    // The Dreamcast holes and generators use separate meshes over the same floor.
     bool board3d(int floorColor, int wallColor, FieldLayout field) {
         if (!useModels3d()) return false;
         const Model3D* floorM = models3d.find("floor"); const Model3D* wallM = models3d.find("wall"); if (!floorM || !wallM) return false;
@@ -517,24 +517,26 @@ struct App {
     }
     void board(const Stage& st, int floorColor, int wallColor, FieldLayout field = {}) {
         const bool three = board3d(floorColor, wallColor, field);
+        const Model3D* hole = three ? models3d.find("hole_out") : nullptr;
+        const Model3D* generator = three ? models3d.find("hole_in") : nullptr;
+        const SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
+        const float pixelsPerUnit = field.cell / 15.0f;
+        std::vector<ModelPack::SoftTri> pad;
         static const int ring[9] = {0x1b, 0x1c, 0x1d, 0x22, 0x1a, 0x1e, 0x21, 0x20, 0x1f};
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
             float ax = field.x(c + 0.5f), ay = field.y(r + 0.5f); uint8_t t = st.tiles[r * 12 + c];
-            if (t == 0x11) { blit(atlas, 7, ax, ay, field.scale()); continue; }
+            const bool isGenerator = t >= 5 && t <= 8;
+            const Model3D* mesh = t == T_Hole ? hole : isGenerator ? generator : nullptr;
+            if (mesh) {
+                pad.clear();
+                models3d.appendDcPiece(*mesh, -1, {ax, ay}, camera, pixelsPerUnit, 0.0f, pad);
+                models3d.softRender(ren, pad);
+                continue;
+            }
+            if (t == T_Hole) { blit(atlas, 7, ax, ay, field.scale()); continue; }
             if (!three) blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
             if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay, field.scale());
-            else if (t >= 5 && t <= 8) {
-                // Battle frame 3100 submits 0x8c0b2628 at the generators.
-                // The pack calls it "hole_in"; the other mesh is the Challenge goal pad.
-                const Model3D* generator = three ? models3d.find("hole_in") : nullptr;
-                if (generator) {
-                    const SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
-                    const float pixelsPerUnit = field.cell / 15.0f;
-                    std::vector<ModelPack::SoftTri> pad;
-                    models3d.appendDcPiece(*generator, -1, {ax, ay}, camera, pixelsPerUnit, 0.0f, pad);
-                    models3d.softRender(ren, pad);
-                } else blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
-            }
+            else if (isGenerator) blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
         }
         if (three) { walls3d(st, wallColor, field); return; }   // walls3d applies the wall plane itself (it was applied twice before)
         // HD 1.0 createPlayfield draws horizontal and vertical edge rows in
