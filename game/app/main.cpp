@@ -771,6 +771,31 @@ struct App {
         }
     }
 
+    // Dreamcast Team Battle HUD (Flycast Team Battle frame 3600): the shared left column, two 256 x 88 team panels (blue and red, orange and green), one three-digit team score
+    // in each, and the 128 x 32 Computer plates of the CPU players. Frames 39 and 40 are the panels.
+    void drawDcTeamHud(const Scoreboard& score, const int (&cpuLevel)[4], int remainingFrames, int roundFrames) {
+        drawDcTimerColumn(remainingFrames, roundFrames);
+        dcBattleSprite(39, 124, 384, 256, 88);
+        dcBattleSprite(40, 368, 383, 256, 88);
+        for (int t = 0; t < 2; ++t) {
+            const int value = std::max(0, score.team[t]);
+            const int digits[] = {(value / 100) % 10, (value / 10) % 10, value % 10};
+            for (int i = 0; i < 3; ++i) dcBattleSprite(20 + digits[i], (t == 0 ? 254 : 382) + 32 * i, 402, 32, 32);
+        }
+        static const float plate[4][2] = {{135, 387}, {485, 387}, {135, 417}, {485, 417}};
+        for (int p = 0; p < 4; ++p)
+            if (cpuLevel[p] >= 0) dcBattleSprite(30, plate[p][0], plate[p][1], 128, 32);
+    }
+
+    void drawDcTeamCrowns(int tick, const Scoreboard& score) {
+        if ((tick & 31) <= 10 || (score.team[0] == 0 && score.team[1] == 0)) return;
+        for (int t = 0; t < 2; ++t) {
+            const int rank = score.team[t] < score.team[1 - t] ? 1 : 0;
+            const int radius = rank == 0 ? 31 : 23, size = (radius + 1) * 2;
+            dcBattleSprite(31 + rank, (t == 0 ? 304 : 424) - radius - 1, 371 - radius - 1, size, size);
+        }
+    }
+
     void drawDcScoreCrowns(int tick, const Scoreboard& score, const int (&ranks)[4]) {
         if ((tick & 31) <= 10 || std::all_of(score.player, score.player + 4,
                                              [](int value) { return value == 0; })) return;
@@ -2815,7 +2840,7 @@ struct BattleMode : Screen {
               const SettingsPaneItems::PadRules* rules = nullptr, int localTeam = -1) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
         game.teamMode = localTeam < 0 ? getenv("CCR_TEAM") != nullptr : localTeam != 0;
-        dcProjection = !game.teamMode && gApp && gApp->useModels3d();
+        dcProjection = gApp && gApp->useModels3d();
         field = dcProjection ? dcBattleField : FieldLayout{};
         game.rocketPulseDecay = dcProjection ? 0.05f : 0.0f;
         game.gbaCpu = getenv("CCR_CPU") ? std::string(getenv("CCR_CPU")) == "gba" : (gApp && gApp->settings.cpuStyle == "gba");
@@ -3007,7 +3032,7 @@ struct BattleMode : Screen {
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         a.stars.draw(a);
-        const bool dcHud = !game.teamMode && mode < 4 && a.useDcBattleHud();
+        const bool dcHud = mode < 4 && a.useDcBattleHud() && (!game.teamMode || a.dcBattleHud.fr.size() >= 41);
         const bool dcPlayerOverlays = dcHud && a.dcBattleHud.fr.size() >= 39;
         const int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock);
         const int seconds = (left + 59) / 60;
@@ -3021,13 +3046,13 @@ struct BattleMode : Screen {
             if (game.sim.coll[y][x] & 0xF00) a.cursor(x, y, p, game.frame, true, field);
         }
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field, dcProjection);
-        if (dcHud) a.drawDcBattleHud(game.score, lv, left, game.roundFrames);
+        if (dcHud) { if (game.teamMode) a.drawDcTeamHud(game.score, lv, left, game.roundFrames); else a.drawDcBattleHud(game.score, lv, left, game.roundFrames); }
         const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
         const int taskAge = intro + game.frame;
         if (intro > 0 && !game.over)
             a.drawBattleRankOverlay(game.teamMode, paused, taskAge, game.score, ranks,
                                     wins, game.sim.rocketPos, dcPlayerOverlays, field);
-        if (dcPlayerOverlays) a.drawDcScoreCrowns(taskAge, game.score, ranks);
+        if (dcPlayerOverlays) { if (game.teamMode) a.drawDcTeamCrowns(taskAge, game.score); else a.drawDcScoreCrowns(taskAge, game.score, ranks); }
         for (int p = 0; p < 4; ++p)
             if (lv[p] < 0) cursorTrails[p].draw(a, p, field.cell, dcProjection);
         const float cursorAlpha = paused ? 1.0f : alpha;

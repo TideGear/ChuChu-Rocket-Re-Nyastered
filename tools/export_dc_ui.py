@@ -46,6 +46,8 @@ def export_battle_hud(prs_png, out):
     tiles += digits + [images[16]]
     tiles += [image.transpose(Image.Transpose.TRANSPOSE) for image in images[17:21]]
     tiles += images[21:]
+    # Team Battle's two bottom panels (Flycast Team Battle frame): the blue and red one is the lower 96 rows of the score sheet, the orange and green one the upper 97 rows of the timer sheet.
+    tiles += [scores.crop((0, 160, 256, 256)), timer_panel.crop((0, 0, 256, 97))]
     width = max(tile.width for tile in tiles)
     positions = []
     x = y = row_height = 0
