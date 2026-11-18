@@ -244,7 +244,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcModeSelect, dcChallengeSelect, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -319,6 +319,7 @@ struct App {
         dpressOk = loadSheet(ret + "dpress", dpress);
         loadSheet(ret + "dc_mode_select", dcModeSelect);
         loadSheet(ret + "dc_challenge_select", dcChallengeSelect);
+        loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
         loadSheet(ret + "dc_arrows", dcArrows);
         loadSheet(ret + "dc_puzzle_start", dcPuzzleStart);
         loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
@@ -2780,6 +2781,23 @@ struct ChallengeMode : Screen {
         if (phase() != before) { if (phase() == ChallengeGame::Success || phase() == ChallengeGame::Result) a.playSfx(0x15); else if (phase() == ChallengeGame::Failure) { a.playSfx(0x1b); char lb[200]; snprintf(lb, sizeof lb, "challenge stage %d: failed (%s)", cur + 1, (battle ? bgame.failReason : game.failReason) ? (battle ? bgame.failReason : game.failReason) : ""); a.log.write(1, lb); } }
     }
     const char* next() override { if (!back) return nullptr; back = false; return fromStageSelect ? "CHALLENGE_SELECT" : "MENU"; }
+    void drawDcIntro(App& a) const {
+        const Sheet& intro = a.dcChallengeIntro;
+        if (!intro.tex || intro.fr.size() != 11) return;
+        // Flycast A1 frame 2390, packets 0x19ff983 and 0x19ffa23.
+        auto draw = [&](int frame, float x, float y) {
+            constexpr float scale = GW / 640.0f;
+            const SDL_Rect& src = intro.fr[frame];
+            const SDL_FRect dst{x * scale, y * scale, src.w * scale, src.h * scale};
+            SDL_RenderCopyF(a.ren, intro.tex, &src, &dst);
+        };
+        if (cur == 24) {
+            draw(5, 180, 150);
+        } else {
+            draw(cur % 5, 180, 150);
+            draw(6 + cur / 5, 442, 188);
+        }
+    }
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255); SDL_RenderClear(a.ren);
@@ -2799,6 +2817,7 @@ struct ChallengeMode : Screen {
             const int total = longRound ? 3600 : 1800;
             const int remaining = !battle ? ChallengeGame::kLimitTicks - game.playTick : longRound ? 3600 - bgame.game.clock : ChallengeBattleGame::kLimitTicks - bgame.playTick;
             a.drawDcTimerColumn(std::max(0, remaining), total);
+            if (ph == ChallengeGame::Intro) drawDcIntro(a);
         }
         if (!supportedNow()) line = "THIS CHALLENGE STAGE IS NOT PORTED YET  ESC BACK";
         else if (ph == ChallengeGame::Intro) line = "STAGE CHALLENGE " + std::to_string(cur + 1) + "  CLICK TO START";

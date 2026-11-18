@@ -24,7 +24,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - DLC skins, CHD/GDI input with per-input dump verification: **open**. .VMS/.VMI reader and writer for puzzle packs: **done**: core reader/writer (`core/vms.hpp`, `vms_test`, `tools/vms_pack.py`) and in-app import (packs in `<data>/imports/*.VMS` appear as the Imported Packs stage set, checked headlessly with DEPuzzle.VMS and a character pack present). Export from the app, DLC character skins and PuzzleP's arrow stock remain open.
 ## E. Sound, animation, assets
 - Full inventory with version/address/asset ID/gates: **open** (pieces in roadmap and docs/*.md).
-- Challenge intro, in-play counters, results and failure still use placeholder text. Replace them with disc art and audit every mode's remaining `a.text(...)` presentation.
+- Challenge intro cards use the disc art, with A1 and B2 compared against Flycast. In-play, failure and result placeholders remain. Replace them with disc art and audit every mode’s remaining `a.text(...)` presentation.
 - Dreamcast sound is **partial**. Trace the original call sites and MANATEE.DRV for cue, pitch, volume, channel, priority, looping, fade and cancellation. Start with Challenge selection, countdown, goal, clear and fail.
 - Dreamcast model inventory is **partial**. The [mesh inventory](dreamcast_meshes.md) and [captured poses](dreamcast_mesh_poses.md) track the observed families. Character clock rules, costumes, KapuKapu, the focus ring and unseen meshes remain open.
 ## F. Platforms, controls, play

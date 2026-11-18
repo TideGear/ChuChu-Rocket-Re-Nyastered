@@ -128,6 +128,18 @@ def export_challenge_select(prs_png, png, out):
         clock.append(ink.crop(ink.getbbox()).resize((16, 20), Image.Resampling.BILINEAR).convert('RGBA'))
     export_atlas(out, 'dc_challenge_select', [background, header, *tiles[1:], *clock])
 
+def export_challenge_intro(prs_png, out):
+    # CHALLENGEPAUSE contains the localized cards. PUZZLEMENU_A through F
+    # contain a separate set, with Japanese text on the USA disc.
+    names = [f'c{letter}' for letter in 'abcdef']
+    names += [f'odainum{i:02}' for i in range(1, 6)]
+    paths = [os.path.join(prs_png, 'CHALLENGEPAUSE_' + name + '.png') for name in names]
+    if not all(os.path.isfile(path) for path in paths):
+        return
+    tiles = [Image.open(path).convert('RGBA') for path in paths]
+    export_atlas(out, 'dc_challenge_intro',
+                 tiles[:6] + [tile.transpose(Image.Transpose.TRANSPOSE) for tile in tiles[6:]])
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -218,6 +230,7 @@ def main(prs_png, out, png=None):
             atlas.paste(Image.open(m).convert('RGBA').transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT), (64 * i, 0))
         sheet('dc_pause_marks', atlas)
     export_challenge_select(prs_png, png, out)
+    export_challenge_intro(prs_png, out)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
