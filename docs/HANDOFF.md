@@ -13,7 +13,7 @@ They were on v2026.11.17, said Easy Setup rejected their ipa/gba/DC files, then 
 
 ## Dreamcast HUD work (next)
 - Live Battle draw callback `0x8c0272a0` is in the task list walked by `0x8c01efd2`. Frame 3100 has 32 sprite submissions through `0x8c0e4bec`, followed by the board draw. Their matching PowerVR quads start at state offset `0x19d1cc3`. See `docs/dreamcast_models.md` for the layout and texture names.
-- The port now draws the four-player sprite HUD in screen coordinates, including CPU labels and the countdown column. Frames 3600, 4250 and 4950 exercise live scores and elapsed time. Next trace human tags and crown layers and capture roulette and Team Battle. The FOURADV 3D objects from dispatcher `0x8c034c60` belong to a different screen.
+- The port draws the four-player HUD with human intro tags and score crowns. Next trace the leader crown on the rocket and match win marks, then capture roulette and Team Battle. See `docs/dreamcast_models.md` for the tag age and crown gates. The FOURADV 3D objects from dispatcher `0x8c034c60` belong to a different screen.
 - Real-frame capture script for the Battle frame at 3100: keys `START@1800-1806` then `START@t-(t+6)` for t=2400,2550,...; `FLY_DUMP=1`.
 
 ## Open (also in audit.md)

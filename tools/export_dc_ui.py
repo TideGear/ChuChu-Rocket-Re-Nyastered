@@ -27,12 +27,14 @@ def export_battle_hud(prs_png, out):
     sources = ['GAMEMENU_' + name for name in
                ('disp01', 'disp02', 'disp03', 'time_num', 'rocket01', 'rocket02')]
     sources += [f'PLAYERCLEAR_winno{i}' for i in range(10)] + ['PLAYERCLEAR_namecpu']
+    sources += [f'PLAYERCLEAR_ranking{i:02}' for i in range(1, 5)]
+    sources += [f'PLAYERCLEAR_player{i}' for i in range(1, 5)]
     paths = [os.path.join(prs_png, name + '.png') for name in sources]
     if not all(os.path.isfile(path) for path in paths):
         return
     images = [Image.open(path).convert('RGBA') for path in paths]
     scores, timer_panel, column, clock, rocket_on, rocket_off, *digits = [
-        image.transpose(Image.Transpose.TRANSPOSE) for image in images[:-1]]
+        image.transpose(Image.Transpose.TRANSPOSE) for image in images[:16]]
     # The Battle NJS_TEXANIM table at 0x8c0b9a80 supplies the UV rectangles.
     tiles = [scores.crop((x, y, x + 128, y + 80))
              for y in (0, 80) for x in (0, 128)]
@@ -41,18 +43,28 @@ def export_battle_hud(prs_png, out):
               rocket_on, rocket_off]
     tiles += [clock.crop((x, y, x + 16, y + 32))
               for y, count in ((0, 8), (32, 3)) for x in range(0, 16 * count, 16)]
-    tiles += digits + [images[-1]]
+    tiles += digits + [images[16]]
+    tiles += [image.transpose(Image.Transpose.TRANSPOSE) for image in images[17:21]]
+    tiles += images[21:]
     width = max(tile.width for tile in tiles)
-    height = sum(tile.height for tile in tiles)
+    positions = []
+    x = y = row_height = 0
+    for tile in tiles:
+        if x + tile.width > width:
+            x = 0
+            y += row_height
+            row_height = 0
+        positions.append((x, y))
+        x += tile.width
+        row_height = max(row_height, tile.height)
+    height = y + row_height
     atlas = Image.new('RGBA', (width, height))
     with open(os.path.join(out, 'dc_battle_hud.frames.bin'), 'wb') as f:
         f.write(struct.pack('<I', len(tiles)))
-        y = 0
-        for tile in tiles:
-            atlas.paste(tile, (0, y))
-            f.write(struct.pack('<9f', 0, y / height, tile.width / width,
+        for tile, (x, y) in zip(tiles, positions):
+            atlas.paste(tile, (x, y))
+            f.write(struct.pack('<9f', x / width, y / height, (x + tile.width) / width,
                                 (y + tile.height) / height, 0, 0, 0, 0, 0))
-            y += tile.height
     with open(os.path.join(out, 'dc_battle_hud.tex.bin'), 'wb') as f:
         f.write(struct.pack('<2I', width, height))
         f.write(atlas.tobytes())

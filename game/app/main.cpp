@@ -663,8 +663,14 @@ struct App {
         SDL_SetTextureAlphaMod(sh->tex, (Uint8)alpha); SDL_RenderCopyEx(ren, sh->tex, &fr, &dst, 0.0, nullptr, (SDL_RendererFlip)((flags & 2 ? SDL_FLIP_HORIZONTAL : 0) | (flags & 4 ? SDL_FLIP_VERTICAL : 0))); SDL_SetTextureAlphaMod(sh->tex, 255); }
 
     bool useDcBattleHud() {
-        return dcBattleHud.tex && dcBattleHud.fr.size() == 31 &&
+        return dcBattleHud.tex && dcBattleHud.fr.size() >= 31 &&
                (mobileSheetsMissing || useModels3d());
+    }
+
+    void dcBattleSprite(int frame, float x, float y, float width, float height) {
+        constexpr float scale = GW / 640.0f;
+        const SDL_FRect dst{x * scale, y * scale, width * scale, height * scale};
+        SDL_RenderCopyF(ren, dcBattleHud.tex, &dcBattleHud.fr[frame], &dst);
     }
 
     // The Battle task (0x8c0272a0) submits these sprites at fixed screen
@@ -672,9 +678,7 @@ struct App {
     void drawDcBattleHud(const Scoreboard& score, const int (&cpuLevel)[4],
                          int remainingFrames, int roundFrames) {
         auto sprite = [&](int frame, float x, float y, float width, float height) {
-            constexpr float scale = GW / 640.0f;
-            const SDL_FRect dst{x * scale, y * scale, width * scale, height * scale};
-            SDL_RenderCopyF(ren, dcBattleHud.tex, &dcBattleHud.fr[frame], &dst);
+            dcBattleSprite(frame, x, y, width, height);
         };
         sprite(5, 32, 0, 128, 256);
         sprite(6, 32, 256, 128, 256);
@@ -707,6 +711,30 @@ struct App {
         SDL_SetTextureColorMod(dcBattleHud.tex, 255, 255, 255);
         SDL_SetTextureAlphaMod(dcBattleHud.tex, 255);
         SDL_SetTextureBlendMode(dcBattleHud.tex, SDL_BLENDMODE_BLEND);
+    }
+
+    void drawDcScoreCrowns(int tick, const Scoreboard& score, const int (&ranks)[4]) {
+        if ((tick & 31) <= 10 || std::all_of(score.player, score.player + 4,
+                                             [](int value) { return value == 0; })) return;
+        for (int p = 0; p < 4; ++p) {
+            const int rank = ranks[p];
+            const int radius = rank == 0 ? 31 : 23;
+            const int size = (radius + 1) * 2;
+            dcBattleSprite(31 + rank, 218 + 120 * p - radius, 360 - radius, size, size);
+        }
+    }
+
+    // Tag update at 0x8c013e5e. A full 16-tick bob sums to zero.
+    void drawDcPlayerTag(int player, int tick, SDL_FPoint start) {
+        constexpr int release = 180;
+        constexpr float step = 6.283185307f / 16.0f;
+        for (int i = 0; i < std::min(tick, release) % 16; ++i)
+            start.y -= 2.5f * std::sin(i * step);
+        const int fall = std::max(0, tick - release);
+        const float angle = (1 - 4 * player) * step;
+        start.x += fall * std::cos(angle);
+        start.y += fall * (std::sin(angle) + 0.1f * (fall + 1));
+        if (start.y < 480) dcBattleSprite(35 + player, start.x, start.y, 208, 52);
     }
 
     // HD 1.0 iPad renderFourBattleHud and renderTeamBattleHud (-788),
@@ -754,7 +782,8 @@ struct App {
     }
     // RankCrawnDrawPriority (0x28f) runs after field objects and before the cursor ring.
     void drawBattleRankOverlay(bool team, bool paused, int tick, const Scoreboard& score,
-                               const int (&ranks)[4], const int (&wins)[4], const int (&rockets)[4][2]) {
+                               const int (&ranks)[4], const int (&wins)[4], const int (&rockets)[4][2],
+                               bool dcScoreCrowns = false) {
         if ((tick & 31) <= 10) return;
         const int* scores = team ? score.team : score.player;
         const int count = team ? 2 : 4;
@@ -782,7 +811,7 @@ struct App {
             const int rank = team ? scores[p] < scores[1 - p] : ranks[p];
             const float x = team ? 430 + 270 * p : 324 + 192 * p;
             const float y = team ? 640 : 644;
-            crown(rank, x, y, rank == 0 ? 1.3f : 1.0f);
+            if (!dcScoreCrowns) crown(rank, x, y, rank == 0 ? 1.3f : 1.0f);
             if (rank == 0) {
                 rocketCrown(p);
                 if (team) rocketCrown(p + 2);
@@ -2580,6 +2609,7 @@ struct BattleMode : Screen {
     bool mouseCursor = false;
     PadAim padAim[4]{{37.5f, 37.5f}, {142.5f, 37.5f}, {37.5f, 97.5f}, {142.5f, 97.5f}};
     std::array<CursorTrail, 4> cursorTrails;
+    std::array<SDL_FPoint, 4> playerTagStart;
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
     // Mouse and keyboard control player 1. Controller face buttons place arrows.
     // FourBattleLoop (HD 1.0 0x1c2b8) mode 1: a 120-tick intro (the round panel from tick 1 for 75 ticks, the Round START banner at tick 90 for 45 ticks), then play starts
@@ -2654,7 +2684,22 @@ struct BattleMode : Screen {
         game.localPlayer = 0;
         restart(); return true;
     }
-    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); cursorTrails = {}; game.freezeOnRoll = game.cpuRunsOnFreeze = true; game.start(stages.list[cur].st, seed); /* FourBattleLoop masks the task server by RL_GetRoulette4Status (docs/roadmap.md, 2026-11-16) */ prev.clear(); if (gApp) gApp->angs.clear(); }
+    void restart() {
+        sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear();
+        mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear();
+        cursorTrails = {};
+        // Project the starting cursor into the HUD's 640x480 space. The
+        // Dreamcast tag starts 130 left and 35 above the cursor quad's origin.
+        constexpr float scale = 640.0f / GW;
+        for (int p = 0; p < 4; ++p)
+            playerTagStart[p] = {(padAim[p].logicalX() - CELL / 2.0f) * scale - 130,
+                                 (padAim[p].logicalY() - CELL / 2.0f) * scale - 35};
+        // FourBattleLoop masks the task server by RL_GetRoulette4Status.
+        game.freezeOnRoll = game.cpuRunsOnFreeze = true;
+        game.start(stages.list[cur].st, seed);
+        prev.clear();
+        if (gApp) gApp->angs.clear();
+    }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
@@ -2783,6 +2828,7 @@ struct BattleMode : Screen {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         a.stars.draw(a);
         const bool dcHud = !game.teamMode && mode < 4 && a.useDcBattleHud();
+        const bool dcPlayerOverlays = dcHud && a.dcBattleHud.fr.size() >= 39;
         const int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock);
         const int seconds = (left + 59) / 60;
         if (!dcHud) a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
@@ -2797,15 +2843,21 @@ struct BattleMode : Screen {
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku);
         if (dcHud) a.drawDcBattleHud(game.score, lv, left, game.roundFrames);
         const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
+        const int taskAge = intro + game.frame;
         if (intro > 0 && !game.over)
-            a.drawBattleRankOverlay(game.teamMode, paused, intro + game.frame, game.score, ranks,
-                                    wins, game.sim.rocketPos);
+            a.drawBattleRankOverlay(game.teamMode, paused, taskAge, game.score, ranks,
+                                    wins, game.sim.rocketPos, dcPlayerOverlays);
+        if (dcPlayerOverlays) a.drawDcScoreCrowns(taskAge, game.score, ranks);
         for (int p = 0; p < 4; ++p) if (lv[p] < 0) cursorTrails[p].draw(a, p);
         for (int p = 0; p < 4; ++p) {
             if (lv[p] >= 0) continue;
             if (p == 0 && mouseCursor) {
                 if (aim.inside) a.cursorAt(aim.x, aim.y, p, game.frame);
             } else padAim[p].draw(a, p, game.frame, paused ? 1.0f : alpha);
+        }
+        if (dcPlayerOverlays) {
+            for (int p = 0; p < 4; ++p)
+                if (lv[p] < 0) a.drawDcPlayerTag(p, taskAge, playerTagStart[p]);
         }
         if (!dcHud) { SDL_RenderSetViewport(a.ren, nullptr);   // in-play timer (HD 1.0 clock2D 0x20e54): image 0x69 at scale 0.8; layout struct +0xf0 x = 78, +0xf8 step = 14, +0xf4 y = 84;
           // minutes at x, colon (frame 10) at x + step, tens at x + step + step / 2, ones at that + step; the value is TI_GetGameBCDTime = the BCD countdown rounded up to the next second
