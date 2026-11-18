@@ -6,6 +6,7 @@ Read first: `docs/goal.md` (plan, under 5,000 characters; now has a Completeness
 - Release **v2026.11.20** has verified downloads for Windows x64, Linux x64, macOS arm64 and macOS x64. Fixes include a platform-specific missing-assets message, `setup.log` with its path printed, and a visible launcher error.
 - Dreamcast moving player cursors: traced the live Battle effect, including the trail texture and 24-tick fade. Battle and Puzzle draw the pointer and trail from the disc. Native camera alignment and other original modes remain open.
 - Dreamcast Battle board: floor is yuka01 on every stage (read from the 25 stage previews), outer wall frame always drawn, walls darker. The "wall" model (0xa20fc, kabetx01) was right; the c_* candidates were HUD pieces.
+- Four-player Battle uses the measured Dreamcast floor and wall planes. Controller cursors start at the rocket cells and use the observed sprite anchor. The shared board geometry also drives pointer hit testing and arrow placement. Next identify the closed rocket models and trace the height projection and lighting for the rest of the field.
 - Tools: `flyhost` (FLY_DUMP=1) dumps main RAM and a save state; `tools/oracle/ta_parse.py` decodes the game's PowerVR stream; `dc_ram_trace.py` runs game SH-4 code on the RAM dump with stubs that log Ninja calls; `dc_callers.py` finds callers (bsr and pointers).
 
 ## Linux player (RecompLauncher report, CachyOS): still unresolved

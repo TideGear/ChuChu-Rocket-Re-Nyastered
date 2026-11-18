@@ -56,6 +56,25 @@ using namespace ccr;
 static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
 // iPad-class layout (Core::settingsInit iOS 0x135cc + the static layout struct at 0x131028, read 2026-11-14): screen 1024 x 768, cell pitch 64 (= 4.2667 px per world unit), field origin (184, 32); other layouts: Android 800x480 (pitch 50, origin 160,18), 480x320 (pitch 35, origin 61,4).
 static const int GW = 1024, GH = 768, OX = 184, OY = 32;
+struct FieldLayout {
+    float left = OX, top = OY, cell = CELL;
+    float wallMagnification = 1.0f;
+
+    float x(float cells) const { return left + cells * cell; }
+    float y(float cells) const { return top + cells * cell; }
+    float scale() const { return cell / CELL; }
+    FieldLayout wallPlane() const {
+        return {GW / 2.0f + (left - GW / 2.0f) * wallMagnification,
+                GH / 2.0f + (top - GH / 2.0f) * wallMagnification,
+                cell * wallMagnification};
+    }
+};
+
+// Battle floor PowerVR quad in the 640x480 Dreamcast viewport, frame 3100.
+static constexpr FieldLayout dcBattleField{
+    136.92937f * 1.6f, 22.60363f * 1.6f, (457.67653f / 12) * 1.6f,
+    218.0f / 215.0f
+};
 static const SDL_Color pcol[4] = {{60, 120, 255, 255}, {250, 170, 30, 255}, {240, 60, 60, 255}, {40, 190, 70, 255}};   // player order of the original art (arrow sheet r0645, cursor sheet r0732, rocket sheets r0651/r0663/r0675/r0687): blue, orange, red, green
 
 // Built-in 5x7 bitmap font (uppercase, digits, basic punctuation) used when no mobile glyph sheet exists (a Dreamcast-only install has none; the disc's own fonts are not wired yet).
@@ -453,11 +472,9 @@ struct App {
     // Colours by game type (Render::createPlayfieldPreview, 0x38458): free-for-all and team battle: floor {1,3,4,5}[stage & 3], wall 0; challenge: floor 1, wall 1; puzzle: floor (group & 3) + 2, wall 2.
     // Dreamcast board (models_3d): the floor is the game's single 180 x 135 quad textured with yuka01-06 (floor colour N = yuka N+1), each wall edge a kabetx01-03 piece (wall colour N = kabetx N+1),
     // both seen from straight above like the mobile board; holes, spawn markers and rocket rings still use the mobile atlas on top of the 3D floor (their Dreamcast models are not identified).
-    bool board3d(const Stage& st, int floorColor, int wallColor, int ox, int oy) {
+    bool board3d(int floorColor, int wallColor, FieldLayout field) {
         if (!useModels3d()) return false;
         const Model3D* floorM = models3d.find("floor"); const Model3D* wallM = models3d.find("wall"); if (!floorM || !wallM) return false;
-        const float k = (float)CELL / 15.0f;
-        (void)k;   // the game's floor quad has UVs 0..6 x 0..4.5 (u = (x + 90) / 30, v = (z + 67.5) / 30) and SDL's geometry call clamps UVs, so the 108 cells are drawn as quarter-texture quads (same mapping)
         const int dcFloor = wallColor == 0 ? 0 : floorColor;   // Dreamcast Battle and Team Battle boards all use yuka01 (purple and tan), read from the 25 stage-select previews of the real game; other modes keep the mobile rule until their Dreamcast frames are checked
         const int mat = 29 + std::max(0, std::min(5, getenv("CCR_FLOOR3D") ? atoi(getenv("CCR_FLOOR3D")) : dcFloor)); if (mat >= (int)floorM->matTex.size()) return false;
         SDL_Texture* tex = models3d.textures[floorM->matTex[mat]];
@@ -465,8 +482,8 @@ struct App {
         // Neutral floor modulation measured from the Dreamcast Normal Puzzle 01 capture.
         const SDL_Color floorLight{202, 202, 202, 255};
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
-            const float x0 = ox + c * (float)CELL, y0 = oy + r * (float)CELL;
-            const float x1 = x0 + CELL, y1 = y0 + CELL;
+            const float x0 = field.x(c), y0 = field.y(r);
+            const float x1 = field.x(c + 1), y1 = field.y(r + 1);
             // The Dreamcast starts the checkerboard in the right-hand texture quarter.
             const float u0 = ((c + 1) & 1) * 0.5f, v0 = (r & 1) * 0.5f;
             const float u1 = u0 + 0.5f, v1 = v0 + 0.5f;
@@ -476,36 +493,37 @@ struct App {
         SDL_RenderGeometry(ren, tex, verts.data(), (int)verts.size(), nullptr, 0);
         return true;
     }
-    void walls3d(const Stage& st, int wallColor, int ox, int oy) {
-        const Model3D* wallM = models3d.find("wall"); if (!wallM) return; const float k = (float)CELL / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor));
+    void walls3d(const Stage& st, int wallColor, FieldLayout field) {
+        const Model3D* wallM = models3d.find("wall"); if (!wallM) return; const float k = field.cell / kCell; const int mat = 35 + std::max(0, std::min(2, wallColor));
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.draw(ren, *wallM, ox + (c + 0.5f) * CELL, oy + r * (float)CELL, k, 0.0f, 90.0f, 0.6f, -1, mat);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.draw(ren, *wallM, field.x(c + 0.5f), field.y(r), k, 0.0f, 90.0f, 0.6f, -1, mat);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.draw(ren, *wallM, ox + c * (float)CELL, oy + (r + 0.5f) * CELL, k, 90.0f, 90.0f, 0.6f, -1, mat);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.draw(ren, *wallM, field.x(c), field.y(r + 0.5f), k, 90.0f, 90.0f, 0.6f, -1, mat);
         }
     }
-    void board(const Stage& st, int floorColor, int wallColor, int ox = OX, int oy = OY) {
-        const bool three = board3d(st, floorColor, wallColor, ox, oy);
+    void board(const Stage& st, int floorColor, int wallColor, FieldLayout field = {}) {
+        const bool three = board3d(floorColor, wallColor, field);
         static const int ring[9] = {0x1b, 0x1c, 0x1d, 0x22, 0x1a, 0x1e, 0x21, 0x20, 0x1f};
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
-            float ax = ox + c * CELL + CELL / 2.0f, ay = oy + r * CELL + CELL / 2.0f; uint8_t t = st.tiles[r * 12 + c];
-            if (t == 0x11) { blit(atlas, 7, ax, ay); continue; }
+            float ax = field.x(c + 0.5f), ay = field.y(r + 0.5f); uint8_t t = st.tiles[r * 12 + c];
+            if (t == 0x11) { blit(atlas, 7, ax, ay, field.scale()); continue; }
             if (!three) blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
-            if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay);
+            if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay, field.scale());
             else if (t >= 5 && t <= 8) {
-                const Model3D* po = three ? models3d.find("hole_out") : nullptr; const Model3D* pi = three ? models3d.find("hole_in") : nullptr; const float k = (float)CELL / 15.0f;   // the generator pad: outs (rim) and ins (inner disc) from the disc, seen from above
+                const Model3D* po = three ? models3d.find("hole_out") : nullptr; const Model3D* pi = three ? models3d.find("hole_in") : nullptr; const float k = field.cell / kCell;
                 if (po && pi) { models3d.draw(ren, *po, ax, ay, k, 0.0f, 90.0f); models3d.draw(ren, *pi, ax, ay, k, 0.0f, 90.0f); }
-                else blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay);
+                else blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
             }
         }
-        if (three) { walls3d(st, wallColor, ox, oy); return; }
+        if (three) { walls3d(st, wallColor, field.wallPlane()); return; }
         // HD 1.0 createPlayfield draws horizontal and vertical edge rows in
         // alternation. Keep its wall footprint and use the higher-resolution art.
         auto wall = [&](int frame, int x, int y, int w, int h) {
             SDL_Rect src = atlas.fr[frame];
             ++src.x;
             --src.w;
-            SDL_Rect dst{ox + x, oy + y, w, h};
+            SDL_Rect dst{static_cast<int>(field.x(x / float(CELL))), static_cast<int>(field.y(y / float(CELL))),
+                         static_cast<int>(w * field.scale()), static_cast<int>(h * field.scale())};
             SDL_RenderCopy(ren, atlas.tex, &src, &dst);
         };
         for (int r = 0; r <= kRows; ++r) {
@@ -517,15 +535,19 @@ struct App {
         }
     }
     // Arrow sprite (image 0x5f, frame = owner; the art points up, rotated clockwise by the heading); a struck arrow is drawn at 0.7 (AR_ArrowDrawPriority).
-    void arrow(int x, int y, int dir, int owner, int hits = 0, int ttl = -1) {
+    void arrow(int x, int y, int dir, int owner, int hits = 0, int ttl = -1, FieldLayout field = {}) {
         if (ttl >= 0 && !(ttl > 60 || (ttl > 0 && (ttl & 1)))) return;   // in the last 60 ticks the arrow flickers (drawn only on odd ticks)
-        arrowIcon(OX + (x + 0.5f) * CELL, OY + (y + 0.5f) * CELL, dir, owner, hits ? 0.7f : 1.0f);
+        arrowIcon(field.x(x + 0.5f), field.y(y + 0.5f), dir, owner, (hits ? 0.7f : 1.0f) * field.scale());
     }
     void arrowIcon(float cx, float cy, int dir, int owner, float sc) {
         static const double rot[4] = {180.0, 270.0, 0.0, 90.0};
         if (settings.models3d && dcArrows.tex && dcArrows.fr.size() == 4) {
             // The Dreamcast texture points west and covers one cell.
-            blit(dcArrows, owner & 3, cx, cy, sc, rot[dir & 3] + 90.0);
+            const SDL_Rect& src = dcArrows.fr[owner & 3];
+            const float w = src.w * sc, h = src.h * sc;
+            const SDL_FRect dst{cx - w / 2, cy - h / 2, w, h};
+            SDL_RenderCopyExF(ren, dcArrows.tex, &src, &dst, rot[dir & 3] + 90.0,
+                              nullptr, SDL_FLIP_NONE);
         } else {
             blit(arw, owner & 3, cx, cy, sc, rot[dir & 3]);
         }
@@ -783,7 +805,7 @@ struct App {
     // RankCrawnDrawPriority (0x28f) runs after field objects and before the cursor ring.
     void drawBattleRankOverlay(bool team, bool paused, int tick, const Scoreboard& score,
                                const int (&ranks)[4], const int (&wins)[4], const int (&rockets)[4][2],
-                               bool dcScoreCrowns = false) {
+                               bool dcScoreCrowns = false, FieldLayout field = {}) {
         if ((tick & 31) <= 10) return;
         const int* scores = team ? score.team : score.player;
         const int count = team ? 2 : 4;
@@ -794,10 +816,9 @@ struct App {
             else blit(crowns, rank, x, y, scale);
         };
         auto rocketCrown = [&](int slot) {
-            constexpr float scale = CELL / kCell;
             const double worldX = 14.5 * rockets[slot][0] + 19.5;
             const float worldY = 14.5f * rockets[slot][1] + 3.0f;
-            crown(0, static_cast<float>(OX + worldX * scale), OY + worldY * scale, 1.0f);
+            crown(0, field.x(static_cast<float>(worldX / kCell)), field.y(worldY / kCell), field.scale());
         };
         for (int p = 0; p < count; ++p) {
             // GameWinRocketDraw uses the accumulated wins, even at zero score.
@@ -869,19 +890,28 @@ struct App {
         const SDL_FRect dst{x - size / 2, y - size / 2, size, size};
         SDL_RenderCopyF(ren, sheet.tex, &sheet.fr[player], &dst);
     }
-    void cursorAt(float x, float y, int player, int ticks, bool bracket = false) {
+    void drawDcBattlePadCursor(float x, float y, int player, int ticks) {
+        if (!useDcCursors()) {
+            cursorAt(x, y, player, ticks, false, dcBattleField.scale());
+            return;
+        }
+        const float phase = (player * 4 + ticks % 16) * (6.283185307f / 16.0f);
+        const float half = 32.0f * (1.0f + 0.1f * std::sin(phase));
+        dcCursorAt(dcCursors, x + half, y + half, player, 2 * half);
+    }
+    void cursorAt(float x, float y, int player, int ticks, bool bracket = false, float fieldScale = 1.0f) {
         int ang = (player << 14) + 0x1000 * ticks;
         float phase = (bracket ? 2.0f : 1.0f) * ang * 6.283185307f / 65536.0f;
-        const float scale = 1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase);
+        const float scale = fieldScale * (1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase));
         if (!bracket && useDcCursors()) dcCursorAt(dcCursors, x, y, player, CELL * scale);
         else blit(cur, bracket ? 4 : player & 3, x, y, scale);
     }
-    void cursor(int cx, int cy, int player, int ticks, bool bracket = false) {
-        cursorAt(OX + (cx + 0.5f) * CELL, OY + (cy + 0.5f) * CELL, player, ticks, bracket);
+    void cursor(int cx, int cy, int player, int ticks, bool bracket = false, FieldLayout field = {}) {
+        cursorAt(field.x(cx + 0.5f), field.y(cy + 0.5f), player, ticks, bracket, field.scale());
     }
-    void cursorGhost(float x, float y, int player, Uint8 opacity) {
+    void cursorGhost(float x, float y, int player, Uint8 opacity, float cell) {
         SDL_SetTextureAlphaMod(dcCursorTrail.tex, opacity);
-        dcCursorAt(dcCursorTrail, x, y, player, CELL);
+        dcCursorAt(dcCursorTrail, x, y, player, cell);
         SDL_SetTextureAlphaMod(dcCursorTrail.tex, 255);
     }
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
@@ -921,18 +951,19 @@ struct App {
     std::vector<FieldObject> fieldObjects;
     // Dreamcast 3D characters (docs/dreamcast_models.md): the basic mouse plays its eight keyframes by the low three bits of the shared clock (0x8c019b0c writes them, 0x8c019e26 draws the frame
     // directly); the cat plays its 24-frame walk cycle from the walk phase (provisional mapping). Orientation: the heading angle (heading << 14) turns the model about the vertical axis.
-    bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z, int mouseFrame) {
+    bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z,
+                         int mouseFrame, float cell) {
         const Model3D* m = en.mouse ? models3d.find("mouse" + std::to_string(mouseFrame)) : models3d.find("cat");
         if (!m) return false;
         const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
-        const float scale = CELL * (en.mouse ? 0.072f : 0.052f);
+        const float scale = cell * (en.mouse ? 0.072f : 0.052f);
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
         const float pitch = en.mouse ? 65.0f : 38.0f;
-        models3d.draw(ren, *m, x, z + CELL * 0.22f, scale, yaw, pitch, 1.0f, en.mouse ? -1 : catFrame);
+        models3d.draw(ren, *m, x, z + cell * 0.22f, scale, yaw, pitch, 1.0f, en.mouse ? -1 : catFrame);
         (void)i; return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
-                          float alpha, const float* puku = nullptr) {
+                          float alpha, const float* puku = nullptr, FieldLayout field = {}) {
         // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
         const int mouseFrame = std::max(0, sim.now - 1) & 7;
         fieldObjects.clear();
@@ -977,25 +1008,25 @@ struct App {
         std::stable_sort(fieldObjects.begin(), fieldObjects.end(),
                          [](const FieldObject& a, const FieldObject& b) { return a.depth < b.depth; });
         for (const FieldObject& object : fieldObjects) {
-            float x = OX + object.x * (CELL / kCell), z = OY + object.z * (CELL / kCell);
+            const float x = field.x(object.x / kCell), z = field.y(object.z / kCell);
             size_t i = object.index;
             if (object.ghost) {
                 const auto& ghost = sim.effects[i];
-                drawImage(ghost.image(), ghost.age & 7, x, z, ghost.flags(), ghost.scale(), 255);
+                drawImage(ghost.image(), ghost.age & 7, x, z, ghost.flags(), ghost.scale() * field.scale(), 255);
                 if (headless && getenv("CCR_MOUSE_GHOST_LIVE_TRACE"))
                     printf("mouse ghost %d %.3f %.3f\n", ghost.age, x, z);
                 continue;
             }
             if (object.rocket) {
                 // A parked rocket is a closed sphere. The exported 3D rockets are launch models.
-                blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f);
+                blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f * field.scale());
                 continue;
             }
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
-            if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame)) continue;
+            if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell)) continue;
             if (en.drawsHoleFall()) {
-                drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter, 255);
+                drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter * field.scale(), 255);
                 if (headless && getenv("CCR_CAT_HOLE_TRACE"))
                     printf("cat hole %d %.3f %.3f %.6f\n", (ang & 0xffff) >> 11, x, z, en.rocketCounter);
                 continue;
@@ -1008,7 +1039,7 @@ struct App {
                 if (imgSheet(image)) {
                     const int frame = i < cphase.size() ? static_cast<int>(cphase[i]) : 0;
                     const int flags = image == 40 && angle < 0x8000 ? 2 : 0;
-                    if (walkScale > 0.0f) drawImage(image, frame, x, z, flags, walkScale, 255);
+                    if (walkScale > 0.0f) drawImage(image, frame, x, z, flags, walkScale * field.scale(), 255);
                     if (headless && getenv("CCR_CAT_HOLE_TRACE") && (en.rocketIn || walkScale < 1.0f))
                         printf("cat %s %d %d %.3f %.3f %.6f\n", en.rocketIn ? "rocket" : "return", image, frame, x, z, walkScale);
                     continue;
@@ -1019,13 +1050,13 @@ struct App {
                 unsigned a = (unsigned)ang & 0xffff; int view = (a >= 0x6001 && a <= 0xA000) ? 1 : ((a < 0x2001 || a > 0xE000) ? 2 : 0);
                 Sheet& sh = !en.mouse ? catV[view] : (en.type == 1 ? goldV[view] : mouseV[view]);
                 int frame = !en.mouse ? (i < cphase.size() ? (int)cphase[i] : 0) : gtime % 11; frame = std::min(frame, (int)sh.fr.size() - 1);
-                const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame]; float sc = walkScale * (CELL / 64.0f); if (frame < (int)sh.fit.size()) sc *= sh.fit[frame];   // drawn at the original iPad (HD 1.0) frame size
+                const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame]; float sc = walkScale * (field.cell / 64.0f); if (frame < (int)sh.fit.size()) sc *= sh.fit[frame];   // drawn at the original iPad (HD 1.0) frame size
                 SDL_Rect dst{(int)std::lround(x + of.x * sc), (int)std::lround(z + of.y * sc), (int)std::lround(fr.w * sc), (int)std::lround(fr.h * sc)};
                 bool flip = view == 0 && a > 0x2000 && a < 0x8000;   // the side art faces east; west-facing is mirrored (unverified: the flag the original passes to drawImage is not in the decompile)
                 SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE); continue;
             }
             Sheet& sh = !en.mouse ? cat : (en.type == 1 ? gold : mouse);
-            const SDL_Rect& fr = sh.fr[(ang >> 11) & 31]; float sc = walkScale * CELL * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
+            const SDL_Rect& fr = sh.fr[(ang >> 11) & 31]; float sc = walkScale * field.cell * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
             SDL_Rect dst{(int)(x) - dw / 2, (int)(z) - dh * 2 / 3, dw, dh}; SDL_RenderCopy(ren, sh.tex, &fr, &dst);
         }
     }
@@ -2071,9 +2102,17 @@ struct MenuMode : Screen {
 // The port measures the distance in window pixels and uses the scale 1.0 (unverified).
 struct DragGesture {
     bool on = false; int cx = -1, cy = -1; float x0 = 0, y0 = 0; int wx0 = 0, wy0 = 0;
-    bool begin(App& a, const SDL_Event& e) { float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); lx -= OX; ly -= OY; int c = (int)std::floor(lx / CELL), r = (int)std::floor(ly / CELL); on = c >= 0 && c < 12 && r >= 0 && r < 9; cx = c; cy = r; x0 = lx; y0 = ly; wx0 = e.button.x; wy0 = e.button.y; return on; }
+    bool begin(App& a, const SDL_Event& e, FieldLayout field = {}) {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH);
+        SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x0, &y0);
+        cx = static_cast<int>(std::floor((x0 - field.left) / field.cell));
+        cy = static_cast<int>(std::floor((y0 - field.top) / field.cell));
+        on = cx >= 0 && cx < kCols && cy >= 0 && cy < kRows;
+        wx0 = e.button.x; wy0 = e.button.y;
+        return on;
+    }
     // returns the direction (0 south, 1 west, 2 north, 3 east) or -1 for a tap
-    int end(App& a, const SDL_Event& e) { on = false; float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); lx -= OX; ly -= OY; float dx = lx - x0, dy = ly - y0; float wdx = (float)(e.button.x - wx0), wdy = (float)(e.button.y - wy0); if (wdx * wdx + wdy * wdy <= 0.25f) return -1; if (std::fabs(dy) < std::fabs(dx)) return dx > 0 ? 3 : 1; return dy > 0 ? 0 : 2; }
+    int end(App& a, const SDL_Event& e) { on = false; float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); float dx = lx - x0, dy = ly - y0; float wdx = (float)(e.button.x - wx0), wdy = (float)(e.button.y - wy0); if (wdx * wdx + wdy * wdy <= 0.25f) return -1; if (std::fabs(dy) < std::fabs(dx)) return dx > 0 ? 3 : 1; return dy > 0 ? 0 : 2; }
 };
 
 static int arrowKey(SDL_Keycode key) {
@@ -2089,14 +2128,16 @@ static int arrowKey(SDL_Keycode key) {
 struct MouseAim {
     float x = 0, y = 0;
     bool inside = false;
-    void update(App& app, int windowX, int windowY) {
+    FieldLayout field;
+    void update(App& app, int windowX, int windowY, FieldLayout layout = {}) {
+        field = layout;
         if (!app.headless) SDL_GetMouseState(&windowX, &windowY);
         SDL_RenderSetLogicalSize(app.ren, GW, GH);
         SDL_RenderWindowToLogical(app.ren, windowX, windowY, &x, &y);
-        inside = x >= OX && y >= OY && x < OX + kCols * CELL && y < OY + kRows * CELL;
+        inside = x >= field.left && y >= field.top && x < field.x(kCols) && y < field.y(kRows);
     }
-    int cellX() const { return static_cast<int>((x - OX) / CELL); }
-    int cellY() const { return static_cast<int>((y - OY) / CELL); }
+    int cellX() const { return static_cast<int>((x - field.left) / field.cell); }
+    int cellY() const { return static_cast<int>((y - field.top) / field.cell); }
 };
 
 struct CursorTrail {
@@ -2104,28 +2145,38 @@ struct CursorTrail {
     struct Sample {
         float x = 0, y = 0;
         bool visible = false;
+        bool mouse = false;
     };
     std::array<Sample, lifetime> history{};
     Sample previous;
     int next = 0;
-    bool wasMouse = false;
 
     // One ghost at the old position per moving tick (Dreamcast 0x8c0145ee).
     void tick(float x, float y, bool visible, bool mouse) {
         history[next] = previous;
-        history[next].visible = previous.visible && visible && mouse == wasMouse &&
+        history[next].visible = previous.visible && visible && mouse == previous.mouse &&
                                 (x != previous.x || y != previous.y);
         next = (next + 1) % lifetime;
-        previous = {x, y, visible};
-        wasMouse = mouse;
+        previous = {x, y, visible, mouse};
     }
 
-    void draw(App& app, int player) const {
+    void draw(App& app, int player, float cell = CELL, bool dcBattle = false) const {
         if (!app.dcCursorTrail.tex || app.dcCursorTrail.fr.size() != 4 || !app.useDcCursors()) return;
         // The original submits the oldest task first and truncates the fade to a byte.
         for (int i = 0; i < lifetime; ++i) {
             const auto& sample = history[(next + i) % lifetime];
-            if (sample.visible) app.cursorGhost(sample.x, sample.y, player, (i + 1) * 64 / lifetime);
+            if (!sample.visible) continue;
+            if (dcBattle && !sample.mouse) {
+                // The trail is a board-plane quad at depth 212, anchored by
+                // its top left. The floor position is at depth 218.
+                constexpr float scale = 218.0f / 212.0f;
+                const float size = cell * scale;
+                const float x = GW / 2.0f + (sample.x - GW / 2.0f) * scale;
+                const float y = GH / 2.0f + (sample.y - GH / 2.0f) * scale;
+                app.cursorGhost(x + size / 2, y + size / 2, player, (i + 1) * 64 / lifetime, size);
+            } else {
+                app.cursorGhost(sample.x, sample.y, player, (i + 1) * 64 / lifetime, cell);
+            }
         }
     }
 };
@@ -2133,11 +2184,11 @@ struct CursorTrail {
 struct PadAim {
     float x, y, previousX = x, previousY = y;
     int targetX = -1, targetY = -1;
-    float logicalX(float fraction = 1.0f) const {
-        return OX + (previousX + (x - previousX) * fraction) * (CELL / kCell);
+    float logicalX(float fraction = 1.0f, FieldLayout field = {}) const {
+        return field.x((previousX + (x - previousX) * fraction) / kCell);
     }
-    float logicalY(float fraction = 1.0f) const {
-        return OY + (previousY + (y - previousY) * fraction) * (CELL / kCell);
+    float logicalY(float fraction = 1.0f, FieldLayout field = {}) const {
+        return field.y((previousY + (y - previousY) * fraction) / kCell);
     }
 
     // Dreamcast 1ST_READ.BIN at 0x8c014220.
@@ -2174,8 +2225,8 @@ struct PadAim {
         step(y, targetY, kRows, SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
     }
 
-    void draw(App& app, int player, int ticks, float alpha) const {
-        app.cursorAt(logicalX(alpha), logicalY(alpha), player, ticks);
+    void draw(App& app, int player, int ticks, float alpha, FieldLayout field = {}) const {
+        app.cursorAt(logicalX(alpha, field), logicalY(alpha, field), player, ticks, false, field.scale());
     }
 };
 
@@ -2526,7 +2577,7 @@ struct StageSelectMode : Screen {
         int s = selPage * 25 + sel; if (s == prevKey && a.ssPrev) return; prevKey = s;
         if (!a.ssPrev) { a.ssPrev = SDL_CreateTexture(a.ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, 832, 640); SDL_SetTextureBlendMode(a.ssPrev, SDL_BLENDMODE_BLEND); }
         SDL_SetRenderTarget(a.ren, a.ssPrev); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0); SDL_RenderClear(a.ren);
-        a.board(stages.list[s].st, ((s / 25) & 3) + 2, 2, 32, 32); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderTarget(a.ren, nullptr);
+        a.board(stages.list[s].st, ((s / 25) & 3) + 2, 2, {32, 32}); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderTarget(a.ren, nullptr);
     }
     void origEvent(App& a, const SDL_Event& e) {
         if (e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT || phase != 0x21) return;   // handleInput works only in state 0x21
@@ -2610,6 +2661,8 @@ struct BattleMode : Screen {
     PadAim padAim[4]{{37.5f, 37.5f}, {142.5f, 37.5f}, {37.5f, 97.5f}, {142.5f, 97.5f}};
     std::array<CursorTrail, 4> cursorTrails;
     std::array<SDL_FPoint, 4> playerTagStart;
+    FieldLayout field;
+    bool dcProjection = false;
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
     // Mouse and keyboard control player 1. Controller face buttons place arrows.
     // FourBattleLoop (HD 1.0 0x1c2b8) mode 1: a 120-tick intro (the round panel from tick 1 for 75 ticks, the Round START banner at tick 90 for 45 ticks), then play starts
@@ -2650,6 +2703,8 @@ struct BattleMode : Screen {
               const SettingsPaneItems::PadRules* rules = nullptr, int localTeam = -1) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
         game.teamMode = localTeam < 0 ? getenv("CCR_TEAM") != nullptr : localTeam != 0;
+        dcProjection = !game.teamMode && gApp && gApp->useModels3d();
+        field = dcProjection ? dcBattleField : FieldLayout{};
         game.gbaCpu = getenv("CCR_CPU") ? std::string(getenv("CCR_CPU")) == "gba" : (gApp && gApp->settings.cpuStyle == "gba");
         game.rouletteManager = true;
         game.rotateOwn = true;
@@ -2688,15 +2743,25 @@ struct BattleMode : Screen {
         sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear();
         mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear();
         cursorTrails = {};
-        // Project the starting cursor into the HUD's 640x480 space. The
-        // Dreamcast tag starts 130 left and 35 above the cursor quad's origin.
-        constexpr float scale = 640.0f / GW;
-        for (int p = 0; p < 4; ++p)
-            playerTagStart[p] = {(padAim[p].logicalX() - CELL / 2.0f) * scale - 130,
-                                 (padAim[p].logicalY() - CELL / 2.0f) * scale - 35};
         // FourBattleLoop masks the task server by RL_GetRoulette4Status.
         game.freezeOnRoll = game.cpuRunsOnFreeze = true;
         game.start(stages.list[cur].st, seed);
+        if (dcProjection) {
+            // The Dreamcast cursor constructor (0x8c0148c0) starts at the
+            // centre of the player's rocket cell (0x8c01c65c).
+            for (int p = 0; p < 4; ++p) {
+                curX[p] = game.sim.rocketPos[p][0];
+                curY[p] = game.sim.rocketPos[p][1];
+                padAim[p] = {(curX[p] + 0.5f) * kCell, (curY[p] + 0.5f) * kCell};
+            }
+        }
+        constexpr float toNative = 640.0f / GW;
+        const float cursorInset = dcProjection ? 0.0f : field.cell / 2.0f;
+        for (int p = 0; p < 4; ++p) {
+            playerTagStart[p] = {(padAim[p].logicalX(1.0f, field) - cursorInset) * toNative - 130,
+                                 (padAim[p].logicalY(1.0f, field) - cursorInset) * toNative -
+                                     (dcProjection ? 20.0f : 35.0f)};
+        }
         prev.clear();
         if (gApp) gApp->angs.clear();
     }
@@ -2706,7 +2771,7 @@ struct BattleMode : Screen {
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
             aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
-                          e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y);
+                          e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, field);
             mouseCursor = true;
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_CONTROLLERDEVICEADDED) {
@@ -2745,13 +2810,13 @@ struct BattleMode : Screen {
             }
         }
         else if (e.type == SDL_KEYDOWN && arrowKey(e.key.keysym.sym) >= 0) {
-            if (!a.headless) aim.update(a, 0, 0);
+            if (!a.headless) aim.update(a, 0, 0, field);
             keyPlayer(e.key);
         }
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_SPACE) paused = !paused; else if (k == SDLK_r) restart(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); restart(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); restart(); } }
-        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) { tapped = true; drag.begin(a, e); }
+        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) { tapped = true; drag.begin(a, e, field); }
         else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (d >= 0) place(0, cx, cy, d); }   // no drag = no arrow (Input::getArrowType returns 0)
     }
     void tick(App& a) override {
@@ -2781,7 +2846,8 @@ struct BattleMode : Screen {
         }
         for (int p = 0; p < 4; ++p) {
             const bool mouse = p == 0 && mouseCursor;
-            cursorTrails[p].tick(mouse ? aim.x : padAim[p].logicalX(), mouse ? aim.y : padAim[p].logicalY(),
+            cursorTrails[p].tick(mouse ? aim.x : padAim[p].logicalX(1.0f, field),
+                                 mouse ? aim.y : padAim[p].logicalY(1.0f, field),
                                  lv[p] < 0 && (!mouse || aim.inside), mouse);
         }
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
@@ -2832,28 +2898,33 @@ struct BattleMode : Screen {
         const int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock);
         const int seconds = (left + 59) / 60;
         if (!dcHud) a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
-        { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
-        for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
+        { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0, field); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
+        for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl, field);
         for (int p = 0; p < 4; ++p) {
             const bool mouse = p == 0 && mouseCursor;
             if (lv[p] >= 0 || (mouse && !aim.inside)) continue;
             const int x = mouse ? aim.cellX() : curX[p], y = mouse ? aim.cellY() : curY[p];
-            if (game.sim.coll[y][x] & 0xF00) a.cursor(x, y, p, game.frame, true);
+            if (game.sim.coll[y][x] & 0xF00) a.cursor(x, y, p, game.frame, true, field);
         }
-        a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku);
+        a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field);
         if (dcHud) a.drawDcBattleHud(game.score, lv, left, game.roundFrames);
         const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
         const int taskAge = intro + game.frame;
         if (intro > 0 && !game.over)
             a.drawBattleRankOverlay(game.teamMode, paused, taskAge, game.score, ranks,
-                                    wins, game.sim.rocketPos, dcPlayerOverlays);
+                                    wins, game.sim.rocketPos, dcPlayerOverlays, field);
         if (dcPlayerOverlays) a.drawDcScoreCrowns(taskAge, game.score, ranks);
-        for (int p = 0; p < 4; ++p) if (lv[p] < 0) cursorTrails[p].draw(a, p);
+        for (int p = 0; p < 4; ++p)
+            if (lv[p] < 0) cursorTrails[p].draw(a, p, field.cell, dcProjection);
+        const float cursorAlpha = paused ? 1.0f : alpha;
         for (int p = 0; p < 4; ++p) {
             if (lv[p] >= 0) continue;
             if (p == 0 && mouseCursor) {
-                if (aim.inside) a.cursorAt(aim.x, aim.y, p, game.frame);
-            } else padAim[p].draw(a, p, game.frame, paused ? 1.0f : alpha);
+                if (aim.inside) a.cursorAt(aim.x, aim.y, p, game.frame, false, field.scale());
+            } else if (dcProjection) {
+                a.drawDcBattlePadCursor(padAim[p].logicalX(cursorAlpha, field),
+                                        padAim[p].logicalY(cursorAlpha, field), p, taskAge);
+            } else padAim[p].draw(a, p, game.frame, cursorAlpha, field);
         }
         if (dcPlayerOverlays) {
             for (int p = 0; p < 4; ++p)
@@ -2878,7 +2949,7 @@ struct BattleMode : Screen {
         int rollTick, roller, outcome;
         if (game.rouletteDrawState(rollTick, roller, outcome)) {
             const auto& cell = game.sim.rocketPos[roller];
-            const auto pose = battleRoulettePose(rollTick, cell[0], cell[1], outcome, OX, OY, CELL / kCell);
+            const auto pose = battleRoulettePose(rollTick, cell[0], cell[1], outcome, field.left, field.top, field.cell / kCell);
             // Slot 99 is byte-identical across the five exported iPad language packs.
             a.rouletteDraw.draw(a.ren, a.root + "/ret_all/loc_en/img_99", pose, GW, GH);
             if (a.headless && getenv("CCR_ROULETTE_DRAW_TRACE"))
