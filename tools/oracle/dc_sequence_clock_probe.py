@@ -1,7 +1,8 @@
 """Compare a fresh linear sequence's event timing with original scheduler calls.
 
 Runs original context initialization/start and scheduler, draining the command
-FIFO without voice dispatch. This verifies event timing, not audio or CPU cycles.
+FIFO without voice dispatch. Compares events, command words and all 64 gates
+through sequence end, not audio, post-end gate tails or CPU cycles.
 """
 import argparse
 import struct
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from arm7_bus import Arm7Bus
 from dc_sound_pitch import PitchTable
 from dc_sound_timing import LinearSequenceClock
+from dc_sound_sequence import SequenceCommands
 from mlt_extract import sections
 from mlt_sequences import inventory
 
@@ -23,6 +25,7 @@ def verify(driver, mlt, bank_index=0, sequence_index=19):
     PitchTable(driver)
     sequence = next(b for b in inventory(mlt) if b['bank'] == bank_index)['sequences'][sequence_index]
     native = LinearSequenceClock(sequence)
+    command_model = SequenceCommands(sequence)
     section = next(s for s in sections(mlt) if s['tag'] == 'SMSB' and s['bank'] == bank_index)
     sequence_address = section['address'] + sequence['file_offset'] - section['offset']
     uc = Uc(UC_ARCH_ARM, UC_MODE_ARM)
@@ -55,7 +58,7 @@ def verify(driver, mlt, bank_index=0, sequence_index=19):
             observed.append(pointer - sequence_address)
 
     uc.hook_add(UC_HOOK_CODE, event, begin=0x6aac, end=0x6aac)
-    count = 0
+    count = command_count = 0
     for tick in range(1, 10001):
         observed.clear()
         uc.mem_write(0x12418, struct.pack('<I', tick))
@@ -68,6 +71,21 @@ def verify(driver, mlt, bank_index=0, sequence_index=19):
             actual_scale = struct.unpack('<I', uc.mem_read(0x1105c, 4))[0]
             if (actual_time, actual_scale) != (native.timing.time, native.timing.scale):
                 raise AssertionError(('Timing state differs', tick, actual_time, native.timing.time))
+        expected_commands = command_model.update()
+        write, read = struct.unpack('<2I', uc.mem_read(0x12000, 8))
+        actual_commands = []
+        while read != write:
+            actual_commands.append(struct.unpack('<I', uc.mem_read(0xb000 + read, 4))[0])
+            read = (read + 4) & 0xfff
+            if len(actual_commands) > 1024:
+                raise AssertionError('Invalid FIFO pointers')
+        if actual_commands != expected_commands:
+            raise AssertionError(('Command output differs', tick, actual_commands, expected_commands))
+        actual_gates = bytes(uc.mem_read(0x11380, 64 * 12))
+        expected_gates = b''.join(struct.pack('<3I', g.command, g.elapsed, g.remaining) for g in command_model.gates)
+        if actual_gates != expected_gates:
+            raise AssertionError(('Pending gate table differs', tick))
+        command_count += len(actual_commands)
         # Isolate scheduling from voice dispatch, keeping FIFO capacity available.
         uc.mem_write(0x12004, bytes(uc.mem_read(0x12000, 4)))
         count += len(observed)
@@ -75,7 +93,7 @@ def verify(driver, mlt, bank_index=0, sequence_index=19):
             flags = uc.mem_read(0x11051, 1)[0]
             if flags & 1:
                 raise AssertionError('Original sequence did not end')
-            return dict(updates=tick, events=count)
+            return dict(updates=tick, events=count, commands=command_count)
     raise AssertionError('Sequence exceeded bounded update window')
 
 

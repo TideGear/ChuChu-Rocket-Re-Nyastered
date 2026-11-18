@@ -78,7 +78,7 @@ class LinearSequenceClock:
         self.position = 0
         self.ended = False
 
-    def update(self, increment=0x4000):
+    def update(self, increment=0x4000, on_event=None):
         word(increment)
         if self.ended:
             return []
@@ -97,6 +97,8 @@ class LinearSequenceClock:
                 break
             if event['type'] == 'tempo':
                 self.timing.tempo = event['value']
+            if on_event is not None:
+                on_event(event, self.timing)
             remaining = self.timing.advance(event['step'])
             # CMP/BLE at 0x70c8 uses a signed comparison to zero.
             if 0 < remaining < 0x80000000:

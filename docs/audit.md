@@ -17,14 +17,14 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Puzzle Edit: conversion and CRC **done**; Dreamcast .VMS/.VMI **writer done and checked against the real packs** (`tools/vms_pack.py`, 50/50 slots and both .VMI identical; acceptance by an emulator untested); screen, save format, validity rules, in-app export **open**.
 ## C. Version differences
 - Dreamcast input, heat maps, SH-4 whole-battle CPU: **open** (CPU placement 10/10 cases from a recorded set only).
-- MANATEE.DRV SFX rates, GBA battle diff and score gap, iOS-specific differences: **open / partial** (see roadmap).
+- MANATEE.DRV SFX pitch and sequence timing: **partial** (original ARM pitch, context setup, event timing and pending-gate checks in audio.md; complete playback and gameplay integration remain open). GBA battle diff and score gap, iOS-specific differences: **open / partial** (see roadmap).
 ## D. Content and options
 - Unlockables from code: puzzle groups open sequentially (all 25 cleared in group n-1; ported in stage select via `maxStage`) and costumes 1/2 by Mania/Challenge clears (decoded for Android, iOS, Dreamcast: `docs/unlockables.md`). **Unlock-all: done** for puzzle groups (setting `unlock_all`, Options > Settings row; costumes and Challenge need the Costumes screen). Cross-check against GameFAQs, GBA/Dreamcast-only unlocks, achievements and the costume screen: **open**.
 - Stage sets: main 100, GBA extras, Dreamcast Express selectable (**done**); PuzzleP stock **open**.
 - DLC skins, CHD/GDI input with per-input dump verification: **open**. .VMS/.VMI reader and writer for puzzle packs: **done**: core reader/writer (`core/vms.hpp`, `vms_test`, `tools/vms_pack.py`) and in-app import (packs in `<data>/imports/*.VMS` appear as the Imported Packs stage set, checked headlessly with DEPuzzle.VMS and a character pack present). Export from the app, DLC character skins and PuzzleP's arrow stock remain open.
 ## E. Sound, animation, assets
 - Full inventory with version/address/asset ID/gates: **open** (pieces in roadmap and docs/*.md).
-- Challenge intro cards use the disc art, with A1 and B2 compared against Flycast. In-play, failure and result placeholders remain. Replace them with disc art and audit every mode’s remaining `a.text(...)` presentation.
+- Challenge intro cards use disc art, with A1 and B2 compared against Flycast. Failure Retry/Stage Select and C1 clear Next/Stage Select now use disc art and have headless checks. Alternate clear types, End, runtime clocks, countdown/in-play art and remaining text presentation still need coverage (HANDOFF.md).
 - Dreamcast sound is **partial**. Trace the original call sites and MANATEE.DRV for cue, pitch, volume, channel, priority, looping, fade and cancellation. The headless Flycast host records WAV and frame sample offsets. Start cue comparisons with Challenge selection, countdown, goal, clear and fail.
 - Dreamcast model inventory is **partial**. The [mesh inventory](dreamcast_meshes.md) and [captured poses](dreamcast_mesh_poses.md) track the observed families. Character clock rules, costumes, KapuKapu, the focus ring and unseen meshes remain open.
 ## F. Platforms, controls, play
