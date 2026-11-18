@@ -509,9 +509,9 @@ struct App {
         // The game submits the pieces in this order (top row of horizontal pieces, then that row's vertical pieces, then the next row) and they share one depth buffer: render them together.
         std::vector<ModelPack::SoftTri> all;
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c + 0.5f), field.y(r)}, camera, k, 0.0f, &all);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.appendDcPiece(*wallM, mat, {field.x(c + 0.5f), field.y(r)}, camera, k, 0.0f, all);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c), field.y(r + 0.5f)}, camera, k, -90.0f, &all);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.appendDcPiece(*wallM, mat, {field.x(c), field.y(r + 0.5f)}, camera, k, -90.0f, all);
         }
         models3d.softRender(ren, all);
     }
@@ -524,9 +524,16 @@ struct App {
             if (!three) blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
             if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay, field.scale());
             else if (t >= 5 && t <= 8) {
-                const Model3D* po = three ? models3d.find("hole_out") : nullptr; const Model3D* pi = three ? models3d.find("hole_in") : nullptr; const float k = field.cell / kCell;
-                if (po && pi) { const float kk = field.cell / 15.0f; models3d.drawDcPiece(ren, *po, -1, {ax, ay}, {GW / 2.0f, GH / 2.0f}, kk, 0.0f); models3d.drawDcPiece(ren, *pi, -1, {ax, ay}, {GW / 2.0f, GH / 2.0f}, kk, 0.0f); (void)k; }   // pads: exact transform (scale 1, tilt 0, perspective); the textures of these two models are not yet verified against a real frame
-                else blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
+                // Battle frame 3100 submits 0x8c0b2628 at the generators.
+                // The pack calls it "hole_in"; the other mesh is the Challenge goal pad.
+                const Model3D* generator = three ? models3d.find("hole_in") : nullptr;
+                if (generator) {
+                    const SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
+                    const float pixelsPerUnit = field.cell / 15.0f;
+                    std::vector<ModelPack::SoftTri> pad;
+                    models3d.appendDcPiece(*generator, -1, {ax, ay}, camera, pixelsPerUnit, 0.0f, pad);
+                    models3d.softRender(ren, pad);
+                } else blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
             }
         }
         if (three) { walls3d(st, wallColor, field); return; }   // walls3d applies the wall plane itself (it was applied twice before)

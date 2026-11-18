@@ -81,23 +81,20 @@ private:
         return true;
     }
 public:
+    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; };
+
     // The Battle draw task builds a dome from two copies of the lid,
-    // at yaw 90 and 270 degrees, under its top-down perspective camera.
+    // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
     void drawDcRocketDome(SDL_Renderer* ren, const Model3D& lid, SDL_FPoint floorPosition,
                           SDL_FPoint cameraCenter, float pixelsPerUnit, float pulse) const {
-        struct Triangle {
-            float height = 0;
-            SDL_Vertex vertices[3];
-        };
-        if (lid.tris.empty()) return;
-        const size_t material = lid.tris.front().mat;
-        if (material >= lid.matTex.size() || lid.matTex[material] >= textures.size()) return;
         const float scale = pixelsPerUnit * pulse;
-        std::vector<Triangle> projected;
+        std::vector<SoftTri> projected;
         projected.reserve(2 * lid.tris.size());
         for (float side : {1.0f, -1.0f}) {
             for (const auto& tri : lid.tris) {
-                Triangle out;
+                if (tri.mat >= lid.matTex.size() || lid.matTex[tri.mat] >= cpuPixels.size()) continue;
+                SoftTri out{};
+                out.tex = lid.matTex[tri.mat];
                 for (int i = 0; i < 3; ++i) {
                     const auto& v = tri.v[i];
                     const float depth = 218.0f - v.y * pulse;
@@ -105,31 +102,23 @@ public:
                     const float dx = floorPosition.x - cameraCenter.x + side * v.z * scale;
                     const float dy = floorPosition.y - cameraCenter.y - side * v.x * scale;
                     const float light = 0.3f + std::max(0.0f, 0.5f * v.ny + 0.25f * side * v.nx);
-                    const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * light));
+                    out.p[i] = {cameraCenter.x + dx * perspective, cameraCenter.y + dy * perspective};
+                    out.iw[i] = 1.0f / depth;
+                    out.light[i] = light;
                     // The decoded PVR's axes are transposed relative to the Ninja UVs.
-                    out.vertices[i] = {{cameraCenter.x + dx * perspective, cameraCenter.y + dy * perspective},
-                                       {shade, shade, shade, 255}, {1.0f - v.v, v.u}};
-                    out.height += v.y;
+                    out.u[i] = 1.0f - v.v;
+                    out.v[i] = v.u;
                 }
                 projected.push_back(out);
             }
         }
-        std::stable_sort(projected.begin(), projected.end(), [](const Triangle& a, const Triangle& b) {
-            return a.height < b.height;
-        });
-        std::vector<SDL_Vertex> vertices;
-        vertices.reserve(projected.size() * 3);
-        for (const auto& tri : projected)
-            vertices.insert(vertices.end(), tri.vertices, tri.vertices + 3);
-        SDL_RenderGeometry(ren, textures[lid.matTex[material]], vertices.data(),
-                           static_cast<int>(vertices.size()), nullptr, 0);
+        softRender(ren, projected);
     }
 
     // Software rasteriser with the PowerVR's per-pixel behaviour (the SDL geometry renderer has no depth buffer, and a painter's order cannot reproduce the real overlaps, such as a wall's end
     // caps, or a mouse's foot meeting its body): depth test on the interpolated 1/w (greater is nearer, later wins ties), perspective-correct texture coordinates, bilinear filtering with
     // clamping (the real tsp words say bilinear and clamp), per-vertex intensity multiplied with the texture and saturated at 255 (intensities above 1.0 are real), and a second pass for the
     // translucent list (depth-tested against the opaque pixels, no depth write, source-alpha blend). Rendered at the output resolution into a small buffer covering the triangles.
-    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; };
     void softRender(SDL_Renderer* ren, const std::vector<SoftTri>& tris) const {
         if (tris.empty()) return;
         int ow = 0, oh = 0, lw = 0, lh = 0; SDL_GetRendererOutputSize(ren, &ow, &oh); SDL_RenderGetLogicalSize(ren, &lw, &lh);
@@ -199,11 +188,11 @@ public:
     // projected with its own height, sx = camera.x + k * 218 * X / (218 - Y), so a wall's lower side face shows under the bar (the 218 / 215 "wall plane" is this perspective at height 3).
     // Lighting per vertex: 0.3 + max(0, 0.5 * ny - 0.25 * nz) of the turned normal (exact to four decimals on the real vertices), multiplied with the texture. `material` >= 0 forces one
     // material. The pack's textures are stored transposed, so the stream's (u, v) is sampled as (v, u).
-    void drawDcPiece(SDL_Renderer* ren, const Model3D& piece, int material, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, std::vector<SoftTri>* sink = nullptr) const {
+    void appendDcPiece(const Model3D& piece, int material, SDL_FPoint planePos, SDL_FPoint camera,
+                       float pixelsPerUnit, float yawDeg, std::vector<SoftTri>& out) const {
         if (piece.tris.empty()) return;
         const float a = yawDeg * 0.017453292f, c = cosf(a), s = sinf(a);
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
-        std::vector<SoftTri> out; out.reserve(piece.tris.size() * 2);
         struct P { float x, y, z, u, v, light; };
         for (const auto& tri : piece.tris) {
             const int mi = material >= 0 ? material : tri.mat;
@@ -230,8 +219,6 @@ public:
                 out.push_back(o);
             }
         }
-        if (sink) { sink->insert(sink->end(), out.begin(), out.end()); return; }   // batched: the caller renders all pieces into one shared depth buffer (the real game's walls depth-test against each other)
-        softRender(ren, out);
     }
 
     // A character (mouse or cat) exactly as the Dreamcast field callbacks draw it (0x8c0193e0 for mice, 0x8c011060 for cats; verified by fitting the real PowerVR vertices of 40 mice and
