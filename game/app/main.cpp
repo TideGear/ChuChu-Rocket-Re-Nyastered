@@ -1032,7 +1032,8 @@ struct App {
                           float alpha, const float* puku = nullptr, FieldLayout field = {},
                           bool dcProjection = false, int soloRocket = 0) {
         // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
-        const int mouseFrame = std::max(0, sim.now - 1) & 7;
+        static const int mouseFrameOverride = getenv("CCR_MOUSE_FRAME") ? atoi(getenv("CCR_MOUSE_FRAME")) : -1;   // headless comparison: force the keyframe the real frame showed
+        const int mouseFrame = mouseFrameOverride >= 0 ? mouseFrameOverride & 7 : std::max(0, sim.now - 1) & 7;
         fieldObjects.clear();
         auto rocket = [&](int x, int y, int player) {
             float z = (y + 0.5f) * kCell;
