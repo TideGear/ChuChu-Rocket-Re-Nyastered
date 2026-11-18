@@ -158,6 +158,18 @@ def export_challenge_failure(prs_png, out):
                             Image.Resampling.BILINEAR) for tile in tiles]
     export_atlas(out, 'dc_challenge_failure', tiles)
 
+def export_challenge_result(prs_png, out):
+    names = ['challengeclear', 'fukidasi7', 'challengepanel0', 'challengepanel1',
+             'challengepanel2', 'puzzlesetumei0']
+    paths = [os.path.join(prs_png, 'CHALLENGECLEAR_' + name + '.png') for name in names]
+    if not all(os.path.isfile(path) for path in paths):
+        return
+    tiles = [Image.open(path).convert('RGBA') for path in paths]
+    tiles = [tile.transform(tile.size, Image.Transform.AFFINE,
+                            (255 / 256, 0, 0, 0, 255 / 256, 0),
+                            Image.Resampling.BILINEAR) for tile in tiles]
+    export_atlas(out, 'dc_challenge_result', tiles)
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -250,6 +262,7 @@ def main(prs_png, out, png=None):
     export_challenge_select(prs_png, png, out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)
+    export_challenge_result(prs_png, out)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.

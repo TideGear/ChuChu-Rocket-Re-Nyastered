@@ -244,7 +244,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -321,6 +321,7 @@ struct App {
         loadSheet(ret + "dc_challenge_select", dcChallengeSelect);
         loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
         loadSheet(ret + "dc_challenge_failure", dcChallengeFailure);
+        loadSheet(ret + "dc_challenge_result", dcChallengeResult);
         loadSheet(ret + "dc_arrows", dcArrows);
         loadSheet(ret + "dc_puzzle_start", dcPuzzleStart);
         loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
@@ -2731,6 +2732,7 @@ struct ChallengeMode : Screen {
     bool paused = false;   // P key (the original's START) or CCR_PAUSE_TICK in headless tests
     bool fromStageSelect = false;
     int failureChoice = 0;
+    uint64_t previousTotal = 0, resultTotal = 0;
     bool dcLayout(App& a) { return a.useModels3d() && a.useDcBattleHud(); }
     FieldLayout pf(App& a) { return dcLayout(a) ? dcBattleField : FieldLayout{}; }
     // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
@@ -2738,8 +2740,8 @@ struct ChallengeMode : Screen {
     static Save loadSave(const std::string& root) { Save s; if (FILE* f = fopen((root + "/challenge.bin").c_str(), "rb")) { if (fread(&s, sizeof s, 1, f) != 1) s = Save(); fclose(f); } return s; }
     void logResult(App& a) { char b[160]; snprintf(b, sizeof b, "challenge stage %d: cleared in %d s", cur + 1, battle ? bgame.clearSeconds() : game.clearSeconds()); a.log.write(1, b); }
     void saveResult(App& a) { logResult(a);   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
-        Save s = loadSave(a.saveDir); const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
-        s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur];
+        Save s = loadSave(a.saveDir); previousTotal = 0; for (uint32_t seconds : s.best) previousTotal += seconds; const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
+        s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur]; resultTotal = 0; for (uint32_t seconds : s.best) resultTotal += seconds;
         if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
@@ -2754,6 +2756,24 @@ struct ChallengeMode : Screen {
     int music() override { return 9; }
     void place(App& a, int dir) { if (phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
     void event(App& a, const SDL_Event& e) override {
+        if (phase() == ChallengeGame::Result && a.dcChallengeResult.tex) {
+            if (e.type == SDL_KEYDOWN) {
+                if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE) nextStageRequested = true;
+                else if (e.key.keysym.sym == SDLK_ESCAPE) { a.nextStage = cur; fromStageSelect = true; back = true; }
+            } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_START) nextStageRequested = true;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B) { a.nextStage = cur; fromStageSelect = true; back = true; }
+            } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                SDL_RenderSetLogicalSize(a.ren, 640, 480);
+                float x, y;
+                SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+                if (x >= 32 && x < 200 && y >= 382 && y < 446) {
+                    if (y < 414) nextStageRequested = true;
+                    else { a.nextStage = cur; fromStageSelect = true; back = true; }
+                }
+            }
+            return;
+        }
         if (phase() == ChallengeGame::Failure && a.dcChallengeFailure.tex) {
             if (e.type == SDL_KEYDOWN) {
                 const auto key = e.key.keysym.sym;
@@ -2829,8 +2849,8 @@ struct ChallengeMode : Screen {
         draw(2, 51, 141);
         if (cur == 24) draw(18, 288, 150);
         else {
-            draw(8 + cur / 5, 288, 150);
-            draw(13 + cur % 5, 331, 150);
+            draw(8 + cur % 5, 288, 150);
+            draw(13 + cur / 5, 331, 150);
         }
         draw(failureChoice == 0 ? 0 : 1, 256, 256);
         draw(failureChoice == 1 ? 0 : 1, 256, 300);
@@ -2839,6 +2859,38 @@ struct ChallengeMode : Screen {
             const SDL_Rect& src = a.dcModeSelect.fr[DcModeSelect::Cursor + (cticks / 3) % 12];
             const SDL_Rect dst{166, failureChoice == 0 ? 240 : 284, src.w, src.h};
             SDL_RenderCopy(a.ren, a.dcModeSelect.tex, &src, &dst);
+        }
+    }
+    void drawDcResult(App& a) const {
+        SDL_RenderSetLogicalSize(a.ren, 640, 480);
+        auto draw = [&](const Sheet& sheet, int frame, int x, int y) {
+            const SDL_Rect& src = sheet.fr[frame];
+            const SDL_Rect dst{x, y, src.w, src.h};
+            SDL_RenderCopy(a.ren, sheet.tex, &src, &dst);
+        };
+        const Sheet& result = a.dcChallengeResult;
+        const Sheet& failure = a.dcChallengeFailure;
+        draw(failure, 6, 0, 125); draw(failure, 7, 512, 125);
+        draw(result, 0, 51, 142); draw(result, 1, 563, 142);
+        if (cur == 24) draw(failure, 18, 288, 150);
+        else { draw(failure, 8 + cur % 5, 288, 150); draw(failure, 13 + cur / 5, 331, 150); }
+        draw(result, 2, 104, 240); draw(result, 3, 208, 340); draw(result, 4, 104, 286);
+        draw(result, 5, 32, 382);
+        // Result time boxes are runtime textures in Flycast. Reuse the disc
+        // clock glyphs also used by the selector until their font is traced.
+        const uint64_t times[] = {previousTotal, static_cast<uint64_t>(battle ? bgame.clearSeconds() : game.clearSeconds()), resultTotal};
+        const int ys[] = {253, 299, 353};
+        for (int row = 0; row < 3; ++row) {
+            const int minutes = static_cast<int>(std::min<uint64_t>(times[row] / 60, 99));
+            const int seconds = static_cast<int>(times[row] % 60);
+            const int digits[] = {minutes / 10, minutes % 10, seconds / 10, seconds % 10};
+            const int xs[] = {393, 417, 465, 489};
+            SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 165, 165, 165);
+            for (int i = 0; i < 4; ++i) draw(a.dcChallengeSelect, 14 + digits[i], xs[i], ys[row]);
+            SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 255, 255, 255);
+            SDL_SetRenderDrawColor(a.ren, 165, 165, 165, 255);
+            const SDL_Rect dots[] = {{448, ys[row] + 4, 2, 4}, {448, ys[row] + 14, 2, 4}};
+            SDL_RenderFillRects(a.ren, dots, 2);
         }
     }
     void drawDcIntro(App& a) const {
@@ -2878,6 +2930,11 @@ struct ChallengeMode : Screen {
             const int remaining = !battle ? ChallengeGame::kLimitTicks - game.playTick : longRound ? 3600 - bgame.game.clock : ChallengeBattleGame::kLimitTicks - bgame.playTick;
             a.drawDcTimerColumn(std::max(0, remaining), total);
             if (ph == ChallengeGame::Intro) drawDcIntro(a);
+        }
+        if (dc && ph == ChallengeGame::Result && a.dcChallengeResult.fr.size() == 6 &&
+            a.dcChallengeFailure.fr.size() == 19 && a.dcChallengeSelect.fr.size() == 24) {
+            drawDcResult(a);
+            return;
         }
         if (dc && ph == ChallengeGame::Failure && a.dcChallengeFailure.fr.size() == 19) {
             drawDcFailure(a);
