@@ -3,6 +3,7 @@
 // usage: flyhost <flycast_libretro.dll> <system dir (contains dc/dc_boot.bin)> <save dir> <content .cue/.gdi/.chd> <frames> <out prefix> [shots f1,f2,...] [keys "START@100-105;A@200-203"]
 // keys: A B X Y START UP DOWN LEFT RIGHT L R, frame ranges inclusive.
 // FLYHOST_PER_PIXEL=1 requests Flycast's per-pixel alpha sorting for comparison captures.
+// FLYHOST_WAV=<path> records stereo PCM at the core's sample rate.
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -45,6 +46,59 @@ static SDL_Window* gWin = nullptr; static SDL_GLContext gCtx = nullptr;
 static GLuint gFbo = 0, gTex = 0, gDepth = 0; static unsigned gW = 640, gH = 480; static int gFrame = 0;
 static std::map<int, std::vector<std::pair<int, int>>> gKeys; static std::set<int> gShots; static std::string gOut;
 static unsigned gMaxW = 640, gMaxH = 480; static std::vector<unsigned char> gPix; static unsigned gLastW = 0, gLastH = 0; static bool gHaveFrame = false;
+
+class AudioCapture {
+    FILE* file = nullptr;
+    uint32_t bytes = 0;
+    uint32_t rate = 0;
+    bool ok = true;
+
+    void word(uint32_t value, int size) {
+        unsigned char encoded[4];
+        for (int i = 0; i < size; ++i) encoded[i] = static_cast<unsigned char>(value >> (i * 8));
+        if (fwrite(encoded, 1, size, file) != static_cast<size_t>(size)) ok = false;
+    }
+    void header() {
+        if (fwrite("RIFF", 1, 4, file) != 4) ok = false;
+        word(36 + bytes, 4);
+        if (fwrite("WAVEfmt ", 1, 8, file) != 8) ok = false;
+        word(16, 4); word(1, 2); word(2, 2);
+        word(rate, 4); word(rate * 4, 4); word(4, 2); word(16, 2);
+        if (fwrite("data", 1, 4, file) != 4) ok = false;
+        word(bytes, 4);
+    }
+public:
+    uint32_t framesWritten() const { return bytes / 4; }
+    bool open(const char* path, double sampleRate) {
+        if (!path) return true;
+        if (!(sampleRate >= 1 && sampleRate <= 1000000)) return false;
+        rate = static_cast<uint32_t>(sampleRate + 0.5);
+        file = fopen(path, "wb");
+        if (!file) return false;
+        header();
+        return ok;
+    }
+    void append(const int16_t* samples, size_t frames) {
+        if (!file || !ok) return;
+        if (frames > (UINT32_MAX - 36u - bytes) / 4u) { ok = false; return; }
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+        for (size_t i = 0; i < frames * 2; ++i) word(static_cast<uint16_t>(samples[i]), 2);
+#else
+        if (fwrite(samples, 4, frames, file) != frames) ok = false;
+#endif
+        bytes += static_cast<uint32_t>(frames * 4);
+    }
+    bool close() {
+        if (!file) return ok;
+        if (fseek(file, 0, SEEK_SET) != 0) ok = false;
+        else header();
+        if (fclose(file) != 0) ok = false;
+        file = nullptr;
+        return ok;
+    }
+    ~AudioCapture() { close(); }
+};
+static AudioCapture gAudio;
 typedef void (APIENTRY* PFNGENFB)(GLsizei, GLuint*); typedef void (APIENTRY* PFNBINDFB)(GLenum, GLuint); typedef void (APIENTRY* PFNFBTEX)(GLenum, GLenum, GLenum, GLuint, GLint);
 typedef void (APIENTRY* PFNGENRB)(GLsizei, GLuint*); typedef void (APIENTRY* PFNBINDRB)(GLenum, GLuint); typedef void (APIENTRY* PFNRBSTORE)(GLenum, GLenum, GLsizei, GLsizei); typedef void (APIENTRY* PFNFBRB)(GLenum, GLenum, GLenum, GLuint);
 static PFNGENFB glGenFramebuffersP; static PFNBINDFB glBindFramebufferP; static PFNFBTEX glFramebufferTexture2DP; static PFNGENRB glGenRenderbuffersP; static PFNBINDRB glBindRenderbufferP; static PFNRBSTORE glRenderbufferStorageP; static PFNFBRB glFramebufferRenderbufferP;
@@ -133,8 +187,14 @@ static bool saveShot(int frame) {
     SDL_FreeSurface(s);
     return saved;
 }
-static void audio1(int16_t, int16_t) {}
-static size_t audioN(const int16_t*, size_t n) { return n; }
+static void audio1(int16_t left, int16_t right) {
+    const int16_t samples[] = {left, right};
+    gAudio.append(samples, 1);
+}
+static size_t audioN(const int16_t* samples, size_t n) {
+    gAudio.append(samples, n);
+    return n;
+}
 static void poll() {}
 static constexpr unsigned joypadDevice = 1;
 static int16_t input(unsigned port, unsigned device, unsigned, unsigned id) {
@@ -205,10 +265,31 @@ int main(int argc, char** argv) {
     for (unsigned port = 1; port < 4; ++port) retro_set_controller_port_device(port, 0);
     retro_system_av_info av{}; retro_get_system_av_info(&av); gMaxW = av.geometry.max_width; gMaxH = av.geometry.max_height; fprintf(stderr, "av %ux%u max %ux%u fps %.2f\n", av.geometry.base_width, av.geometry.base_height, gMaxW, gMaxH, av.timing.fps);
     if (!gHwSet) { fprintf(stderr, "the core did not request a hardware context\n"); return 5; }
+    if (!gAudio.open(getenv("FLYHOST_WAV"), av.timing.sample_rate)) {
+        fprintf(stderr, "cannot start WAV capture\n");
+        retro_unload_game();
+        retro_deinit();
+        return 6;
+    }
+    FILE* audioFrames = nullptr;
+    if (const char* path = getenv("FLYHOST_WAV")) {
+        const std::string indexPath = std::string(path) + ".frames.csv";
+        audioFrames = fopen(indexPath.c_str(), "w");
+        if (!audioFrames || fprintf(audioFrames, "video_frame,first_sample,end_sample\n") < 0) {
+            fprintf(stderr, "cannot start audio frame index\n");
+            if (audioFrames) fclose(audioFrames);
+            retro_unload_game();
+            retro_deinit();
+            return 6;
+        }
+    }
     makeFbo(); if (gHw.context_reset) gHw.context_reset(); gGlReady = true;
     bool capturesOk = true;
     for (gFrame = 0; gFrame < frames; gFrame++) {
+        const uint32_t firstSample = gAudio.framesWritten();
         retro_run();
+        if (audioFrames && fprintf(audioFrames, "%d,%u,%u\n", gFrame, firstSample, gAudio.framesWritten()) < 0)
+            capturesOk = false;
         if (gShots.count(gFrame) && !saveShot(gFrame)) capturesOk = false;
         if (gShots.count(gFrame) && getenv("FLY_DUMP")) {   // also write the video RAM, main RAM and a full save state (PowerVR registers included) beside the screenshot
             char nm[512]; const char* kinds[2] = {"ram", "vram"}; const unsigned ids[2] = {2, 3};
@@ -219,6 +300,8 @@ int main(int argc, char** argv) {
     retro_unload_game();
     if (gHw.context_destroy) gHw.context_destroy();
     retro_deinit();
+    if (!gAudio.close()) { fprintf(stderr, "WAV capture failed\n"); capturesOk = false; }
+    if (audioFrames && fclose(audioFrames) != 0) capturesOk = false;
     SDL_GL_DeleteContext(gCtx);
     SDL_DestroyWindow(gWin);
     SDL_Quit();
