@@ -212,7 +212,13 @@ def main(prs_png, out, png=None):
         with open(os.path.join(out, name + '.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
         print(name, '%dx%d' % im.size)
     bubble = os.path.join(prs_png, 'PUZZLE_puzzlefukidasi.png')
-    if os.path.exists(bubble): sheet('dc_puzzle_plate', Image.open(bubble).convert('RGBA').crop((0, 0, 512, 44)))
+    board = os.path.join(prs_png, 'PUZZLECLEAR_challengeboard.png')
+    if os.path.exists(board):
+        # The Puzzle plate/bubble texture (word 04046c00 in Flycast frame 2390) is this 278 x 42 bar, two rows lower in the 512 x 64 texture (0 differing RGB values), with no tail.
+        plate = Image.new('RGBA', (512, 44))
+        plate.paste(Image.open(board).convert('RGBA').crop((0, 0, 512, 42)), (0, 2))
+        sheet('dc_puzzle_plate', plate)
+    elif os.path.exists(bubble): sheet('dc_puzzle_plate', Image.open(bubble).convert('RGBA').crop((0, 0, 512, 44)))
     names = [os.path.join(prs_png, f'PUZZLE_{n}.png') for n in ('normal', 'hard', 'mania', 'original', 'special')]
     if all(os.path.exists(n) for n in names):
         labels = Image.new('RGBA', (256, 32 * len(names)))
