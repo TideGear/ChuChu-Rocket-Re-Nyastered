@@ -4,6 +4,8 @@ Read [goal.md](goal.md) for scope and [audit.md](audit.md) for status. Use [Drea
 
 ## Current Dreamcast work
 
+- Arrow cursor alignment is fixed for the Dreamcast artwork. The texture's top-left tip now follows the active point used to select cells. Mouse trails share that anchor. Headless Challenge capture used aim (350,170) at 640×480. Check the feel with a real mouse next.
+
 - Windows setup and live play work with the tested USA CUE/BIN disc alone. Fresh extraction, build, Battle, Team Battle, Challenge A1 and Puzzle captures passed. Other image formats and platforms need their own checks. The D: build junction was readable but compilation needed a writable local build directory.
 - Mode Select, Stage Challenge select and the Challenge intro cards use disc art. A1 and B2 intro crops are checked against Flycast. Existing caches need the UI exporter rerun to create `dc_challenge_intro`. Stage selection still needs exact clock glyphs and clear marks, plus unlock and transition verification.
 - Next reproduce the Challenge failure and success screens, countdown art and in-play indicators. The failure screenshot and state are `local/handoff-check/challenge-intro/a__04250.bmp` and `a_04250.state`. It has the Challenge banner, A1 label, Try again and Stage Select choices, animated cursor, and original controls strip. The same folder has earlier shots and states from frames 2310, 2340, 2370, 2400, 2450 and 3050. The result assets are in `CHALLENGECLEAR.PRS`. Replace the remaining placeholder lines once the original visual paths are wired.

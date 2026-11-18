@@ -986,7 +986,12 @@ struct App {
         int ang = (player << 14) + 0x1000 * ticks;
         float phase = (bracket ? 2.0f : 1.0f) * ang * 6.283185307f / 65536.0f;
         const float scale = fieldScale * (1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase));
-        if (!bracket && useDcCursors()) dcCursorAt(dcCursors, x, y, player, CELL * scale);
+        if (!bracket && useDcCursors()) {
+            // newk1..4 point from the texture's top-left corner. MouseAim's
+            // coordinates are the active point used to select the board cell.
+            const float size = CELL * scale;
+            dcCursorAt(dcCursors, x + size / 2, y + size / 2, player, size);
+        }
         else blit(cur, bracket ? 4 : player & 3, x, y, scale);
     }
     void cursor(int cx, int cy, int player, int ticks, bool bracket = false, FieldLayout field = {}) {
@@ -2372,7 +2377,8 @@ struct CursorTrail {
                 const float y = GH / 2.0f + (sample.y - GH / 2.0f) * scale;
                 app.cursorGhost(x + size / 2, y + size / 2, player, (i + 1) * 64 / lifetime, size);
             } else {
-                app.cursorGhost(sample.x, sample.y, player, (i + 1) * 64 / lifetime, cell);
+                const float half = sample.mouse ? cell / 2 : 0.0f;
+                app.cursorGhost(sample.x + half, sample.y + half, player, (i + 1) * 64 / lifetime, cell);
             }
         }
     }
