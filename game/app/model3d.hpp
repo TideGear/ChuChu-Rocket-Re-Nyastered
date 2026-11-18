@@ -80,6 +80,50 @@ private:
         return true;
     }
 public:
+    // The Battle draw task builds a dome from two copies of the lid,
+    // at yaw 90 and 270 degrees, under its top-down perspective camera.
+    void drawDcRocketDome(SDL_Renderer* ren, const Model3D& lid, SDL_FPoint floorPosition,
+                          SDL_FPoint cameraCenter, float pixelsPerUnit, float pulse) const {
+        struct Triangle {
+            float height = 0;
+            SDL_Vertex vertices[3];
+        };
+        if (lid.tris.empty()) return;
+        const size_t material = lid.tris.front().mat;
+        if (material >= lid.matTex.size() || lid.matTex[material] >= textures.size()) return;
+        const float scale = pixelsPerUnit * pulse;
+        std::vector<Triangle> projected;
+        projected.reserve(2 * lid.tris.size());
+        for (float side : {1.0f, -1.0f}) {
+            for (const auto& tri : lid.tris) {
+                Triangle out;
+                for (int i = 0; i < 3; ++i) {
+                    const auto& v = tri.v[i];
+                    const float depth = 218.0f - v.y * pulse;
+                    const float perspective = 218.0f / depth;
+                    const float dx = floorPosition.x - cameraCenter.x + side * v.z * scale;
+                    const float dy = floorPosition.y - cameraCenter.y - side * v.x * scale;
+                    const float light = 0.3f + std::max(0.0f, 0.5f * v.ny + 0.25f * side * v.nx);
+                    const Uint8 shade = static_cast<Uint8>(std::lround(255.0f * light));
+                    // The decoded PVR's axes are transposed relative to the Ninja UVs.
+                    out.vertices[i] = {{cameraCenter.x + dx * perspective, cameraCenter.y + dy * perspective},
+                                       {shade, shade, shade, 255}, {1.0f - v.v, v.u}};
+                    out.height += v.y;
+                }
+                projected.push_back(out);
+            }
+        }
+        std::stable_sort(projected.begin(), projected.end(), [](const Triangle& a, const Triangle& b) {
+            return a.height < b.height;
+        });
+        std::vector<SDL_Vertex> vertices;
+        vertices.reserve(projected.size() * 3);
+        for (const auto& tri : projected)
+            vertices.insert(vertices.end(), tri.vertices, tri.vertices + 3);
+        SDL_RenderGeometry(ren, textures[lid.matTex[material]], vertices.data(),
+                           static_cast<int>(vertices.size()), nullptr, 0);
+    }
+
     // Draws the model centred at (cx, cy) on screen. Scale is in pixels per model unit and angles are in degrees.
     void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float brightness = 1.0f, int frame = -1, int forceMat = -1, uint64_t skipMats = 0) const {
         const std::vector<float>* pose = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;

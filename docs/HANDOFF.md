@@ -6,7 +6,8 @@ Read first: `docs/goal.md` (plan, under 5,000 characters; now has a Completeness
 - Release **v2026.11.20** has verified downloads for Windows x64, Linux x64, macOS arm64 and macOS x64. Fixes include a platform-specific missing-assets message, `setup.log` with its path printed, and a visible launcher error.
 - Dreamcast moving player cursors: traced the live Battle effect, including the trail texture and 24-tick fade. Battle and Puzzle draw the pointer and trail from the disc. Native camera alignment and other original modes remain open.
 - Dreamcast Battle board: floor is yuka01 on every stage (read from the 25 stage previews), outer wall frame always drawn, walls darker. The "wall" model (0xa20fc, kabetx01) was right; the c_* candidates were HUD pieces.
-- Four-player Battle uses the measured Dreamcast floor and wall planes. Controller cursors start at the rocket cells and use the observed sprite anchor. The shared board geometry also drives pointer hit testing and arrow placement. Next identify the closed rocket models and trace the height projection and lighting for the rest of the field.
+- Four-player Battle uses the measured Dreamcast floor and wall planes. Controller cursors start at the rocket cells and use the observed sprite anchor. The shared board geometry also drives pointer hit testing and arrow placement.
+- Four-player Battle draws the parked rocket domes from the disc's lid mesh and uses the measured perspective, light and pulse. The dome is two copies of the lid, drawn at yaw 90 and 270 degrees. Next trace the square pad and the height projection and lighting for the remaining field objects.
 - Tools: `flyhost` (FLY_DUMP=1) dumps main RAM and a save state; `tools/oracle/ta_parse.py` decodes the game's PowerVR stream; `dc_ram_trace.py` runs game SH-4 code on the RAM dump with stubs that log Ninja calls; `dc_callers.py` finds callers (bsr and pointers).
 
 ## Linux player (RecompLauncher report, CachyOS): still unresolved
@@ -18,6 +19,6 @@ They were on v2026.11.17, said Easy Setup rejected their ipa/gba/DC files, then 
 - Real-frame capture script for the Battle frame at 3100: keys `START@1800-1806` then `START@t-(t+6)` for t=2400,2550,...; `FLY_DUMP=1`.
 
 ## Open (also in audit.md)
-Arrow-placement ghost, cursor alignment and other modes, character camera pitch/scale, lighting, animation phase vs real frames, rocket pad ball and base, Dreamcast 2D UI path (fonts, backgrounds, brackets, arrows, holes), Puzzle/Challenge/Team Dreamcast floor colours, stage 24 seed 3000 from f2779, Puzzle Edit screen, Linux/macOS real-desktop tests.
+Arrow-placement ghost, cursor alignment and other modes, character camera pitch/scale, lighting, animation phase vs real frames, square rocket pads and launch, Dreamcast 2D UI path (fonts, backgrounds, brackets, arrows, holes), Puzzle/Challenge/Team Dreamcast floor colours, stage 24 seed 3000 from f2779, Puzzle Edit screen, Linux/macOS real-desktop tests.
 
 Rules to keep: no AI attribution trailers in commits (user's global CLAUDE.md); timing tests through `tools/quiet.ps1`; headless tests only; read original code before implementing; keep goal.md under 5,000 characters.

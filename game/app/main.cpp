@@ -963,7 +963,8 @@ struct App {
         (void)i; return true;
     }
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
-                          float alpha, const float* puku = nullptr, FieldLayout field = {}) {
+                          float alpha, const float* puku = nullptr, FieldLayout field = {},
+                          bool dcProjection = false) {
         // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
         const int mouseFrame = std::max(0, sim.now - 1) & 7;
         fieldObjects.clear();
@@ -1018,7 +1019,14 @@ struct App {
                 continue;
             }
             if (object.rocket) {
-                // A parked rocket is a closed sphere. The exported 3D rockets are launch models.
+                if (dcProjection) {
+                    static constexpr const char* lids[] = {"lid1", "lid2", "lid3", "lid4"};
+                    if (const auto* lid = models3d.find(lids[i])) {
+                        models3d.drawDcRocketDome(ren, *lid, {x, z}, {GW / 2.0f, GH / 2.0f},
+                                                 field.cell / kCell, puku ? puku[i] : 1.0f);
+                        continue;
+                    }
+                }
                 blit(rk[i], 0, x, z, (puku ? puku[i] : 1.0f) * 0.8f * field.scale());
                 continue;
             }
@@ -2705,6 +2713,7 @@ struct BattleMode : Screen {
         game.teamMode = localTeam < 0 ? getenv("CCR_TEAM") != nullptr : localTeam != 0;
         dcProjection = !game.teamMode && gApp && gApp->useModels3d();
         field = dcProjection ? dcBattleField : FieldLayout{};
+        game.rocketPulseDecay = dcProjection ? 0.05f : 0.0f;
         game.gbaCpu = getenv("CCR_CPU") ? std::string(getenv("CCR_CPU")) == "gba" : (gApp && gApp->settings.cpuStyle == "gba");
         game.rouletteManager = true;
         game.rotateOwn = true;
@@ -2906,7 +2915,7 @@ struct BattleMode : Screen {
             const int x = mouse ? aim.cellX() : curX[p], y = mouse ? aim.cellY() : curY[p];
             if (game.sim.coll[y][x] & 0xF00) a.cursor(x, y, p, game.frame, true, field);
         }
-        a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field);
+        a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field, dcProjection);
         if (dcHud) a.drawDcBattleHud(game.score, lv, left, game.roundFrames);
         const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
         const int taskAge = intro + game.frame;

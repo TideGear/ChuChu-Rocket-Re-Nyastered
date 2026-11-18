@@ -20,7 +20,9 @@ class BattleGame {
 public:
     void setCharaSpeed(float v);   // test harness (defined below)
     bool teamMode = false;                          // Team Battle (GA game type 1): teams are the player parity (0 and 2 against 1 and 3); changes the roulette events' opponents and the rocket shuffle table
-    float puku[4] = {1.0f, 1.0f, 1.0f, 1.0f};   // rocket size: RO_RocketSetPukuPuku adds 0.2 (literal 0x3e4ccccd) per mouse entering, capped at 1.5 (0x3fc00000); drawn at value x 0.8 of the sprite. The start value 1.0 is the puzzle manager's init (RO_StartRocketPzManager); the battle manager's init was not read.
+    // RO_RocketSetPukuPuku adds 0.2 per mouse entering, capped at 1.5.
+    float puku[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    float rocketPulseDecay = 0.0f; // Dreamcast Battle task 0x8c01c380 uses 0.05.
     static constexpr int kArrowTtl = 600, kArrowSlots = 3;
     Sim sim; std::unique_ptr<Generator> gen; Scoreboard score; std::unique_ptr<Roulette> roulette;   // table = first 128 draws of a fresh RNG with the battle seed (as verified in roulette_test)
     int frame = 0, clock = 0, roundFrames = 60 * 180;   // clock = frames the round countdown has run: it stops while the roulette wheel task is alive (FourBattleLoop phase 2 counts the timers only when RL_GetRoulette4Status() == 0)
@@ -113,6 +115,7 @@ public:
     void tick() {
         if (over) return;
         frame++;
+        for (float& pulse : puku) pulse = std::max(1.0f, pulse - rocketPulseDecay);
         if (!roll_.active) { clock++; int left = roundFrames - clock; if (sfx && left >= 0 && left % 60 == 0 && left / 60 <= 5) sfx(0x13 - left / 60); }   // FourBattleLoop: ChuSECall(0x13 - seconds) as the BCD countdown (mm:ss:ff, ff = 60 Hz frames) reaches 5, 4, 3, 2, 1, 0 s
         bool m2 = false, m1 = roll_.active || thaw_;
         if (freezeOnRoll) for (const Ev& e : evs_) { if (e.kind == 5 || e.kind == 6) m1 = true; if (e.kind == 4) m2 = true; }   // RL status 1 while the wheel spins and during Everybody Move / Cat Attack (mask 0x1f); status 2 during Place Arrows Again (mask 0x13: mice, cats and the generator stop, arrows keep running)
