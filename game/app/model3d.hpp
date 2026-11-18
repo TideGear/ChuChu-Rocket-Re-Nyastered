@@ -165,7 +165,7 @@ public:
                     if (b0 < -1e-4f || b1 < -1e-4f || b2 < -1e-4f) continue;
                     const float iw = b0 * t.iw[0] + b1 * t.iw[1] + b2 * t.iw[2]; if (iw <= 0) continue;
                     float& zb = depth[(size_t)y * W + x];
-                    if (iw < zb) continue;                                           // nearer (greater 1/w) wins; equal depth: the later polygon wins
+                    if (iw < zb - 2e-7f) continue;                                   // nearer (greater 1/w) wins; equal depth (within float noise): the later polygon wins
                     const float w0 = b0 * t.iw[0], w1 = b1 * t.iw[1], w2 = b2 * t.iw[2], ws = w0 + w1 + w2;
                     const float u = (w0 * t.u[0] + w1 * t.u[1] + w2 * t.u[2]) / ws, v = (w0 * t.v[0] + w1 * t.v[1] + w2 * t.v[2]) / ws;
                     const float lum = b0 * t.light[0] + b1 * t.light[1] + b2 * t.light[2];
@@ -199,7 +199,7 @@ public:
     // projected with its own height, sx = camera.x + k * 218 * X / (218 - Y), so a wall's lower side face shows under the bar (the 218 / 215 "wall plane" is this perspective at height 3).
     // Lighting per vertex: 0.3 + max(0, 0.5 * ny - 0.25 * nz) of the turned normal (exact to four decimals on the real vertices), multiplied with the texture. `material` >= 0 forces one
     // material. The pack's textures are stored transposed, so the stream's (u, v) is sampled as (v, u).
-    void drawDcPiece(SDL_Renderer* ren, const Model3D& piece, int material, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg) const {
+    void drawDcPiece(SDL_Renderer* ren, const Model3D& piece, int material, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, std::vector<SoftTri>* sink = nullptr) const {
         if (piece.tris.empty()) return;
         const float a = yawDeg * 0.017453292f, c = cosf(a), s = sinf(a);
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
@@ -230,6 +230,7 @@ public:
                 out.push_back(o);
             }
         }
+        if (sink) { sink->insert(sink->end(), out.begin(), out.end()); return; }   // batched: the caller renders all pieces into one shared depth buffer (the real game's walls depth-test against each other)
         softRender(ren, out);
     }
 

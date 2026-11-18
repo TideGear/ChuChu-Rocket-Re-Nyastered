@@ -504,11 +504,14 @@ struct App {
     void walls3d(const Stage& st, int wallColor, FieldLayout field) {
         const Model3D* wallM = models3d.find("wall"); if (!wallM) return;
         const float k = field.cell / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor)); const SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
+        // The game submits the pieces in this order (top row of horizontal pieces, then that row's vertical pieces, then the next row) and they share one depth buffer: render them together.
+        std::vector<ModelPack::SoftTri> all;
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c + 0.5f), field.y(r)}, camera, k, 0.0f);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c + 0.5f), field.y(r)}, camera, k, 0.0f, &all);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c), field.y(r + 0.5f)}, camera, k, -90.0f);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.drawDcPiece(ren, *wallM, mat, {field.x(c), field.y(r + 0.5f)}, camera, k, -90.0f, &all);
         }
+        models3d.softRender(ren, all);
     }
     void board(const Stage& st, int floorColor, int wallColor, FieldLayout field = {}) {
         const bool three = board3d(floorColor, wallColor, field);
