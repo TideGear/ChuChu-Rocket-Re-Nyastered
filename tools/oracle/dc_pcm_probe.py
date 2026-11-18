@@ -75,6 +75,36 @@ def prepare_envelope_controls(state, mlt, source_channel=0):
     return output
 
 
+def prepare_filter_controls(state, mlt, source_channel=0):
+    """Synthetic filter sweeps, boundary/equal targets, frozen rate and release."""
+    report = inspect(state, mlt)
+    output = prepare_envelope_controls(state, mlt, source_channel)
+    registers, runtimes = report['register_offset'], report['runtime_offset']
+    cases = (
+        ((0x1000, 0x1d00, 0x800, 0x1800, 0x400), 4, 0, 31, 0),
+        ((0x1f00, 0x400, 0x1800, 0x200, 0x1d00), 8, 0, 31, 0),
+        ((0, 0, 0, 0, 0), 31, 0, 31, 0),
+        ((0x1000, 0x1800, 0x800, 0x1c00, 0x400), 4, 3, 31, 0),
+        ((0x1000, 0x1800, 0x800, 0x1c00, 0x400), 4, 0, 0, 0),
+        ((0x1000, 0x1001, 0x1000, 0x1001, 0), 0, 1, 31, 0x8000),
+        ((0x1fff, 0, 0x1fff, 0, 0x1fff), 0, 0, 31, 0),
+        ((0x1000, 0x1800, 0x800, 0x1c00, 0x1d00), 16, 3, 31, 0),
+    )
+    for index, (levels, resonance, phase, attack, fraction) in enumerate(cases, 8):
+        reg, runtime = registers + index * 128, runtimes + index * 72
+        struct.pack_into('<I', output, reg + 16, 31)
+        struct.pack_into('<I', output, reg + 20, 31 | 15 << 10)
+        control = struct.unpack_from('<I', output, reg + 40)[0]
+        struct.pack_into('<I', output, reg + 40, (control & ~63) | resonance)
+        struct.pack_into('<5I', output, reg + 44, *levels)
+        struct.pack_into('<2I', output, reg + 64, attack << 8 | 31, 31 << 8 | 31)
+        struct.pack_into('<iIII', output, runtime + 38, 0, 2, (levels[0] << 16) | fraction, phase)
+        if phase == 0:
+            # Flycast SetFegState(Attack), including state restoration, clears history.
+            struct.pack_into('<3i', output, runtime + 54, 0, 0, 0)
+    return output
+
+
 def verify(state, mlt, wav_path, keys_path=None):
     report = inspect(state, mlt)
     registers = report['register_offset']
@@ -136,6 +166,7 @@ if __name__ == '__main__':
     parser.add_argument('--force-loop', action='store_true', help='synthetic control: enable the selected sample loops')
     parser.add_argument('--keys-csv', type=Path, help='sample/key transitions from the instrumented core')
     parser.add_argument('--envelope-controls', action='store_true', help='synthetic amplitude controls from one source channel')
+    parser.add_argument('--filter-controls', action='store_true', help='synthetic changing filter controls from one source channel')
     args = parser.parse_args()
     state, mlt = args.state.read_bytes(), args.mlt.read_bytes()
     if args.operation == 'prepare':
@@ -143,10 +174,13 @@ if __name__ == '__main__':
             channels = {int(value) for value in args.channels.split(',')}
         except ValueError:
             parser.error('channels must be comma-separated integers')
-        if args.envelope_controls:
+        if args.envelope_controls or args.filter_controls:
+            if args.envelope_controls and args.filter_controls:
+                parser.error('Choose amplitude or filter controls')
             if len(channels) != 1:
                 parser.error('--envelope-controls needs exactly one source channel')
-            args.output.write_bytes(prepare_envelope_controls(state, mlt, next(iter(channels))))
+            operation = prepare_filter_controls if args.filter_controls else prepare_envelope_controls
+            args.output.write_bytes(operation(state, mlt, next(iter(channels))))
         else:
             args.output.write_bytes(prepare(state, mlt, channels, args.force_loop))
     else:

@@ -1,8 +1,8 @@
-"""AICA sample stepping, amplitude envelopes, pitch LFO and fixed filters.
+"""AICA sample stepping, amplitude/filter envelopes and periodic pitch LFO.
 
 Consumes captured channel state. Direct output includes pan/attenuation, sample
-end/loops, amplitude attack/decay/release and timestamped key-offs. Filter
-envelopes must remain constant. Note-on initialization is not modeled. This is not a
+end/loops, amplitude/filter envelope evolution and timestamped key-offs.
+Note-on initialization is not modeled. This is not a
 finished sound-effect renderer. Hardware field/step reference: Flycast core
 3a5267a, core/hw/aica/sgc_if.cpp; compare with original core snapshots.
 """
@@ -77,25 +77,45 @@ class SampleStream:
         self.loop_link = bool(words[5] & 0x4000)
         self.filter_active = not (words[10] & 32) and (any(v < 0x1ff8 for v in words[11:16]) or (words[10] & 31) != 4)
         if self.filter_active:
-            value = self.state['filter_value'] >> 16
-            if self.state['filter_state'] not in (2, 3) or self.state['filter_value'] != value << 16 or any(v != value for v in words[11:16]):
-                raise ValueError('Changing filter envelopes are not yet validated')
-            resonance = (2048, 1536, 1024, 512, 0, -256, -512, -768, -1024, -1280,
+            if self.state['filter_state'] not in range(4):
+                raise ValueError('Invalid filter envelope state')
+            self.filter_deltas = (decay_delta((words[16] >> 8) & 31), decay_delta(words[16] & 31),
+                                  decay_delta((words[17] >> 8) & 31), decay_delta(words[17] & 31))
+            self.filter_targets = [value << 16 for value in words[12:16]]
+            self.resonance = (2048, 1536, 1024, 512, 0, -256, -512, -768, -1024, -1280,
                          -1536, -1792, -2048, -2176, -2304, -2432, -2560, -2688,
                          -2816, -2944, -3072, -3136, -3200, -3264, -3328, -3392,
                          -3456, -3520, -3584, -3648, -3712, -3776)[words[10] & 31]
-            exponent, mantissa = value >> 9, (value & 511) | 512
-            a0 = ((((mantissa << 30) >> ((15 - exponent) * 2)) * ((mantissa - 1) // 8)) >> 17)
-            feedback = (mantissa << exponent) << 5
-            product = resonance * feedback
-            feedback += (abs(product) // 4096) * (-1 if product < 0 else 1)
-            self.filter_coefficients = a0, (1 << 31) - feedback - a0, (1 << 30) - feedback
-            self.filter_exponent = exponent
+            self.filter_cached_value = None
+
+    def step_filter_envelope(self):
+        if not self.filter_active:
+            return
+        state = self.state
+        phase = state['filter_state']
+        value, target = state['filter_value'], self.filter_targets[phase]
+        delta = self.filter_deltas[phase]
+        if value < target:
+            state['filter_value'] = min(target, value + delta)
+        elif value > target:
+            state['filter_value'] = max(target, value - delta)
+        elif phase < 2:
+            state['filter_state'] += 1
 
     def filter(self, sample):
         if not self.filter_active:
             return sample
         state = self.state
+        value = state['filter_value'] >> 16
+        if value != self.filter_cached_value:
+            exponent, mantissa = value >> 9, (value & 511) | 512
+            a0 = ((((mantissa << 30) >> ((15 - exponent) * 2)) * ((mantissa - 1) // 8)) >> 17)
+            feedback = (mantissa << exponent) << 5
+            product = self.resonance * feedback
+            feedback += (abs(product) // 4096) * (-1 if product < 0 else 1)
+            self.filter_coefficients = a0, (1 << 31) - feedback - a0, (1 << 30) - feedback
+            self.filter_exponent = exponent
+            self.filter_cached_value = value
         a0, b1, b2 = self.filter_coefficients
         fraction = state['filter_fraction'] if self.filter_exponent else 0
         accumulator = -a0 * sample + b1 * state['filter_previous1'] - b2 * state['filter_previous2'] - fraction
@@ -200,6 +220,7 @@ class SampleStream:
                     state['enabled'] = False
                     state['position'] = 0
                     continue
+            self.step_filter_envelope()
             phase = state['lfo_phase']
             wave = (self.lfo >> 8) & 3
             if wave == 0:
