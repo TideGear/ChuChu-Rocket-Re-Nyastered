@@ -1220,43 +1220,47 @@ struct ModelViewerMode : Screen {
     }
 };
 
-// Dreamcast startup (SH-4 tasks 0x8c02356a SEGA, 0x8c0236c0 Sonic Team, then Title; tools/oracle/dc_startup.py): SEGA holds 132 ticks, fades and switches at 144; Sonic Team holds until tick 365 or a press, fades,
-// and Title follows 13 ticks later. Layout from Flycast frames 600/800/1200 (docs/HANDOFF.md): SEGA canvas 768 x 512 at (-64, 0), Sonic Team bubble 256 x 256 at (193, 160) on (118, 200, 253), Title tiles, logo at (16, 64), prompt at (176, 360).
-// Fade lengths, the prompt's blink timing, the flying rocket and the music are not traced yet.
+// Dreamcast startup (SH-4 tasks 0x8c02356a SEGA, 0x8c0236c0 Sonic Team, then Title; tools/oracle/dc_startup.py). Layout and timing from headless Flycast frames (docs/HANDOFF.md):
+// SEGA canvas 768 x 512 at (-64, 0), Sonic Team bubble 256 x 256 at (193, 160) on (118, 200, 253), Title tiles, logo at (16, 64), prompt at (176, 360).
+// Every fade is 11 linear steps of 1/11 (corner pixel 254 -> 231 -> ... -> 0). SEGA: fade steps k = t - 132 for t = 133..143, then Sonic Team at t = 144. Sonic Team (tick s): black until s = 4, steps k = s - 4 up to 11 (full at s = 15);
+// the exit request is at s = 365 or a press and its first dimmed frame is 5 ticks later (k = s - request - 4, black from k = 11); Title starts 13 ticks after the request (u = 0): black until u = 9, brightness (u - 8) / 11 for u = 10..19;
+// the prompt appears at u = 89 and is hidden for 8 of every 30 ticks from u = 145. Not traced yet: the flying rocket, `newtitle1/2` and music 18.
 struct DcStartupMode : Screen {
-    int phase = 0, tickInPhase = 0, fadeOutAt = -1; bool leave = false;
+    int phase = 0, t = 0, request = -1; bool leave = false;
     static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() == 5; }
     void event(App&, const SDL_Event& e) override {
         const bool press = (e.type == SDL_KEYDOWN && !e.key.repeat) || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN || e.type == SDL_CONTROLLERBUTTONDOWN;
         if (!press) return;
-        if (phase == 1 && fadeOutAt < 0) fadeOutAt = tickInPhase;
-        else if (phase == 2 && tickInPhase > 12) leave = true;
+        if (phase == 1 && request < 0) request = t;
+        else if (phase == 2 && t >= 20) leave = true;
     }
     void tick(App&) override {
-        ++tickInPhase;
-        if (phase == 0 && tickInPhase >= 144) { phase = 1; tickInPhase = 0; }
+        ++t;
+        if (phase == 0 && t >= 144) { phase = 1; t = 0; }
         else if (phase == 1) {
-            if (fadeOutAt < 0 && tickInPhase >= 365) fadeOutAt = tickInPhase;
-            if (fadeOutAt >= 0 && tickInPhase >= fadeOutAt + 13) { phase = 2; tickInPhase = 0; }
+            if (request < 0 && t >= 365) request = t;
+            if (request >= 0 && t >= request + 13) { phase = 2; t = 0; }
         }
     }
     const char* next() override { return std::exchange(leave, false) ? "MENU" : nullptr; }
+    static float step(int k) { return std::clamp(k, 0, 11) / 11.0f; }   // fade progress for step k
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
-        const Sheet& s = a.dcStartup;
-        auto copy = [&](int frame, int x, int y) { const SDL_Rect& r = s.fr[frame]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, s.tex, &r, &d); };
-        int black = 0;   // overlay alpha
-        if (phase == 0) { SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_RenderClear(a.ren); copy(0, -64, 0); if (tickInPhase >= 132) black = std::min(255, (tickInPhase - 132) * 255 / 12); }
+        const Sheet& sh = a.dcStartup;
+        auto copy = [&](int frame, int x, int y) { const SDL_Rect& r = sh.fr[frame]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
+        float black = 0.0f;   // overlay opacity
+        if (phase == 0) { SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_RenderClear(a.ren); copy(0, -64, 0); black = step(t - 132); }
         else if (phase == 1) {
             SDL_SetRenderDrawColor(a.ren, 118, 200, 253, 255); SDL_RenderClear(a.ren); copy(1, 193, 160);
-            if (tickInPhase < 24) black = 255 - tickInPhase * 255 / 24;
-            if (fadeOutAt >= 0) black = std::max(black, std::min(255, (tickInPhase - fadeOutAt) * 255 / 12));
+            black = request < 0 || t < request + 5 ? 1.0f - step(t - 4) : step(t - request - 4);
+            if (request >= 0 && t < request + 5) black = 0.0f;
         } else {
             SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren); copy(2, 0, 0); copy(3, 16, 64);
-            if (tickInPhase >= 90 && ((tickInPhase - 90) / 30) % 2 == 0) copy(4, 176, 360);
-            if (tickInPhase < 12) black = 255 - tickInPhase * 255 / 12;
+            const bool hidden = t >= 145 && (t - 145) % 30 < 8;
+            if (t >= 89 && !hidden) copy(4, 176, 360);
+            black = t < 10 ? 1.0f : 1.0f - step(t - 8);
         }
-        if (black > 0) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)black); SDL_RenderFillRect(a.ren, nullptr); }
+        if (black > 0.0f) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)std::lround(black * 255.0f)); SDL_RenderFillRect(a.ren, nullptr); }
     }
 };
 
