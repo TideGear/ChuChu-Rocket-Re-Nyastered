@@ -3,8 +3,9 @@
 // usage: flyhost <flycast_libretro.dll> <system dir (contains dc/dc_boot.bin)> <save dir> <content .cue/.gdi/.chd> <frames> <out prefix> [shots f1,f2,...] [keys "START@100-105;A@200-203"]
 // keys: A B X Y START UP DOWN LEFT RIGHT L R, frame ranges inclusive.
 // FLYHOST_PER_PIXEL=1 requests Flycast's per-pixel alpha sorting for comparison captures.
-// FLYHOST_WAV=<path> records stereo PCM at the core's sample rate.
+// FLYHOST_WAV=<path> records stereo PCM at the core's sample rate, with threaded rendering disabled.
 // FLYHOST_STATE=<path> resumes a raw state from this host/core; frame numbers restart at zero.
+// FLYHOST_SYNC=1 disables the core's threaded rendering for frame-aligned audio captures.
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -100,6 +101,7 @@ public:
     ~AudioCapture() { close(); }
 };
 static AudioCapture gAudio;
+static bool gSyncOptionSet = false;
 typedef void (APIENTRY* PFNGENFB)(GLsizei, GLuint*); typedef void (APIENTRY* PFNBINDFB)(GLenum, GLuint); typedef void (APIENTRY* PFNFBTEX)(GLenum, GLenum, GLenum, GLuint, GLint);
 typedef void (APIENTRY* PFNGENRB)(GLsizei, GLuint*); typedef void (APIENTRY* PFNBINDRB)(GLenum, GLuint); typedef void (APIENTRY* PFNRBSTORE)(GLenum, GLenum, GLsizei, GLsizei); typedef void (APIENTRY* PFNFBRB)(GLenum, GLenum, GLenum, GLuint);
 static PFNGENFB glGenFramebuffersP; static PFNBINDFB glBindFramebufferP; static PFNFBTEX glFramebufferTexture2DP; static PFNGENRB glGenRenderbuffersP; static PFNBINDRB glBindRenderbufferP; static PFNRBSTORE glRenderbufferStorageP; static PFNFBRB glFramebufferRenderbufferP;
@@ -147,6 +149,12 @@ static bool env(unsigned cmd, void* data) {
     case 27: ((retro_log_callback*)data)->log = logf_; return true;                // GET_LOG_INTERFACE
     case 15: {                                                                    // GET_VARIABLE
         auto* variable = static_cast<retro_variable*>(data);
+        if ((getenv("FLYHOST_SYNC") || getenv("FLYHOST_WAV")) && strcmp(variable->key, "reicast_threaded_rendering") == 0) {
+            variable->value = "disabled";
+            if (!gSyncOptionSet) fprintf(stderr, "synchronous capture: disabled reicast_threaded_rendering\n");
+            gSyncOptionSet = true;
+            return true;
+        }
         if (getenv("FLYHOST_PER_PIXEL") && strcmp(variable->key, "reicast_alpha_sorting") == 0) {
             variable->value = "per-pixel (accurate)";
             return true;
@@ -268,6 +276,9 @@ int main(int argc, char** argv) {
     retro_system_av_info av{}; retro_get_system_av_info(&av); gMaxW = av.geometry.max_width; gMaxH = av.geometry.max_height; fprintf(stderr, "av %ux%u max %ux%u fps %.2f\n", av.geometry.base_width, av.geometry.base_height, gMaxW, gMaxH, av.timing.fps);
     if (!gHwSet) { fprintf(stderr, "the core did not request a hardware context\n"); return 5; }
     makeFbo(); if (gHw.context_reset) gHw.context_reset(); gGlReady = true;
+    if ((getenv("FLYHOST_SYNC") || getenv("FLYHOST_WAV")) && !gSyncOptionSet) {
+        fprintf(stderr, "core did not query the required synchronous-capture option\n"); return 6;
+    }
     if (const char* path = getenv("FLYHOST_STATE")) {
         const size_t size = retro_serialize_size();
         if (!size || size > 256u * 1024u * 1024u) {

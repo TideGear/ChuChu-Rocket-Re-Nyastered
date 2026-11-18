@@ -57,6 +57,9 @@ def inspect(state, mlt):
                         program=program['index'], layer=layer['index'], split=split['index'],
                         format=split['format'], loop_start=split['loop_start'], loop_end=split['loop_end']))
     channels = []
+    runtime_start = registers + 0x8000
+    if runtime_start + 64 * 72 > len(state):
+        raise ValueError('Truncated Flycast channel runtime records')
     for index in range(64):
         at = registers + 128 * index
         words = [struct.unpack_from('<H', state, at + offset)[0] for offset in range(0, 0x48, 4)]
@@ -64,14 +67,26 @@ def inspect(state, mlt):
         address = ((control & 127) << 16) | words[1]
         if not any(words):
             continue
+        # Packed fields in sgc_if.cpp serialize(), core revision 3a5267a.
+        runtime_at = runtime_start + 72 * index
+        sample, position, fraction, s0, s1 = struct.unpack_from('<3I2i', state, runtime_at)
+        counter = struct.unpack_from('<I', state, runtime_at + 66)[0]
+        phase, enabled = state[runtime_at + 70:runtime_at + 72]
+        if enabled > 1 or sample != (address & ~1 if (control >> 7) & 3 == 0 else address):
+            raise ValueError('Flycast runtime record does not match channel registers')
+        runtime = dict(sample_address=sample, position=position, fraction=fraction,
+                       s0=s0, s1=s1, lfo_counter=counter, lfo_phase=phase, enabled=bool(enabled))
+        runtime.update(zip(('amplitude_value', 'amplitude_state', 'filter_value', 'filter_state',
+                            'filter_previous1', 'filter_previous2', 'filter_fraction'),
+                           struct.unpack_from('<iIII3i', state, runtime_at + 38)))
         channels.append(dict(channel=index, key_on=bool(control & 0x4000),
             sample_address=address, pcm_mode=(control >> 7) & 3,
             loop=bool(control & 0x200), loop_start=words[2], loop_end=words[3],
             pitch_raw=words[6], fns=words[6] & 1023, octave_raw=(words[6] >> 11) & 15,
             lfo_raw=words[7], pan_raw=words[9] & 31, direct_level=(words[9] >> 8) & 15,
-            total_level=words[10] >> 8, register_words=words,
+            total_level=words[10] >> 8, register_words=words, runtime=runtime,
             sample_references=samples.get(address, [])))
-    return dict(state_header=0x356, sound_ram_offset=base, register_offset=registers,
+    return dict(state_header=0x356, sound_ram_offset=base, register_offset=registers, runtime_offset=runtime_start,
                 verified_sample_addresses=len(samples), channels=channels)
 
 

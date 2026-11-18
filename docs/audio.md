@@ -1,4 +1,4 @@
-# Audio: source comparison (music)
+# Audio: sources, playback and verification
 
 Method: `tools/audio_compare.py` decodes the 15 mobile music files (Ogg Vorbis, mono, 44.1 kHz, ~48 kbps nominal; byte-identical in every
 iOS build and in Android) and the Dreamcast CD audio tracks (raw PCM, stereo, 44.1 kHz), and correlates 10 Hz band-energy envelopes.
@@ -20,7 +20,7 @@ SFX and voices (iOS/Android 52 effects, mono ~70 kbps; Dreamcast `DP2SOUND.MLT`,
 ## Dreamcast sound containers (corrected 2026-11-18)
 
 - `DPETC/VOICE.AFS`: 383 ADX entries decoded to silence on the tested USA disc. This does not establish where every Dreamcast voice lives.
-- `MANATEE.DRV` is the AICA ARM7 sound driver. Its channel setup, playback rates, envelopes and cancellation still need runtime verification.
+- `MANATEE.DRV` is the AICA ARM7 sound driver. Base pitch and two failure-voice setup paths are checked below; other cues, timing, envelope evolution and cancellation remain open.
 - `tools/mlt_extract.py` reads the SMLT header and its count of 32-byte section entries. Each entry contains tag (+0), bank (+4), sound-RAM address (+8), RAM allocation size (+12), **file offset (+16)** and file size (+20). A file offset of 0xffffffff reserves RAM without a payload.
 - The old extractor used the RAM address as a file offset. Earlier waveform smoothness, duration, rate and mobile-envelope comparisons used incorrect payloads and are invalid. Those assessments have been removed. The legacy `mlt_samples.py` also guesses SOSP address/format fields and must not supply gameplay audio.
 - Corrected extraction checked all six MLT files on this disc (DP2SOUND plus five language banks): six file-backed sections apiece, with matching payload signatures. English CHU2_SE has 29 sequences in bank 0 and 99 in bank 1; DP2SOUND has 17 in bank 1. SOSB, SMPB and SMDB are distinct structured bank types, not interchangeable sample-data banks.
@@ -64,6 +64,19 @@ Ghidra independently decompiled the driver into `local/handoff-check/sound-banks
 `tools/oracle/dc_note_on_probe.py <MANATEE.DRV> <failure.state> <loaded.MLT>` compares all 8,192 combinations of controller values 0..127 and both depth fields 0..7 with the original ARM block. It then executes the complete note-on command at ARM 0xd68 for the two captured program-27 voices, using their actual group, MIDI channel, key, velocity, program and controllers. Voice allocations are cleared in this direct fixture. All 18 meaningful channel register words match the live frame-4250 channels: sample, loops, amplitude/filter envelopes, pitch, LFO, DSP send, pan and total level. Only KYONEX is excluded; this trigger is cleared by real hardware after the command, which Unicorn does not emulate. No driver calls are stubbed.
 
 The tested failure voices use group 2, MIDI channels 2/1, keys 69/72, velocity 90, modulation 120, volume 95, and pan 88/40. Both produce LFO word 0x72e0 and total level 27. This verifies driver register preparation for these two voices. Hardware modulation phase, filter/envelope evolution, DSP effects, mixing, cancellation and final waveform parity remain open. Do not equate matching register initialization with matching audible output.
+
+## PCM waveform verification (2026-11-18)
+
+The tested core identifies itself as Flycast revision `3a5267a`. Its [channel serialization and synthesis source](https://github.com/flyinghead/flycast/blob/3a5267a/core/hw/aica/sgc_if.cpp) confirms 72-byte packed runtime records after the channel registers in the tested 0x356 state layout. `dc_aica_state.py` now reads sample position/fraction, current samples, LFO phase/counter, amplitude state and filter history, checking runtime sample addresses against registers.
+
+`tools/aica_pcm.py` models PCM16 sample stepping, periodic pitch modulation, interpolation, a constant filter-envelope window, and direct pan/attenuation. `tools/oracle/dc_pcm_probe.py` creates controlled reference states and compares their output exactly:
+
+- `prepare <source.state> <loaded.MLT> <isolated.state> --channels 0,2` disables unselected channel runtimes and mutes the 18 DSP/CD return controls. It retains selected voices' captured position and history.
+- Resume that state with `FLYHOST_STATE` and `FLYHOST_WAV`, then run `verify <isolated.state> <loaded.MLT> <core.wav>`.
+- From the A1 frame-4250 state, channels 0, 2, and their combined direct mix each matched **14,383 stereo frames with zero sample error**, across three 20-frame captures. Files are `local/handoff-check/pcm-step-reference/channel0-long.*`, `channel2-long.*`, and `channel0_2-long.*`.
+- An earlier five-frame run also matched stream position/fraction, source samples, LFO state and filter history at three saved endpoints for both channels. Flipping one recorded sample by one unit causes the waveform verifier to reject it.
+
+Scope: sustained, already-running PCM16 voices with triangle pitch LFO, fixed amplitude/filter envelopes, full-volume stereo output, and muted DSP/CD returns. This does not verify note attack/release, sample-end/loop handling, ADPCM, changing filters, other LFO waveforms or the complete game mix. Unsupported windows are rejected rather than approximated. Next extend verified rendering through start/stop and ADPCM, then DSP/mixing and native integration.
 
 ## Sound-effect ids (2026-11-13)
 Android 1.15 `ChuSECall(id, _)` (0x3d508) calls `AppData::playSFX(table[id].first)`; the 8-byte table at 0x63a00 maps ids 0..28 to themselves (ids 29..39 map to 40..50, the extra effects). Id 7 (cat enters rocket) is dropped when it fires less than 3 global ticks after its previous call. The app now follows this (battle hook: arrow placed 1, mouse home 6, cat in rocket 7 with the 3-tick rule, roulette 10, refused 0x13). Still to do: the sound index -> file mapping for ids >= 29, per-screen music selection and loop points, and the same tables for iOS/Dreamcast.
@@ -134,13 +147,11 @@ App: `App::playSong` (restarts only on a different song), songs loaded on demand
 
 ## Flycast reference recording
 
-Set `FLYHOST_WAV=<output.wav>` when running `tools/oracle/flyhost.cpp` to record the core's stereo 16-bit PCM at its declared sample rate. The companion `<output.wav>.frames.csv` records each video frame's first and end sample offsets. Both audio callback forms feed the same file. The host checks write/finalization errors and RIFF size limits. It continues to run without opening an audio device.
+`FLYHOST_WAV=<output.wav>` records stereo PCM16 at the core's declared sample rate; a companion `.frames.csv` maps video steps to delivered sample ranges. No audio device opens. WAV recording now automatically disables `reicast_threaded_rendering`; the host rejects capture if the tested synchronization option is not queried. `FLYHOST_SYNC=1` selects the same behavior without recording audio.
 
-A 4,310-frame Challenge navigation/run/failure capture produced 3,259,242 stereo frames at 44,100 Hz with nonzero audio across menu and gameplay segments. A separate 180-frame run verified contiguous CSV ranges and exact equality between its last sample index and the WAV sample count (145,000). The delivered sample count exceeds nominal video time in these runs, so cue comparisons must use the frame index. These checks verify capture infrastructure. Cue identification, looping, fades and playback parity remain open.
+Earlier threaded recordings had sharply varying sample delivery per frame, so their CSV ranges are not reproducible emulated-frame boundaries. Use them only for coarse cue identification. Two synchronized 150-frame replays from the same 4205 state produced byte-identical WAVs (SHA-256 `03d84fc9e7593908e3b7089c3b464dbee070b9cdeeb8eea412be029194d31f0d`) and identical frame indices: an initial partial frame, then 735/736 samples per frame. The references are `local/handoff-check/failure-audio-sync/a.wav` and `b.wav`. The isolated PCM comparisons above use synchronized recording too.
 
-`FLYHOST_STATE=<raw .state>` now resumes a state produced by the same host/core. Capture and scripted-input frame numbers restart at zero. The host initializes the hidden graphics context before loading, requires the exact current core state size, checks reads/close/core acceptance, and opens WAV output only after loading succeeds.
-
-A 150-frame replay from `local/handoff-check/failure-motion/g_04205.state` produced `local/handoff-check/failure-audio-resume/failure.wav`, with 113,091 stereo samples at 44,100 Hz and 150 contiguous CSV frame ranges. Replay frame 44's AICA register words match the prior original frame-4250 capture. A truncated-state control returned exit 6 without creating a WAV. Use this shorter indexed recording for the failure cue rather than the older full-session WAV without an index. Other reference sequences still need indexed captures.
+`FLYHOST_STATE=<raw .state>` resumes a state from this host/core, with capture/input frame numbers restarting at zero. The hidden graphics context is initialized before loading. State size, reads, close and core acceptance are checked before WAV creation. A truncated-state control returns exit 6 without creating output. Normal boot and saved-state replay both pass. Keep core/version and loaded disc identical when reproducing a reference; other cues still need synchronized captures.
 
 ## Dreamcast Challenge transition requests
 
