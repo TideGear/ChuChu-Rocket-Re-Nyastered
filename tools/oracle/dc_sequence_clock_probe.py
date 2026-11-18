@@ -2,7 +2,7 @@
 
 Runs original context initialization/start and scheduler, draining the command
 FIFO without voice dispatch. Compares events, command words and all 64 gates
-through sequence end, not audio, post-end gate tails or CPU cycles.
+through sequence end and pending-gate expiry, not audio or CPU cycles.
 """
 import argparse
 import struct
@@ -21,9 +21,21 @@ from mlt_extract import sections
 from mlt_sequences import inventory
 
 
-def verify(driver, mlt, bank_index=0, sequence_index=19):
+def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=False):
     PitchTable(driver)
     sequence = next(b for b in inventory(mlt) if b['bank'] == bank_index)['sequences'][sequence_index]
+    if short_tail_control:
+        previous, end = sequence['events'][-2:]
+        if previous['type'] != 'note' or end['type'] != 'end':
+            raise ValueError('Tail control requires a final note followed by end')
+        width = 2 if previous['status'] & 0x10 else 1
+        if previous['offset'] + 3 + (previous['status'] >> 5) + 1 + width != end['offset']:
+            raise ValueError('Tail control requires contiguous note/end bytes')
+        position = sequence['file_offset'] + end['offset'] - width
+        modified = bytearray(mlt)
+        modified[position:position + width] = bytes(width)
+        mlt = bytes(modified)
+        sequence = next(b for b in inventory(mlt) if b['bank'] == bank_index)['sequences'][sequence_index]
     native = LinearSequenceClock(sequence)
     command_model = SequenceCommands(sequence)
     section = next(s for s in sections(mlt) if s['tag'] == 'SMSB' and s['bank'] == bank_index)
@@ -59,6 +71,7 @@ def verify(driver, mlt, bank_index=0, sequence_index=19):
 
     uc.hook_add(UC_HOOK_CODE, event, begin=0x6aac, end=0x6aac)
     count = command_count = 0
+    end_tick = pending_at_end = None
     for tick in range(1, 10001):
         observed.clear()
         uc.mem_write(0x12418, struct.pack('<I', tick))
@@ -93,7 +106,12 @@ def verify(driver, mlt, bank_index=0, sequence_index=19):
             flags = uc.mem_read(0x11051, 1)[0]
             if flags & 1:
                 raise AssertionError('Original sequence did not end')
-            return dict(updates=tick, events=count, commands=command_count)
+            if end_tick is None:
+                end_tick = tick
+                pending_at_end = sum(bool(g.command) for g in command_model.gates)
+            if not any(g.command for g in command_model.gates):
+                return dict(updates=tick, sequence_end=end_tick, pending_at_end=pending_at_end,
+                            events=count, commands=command_count)
     raise AssertionError('Sequence exceeded bounded update window')
 
 
@@ -104,13 +122,18 @@ if __name__ == '__main__':
     parser.add_argument('--bank', type=int, default=0)
     parser.add_argument('--sequence', type=int, default=19)
     parser.add_argument('--all', action='store_true', help='verify every sequence in the MLT')
+    parser.add_argument('--short-tail-control', action='store_true', help='synthetic control: zero the final note step')
     args = parser.parse_args()
+    if args.all and args.short_tail_control:
+        parser.error('Choose --all or --short-tail-control, not both')
     driver, mlt = args.driver.read_bytes(), args.mlt.read_bytes()
     if args.all:
         results = [verify(driver, mlt, bank['bank'], sequence['index'])
                    for bank in inventory(mlt) for sequence in bank['sequences']
                    if not sequence.get('empty')]
         print(dict(sequences=len(results), events=sum(r['events'] for r in results),
-                   updates=sum(r['updates'] for r in results)))
+                   updates=sum(r['updates'] for r in results), commands=sum(r['commands'] for r in results),
+                   post_end_updates=sum(r['updates'] - r['sequence_end'] for r in results),
+                   sequences_with_pending_tails=sum(bool(r['pending_at_end']) for r in results)))
     else:
-        print(verify(driver, mlt, args.bank, args.sequence))
+        print(verify(driver, mlt, args.bank, args.sequence, args.short_tail_control))
