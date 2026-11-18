@@ -455,7 +455,7 @@ struct App {
         const Model3D* floorM = models3d.find("floor"); const Model3D* wallM = models3d.find("wall"); if (!floorM || !wallM) return false;
         const float k = (float)CELL / 15.0f;
         (void)k;   // the game's floor quad has UVs 0..6 x 0..4.5 (u = (x + 90) / 30, v = (z + 67.5) / 30) and SDL's geometry call clamps UVs, so the 108 cells are drawn as quarter-texture quads (same mapping)
-        const int mat = 29 + std::max(0, std::min(5, floorColor)); if (mat >= (int)floorM->matTex.size()) return false;
+        const int mat = 29 + std::max(0, std::min(5, getenv("CCR_FLOOR3D") ? atoi(getenv("CCR_FLOOR3D")) : floorColor)); if (mat >= (int)floorM->matTex.size()) return false;
         SDL_Texture* tex = models3d.textures[floorM->matTex[mat]];
         std::vector<SDL_Vertex> verts; verts.reserve(12 * 9 * 6);
         // Neutral floor modulation measured from the Dreamcast Normal Puzzle 01 capture.

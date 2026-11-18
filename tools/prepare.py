@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Windowless asset extraction for launchers (RecompLauncher "prepare" step) on Linux and macOS (tools/prepare.ps1 does the same on Windows).
 Extracts assets from YOUR original game files into the data folder; never changes your original files.
-usage: prepare.py --game-files <folder with your original files, loose or ZIP> [--cache <folder>]
+usage: prepare.py --game-files <folder with your original files, loose or ZIP (or one file in it)> [--cache <folder>] [--download-python]
+--download-python: when Pillow is missing, create a private virtual environment in the data folder and install Pillow into it (needs python3-venv and internet).
 Prints "progress <0..1> <text>" lines; exits 0 when the cache holds playable stage data, 1 otherwise.
 Needs Python 3.10+ and Pillow (python3 -m pip install pillow, or your distribution's python3-pil / python-pillow package)."""
 import argparse, json, os, shutil, subprocess, sys, uuid
@@ -20,10 +21,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--game-files', default=os.environ.get('CCR_SETUP_GAME_FILES'))
     ap.add_argument('--cache', default=None)
+    ap.add_argument('--download-python', action='store_true')
     a = ap.parse_args()
-    if not a.game_files or not Path(a.game_files).is_dir():
+    gf = Path(a.game_files) if a.game_files else None
+    if gf is not None and gf.is_file(): gf = gf.parent   # one file chosen (an .ipa, .gba, .cue ...): use the folder it is in
+    if gf is None or not gf.is_dir():
         say('Your game folder was not found: %s' % a.game_files); return 1
-    game = Path(a.game_files).resolve()
+    game = gf.resolve()
     cache = Path(a.cache).resolve() if a.cache else default_cache()
     old = cache.parent / 'ReNyastered'   # the folder name used before the rename: move it once if the new one does not exist
     if not a.cache and not cache.exists() and old.exists(): shutil.move(str(old), str(cache))
@@ -32,7 +36,16 @@ def main():
     if sys.version_info < (3, 10): say('Python 3.10 or later is required (found %s).' % sys.version.split()[0]); return 1
     try: import PIL  # noqa: F401
     except ImportError:
-        say('Pillow is missing. Install it with: python3 -m pip install --user pillow  (or your distribution\'s python3-pil / python-pillow package), then run setup again.'); return 1
+        if a.download_python and not os.environ.get('CCR_PREPARE_VENV'):
+            venv = cache / 'venv'; say('progress 0.05 Pillow is missing: creating a private Python environment (needs internet)')
+            for cmd in ([sys.executable, '-m', 'venv', str(venv)], [str(venv / 'bin' / 'python'), '-m', 'pip', 'install', '--disable-pip-version-check', 'pillow']):
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                if res.returncode != 0:
+                    say('Could not set up Pillow automatically (%s):' % ' '.join(cmd[:3])); say((res.stdout + res.stderr).strip()[-600:])
+                    say('Install Pillow yourself (python3-pil or python-pillow from your package manager; on Debian/Ubuntu also python3-venv), then run setup again.'); return 1
+            say('progress 0.1 Pillow installed; continuing')
+            return subprocess.call([str(venv / 'bin' / 'python'), str(Path(__file__).resolve()), '--game-files', str(game)] + (['--cache', str(cache)] if a.cache else []), env=dict(os.environ, CCR_PREPARE_VENV='1'))
+        say('Pillow is missing. Enable "Download Python and Pillow if needed" (setup then installs Pillow into a private environment; needs python3-venv and internet), or install your distribution package (python3-pil / python-pillow), then run setup again.'); return 1
     lock = open(cache / 'prepare.lock', 'w')
     try:
         import fcntl

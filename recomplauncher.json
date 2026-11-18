@@ -106,11 +106,11 @@
       {
         "id": "download_python",
         "label": "Download Python and Pillow if needed",
-        "note": "Setup uses these to extract assets from your own copies.",
+        "note": "Setup uses these to extract assets from your own copies. On Linux and macOS it installs Pillow into a private environment (needs python3-venv and internet).",
         "args": [
           "--download-python"
         ],
-        "default": false
+        "default": true
       }
     ],
     "version": "2"
