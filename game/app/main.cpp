@@ -59,6 +59,8 @@ static const int GW = 1024, GH = 768, OX = 184, OY = 32;
 struct FieldLayout {
     float left = OX, top = OY, cell = CELL;
     float wallMagnification = 1.0f;
+    SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
+    float cameraDistance = 218.0f;
 
     float x(float cells) const { return left + cells * cell; }
     float y(float cells) const { return top + cells * cell; }
@@ -242,7 +244,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcModeSelect, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcModeSelect, dcChallengeSelect, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -316,6 +318,7 @@ struct App {
         dlogoOk = loadSheet(ret + "dlogo", dlogo);
         dpressOk = loadSheet(ret + "dpress", dpress);
         loadSheet(ret + "dc_mode_select", dcModeSelect);
+        loadSheet(ret + "dc_challenge_select", dcChallengeSelect);
         loadSheet(ret + "dc_arrows", dcArrows);
         loadSheet(ret + "dc_puzzle_start", dcPuzzleStart);
         loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
@@ -506,13 +509,13 @@ struct App {
     }
     void walls3d(const Stage& st, int wallColor, FieldLayout field) {
         const Model3D* wallM = models3d.find("wall"); if (!wallM) return;
-        const float k = field.cell / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor)); const SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
+        const float k = field.cell / 15.0f; const int mat = 35 + std::max(0, std::min(2, wallColor));
         // The game submits the pieces in this order (top row of horizontal pieces, then that row's vertical pieces, then the next row) and they share one depth buffer: render them together.
         std::vector<ModelPack::SoftTri> all;
         for (int r = 0; r <= kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.appendDcPiece(*wallM, mat, {field.x(c + 0.5f), field.y(r)}, camera, k, 0.0f, all);
+            for (int c = 0; c < kCols; ++c) if (st.hw[r * kCols + c] || r == 0 || r == kRows) models3d.appendDcPiece(*wallM, mat, {field.x(c + 0.5f), field.y(r)}, field.camera, k, 0.0f, all, field.cameraDistance);
             if (r == kRows) break;
-            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.appendDcPiece(*wallM, mat, {field.x(c), field.y(r + 0.5f)}, camera, k, -90.0f, all);
+            for (int c = 0; c <= kCols; ++c) if (st.vw[r * (kCols + 1) + c] || c == 0 || c == kCols) models3d.appendDcPiece(*wallM, mat, {field.x(c), field.y(r + 0.5f)}, field.camera, k, -90.0f, all, field.cameraDistance);
         }
         models3d.softRender(ren, all);
     }
@@ -520,7 +523,6 @@ struct App {
         const bool three = board3d(floorColor, wallColor, field);
         const Model3D* hole = three ? models3d.find("hole_out") : nullptr;
         const Model3D* generator = three ? models3d.find("hole_in") : nullptr;
-        const SDL_FPoint camera{GW / 2.0f, GH / 2.0f};
         const float pixelsPerUnit = field.cell / 15.0f;
         std::vector<ModelPack::SoftTri> pad;
         static const int ring[9] = {0x1b, 0x1c, 0x1d, 0x22, 0x1a, 0x1e, 0x21, 0x20, 0x1f};
@@ -530,7 +532,7 @@ struct App {
             const Model3D* mesh = t == T_Hole ? hole : isGenerator ? generator : nullptr;
             if (mesh) {
                 pad.clear();
-                models3d.appendDcPiece(*mesh, -1, {ax, ay}, camera, pixelsPerUnit, 0.0f, pad);
+                models3d.appendDcPiece(*mesh, -1, {ax, ay}, field.camera, pixelsPerUnit, 0.0f, pad, field.cameraDistance);
                 models3d.softRender(ren, pad);
                 continue;
             }
@@ -2140,7 +2142,7 @@ struct DcModeSelect : Screen {
     static constexpr int labelY[kCount] = {84, 128, 168, 208, 248, 288, 328, 368, 417};
     static constexpr int descriptions[kCount] = {0, 1, 2, 3, 4, 5, 6, 8, 7};
     static constexpr const char* destinations[kCount] = {
-        "HELP", "BATTLE", "TEAM_BATTLE", "CHALLENGE", "STAGES", nullptr, nullptr, nullptr, "OPTIONS"
+        "HELP", "BATTLE", "TEAM_BATTLE", "CHALLENGE_SELECT", "STAGES", nullptr, nullptr, nullptr, "OPTIONS"
     };
     int selected = 1;
     unsigned frame = 0;
@@ -2713,13 +2715,13 @@ struct PuzzleMode : Screen {
     }
 };
 
-// ---------------------------------------------------------------- stage select (functional; the original's layout/art is not reproduced yet: docs/known_gaps.md)
 // ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
 struct ChallengeMode : Screen {
     Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
     // Dreamcast layout (Flycast Challenge A1): the same measured floor plane as Battle and Puzzle, and the Battle task's left column (strip, clock, nine-rocket time gauge).
     bool paused = false;   // P key (the original's START) or CCR_PAUSE_TICK in headless tests
+    bool fromStageSelect = false;
     bool dcLayout(App& a) { return a.useModels3d() && a.useDcBattleHud(); }
     FieldLayout pf(App& a) { return dcLayout(a) ? dcBattleField : FieldLayout{}; }
     // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
@@ -2746,8 +2748,8 @@ struct ChallengeMode : Screen {
         if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN) { aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, pf(a)); mouseCursor = true; }
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             if (phase() == ChallengeGame::Intro) skipIntro();                                   // flag 1: a tap skips the intro
-            else if (game.phase == ChallengeGame::Failure) { begin(cur); a.playSfx(2); }              // flag 8: restart the stage
-            else if (game.phase == ChallengeGame::Result) nextStageRequested = true;
+            else if (phase() == ChallengeGame::Failure) { begin(cur); a.playSfx(2); }                   // flag 8: restart the stage
+            else if (phase() == ChallengeGame::Result) nextStageRequested = true;
             else if (!supportedNow()) back = true;
             else place(a, lastDir);
         }
@@ -2755,10 +2757,10 @@ struct ChallengeMode : Screen {
             const SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_p && supportedNow() && phase() == ChallengeGame::Play) { paused = !paused; return; }
             if (paused) return;
-            if (k == SDLK_ESCAPE) { back = true; return; }                                             // flag 2: quit
+            if (k == SDLK_ESCAPE) { if (fromStageSelect) a.nextStage = cur; back = true; return; }      // flag 2: quit
             if (phase() == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) skipIntro();
-            else if (game.phase == ChallengeGame::Failure && (k == SDLK_RETURN || k == SDLK_r)) { begin(cur); a.playSfx(2); }
-            else if (game.phase == ChallengeGame::Result && (k == SDLK_RETURN || k == SDLK_SPACE)) nextStageRequested = true;
+            else if (phase() == ChallengeGame::Failure && (k == SDLK_RETURN || k == SDLK_r)) { begin(cur); a.playSfx(2); }
+            else if (phase() == ChallengeGame::Result && (k == SDLK_RETURN || k == SDLK_SPACE)) nextStageRequested = true;
             else if (arrowKey(k) >= 0) { if (!a.headless) aim.update(a, 0, 0, pf(a)); place(a, arrowKey(k)); }
         }
     }
@@ -2777,7 +2779,7 @@ struct ChallengeMode : Screen {
         if (phase() == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
         if (phase() != before) { if (phase() == ChallengeGame::Success || phase() == ChallengeGame::Result) a.playSfx(0x15); else if (phase() == ChallengeGame::Failure) { a.playSfx(0x1b); char lb[200]; snprintf(lb, sizeof lb, "challenge stage %d: failed (%s)", cur + 1, (battle ? bgame.failReason : game.failReason) ? (battle ? bgame.failReason : game.failReason) : ""); a.log.write(1, lb); } }
     }
-    const char* next() override { if (!back) return nullptr; back = false; return "MENU"; }
+    const char* next() override { if (!back) return nullptr; back = false; return fromStageSelect ? "CHALLENGE_SELECT" : "MENU"; }
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255); SDL_RenderClear(a.ren);
@@ -2821,6 +2823,140 @@ struct ChallengeMode : Screen {
             return;
         }
         if (!dc || (ph != ChallengeGame::Intro && ph != ChallengeGame::Countdown)) a.text(line, dc ? 210 : 24, dc ? 660 : 14, 30);   // the real Dreamcast Challenge screen shows no text line; the port keeps one for score and results
+    }
+};
+
+struct ChallengeSelectMode : Screen {
+    enum SheetFrame { Background, Header, TimePanel, Bubble, Labels, Capsule, SelectedCapsule,
+                      Check, Description, Digit = Description + 6, FrameCount = Digit + 10 };
+    static constexpr int kStages = 25;
+    static constexpr int kFinal = 24;
+    static constexpr uint32_t kRegularClearMask = (1u << kFinal) - 1u;
+    static constexpr float kPreviewCell = (612.695923f - 369.345978f) / 12.0f;
+    // Floor packet at 0x253e10 in Challenge Select frame 2100. The world
+    // origin lies 72 units right and 85.5 units below the floor's corner.
+    static constexpr FieldLayout preview{369.345978f, 248.111664f, kPreviewCell, 1.0f,
+        {369.345978f + 72.0f * kPreviewCell / 15.0f, 248.111664f + 85.5f * kPreviewCell / 15.0f}, 410.0f};
+    Stages stages;
+    ChallengeMode::Save progress;
+    int selected = 0;
+    const char* destination = nullptr;
+
+    static bool available(App& a) {
+        return a.dcChallengeSelect.tex && a.dcChallengeSelect.fr.size() == FrameCount && a.useModels3d();
+    }
+    bool finalUnlocked() const { return (progress.mask & kRegularClearMask) == kRegularClearMask; }
+    bool load(App& a, int stage) {
+        if (!loadStages((a.root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.size() < kStages)
+            return false;
+        progress = ChallengeMode::loadSave(a.saveDir);
+        selected = std::clamp(stage, 0, finalUnlocked() ? kFinal : kFinal - 1);
+        return true;
+    }
+    void choose(App& a, int stage) {
+        if (selected != stage) a.playSfx(0);
+        selected = stage;
+    }
+    void move(App& a, int delta) {
+        const int count = finalUnlocked() ? kStages : kFinal;
+        const int target = (selected + delta + kStages) % kStages;
+        choose(a, target >= count ? (delta > 0 ? 0 : count - 1) : target);
+    }
+    void confirm(App& a) {
+        a.nextStage = selected;
+        destination = "CHALLENGE_FROM_SELECT";
+        a.playSfx(2);
+    }
+    void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_KEYDOWN) {
+            switch (e.key.keysym.sym) {
+            case SDLK_LEFT: move(a, -1); break;
+            case SDLK_RIGHT: move(a, 1); break;
+            case SDLK_UP: move(a, -5); break;
+            case SDLK_DOWN: move(a, 5); break;
+            case SDLK_RETURN: case SDLK_SPACE: confirm(a); break;
+            case SDLK_ESCAPE: destination = "MENU_CHALLENGE"; break;
+            }
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+            switch (e.cbutton.button) {
+            case SDL_CONTROLLER_BUTTON_DPAD_LEFT: move(a, -1); break;
+            case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: move(a, 1); break;
+            case SDL_CONTROLLER_BUTTON_DPAD_UP: move(a, -5); break;
+            case SDL_CONTROLLER_BUTTON_DPAD_DOWN: move(a, 5); break;
+            case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_START: confirm(a); break;
+            case SDL_CONTROLLER_BUTTON_B: destination = "MENU_CHALLENGE"; break;
+            }
+        } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_RenderSetLogicalSize(a.ren, 640, 480);
+            SDL_RenderSetViewport(a.ren, nullptr);
+            float x, y;
+            SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+            if (x >= 240 && x < 344 && y >= 406 && y < 448) destination = "MENU_CHALLENGE";
+            for (int i = 0; i < kStages; ++i) {
+                if (x < capsuleX(i) || x >= capsuleX(i) + 44 || y < capsuleY(i) || y >= capsuleY(i) + 28) continue;
+                if (i == kFinal && !finalUnlocked()) { a.playSfx(0x13); break; }
+                if (selected == i) confirm(a);
+                else choose(a, i);
+                break;
+            }
+        }
+    }
+    const char* next() override { return std::exchange(destination, nullptr); }
+    static int capsuleX(int i) { return 36 + (i % 5) * 54; }
+    static int capsuleY(int i) { return 115 + (i / 5) * 34; }
+    void image(App& a, int id, int x, int y) const {
+        const SDL_Rect& src = a.dcChallengeSelect.fr[id];
+        const SDL_Rect dst{x, y, src.w, src.h};
+        SDL_RenderCopy(a.ren, a.dcChallengeSelect.tex, &src, &dst);
+    }
+    void clock(App& a, uint64_t seconds, int y) const {
+        const int minutes = static_cast<int>(std::min<uint64_t>(seconds / 60, 99));
+        const int remainder = static_cast<int>(seconds % 60);
+        const int digits[] = {minutes / 10, minutes % 10, remainder / 10, remainder % 10};
+        static constexpr int x[] = {197, 221, 269, 293};
+        SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 165, 165, 165);
+        for (int i = 0; i < 4; ++i) image(a, Digit + digits[i], x[i], y);
+        SDL_SetTextureColorMod(a.dcChallengeSelect.tex, 255, 255, 255);
+        SDL_SetRenderDrawColor(a.ren, 165, 165, 165, 255);
+        const SDL_Rect dots[] = {{252, y + 4, 2, 4}, {252, y + 14, 2, 4}};
+        SDL_RenderFillRects(a.ren, dots, 2);
+    }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, 640, 480);
+        SDL_RenderSetViewport(a.ren, nullptr);
+        SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255);
+        SDL_RenderClear(a.ren);
+        image(a, Background, 0, 0);
+        image(a, Header, 16, 32);
+        image(a, TimePanel, 16, 300);
+        image(a, Bubble, 356, 168);
+        static constexpr int titleOfType[] = {1, 2, 0, 3, 4};
+        image(a, Description + (selected == kFinal ? 5 : titleOfType[selected % 5]), 374, 174);
+        for (int i = 0; i < kStages; ++i)
+            image(a, i == selected ? SelectedCapsule : Capsule, capsuleX(i), capsuleY(i));
+        image(a, Labels, 32, 112);
+        for (int i = 0; i < kStages; ++i)
+            if (progress.mask & (1u << i)) image(a, Check, capsuleX(i) + 26, capsuleY(i));
+        uint64_t total = 0;
+        for (uint32_t seconds : progress.best) total += seconds;
+        clock(a, progress.best[selected], 309);
+        clock(a, total, 357);
+        SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255);
+        const SDL_Rect aperture{364, 244, 252, 187};
+        SDL_RenderFillRect(a.ren, &aperture);
+        const Stage& stage = stages.list[selected].st;
+        a.board(stage, 1, 1, preview);
+        const Model3D* lids[] = {a.models3d.find("lid1"), a.models3d.find("lid2"),
+                                 a.models3d.find("lid3"), a.models3d.find("lid4")};
+        for (int row = 0; row < kRows; ++row) for (int col = 0; col < kCols; ++col) {
+            const int tile = stage.tiles[row * kCols + col];
+            if (tile < 1 || tile > 4 || !lids[tile - 1]) continue;
+            const bool team = selected == kFinal || selected % 5 == 4;
+            const Model3D* other = !ChallengeBattleGame::supports(selected) ? lids[2] :
+                                   team ? lids[(tile - 1) ^ 2] : nullptr;
+            a.models3d.drawDcRocketDome(a.ren, *lids[tile - 1], {preview.x(col + 0.5f), preview.y(row + 0.5f)},
+                                       preview.camera, preview.cell / 15.0f, 1.0f, preview.cameraDistance, other);
+        }
     }
 };
 
@@ -3474,7 +3610,19 @@ int main(int argc, char** argv) {
         if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
         else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
-        else if (name == "CHALLENGE" || name == "challenge") { auto m = std::make_unique<ChallengeMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load challenge stages\n"); return false; } app.nextStage = -1; mode = std::move(m); }
+        else if (name == "CHALLENGE_SELECT" && ChallengeSelectMode::available(app)) {
+            auto m = std::make_unique<ChallengeSelectMode>();
+            if (!m->load(app, app.nextStage >= 0 ? app.nextStage : 0)) { puts("cannot load challenge stages"); return false; }
+            app.nextStage = -1;
+            mode = std::move(m);
+        }
+        else if (name == "CHALLENGE" || name == "challenge" || name == "CHALLENGE_FROM_SELECT" || name == "CHALLENGE_SELECT") {
+            auto m = std::make_unique<ChallengeMode>();
+            if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { puts("cannot load challenge stages"); return false; }
+            m->fromStageSelect = name == "CHALLENGE_FROM_SELECT";
+            app.nextStage = -1;
+            mode = std::move(m);
+        }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
         else if (name == "BATTLE" || name == "battle" || name == "BATTLE_MATCH" || name == "TEAM_BATTLE") {
@@ -3507,7 +3655,11 @@ int main(int argc, char** argv) {
         else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
         else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
-        else if (DcModeSelect::available(app)) mode = std::make_unique<DcModeSelect>();
+        else if (DcModeSelect::available(app)) {
+            auto m = std::make_unique<DcModeSelect>();
+            if (name == "MENU_CHALLENGE") m->selected = 3;
+            mode = std::move(m);
+        }
         else mode = std::make_unique<MenuMode>();
         return true;
     };

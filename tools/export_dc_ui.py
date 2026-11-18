@@ -96,6 +96,38 @@ def export_mode_select(prs_png, png, out):
         background.paste(tile.transpose(Image.Transpose.TRANSPOSE), (512, i * 128))
     export_atlas(out, 'dc_mode_select', [background, *tiles[4:]])
 
+def export_challenge_select(prs_png, png, out):
+    if not png:
+        return
+    names = ('stageselecttitle9', 'stargepanel0', 'puzzlefukidasi', 'challengenumber',
+             'bluedaen', 'orangedaen', 'check')
+    names += tuple(f'challengesetumei{i}' for i in range(6))
+    parts = [os.path.join(prs_png, 'CHALLENGE_' + name + '.png') for name in names]
+    backs = [os.path.join(prs_png, f'CHALLENGE_selectback{i}.png') for i in range(8)]
+    title = os.path.join(png, 'ENGLISH__CHALLENGE.png')
+    digits = [os.path.join(prs_png, f'FOURADV_nums{i:02}.png') for i in range(10)]
+    if not all(os.path.isfile(path) for path in (title, *parts, *backs, *digits)):
+        return
+
+    def read(path):
+        return Image.open(path).convert('RGBA')
+
+    background = Image.new('RGBA', (640, 512))
+    for part, spot in enumerate(((0, 0), (512, 0), (512, 128), (512, 256), (512, 384),
+                                (256, 0), (0, 256), (256, 256))):
+        background.paste(read(backs[part]).transpose(Image.Transpose.TRANSPOSE), spot)
+    header = Image.new('RGBA', (640, 64))
+    tiles = [read(part) for part in parts]
+    header.paste(read(title), (0, 0))
+    header.paste(tiles[0], (512, 0))
+    tiles[3] = tiles[3].transpose(Image.Transpose.TRANSPOSE)
+    clock = []
+    for digit in digits:
+        # White number on an opaque black field. Exclude the black padding.
+        ink = read(digit).convert('L').transpose(Image.Transpose.TRANSPOSE)
+        clock.append(ink.crop(ink.getbbox()).resize((16, 20), Image.Resampling.BILINEAR).convert('RGBA'))
+    export_atlas(out, 'dc_challenge_select', [background, header, *tiles[1:], *clock])
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -185,27 +217,7 @@ def main(prs_png, out, png=None):
         for i, m in enumerate(marks):
             atlas.paste(Image.open(m).convert('RGBA').transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT), (64 * i, 0))
         sheet('dc_pause_marks', atlas)
-    # The Stage Challenge stage select (Flycast frame 2100, docs/dreamcast_models.md): one 640 x 1024 atlas, regions fixed in main.cpp (ChallengeSelectMode).
-    # (0,0) the eight background pieces assembled (each stored rotated: ROTATE_270 then a horizontal flip; four 256 x 256 at x 0/256 and y 0/256, four 128 x 128 at x 512),
-    # (0,512) title strip 512 x 64 and (512,512) its 128 x 64 end, (0,576) the time panel 512 x 128, (0,704) blue and (64,704) orange capsule, (128,704) the check mark,
-    # (256,704) the 256 x 256 label sheet (A1..E5, End), (512,704+32i) the six 256 x 32 stage type titles, (0,960) the bubble frame 512 x 44.
-    def cs(n): return os.path.join(prs_png, n)
-    parts = [f'CHALLENGE_selectback{i}.png' for i in range(8)] + ['CHALLENGE_stageselecttitle8.png', 'CHALLENGE_stageselecttitle9.png', 'CHALLENGE_stargepanel0.png',
-             'CHALLENGE_bluedaen.png', 'CHALLENGE_orangedaen.png', 'CHALLENGE_check.png', 'CHALLENGE_challengenumber.png', 'CHALLENGE_puzzlefukidasi.png'] +             [f'CHALLENGE_challengesetumei{i}.png' for i in range(6)]
-    if all(os.path.exists(cs(n)) for n in parts):
-        T = Image.Transpose
-        rotc = lambda im: im.transpose(T.ROTATE_270).transpose(T.FLIP_LEFT_RIGHT)
-        L = lambda n: Image.open(cs(n)).convert('RGBA')
-        atlas = Image.new('RGBA', (640, 1024))
-        for n, pos in zip((0, 5, 6, 7), ((0, 0), (256, 0), (0, 256), (256, 256))): atlas.paste(rotc(L(f'CHALLENGE_selectback{n}.png')), pos)
-        for n, y in zip((1, 2, 3, 4), (0, 128, 256, 384)): atlas.paste(rotc(L(f'CHALLENGE_selectback{n}.png')), (512, y))
-        atlas.paste(L('CHALLENGE_stageselecttitle8.png'), (0, 512)); atlas.paste(L('CHALLENGE_stageselecttitle9.png'), (512, 512))
-        atlas.paste(L('CHALLENGE_stargepanel0.png'), (0, 576))
-        atlas.paste(L('CHALLENGE_bluedaen.png'), (0, 704)); atlas.paste(L('CHALLENGE_orangedaen.png'), (64, 704)); atlas.paste(L('CHALLENGE_check.png'), (128, 704))
-        atlas.paste(rotc(L('CHALLENGE_challengenumber.png')), (256, 704))
-        for i in range(6): atlas.paste(L(f'CHALLENGE_challengesetumei{i}.png'), (512, 704 + 32 * i))
-        atlas.paste(L('CHALLENGE_puzzlefukidasi.png').crop((0, 0, 512, 44)), (0, 960))
-        sheet('dc_challenge_select', atlas)
+    export_challenge_select(prs_png, png, out)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.

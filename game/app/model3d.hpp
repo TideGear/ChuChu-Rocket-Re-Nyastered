@@ -86,19 +86,21 @@ public:
     // The Battle draw task builds a dome from two copies of the lid,
     // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
     void drawDcRocketDome(SDL_Renderer* ren, const Model3D& lid, SDL_FPoint floorPosition,
-                          SDL_FPoint cameraCenter, float pixelsPerUnit, float pulse) const {
+                          SDL_FPoint cameraCenter, float pixelsPerUnit, float pulse,
+                          float cameraDistance = 218.0f, const Model3D* oppositeLid = nullptr) const {
         const float scale = pixelsPerUnit * pulse;
         std::vector<SoftTri> projected;
         projected.reserve(2 * lid.tris.size());
         for (float side : {1.0f, -1.0f}) {
-            for (const auto& tri : lid.tris) {
-                if (tri.mat >= lid.matTex.size() || lid.matTex[tri.mat] >= cpuPixels.size()) continue;
+            const Model3D& half = side < 0.0f && oppositeLid ? *oppositeLid : lid;
+            for (const auto& tri : half.tris) {
+                if (tri.mat >= half.matTex.size() || half.matTex[tri.mat] >= cpuPixels.size()) continue;
                 SoftTri out{};
-                out.tex = lid.matTex[tri.mat];
+                out.tex = half.matTex[tri.mat];
                 for (int i = 0; i < 3; ++i) {
                     const auto& v = tri.v[i];
-                    const float depth = 218.0f - v.y * pulse;
-                    const float perspective = 218.0f / depth;
+                    const float depth = cameraDistance - v.y * pulse;
+                    const float perspective = cameraDistance / depth;
                     const float dx = floorPosition.x - cameraCenter.x + side * v.z * scale;
                     const float dy = floorPosition.y - cameraCenter.y - side * v.x * scale;
                     const float light = 0.3f + std::max(0.0f, 0.5f * v.ny + 0.25f * side * v.nx);
@@ -189,7 +191,8 @@ public:
     // Lighting per vertex: 0.3 + max(0, 0.5 * ny - 0.25 * nz) of the turned normal (exact to four decimals on the real vertices), multiplied with the texture. `material` >= 0 forces one
     // material. The pack's textures are stored transposed, so the stream's (u, v) is sampled as (v, u).
     void appendDcPiece(const Model3D& piece, int material, SDL_FPoint planePos, SDL_FPoint camera,
-                       float pixelsPerUnit, float yawDeg, std::vector<SoftTri>& out) const {
+                       float pixelsPerUnit, float yawDeg, std::vector<SoftTri>& out,
+                       float cameraDistance) const {
         if (piece.tris.empty()) return;
         const float a = yawDeg * 0.017453292f, c = cosf(a), s = sinf(a);
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
@@ -213,7 +216,7 @@ public:
             for (int k = 1; k + 1 < n; ++k) {
                 SoftTri o{}; o.tex = tex; o.translucent = false; const P* q[3] = {&poly[0], &poly[k], &poly[k + 1]};
                 for (int i = 0; i < 3; ++i) {
-                    const float depth = 218.0f - q[i]->y, scale = pixelsPerUnit * 218.0f / depth;
+                    const float depth = cameraDistance - q[i]->y, scale = pixelsPerUnit * cameraDistance / depth;
                     o.p[i] = {camera.x + (ox + q[i]->x) * scale, camera.y + (oz + q[i]->z) * scale}; o.iw[i] = 1.0f / depth; o.u[i] = q[i]->u; o.v[i] = q[i]->v; o.light[i] = q[i]->light;
                 }
                 out.push_back(o);
