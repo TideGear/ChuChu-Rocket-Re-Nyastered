@@ -223,7 +223,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel;
+    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcCursors, dcCursorTrail;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -299,6 +299,8 @@ struct App {
         loadSheet(ret + "dc_arrows", dcArrows);
         loadSheet(ret + "dc_puzzle_start", dcPuzzleStart);
         loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
+        loadSheet(ret + "dc_cursors", dcCursors);
+        loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
         padOk = (dlogoOk || imgSheet(7)) && loadSheet(ret + "bg0877", pbg) &&
                 loadSheet(ret + "pprompt", pprompt) && loadSheet(ret + "procket", procket) &&
                 loadSheet(ret + "pdeco", pdeco) && loadSheet(ret + "pbtn", pbtn) && loadSheet(ret + "bg0879", pmbg);
@@ -783,14 +785,27 @@ struct App {
             for (int k = 0; k <= wp; k++) drawImage(0x5d, 4 + t, tx + layF(0x30c + wp * 0x14 + t * 0x64 + 4 * k), iy + layF(0x308), 0, 1.0f, k >= lit ? 0x22 : 0xff);
             if ((reach >> t) & 1) drawImage(0x91, 0, tx + (t == 0 ? layF(0x2fc) : layF(0x300)), iy + layF(0x304), 0, 1.0f, 255); } }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
+    bool useDcCursors() {
+        return dcCursors.tex && dcCursors.fr.size() == 4 && (!cur.tex || useModels3d());
+    }
+    void dcCursorAt(Sheet& sheet, float x, float y, int player, float size) {
+        const SDL_FRect dst{x - size / 2, y - size / 2, size, size};
+        SDL_RenderCopyF(ren, sheet.tex, &sheet.fr[player], &dst);
+    }
     void cursorAt(float x, float y, int player, int ticks, bool bracket = false) {
         int ang = (player << 14) + 0x1000 * ticks;
         float phase = (bracket ? 2.0f : 1.0f) * ang * 6.283185307f / 65536.0f;
-        blit(cur, bracket ? 4 : player & 3, x, y,
-             1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase));
+        const float scale = 1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase);
+        if (!bracket && useDcCursors()) dcCursorAt(dcCursors, x, y, player, CELL * scale);
+        else blit(cur, bracket ? 4 : player & 3, x, y, scale);
     }
     void cursor(int cx, int cy, int player, int ticks, bool bracket = false) {
         cursorAt(OX + (cx + 0.5f) * CELL, OY + (cy + 0.5f) * CELL, player, ticks, bracket);
+    }
+    void cursorGhost(float x, float y, int player, Uint8 opacity) {
+        SDL_SetTextureAlphaMod(dcCursorTrail.tex, opacity);
+        dcCursorAt(dcCursorTrail, x, y, player, CELL);
+        SDL_SetTextureAlphaMod(dcCursorTrail.tex, 255);
     }
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
@@ -2007,9 +2022,46 @@ struct MouseAim {
     int cellY() const { return static_cast<int>((y - OY) / CELL); }
 };
 
+struct CursorTrail {
+    static constexpr int lifetime = 24;
+    struct Sample {
+        float x = 0, y = 0;
+        bool visible = false;
+    };
+    std::array<Sample, lifetime> history{};
+    Sample previous;
+    int next = 0;
+    bool wasMouse = false;
+
+    // One ghost at the old position per moving tick (Dreamcast 0x8c0145ee).
+    void tick(float x, float y, bool visible, bool mouse) {
+        history[next] = previous;
+        history[next].visible = previous.visible && visible && mouse == wasMouse &&
+                                (x != previous.x || y != previous.y);
+        next = (next + 1) % lifetime;
+        previous = {x, y, visible};
+        wasMouse = mouse;
+    }
+
+    void draw(App& app, int player) const {
+        if (!app.dcCursorTrail.tex || app.dcCursorTrail.fr.size() != 4 || !app.useDcCursors()) return;
+        // The original submits the oldest task first and truncates the fade to a byte.
+        for (int i = 0; i < lifetime; ++i) {
+            const auto& sample = history[(next + i) % lifetime];
+            if (sample.visible) app.cursorGhost(sample.x, sample.y, player, (i + 1) * 64 / lifetime);
+        }
+    }
+};
+
 struct PadAim {
     float x, y, previousX = x, previousY = y;
     int targetX = -1, targetY = -1;
+    float logicalX(float fraction = 1.0f) const {
+        return OX + (previousX + (x - previousX) * fraction) * (CELL / kCell);
+    }
+    float logicalY(float fraction = 1.0f) const {
+        return OY + (previousY + (y - previousY) * fraction) * (CELL / kCell);
+    }
 
     // Dreamcast 1ST_READ.BIN at 0x8c014220.
     void tick(SDL_GameController* pad) {
@@ -2046,8 +2098,7 @@ struct PadAim {
     }
 
     void draw(App& app, int player, int ticks, float alpha) const {
-        app.cursorAt(OX + (previousX + (x - previousX) * alpha) * (CELL / kCell),
-                     OY + (previousY + (y - previousY) * alpha) * (CELL / kCell), player, ticks);
+        app.cursorAt(logicalX(alpha), logicalY(alpha), player, ticks);
     }
 };
 
@@ -2055,6 +2106,7 @@ struct PadAim {
 struct PuzzleMode : Screen {
     static constexpr int kFailureHoldFrames = 120;
     MouseAim aim;
+    CursorTrail cursorTrail;
     bool mouseCursor = false;
     int failureFrames = 0;
     PadAim padAim{82.5f, 67.5f};
@@ -2066,6 +2118,7 @@ struct PuzzleMode : Screen {
     bool dash = false; bool paused = false, pconf = false;   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
+        cursorTrail = {};
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
@@ -2176,6 +2229,8 @@ struct PuzzleMode : Screen {
             curX = static_cast<int>(padAim.x / kCell);
             curY = static_cast<int>(padAim.y / kCell);
         }
+        cursorTrail.tick(mouseCursor ? aim.x : padAim.logicalX(), mouseCursor ? aim.y : padAim.logicalY(),
+                         state == 0 && (!mouseCursor || aim.inside), mouseCursor);
         for (size_t i = 0; i < sim.ents.size() && i < prev.size(); i++) prev[i] = {sim.ents[i].x, sim.ents[i].z};
         if (state == 3) {
             if (failureFrames == 0) a.playSfx(27);
@@ -2236,6 +2291,7 @@ struct PuzzleMode : Screen {
         if (showCursor && (sim.coll[aimY][aimX] & 0xF00)) a.cursor(aimX, aimY, 0, cticks, true);
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f);
         if (showCursor) {
+            cursorTrail.draw(a, 0);
             if (mouseCursor) a.cursorAt(aim.x, aim.y, 0, cticks);
             else padAim.draw(a, 0, cticks, paused ? 1.0f : alpha);
         }
@@ -2475,6 +2531,7 @@ struct BattleMode : Screen {
     MouseAim aim;
     bool mouseCursor = false;
     PadAim padAim[4]{{37.5f, 37.5f}, {142.5f, 37.5f}, {37.5f, 97.5f}, {142.5f, 97.5f}};
+    std::array<CursorTrail, 4> cursorTrails;
     Stages stages; int cur = 0; uint32_t seed = 1; int lv[4] = {-1, 3, 3, 3}; BattleGame game; std::vector<std::pair<float, float>> prev; bool paused = false, back = false;
     // Mouse and keyboard control player 1. Controller face buttons place arrows.
     // FourBattleLoop (HD 1.0 0x1c2b8) mode 1: a 120-tick intro (the round panel from tick 1 for 75 ticks, the Round START banner at tick 90 for 45 ticks), then play starts
@@ -2549,7 +2606,7 @@ struct BattleMode : Screen {
         game.localPlayer = 0;
         restart(); return true;
     }
-    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); game.freezeOnRoll = game.cpuRunsOnFreeze = true; game.start(stages.list[cur].st, seed); /* FourBattleLoop masks the task server by RL_GetRoulette4Status (docs/roadmap.md, 2026-11-16) */ prev.clear(); if (gApp) gApp->angs.clear(); }
+    void restart() { sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear(); mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear(); cursorTrails = {}; game.freezeOnRoll = game.cpuRunsOnFreeze = true; game.start(stages.list[cur].st, seed); /* FourBattleLoop masks the task server by RL_GetRoulette4Status (docs/roadmap.md, 2026-11-16) */ prev.clear(); if (gApp) gApp->angs.clear(); }
     // Original battle music (Android FUN_0003c56c / FUN_0003c534 / FUN_0003c828): while a roulette event runs the song depends on the outcome (table 0x63994: events 0..3 -> BGM ids 10, 9, 7, 8,
     // i.e. songs 6, 5, 3, 4); otherwise (and after the event) song 1 while more than 30 s are left (TI_CountDownBCDTimer > 0x2fff), song 2 in the last 30 s.
     int music() override { static const int evSong[4] = {6, 5, 3, 4}; int k = game.activeEventKind(); if (k >= 0 && k < 4) return evSong[k]; return game.clock > game.roundFrames - 60 * 30 ? 2 : 1; }
@@ -2629,6 +2686,11 @@ struct BattleMode : Screen {
         } else {
             for (auto& pointer : padAim) { pointer.previousX = pointer.x; pointer.previousY = pointer.y; }
         }
+        for (int p = 0; p < 4; ++p) {
+            const bool mouse = p == 0 && mouseCursor;
+            cursorTrails[p].tick(mouse ? aim.x : padAim[p].logicalX(), mouse ? aim.y : padAim[p].logicalY(),
+                                 lv[p] < 0 && (!mouse || aim.inside), mouse);
+        }
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
         if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
         gTime++;
@@ -2686,6 +2748,7 @@ struct BattleMode : Screen {
         if (intro > 0 && !game.over)
             a.drawBattleRankOverlay(game.teamMode, paused, intro + game.frame, game.score, ranks,
                                     wins, game.sim.rocketPos);
+        for (int p = 0; p < 4; ++p) if (lv[p] < 0) cursorTrails[p].draw(a, p);
         for (int p = 0; p < 4; ++p) {
             if (lv[p] >= 0) continue;
             if (p == 0 && mouseCursor) {

@@ -3,6 +3,8 @@
 Status words: **done** (implemented and checked, evidence named), **partial** (what exists and what is missing), **open** (nothing built). This is a working audit, not a completion claim.
 
 ## A. Presentation and UI
+- Dreamcast Battle HUD: **partial**. The live callback at `0x8c0272a0` in Flycast frame 3100 emits screen-space sprites for the scores, timer, rocket column and panels. The corresponding PowerVR quads are in the capture. The port still needs these layers, the name plates, background, and mode-specific states.
+- Dreamcast player cursor trails: **partial**. Flycast Battle frames 3124, 3130 and 3140 contain the trail tasks from `0x8c014100` and the textured quads from `0x8c01406a`. The port uses the disc textures and the original 24-tick fade in Battle and Puzzle. Full camera and layer parity, original Puzzle and Team captures, other inputs, and the separate placement ghost remain open.
 - Startup, main menu, Options (Sounds, Language, Credits, How to Play), Help: **partial** (iPad HD 1.0 layouts reproduced and diffed against the original for several screens; The Basics, Costumes, roulette wheel art, celebration rockets, phone/larger-device HUD layouts, tutorial highlights, split-screen are open; see roadmap "Phase A leftovers").
 - Settings page and controller remap: **done** (screenshot read; pad remap untested on hardware).
 - Pad prompts in the HUD: **open** (`padButtonLabel` exists).
@@ -28,13 +30,13 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Controller remap, quit combo: **done** (logic tested, no hardware run). The Windows Release tests also verify that malformed hold-time settings preserve the last valid value and oversized integers clamp to 600 ticks.
 - Wireless local play, online lockstep: **partial** (netplay core and 19,518-iteration loopback test; no screens, no phone pairing). The simulated network test detected a score divergence injected on peer 1 at tick 120 on all five boards. With the same four peers and 30% packet loss, the baseline finished without divergence.
 - 4K GPU measurement: **done for the hidden-window Battle renderer** (2D 8.1 ms/frame; 3D 4.20 ms at simulated 60 Hz and 4.54 ms at simulated 240 Hz, load-guarded CLEAN runs, `docs/verification.md`). Display presentation and frame pacing remain **open**.
-- Linux/macOS releases: v2026.11.18 carries CI-built `linux-x64` and `macos-arm64` archives (green builds and unit tests on GitHub runners). The x64 job previously waited for `macos-13`. The workflow now selects `macos-15-intel` and checks the macOS executable architecture before packaging. The new workflow still needs a hosted run. Local platform testing and launcher archive selection remain unverified.
+- Linux/macOS releases: v2026.11.20 has `linux-x64`, `macos-arm64` and `macos-x64` archives from the tag workflow. The Intel runner uses `macos-15-intel` and the workflow checks both macOS architectures before packaging. Local platform testing and launcher archive selection remain unverified.
 - Linux/macOS: **partial; a real user report (2026-11-17) showed v2026.11.17 could not extract on Linux (Windows-only `--prepare`); fixed in a3287c6, not yet confirmed on a real Linux PC**.
 - (older note) Linux/macOS: **partial** (main.cpp compiles for x86_64/aarch64 Linux and macOS with zig; `.github/workflows/build.yml`: Linux **built and unit-tested green on a GitHub runner** (no human run of the game on Linux); macOS job cancelled before starting (no runner provided), so macOS is unverified).
 - Android arm64 emulator test: **open**. Existing `battle_test`, `determinism_test` and `score_test` artifacts are AArch64 ELF64 executables with the Android dynamic linker. The SDK has no emulator image or configured virtual device. A fresh build of the settings and controller tests hit a permission error launching the NDK compiler.
 - WebAssembly PWA headless browser test: **open**. The PWA manifest and service worker now use the emitted `ccr.html` entry point. A Node worker test checked the cache entries against the local WebAssembly build and served the launch page, JavaScript, and WebAssembly with network fetch disabled. Browser installation and offline startup with user-provided assets remain unverified.
 ## G. Releases and docs
-- Versioned GitHub releases with ZIPs and notes: **done** for Windows (v2026.11.16, v2026.11.17); Linux/macOS **open**.
+- Versioned GitHub releases with notes: **done** for Windows x64, Linux x64, macOS arm64 and macOS x64 (downloads verified on v2026.11.20).
 - Portable mode, commented settings, rotating logs: **done** (userdata_test; headless app check).
 - Version matrix, asset provenance, README, unofficial-project statement: **partial** (README and distribution notes exist; matrix not regenerated for this audit).
 
