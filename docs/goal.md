@@ -8,6 +8,7 @@ Working rules
 - "Verified" means diffed against the original's own frame loop and tasks as the game runs them, not hand-driven pieces; say which was used. Record evidence and gaps in the roadmap; untested paths stay open.
 - Completeness: never assume a feature is absent or present. List every draw routine, callback, effect, trail, table and screen of each original in docs/audit.md as open until traced, matched and verified against a real Flycast frame or the original's loop; revisit whenever a gap is noticed. Test data must exercise the feature. Investigate unexplained differences.
 - Trace draw order, depth ties, clipping, overlays before editing scenes; verify headlessly without using the user's screen/audio. Phase order is a default; user priorities win. Commit verified changes without AI attribution, push, note next item. No placeholders.
+- Working style: chip away continuously. Each update gives only new findings (frame, address, measured error) and the next step. Never recap the unmet goal or open lists, and never say the goal cannot be finished this session; a stop-hook reminder is not a request for status.
 - Exactness: derive every number (UVs, axes, angles, scales, lights, colours, layouts) from the original code (Ghidra, tools/oracle) or the real Flycast stream, recording its address; never commit an eyeballed fit. Audit every mesh and variant (costume, pose, LOD).
 Phases
 A. Presentation and UI. Match startup, menus, The Basics, Options, pause, previews, locks, HUDs, results, roulette, character/rocket effects, cursor trails, fonts. Map draw IDs through the original device tables.
@@ -25,4 +26,4 @@ Documentation
 - Behavior and content: `modes.md`, `rules_arrows.md`, `rules_battle.md`, `rules_events.md`, `rules_movement.md`, `cpu_ai.md`, `roulette.md`, `gba_notes.md`, `stages.md`, `dlc.md`, `unlockables.md`.
 - Sources and distribution: `version_matrix.md`, `asset_quality.md`, `provenance.md`, `distribution.md`, `research_check.md`, `ChuChu Rocket Version Comparison (AI Deep Research).md`, and repository `README.md`.
 
-Track every requirement and research claim in the audit with evidence and verified, partial, open, or not testable status. Keep the version matrix and README current, and check them before release.
+Track every requirement and research claim in the audit with evidence and verified, partial, open, or not testable status.
