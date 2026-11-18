@@ -394,7 +394,17 @@ def main():
     puzzle = any(Path(assets, path).is_file() for path in
                  ('gba/gba_stages.bin', 'mobile_puzzles.bin', 'dreamcast_puzzles.bin'))
     battle = Path(assets, 'battle_stages.bin').is_file()
-    manifest['playable_modes'] = [mode for mode, present in (('Puzzle', puzzle), ('Battle', battle))
+    challenge = False
+    if battle:
+        stage_data = Path(assets, 'battle_stages.bin').read_bytes()
+        if len(stage_data) >= 4:
+            count = struct.unpack_from('<I', stage_data)[0]
+            if len(stage_data) == 4 + count * 381:
+                challenge_stages = {struct.unpack_from('<H', stage_data, 6 + i * 381)[0]
+                                    for i in range(count) if stage_data[4 + i * 381] == 3}
+                challenge = set(range(25)).issubset(challenge_stages)
+    manifest['playable_modes'] = [mode for mode, present in
+                                  (('Puzzle', puzzle), ('Battle', battle), ('Stage Challenge', challenge))
                                   if present and manifest['base_graphics_available']]
     with open(os.path.join(cache, 'manifest.json'), 'w') as f:
         json.dump(manifest, f, indent=1)

@@ -25,7 +25,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 ## E. Sound, animation, assets
 - Full inventory with version/address/asset ID/gates: **open** (pieces in roadmap and docs/*.md).
 - Challenge intro cards use the disc art, with A1 and B2 compared against Flycast. In-play, failure and result placeholders remain. Replace them with disc art and audit every mode’s remaining `a.text(...)` presentation.
-- Dreamcast sound is **partial**. Trace the original call sites and MANATEE.DRV for cue, pitch, volume, channel, priority, looping, fade and cancellation. Start with Challenge selection, countdown, goal, clear and fail.
+- Dreamcast sound is **partial**. Trace the original call sites and MANATEE.DRV for cue, pitch, volume, channel, priority, looping, fade and cancellation. The headless Flycast host records WAV and frame sample offsets. Start cue comparisons with Challenge selection, countdown, goal, clear and fail.
 - Dreamcast model inventory is **partial**. The [mesh inventory](dreamcast_meshes.md) and [captured poses](dreamcast_mesh_poses.md) track the observed families. Character clock rules, costumes, KapuKapu, the focus ring and unseen meshes remain open.
 ## F. Platforms, controls, play
 - 60 Hz fixed simulation: **done**; interpolated rendering **done**; mouse aim, WASD/arrows: **done**; four-player hotseat: **done**.
@@ -44,7 +44,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 
 ## Next work
 
-- Finish the Dreamcast presentation gaps above, beginning with Challenge intro and results. Keep capture and Ghidra details in the [handoff](HANDOFF.md).
+- Finish the Dreamcast presentation gaps above, beginning with exact Challenge clocks, alternate clear states and sound. Keep capture and Ghidra details in the [handoff](HANDOFF.md).
 - Resolve the remaining Challenge seed 3000 divergence, finish Puzzle Edit and in-app export, and verify unlocks, DLC skins and Dreamcast input formats.
 - Test native Linux/macOS, Android and PWA operation beyond builds and harnesses.
 
