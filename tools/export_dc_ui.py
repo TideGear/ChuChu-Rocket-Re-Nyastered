@@ -48,6 +48,9 @@ def export_battle_hud(prs_png, out):
     tiles += images[21:]
     # Team Battle's two bottom panels (Flycast Team Battle frame): the blue and red one is the lower 96 rows of the score sheet, the orange and green one the upper 97 rows of the timer sheet.
     tiles += [scores.crop((0, 160, 256, 256)), timer_panel.crop((0, 0, 256, 97))]
+    export_atlas(out, 'dc_battle_hud', tiles)
+
+def export_atlas(out, name, tiles):
     width = max(tile.width for tile in tiles)
     positions = []
     x = y = row_height = 0
@@ -61,18 +64,41 @@ def export_battle_hud(prs_png, out):
         row_height = max(row_height, tile.height)
     height = y + row_height
     atlas = Image.new('RGBA', (width, height))
-    with open(os.path.join(out, 'dc_battle_hud.frames.bin'), 'wb') as f:
+    with open(os.path.join(out, name + '.frames.bin'), 'wb') as f:
         f.write(struct.pack('<I', len(tiles)))
         for tile, (x, y) in zip(tiles, positions):
             atlas.paste(tile, (x, y))
             f.write(struct.pack('<9f', x / width, y / height, (x + tile.width) / width,
                                 (y + tile.height) / height, 0, 0, 0, 0, 0))
-    with open(os.path.join(out, 'dc_battle_hud.tex.bin'), 'wb') as f:
+    with open(os.path.join(out, name + '.tex.bin'), 'wb') as f:
         f.write(struct.pack('<2I', width, height))
         f.write(atlas.tobytes())
 
+def export_mode_select(prs_png, png, out):
+    if not png:
+        return
+    back = os.path.join(png, 'ENGLISH__MENU.png')
+    parts = [f'MENU_modeback{i}' for i in range(1, 5)]
+    parts += ['MENU_bluerocket2', 'MENU_yellowrocket2', 'MENU_modefukidasi', 'MENU_netsousa00',
+              'MENU_middleneko0', 'MENU_middleneko1']
+    parts += [f'MENU_selectmoji{i}' for i in range(9)]
+    parts += [f'MENU_fukidasimoji{i}' for i in range(9)]
+    parts += [f'ROCKET_EF_awa{i:02}' for i in range(1, 13)]
+    paths = [os.path.join(prs_png, part + '.png') for part in parts]
+    if not all(os.path.isfile(path) for path in (back, *paths)):
+        return
+
+    tiles = [Image.open(path).convert('RGBA') for path in paths]
+    # Compose the five abutting background quads before scaling the menu.
+    background = Image.new('RGBA', (640, 512))
+    background.paste(Image.open(back).convert('RGBA').transpose(Image.Transpose.TRANSPOSE), (0, 0))
+    for i, tile in enumerate(tiles[:4]):
+        background.paste(tile.transpose(Image.Transpose.TRANSPOSE), (512, i * 128))
+    export_atlas(out, 'dc_mode_select', [background, *tiles[4:]])
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
+    export_mode_select(prs_png, png, out)
     for src, name, src_dir in (
         ('TITLE_newtitle0.png', 'dlogo', prs_png),
         ('ENGLISH__PRESSSTART.png', 'dpress', png),

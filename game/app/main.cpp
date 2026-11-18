@@ -242,7 +242,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcModeSelect, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -315,6 +315,7 @@ struct App {
         menuOk = loadSheet(ret + "a0134", mbg) && loadSheet(ret + "a0113", mbtn) && loadSheet(ret + "a0110", mdeco);
         dlogoOk = loadSheet(ret + "dlogo", dlogo);
         dpressOk = loadSheet(ret + "dpress", dpress);
+        loadSheet(ret + "dc_mode_select", dcModeSelect);
         loadSheet(ret + "dc_arrows", dcArrows);
         loadSheet(ret + "dc_puzzle_start", dcPuzzleStart);
         loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
@@ -2126,6 +2127,109 @@ struct HdMenuMode : Screen {
     }
 };
 
+// Dreamcast Mode Select. Positions and layering from the PowerVR
+// draw list in Flycast frame 2750 (state offsets 0x19bd543 through 0x19be623).
+struct DcModeSelect : Screen {
+    static constexpr int kCount = 9;
+    enum SheetFrame { Background, BlueRocket, YellowRocket, Bubble, Controls,
+                      Cat, Label = Cat + 2, Description = Label + kCount,
+                      Cursor = Description + kCount, FrameCount = Cursor + 12 };
+    static constexpr int x[kCount] = {104, 168, 184, 200, 216, 232, 248, 264, 328};
+    static constexpr int y[kCount] = {84, 126, 166, 206, 246, 286, 326, 366, 408};
+    static constexpr int labelX[kCount] = {160, 192, 192, 192, 256, 256, 256, 304, 353};
+    static constexpr int labelY[kCount] = {84, 128, 168, 208, 248, 288, 328, 368, 417};
+    static constexpr int descriptions[kCount] = {0, 1, 2, 3, 4, 5, 6, 8, 7};
+    static constexpr const char* destinations[kCount] = {
+        "HELP", "BATTLE", "TEAM_BATTLE", "CHALLENGE", "STAGES", nullptr, nullptr, nullptr, "OPTIONS"
+    };
+    int selected = 1;
+    unsigned frame = 0;
+    const char* destination = nullptr;
+
+    static bool available(const App& a) {
+        return a.mobileSheetsMissing && a.dcModeSelect.tex && a.dcModeSelect.fr.size() == FrameCount;
+    }
+
+    int music() override { return 0; }
+    void tick(App&) override { ++frame; }
+
+    void select(App& a, int item) {
+        if (selected == item) return;
+        selected = item;
+        a.playSfx(0);
+    }
+
+    void confirm(App& a) {
+        if (!destinations[selected] ||
+            (selected == 0 && !HelpMode::ok(a)) ||
+            (selected == 3 && !challengeBoardsAvailable(a.root)) ||
+            (selected == 8 && !OptionsMode::ok(a))) {
+            a.playSfx(0x13);
+            return;
+        }
+        destination = destinations[selected];
+        a.playSfx(2);
+    }
+
+    void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_KEYDOWN) {
+            switch (e.key.keysym.sym) {
+            case SDLK_UP: select(a, (selected + kCount - 1) % kCount); break;
+            case SDLK_DOWN: select(a, (selected + 1) % kCount); break;
+            case SDLK_RETURN: case SDLK_SPACE: confirm(a); break;
+            case SDLK_ESCAPE: if (a.titleOk) destination = "TITLE"; break;
+            }
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+            switch (e.cbutton.button) {
+            case SDL_CONTROLLER_BUTTON_DPAD_UP: select(a, (selected + kCount - 1) % kCount); break;
+            case SDL_CONTROLLER_BUTTON_DPAD_DOWN: select(a, (selected + 1) % kCount); break;
+            case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_START: confirm(a); break;
+            case SDL_CONTROLLER_BUTTON_B: if (a.titleOk) destination = "TITLE"; break;
+            }
+        } else if (e.type == SDL_MOUSEMOTION ||
+                   (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT)) {
+            SDL_RenderSetLogicalSize(a.ren, 640, 480);
+            SDL_RenderSetViewport(a.ren, nullptr);
+            float px, py;
+            SDL_RenderWindowToLogical(a.ren, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
+                                      e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, &px, &py);
+            for (int i = 0; i < kCount; ++i) {
+                if (px >= x[i] && px < x[i] + 197 && py >= y[i] && py < y[i] + 36) {
+                    select(a, i);
+                    if (e.type == SDL_MOUSEBUTTONDOWN) confirm(a);
+                    break;
+                }
+            }
+        }
+    }
+
+    const char* next() override {
+        const char* result = destination;
+        destination = nullptr;
+        return result;
+    }
+
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, 640, 480);
+        SDL_RenderSetViewport(a.ren, nullptr);
+        SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255);
+        SDL_RenderClear(a.ren);
+        auto draw = [&](int index, int left, int top) {
+            const SDL_Rect& src = a.dcModeSelect.fr[index];
+            const SDL_Rect dst{left, top, src.w, src.h};
+            SDL_RenderCopy(a.ren, a.dcModeSelect.tex, &src, &dst);
+        };
+        draw(Background, 0, 0);
+        draw(Bubble, 398, 118);
+        draw(Controls, 16, 382);
+        for (int i = 0; i < kCount; ++i) draw(i == selected ? YellowRocket : BlueRocket, x[i], y[i]);
+        for (int i = 0; i < kCount; ++i) draw(Label + i, labelX[i], labelY[i]);
+        draw(Description + descriptions[selected], 419, 125);
+        draw(Cat + (frame / 16) % 2, 518, 172);
+        draw(Cursor + (frame / 3) % 12, x[selected] - 90, y[selected] - 16);
+    }
+};
+
 // ---------------------------------------------------------------- menu
 struct MenuMode : Screen {
     // Original main menu (docs/ui_art.md). iPad class (1024x768; art = iPad HD pack: yellow tile-map background 879, 340-wide bars, cat decoration at (208,50)): items at (184,173) (264,263) (344,353) (424,443) (504,533);
@@ -3373,7 +3477,7 @@ int main(int argc, char** argv) {
         else if (name == "CHALLENGE" || name == "challenge") { auto m = std::make_unique<ChallengeMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load challenge stages\n"); return false; } app.nextStage = -1; mode = std::move(m); }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
-        else if (name == "BATTLE" || name == "battle" || name == "BATTLE_MATCH") {
+        else if (name == "BATTLE" || name == "battle" || name == "BATTLE_MATCH" || name == "TEAM_BATTLE") {
             auto battle = std::make_unique<BattleMode>();
             if (name == "BATTLE_MATCH") {
                 const auto& setup = static_cast<const BattleSetupMode&>(*mode);
@@ -3388,7 +3492,7 @@ int main(int argc, char** argv) {
                 }
             } else {
                 memcpy(battle->lv, lv, sizeof lv);
-                if (!battle->load(app.root, stageNo, seed)) { puts("cannot load battle stages"); return false; }
+                if (!battle->load(app.root, stageNo, seed, nullptr, name == "TEAM_BATTLE" ? 1 : -1)) { puts("cannot load battle stages"); return false; }
             }
             for (int i = 0; i < SDL_NumJoysticks(); ++i) if (SDL_IsGameController(i)) {
                 SDL_Event event{};
@@ -3403,6 +3507,7 @@ int main(int argc, char** argv) {
         else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
         else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
+        else if (DcModeSelect::available(app)) mode = std::make_unique<DcModeSelect>();
         else mode = std::make_unique<MenuMode>();
         return true;
     };
