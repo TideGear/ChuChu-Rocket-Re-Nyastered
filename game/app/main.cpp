@@ -958,7 +958,9 @@ struct App {
         const float yaw = 180.0f - (float)(ang & 0xffff) * (360.0f / 65536.0f);
         const float scale = cell * (en.mouse ? 0.072f : 0.052f);
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
-        const float pitch = en.mouse ? 65.0f : 38.0f;
+        // The original tilts both characters by -8192 (45 degrees) before drawing (0x8c0193e0, 0x8c0117c0); CCR_CHAR_PITCH overrides for comparisons.
+        static const float pitchOverride = getenv("CCR_CHAR_PITCH") ? static_cast<float>(atof(getenv("CCR_CHAR_PITCH"))) : 45.0f;
+        const float pitch = pitchOverride;
         models3d.draw(ren, *m, x, z + cell * 0.22f, scale, yaw, pitch, 1.0f, en.mouse ? -1 : catFrame);
         (void)i; return true;
     }
