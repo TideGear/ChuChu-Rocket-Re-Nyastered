@@ -67,10 +67,11 @@ class LinearSequenceClock:
     """Schedule parsed, non-looping SMSD events in driver updates.
 
     Event effects and voice allocation are separate. References already expanded
-    by mlt_sequences are accepted; loops and sysex need their original handlers.
+    by mlt_sequences are accepted; loops need their original handler. System-
+    exclusive payload dispatch belongs to the command scheduler.
     """
     def __init__(self, sequence):
-        supported = {'tempo', 'control', 'program', 'pressure', 'pitch', 'note', 'end'}
+        supported = {'tempo', 'control', 'program', 'pressure', 'pitch', 'note', 'end', 'sysex'}
         if any(event['type'] not in supported for event in sequence['events']):
             raise ValueError('Unsupported non-linear sequence event')
         self.timing = SequenceTiming(*sequence['header'])

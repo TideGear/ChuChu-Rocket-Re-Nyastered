@@ -30,6 +30,16 @@ class SequenceTests(unittest.TestCase):
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 events(HEADER + bytes.fromhex(payload))
 
+    def test_sysex_length_and_following_step(self):
+        for prefix, delay in (('00 04', '09'), ('80 04', '01 23')):
+            rows = events(HEADER + bytes.fromhex(f'f0 {prefix} 7e 7f 09 01 {delay} 83'))['events']
+            self.assertEqual(rows[0]['data'], [126, 127, 9, 1])
+            self.assertEqual(rows[0]['step'], int(delay.replace(' ', ''), 16))
+            self.assertEqual(rows[1]['tick'], rows[0]['step'])
+        for payload in ('f0 00 00 00 83', 'f0 00 04 7e 7f', 'f0 80 01 7e 01'):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                events(HEADER + bytes.fromhex(payload))
+
     def test_bad_bank_pointer(self):
         bank = b'SMSB' + struct.pack('<4I', 2, 32, 1, 0xffff) + bytes(12)
         container = b'SMLT' + struct.pack('<2I', 2, 1) + bytes(20)

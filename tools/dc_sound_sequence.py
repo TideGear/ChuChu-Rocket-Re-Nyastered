@@ -1,7 +1,7 @@
 """Linear MANATEE command scheduling, without voice allocation or synthesis.
 
 One isolated group, available FIFO capacity and ordinary free-slot gates only.
-Full gate tables, continuation records, looping and sysex are unsupported.
+Full gate tables, continuation records and looping are unsupported.
 """
 from dc_sound_timing import LinearSequenceClock
 from dc_sound_gate import NoteGate
@@ -25,7 +25,15 @@ class SequenceCommands:
 
         def event(row, timing):
             kind = row['type']
-            if kind == 'note':
+            if kind == 'sysex':
+                payload = bytes(row['data'])
+                if not 1 <= len(payload) <= 5:
+                    raise ValueError('System-exclusive payloads over five bytes are not validated')
+                commands.append((self.priority | 7) << 24 | self.group << 20 |
+                                (len(payload) & 255) << 8 | payload[0])
+                for offset in range(1, len(payload), 4):
+                    commands.append(int.from_bytes(payload[offset:offset + 4].ljust(4, b'\0'), 'big'))
+            elif kind == 'note':
                 gate = NoteGate.from_note(self.priority, self.group, row['channel'],
                                           row['note'], row['velocity'], row['gate'],
                                           timing.scale, sequence_time=timing.time)

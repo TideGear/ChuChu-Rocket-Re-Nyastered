@@ -80,10 +80,12 @@ def events(data, limit=100000):
             row.update(type='loop', value=value & 127)
             step = read(2 if value & 128 else 1)
         elif status == 0xf0:
-            step = read(1)
-            length = read(1)
+            length_word = read(2)
+            length = length_word & 0x7fff
+            if not length:
+                raise ValueError('Empty SMSD system-exclusive payload')
             row.update(type='sysex', data=[read(1) for _ in range(length)])
-            row['unknown'] = read(2 if step & 128 else 1)
+            step = read(2 if length_word & 0x8000 else 1)
         else:
             raise ValueError(f'Unsupported SMSD status {status:#x} at {start:#x}')
         row['step'] = step + step_ext

@@ -72,7 +72,7 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
     uc.hook_add(UC_HOOK_CODE, event, begin=0x6aac, end=0x6aac)
     count = command_count = 0
     end_tick = pending_at_end = None
-    for tick in range(1, 10001):
+    for tick in range(1, 100001):
         observed.clear()
         uc.mem_write(0x12418, struct.pack('<I', tick))
         call(0x68d4)
