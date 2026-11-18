@@ -1021,7 +1021,7 @@ struct App {
         const float turn = (float)(ang & 0xffff) * (360.0f / 65536.0f);
         // Matched against Flycast Normal Puzzle 01 and 02 (docs/dreamcast_models.md): the mouse turns by -angle; the cat keeps the earlier 180 - angle until a real frame checks it.
         const float yaw = en.mouse ? -turn : 180.0f - turn;
-        const float scale = cell * (en.mouse ? 0.072f : 0.052f);
+        const float scale = cell * (en.mouse ? 0.072f : 0.096f);   // the cat's 0.052 was 1.85 times too small against Flycast Team Battle frame 3600 (orange pixel area ratio 3.4); a single frame, so provisional
         const int catFrame = (i < cphase.size() ? (int)(cphase[i] * 1.2f) : 0) % 24;   // the walk phase (0.45 per tick, wraps at 20) stretched over the 24 frames: provisional, the Dreamcast phase rule is not decoded
         // The original tilts both characters by -8192 (45 degrees) before drawing (0x8c0193e0, 0x8c0117c0); CCR_CHAR_PITCH overrides for comparisons.
         static const float pitchOverride = getenv("CCR_CHAR_PITCH") ? static_cast<float>(atof(getenv("CCR_CHAR_PITCH"))) : 45.0f;

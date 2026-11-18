@@ -18,7 +18,7 @@ struct Model3D {
 };
 // Lighting: the Dreamcast chunk models carry vertex normals (chunk type 41) and a material with diffuse 0xffffffff and ambient 0x7f7f7fff; the colour of a vertex is
 // ambient + diffuse * max(0, N.L) with N turned to view space. L, ambient and diffuse are set from the fit against the mobile art (docs/dreamcast_models.md) or CCR_LIGHT=lx,ly,lz,amb,diff.
-struct ModelLight { float lx = 0.6f, ly = 0.1f, lz = 0.5f, amb = 0.75f, diff = 0.8f; };   // fitted to the mobile turntable (tools/fit_light.py, fine pass): mean luminance error 0.080 (first guess 0.148)
+struct ModelLight { float lx = 0.0f, ly = 0.25f, lz = 0.5f, amb = 0.3f, diff = 0.559f; };   // the game's own Battle light read from the rocket lids (0.3 + max(0, 0.5 up + 0.25 screen-up)); the earlier fit to the mobile turntable was 0.6, 0.1, 0.5, 0.75, 0.8   // fitted to the mobile turntable (tools/fit_light.py, fine pass): mean luminance error 0.080 (first guess 0.148)
 inline ModelLight& modelLight() {
     static ModelLight l; static bool init = false;
     if (!init) { init = true; if (const char* e = getenv("CCR_LIGHT")) sscanf(e, "%f,%f,%f,%f,%f", &l.lx, &l.ly, &l.lz, &l.amb, &l.diff); float n = sqrtf(l.lx * l.lx + l.ly * l.ly + l.lz * l.lz); if (n > 0) { l.lx /= n; l.ly /= n; l.lz /= n; } }
@@ -131,6 +131,9 @@ public:
         struct T { float z; int tex; SDL_Vertex v[3]; };
         std::vector<T> out; out.reserve(m.tris.size());
         const ModelLight& L = modelLight();
+        static const int uvOverride = getenv("CCR_UV_MODE") ? atoi(getenv("CCR_UV_MODE")) : -1;
+        // The Dreamcast textures are stored with U and V transposed (as the lids need): the mouse faces match Flycast with (1 - v, u); other models keep the exported mapping until a real frame checks them.
+        const int uvMode = uvOverride >= 0 ? uvOverride : (m.name.rfind("mouse", 0) == 0 ? 1 : 0);
         for (size_t ti = 0; ti < m.tris.size(); ti++) {
             const auto& t = m.tris[ti];
             if (skipMats >> (t.mat & 63) & 1) continue;
@@ -147,7 +150,7 @@ public:
                 const float lum = std::min(1.0f, L.amb + L.diff * ndl);
                 const uint8_t c = (uint8_t)(255.0f * lum * brightness);
                 o.v[k].position = SDL_FPoint{cx + x * scale, cy - y2 * scale};
-                o.v[k].color = SDL_Color{c, c, c, 255}; o.v[k].tex_coord = SDL_FPoint{t.v[k].u, t.v[k].v};
+                o.v[k].color = SDL_Color{c, c, c, 255}; o.v[k].tex_coord = uvMode == 1 ? SDL_FPoint{1.0f - t.v[k].v, t.v[k].u} : uvMode == 2 ? SDL_FPoint{t.v[k].v, t.v[k].u} : uvMode == 3 ? SDL_FPoint{t.v[k].v, 1.0f - t.v[k].u} : SDL_FPoint{t.v[k].u, t.v[k].v};   // comparison switch CCR_UV_MODE
                 zsum += z2;
             }
             const int mi = forceMat >= 0 ? forceMat : t.mat; o.z = zsum / 3; o.tex = mi < (int)m.matTex.size() ? (int)m.matTex[mi] : 0; out.push_back(o);
