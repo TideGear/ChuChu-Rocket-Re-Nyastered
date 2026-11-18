@@ -76,6 +76,7 @@ def main(prs_png, out, png=None):
         ('ENGLISH__PRESSSTART.png', 'dpress', png),
         ('PUZZLEMENU_pzleft01.png', 'dc_puzzle_start', prs_png),
         ('PUZZLEMENU_pzleft02.png', 'dc_puzzle_cancel', prs_png),
+        ('PUZZLEMENU_pzright.png', 'dc_puzzle_panel', prs_png),
     ):
         if not src_dir: continue
         p = os.path.join(src_dir, src)
@@ -83,9 +84,11 @@ def main(prs_png, out, png=None):
             p = os.path.join(src_dir, '.__' + src)
         if not os.path.exists(p): continue
         im = Image.open(p).convert('RGBA')
-        if name in ('dc_puzzle_start', 'dc_puzzle_cancel'):
+        if name in ('dc_puzzle_start', 'dc_puzzle_cancel', 'dc_puzzle_panel'):
             im = im.transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-        im = im.crop(im.getbbox()); w, h = im.size
+        # The bottom panel is two 256 x 96 quads of one texture (rows 0-95 and 96-191), so it keeps its full size.
+        if name != 'dc_puzzle_panel': im = im.crop(im.getbbox())
+        w, h = im.size
         with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', w, h)); f.write(im.tobytes())
         with open(os.path.join(out, name + '.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
         print(name, src, '%dx%d' % (w, h))
