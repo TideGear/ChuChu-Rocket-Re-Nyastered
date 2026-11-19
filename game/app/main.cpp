@@ -252,7 +252,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -330,6 +330,7 @@ struct App {
         loadSheet(ret + "dc_startup", dcStartup);
         loadSheet(ret + "dc_battle_setup", dcBattleSetup);
         loadSheet(ret + "dc_help", dcHelp);
+        loadSheet(ret + "dc_options", dcOptions);
         loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
         loadSheet(ret + "dc_bios_ansi", dcBiosAnsi);   // optional: BIOS ANSI glyphs for the hint text
         loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
@@ -2259,6 +2260,43 @@ struct DcHelpMode : Screen {
     }
 };
 
+// Dreamcast Options menu (mode 11, Flycast frame 2300): background, Menu button, six entries in the BIOS font (12 px per character, white) and the red arrow. The settings pages behind
+// each entry are not built yet: Enter returns to Mode Select.
+struct DcOptionsMode : Screen {
+    int sel = 0; bool leave = false;
+    static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() == 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
+    static constexpr int kRows[6] = {172, 204, 236, 268, 300, 364};
+    void move(App& a, int d) { sel = (sel + 6 + d) % 6; a.playSfx(0); }
+    void event(App& a, const SDL_Event& e) override {
+        if (e.type == SDL_KEYDOWN && !e.key.repeat) {
+            switch (e.key.keysym.sym) {
+            case SDLK_UP: case SDLK_w: move(a, -1); break; case SDLK_DOWN: case SDLK_s: move(a, 1); break;
+            case SDLK_RETURN: case SDLK_SPACE: a.playSfx(1); leave = true; break;
+            case SDLK_ESCAPE: leave = true; break; default: break; }
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+            switch (e.cbutton.button) {
+            case SDL_CONTROLLER_BUTTON_DPAD_UP: move(a, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: move(a, 1); break;
+            case SDL_CONTROLLER_BUTTON_A: a.playSfx(1); leave = true; break; case SDL_CONTROLLER_BUTTON_B: leave = true; break; default: break; }
+        }
+    }
+    const char* next() override { return std::exchange(leave, false) ? "MENU" : nullptr; }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
+        SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        const Sheet& sh = a.dcOptions;
+        { const SDL_Rect& r = sh.fr[0]; const SDL_Rect src{r.x, r.y, 640, 480}, dst{0, 0, 640, 480}; SDL_RenderCopy(a.ren, sh.tex, &src, &dst); }
+        auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
+        put(1, 16, 88); put(2, 16, 407);
+        static const char* const labels[6] = {"General Settings", "Settings for 4P Battle and Team Battle", "Records", "Language", "Keyboard F-key Settings", "Return to Initial Settings"};
+        for (int i = 0; i < 6; ++i) {
+            int x = 100; const int y = kRows[i] - 12;
+            for (const char* c = labels[i]; *c; ++c, x += 12) { const unsigned char ch = *c; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); }
+        }
+        SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
+        for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, kRows[sel] + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
+    }
+};
+
 struct DcModeSelect : Screen {
     static constexpr int kCount = 9;
     enum SheetFrame { Background, BlueRocket, YellowRocket, Bubble, Controls,
@@ -2293,7 +2331,7 @@ struct DcModeSelect : Screen {
         if (!destinations[selected] ||
             (selected == 0 && !HelpMode::ok(a) && !DcHelpMode::available(a)) ||
             (selected == 3 && !challengeBoardsAvailable(a.root)) ||
-            (selected == 8 && !OptionsMode::ok(a))) {
+            (selected == 8 && !OptionsMode::ok(a) && !DcOptionsMode::available(a))) {
             a.playSfx(0x13);
             return;
         }
@@ -4124,6 +4162,7 @@ int main(int argc, char** argv) {
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
         else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
+        else if (name == "OPTIONS" && DcOptionsMode::available(app)) mode = std::make_unique<DcOptionsMode>();
         else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
         else if (DcModeSelect::available(app)) {
             auto m = std::make_unique<DcModeSelect>();

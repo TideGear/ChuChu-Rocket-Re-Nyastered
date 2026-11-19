@@ -276,6 +276,18 @@ def export_dc_help(prs_png, out):
     tiles[2] = tiles[2].transpose(T); tiles[3] = tiles[3].transpose(T)
     export_atlas(out, 'dc_help', tiles)
 
+def export_dc_options(prs_png, out):
+    """Dreamcast Options menu art (Flycast mode 11): 0 background 640 x 512 (OPTION_optionback0 at (0,0) and optionback1..4 at (512, 128k), all stored transposed),
+    1 Menu button 256 x 64 at (16,88), 2 controls strip OPTION_newsousa2 512 x 64 at (16,407) (pixel-identical to the Flycast crop)."""
+    names = ['OPTION_optionback%d' % i for i in range(5)] + ['OPTION_menu', 'OPTION_newsousa2']
+    paths = [os.path.join(prs_png, n + '.png') for n in names]
+    if not all(os.path.isfile(x) for x in paths): return
+    T = Image.Transpose.TRANSPOSE
+    bg = Image.new('RGBA', (640, 512))
+    bg.alpha_composite(Image.open(paths[0]).convert('RGBA').transpose(T), (0, 0))
+    for k in range(4): bg.alpha_composite(Image.open(paths[k + 1]).convert('RGBA').transpose(T), (512, 128 * k))
+    export_atlas(out, 'dc_options', [bg, Image.open(paths[5]).convert('RGBA'), Image.open(paths[6]).convert('RGBA')])
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -376,6 +388,7 @@ def main(prs_png, out, png=None):
     export_dc_startup(prs_png, png, out)
     export_dc_battle_setup(prs_png, out)
     export_dc_help(prs_png, out)
+    export_dc_options(prs_png, out)
     export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)

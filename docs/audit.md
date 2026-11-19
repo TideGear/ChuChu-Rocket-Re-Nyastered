@@ -61,7 +61,7 @@ The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `
 | 8 | 0x8c02dc50 | Puzzle Edit (mode variable 8 in the Edit/pause capture `pz3`; init loads `yuka01/03`, `kabetx01/03`) | open: pause overlay seen; the editor screens are not compared |
 | 9 | 0x8c034fa0 | network (string `  Disconnecting...  `) | open, not testable offline |
 | 10 | 0x8c04ffc0 | network setup (strings about setting up the Dreamcast for network access) | open, not testable offline |
-| 11 | 0x8c051b9a | Options (General Settings, Settings for 4P Battle and Team Battle, Records, Language, Keyboard F-key Settings, Return to Initial Settings) | open: not compared |
+| 11 | 0x8c051b9a | Options (General Settings, Settings for 4P Battle and Team Battle, Records, Language, Keyboard F-key Settings, Return to Initial Settings) | partial: Options menu drawn from disc art (`DcOptionsMode`, strip = `OPTION_newsousa2`, text in the BIOS font or its fallback; mean error vs Flycast about 5-7, glyph shapes differ without a BIOS); the settings pages behind each entry are open |
 | 12, 13 | 0x8c0278cc | shared init with `yuka01` floor: 12 = Battle play, Team Battle and the attract demo (mode variable 12 in the battle, HUD and demo captures); 13 unseen | partial: Battle and Team Battle captures compared; demo and mode 13 open |
 | 14 | 0x8c02a33e | Challenge play, pause, failure and clear screens (mode variable 14 in those captures) | partial: A1 play, failure (4.3), clear banner and select compared; other stage types and results open |
 | 15 | 0x8c02b97e | Puzzle play (mode variable 15 in the Normal 01 capture) | partial: Normal 01, 02, 08 compared; Hard, Special, Mania and results open |
