@@ -372,7 +372,7 @@ def export_dc_help_pages(prs_png, out):
         f = os.path.join(prs_png, name + '.png') if os.path.isfile(os.path.join(prs_png, name + '.png')) else os.path.join(os.path.dirname(prs_png), 'png', name + '.png')
         if not os.path.isfile(f): return
         im = Image.open(f).convert('RGBA')
-        tiles.append(uv_span(im.transpose(Image.Transpose.TRANSPOSE) if tr else im))
+        t = im.transpose(Image.Transpose.TRANSPOSE) if tr else im; tiles.append(t if min(t.size) < 16 else uv_span(t))   # the 8-px border strips are stretched hugely; resampling them only smears their edge
     export_atlas(out, 'dc_help_pages', tiles)
     with open(os.path.join(out, 'dc_help_pages.bin'), 'wb') as f:
         f.write(struct.pack('<I', len(pages)))
