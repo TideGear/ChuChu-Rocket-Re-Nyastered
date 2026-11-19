@@ -1060,12 +1060,14 @@ struct App {
     std::vector<int> angs; std::vector<float> cphase; int gtime = 0;   // cat walk phase (+0.45 per tick, wraps at 20.0: FUN_00028ffc), global tick for the mouse walk frame (TI_GetGlobalTime mod 11: FUN_000353e0)
     void stepAngles(const Sim& sim, bool effectsOnly = false) {
         if (!effectsOnly) {
-            gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(0.0f);
+            gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(useModels3d() ? -0.25f : 0.0f);   // Dreamcast: the cat task's first update is its initialisation and does not advance +0x30 (Flycast frames 2300..3550: phase = 0.25 x (updates - 1))
             for (size_t i = 0; i < sim.ents.size(); i++) {
                 const Entity& e = sim.ents[i];
+                if (!e.mouse && getenv("CCR_ENT_TRACE") && (e.catRespawned || e.rocketIn || !e.alive)) printf("cat state now=%d respawned=%d rocketIn=%d alive=%d walkScale=%.2f reg=%d phase=%.2f\n", sim.now, (int)e.catRespawned, (int)e.rocketIn, (int)e.alive, e.catWalkScale, (int)e.reg, cphase[i]);
                 if (e.mouse || !e.alive || e.rocketIn || e.catRespawned || (e.catWalkScale >= 0.0f && !e.reg)) continue;
-                cphase[i] += 0.45f;
-                if (cphase[i] >= 20.0f) cphase[i] -= 20.0f;
+                const bool dcCat = useModels3d();   // Dreamcast cat task 0x8c0113f0: phase (+0x30) += 0.25 per update, minus the frame count 24 (table 0x8c088078) when it reaches it
+                cphase[i] += dcCat ? 0.25f : 0.45f;
+                if (cphase[i] >= (dcCat ? 24.0f : 20.0f)) cphase[i] -= dcCat ? 24.0f : 20.0f;
             }
         }
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
@@ -1107,7 +1109,7 @@ struct App {
         const float turn = (float)(ang & 0xffff) * (360.0f / 65536.0f);
         static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.5f, -0.25f};
         float phase = 0.0f; int frame = -1;
-        if (!en.mouse) { phase = (i < cphase.size() ? cphase[i] * 1.2f : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
+        if (!en.mouse) { phase = (i < cphase.size() ? std::max(0.0f, cphase[i]) : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
         models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u, pink ? kind2Remap : nullptr, (en.mouse && !pink) ? 178.0f / 255.0f : 1.0f);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
 
         // FUN_8c056e1e -> FUN_8c056d00: type 1 (golden) and type 2 (roulette) mice carry a 13.5-unit marker quad (texture 46 + 3 * kind of the CHALLENGECLEAR list: plus50, hatena) at
@@ -1193,7 +1195,7 @@ struct App {
             }
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
-            if (headless && getenv("CCR_ENT_TRACE")) printf("ent %zu %s type %d world %.2f %.2f ang %04x frame %d\n", i, en.mouse ? "mouse" : "cat", en.type, object.x / kCell * 15.0f, object.z / kCell * 15.0f, ang & 0xffff, mouseFrame);
+            if (headless && getenv("CCR_ENT_TRACE")) printf("ent %zu %s type %d world %.2f %.2f ang %04x frame %d phase %.3f\n", i, en.mouse ? "mouse" : "cat", en.type, object.x / kCell * 15.0f, object.z / kCell * 15.0f, ang & 0xffff, mouseFrame, i < cphase.size() ? cphase[i] : -1.0f);
             if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell)) continue;
             if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter * field.scale(), 255);
@@ -3808,6 +3810,7 @@ struct BattleMode : Screen {
         for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; for (int q = 0; q < 4; q++) { game.humanCell[q][0] = curX[q]; game.humanCell[q][1] = curY[q]; }
         if (mouseCursor && aim.inside) { game.humanCell[0][0] = aim.cellX(); game.humanCell[0][1] = aim.cellY(); }
         const int previousClock = game.clock;
+        const int simNow = game.sim.now;
         if (mode == 2 || mode == 3) game.tick();
         // FB_Exe_GAME checks the BCD time after decrementing it.
         const int left = game.roundFrames - game.clock;
@@ -3817,7 +3820,7 @@ struct BattleMode : Screen {
                                seconds == 30 ? 3 : seconds == 60 ? 4 : seconds == 120 ? 5 : -1;
             if (banner >= 0) banners.push_back({0, banner, 0, App::countLife(banner)});
         }
-        a.stepAngles(game.sim);
+        a.stepAngles(game.sim, game.sim.now == simNow);   // the entity tasks do not run while the roulette freezes them (Flycast: the cat's phase advanced 15 times over 56 frames of the spin, then every frame)
     }
     void endRound() {   // FourBattleLoop mode 3 after 60 ticks: the only player (team battle: team) with dense rank 0 wins the round
         if (game.teamMode) { int ts[2] = {game.score.team[0], game.score.team[1]}; int tr[2] = {ts[0] >= ts[1] ? 0 : 1, ts[1] >= ts[0] ? 0 : 1}; for (int p = 0; p < 4; p++) rank[p] = tr[p & 1]; modeTick = 0; rockets_.clear(); smokes_.clear(); flashes_.clear();
