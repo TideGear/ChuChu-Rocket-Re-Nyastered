@@ -3855,7 +3855,10 @@ struct BattleMode : Screen {
         const int seconds = (left + 59) / 60;
         if (!dcHud) a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0, field); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
-        for (auto& ar : game.sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl, field);
+        for (auto& ar : game.sim.arrows) if (ar.live) {
+            if (a.headless && getenv("CCR_ENT_TRACE")) printf("arrow cell %d %d dir %d owner %d hits %d ttl %d\n", ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
+            a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl, field);
+        }
         for (int p = 0; p < 4; ++p) {
             const bool mouse = p == 0 && mouseCursor;
             if (lv[p] >= 0 || (mouse && !aim.inside)) continue;
