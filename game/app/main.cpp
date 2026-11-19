@@ -1177,6 +1177,8 @@ struct App {
             if (object.ghost) {
                 const auto& ghost = sim.effects[i];
                 drawImage(ghost.image(), ghost.age & 7, x, z, ghost.flags(), ghost.scale() * field.scale(), 255);
+                if (headless && getenv("CCR_ENT_TRACE"))
+                    printf("ghost %zu age %d world %.2f %.2f image %d flags %d scale %.3f\n", i, ghost.age, ghost.x / kCell * 15.0f, ghost.z / kCell * 15.0f, ghost.image(), ghost.flags(), ghost.scale());
                 if (headless && getenv("CCR_MOUSE_GHOST_LIVE_TRACE"))
                     printf("mouse ghost %d %.3f %.3f\n", ghost.age, x, z);
                 continue;
