@@ -2385,20 +2385,32 @@ struct DcOptionsMode : Screen {
     // General Settings state (Flycast frame 2450): Character, Sound output, Jump Pack, Music test, SE test, Return to Initial Settings. What each value does in the original is not traced
     // yet; Sound output, Jump Pack and the test numbers are kept for the session only and the SE test plays the port's sound effect of that number.
     int genRow = 0, genSound = 1, genJump = 0, genMusic = 0, genSe = 0;
+    // Settings for 4P Battle and Team Battle (Flycast frame 2750): play time 1-3 minutes, game speed 1-5, '% of ? mice' Normal/High, arrow reset Off/On. Untraced and unwired like General Settings.
+    int bRow = 0, bTime = 3, bSpeed = 3, bMice = 0, bArrow = 0;
     // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
     static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
         if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; a.playSfx(1); }
+        else if (sel == 1 && hasLanguagePage(a)) { page = 1; bRow = 0; a.playSfx(1); }
         else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {
             page = 3; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) langRow = i; a.playSfx(1);
         } else { a.playSfx(1); leave = true; }
     }
     static constexpr int kRows[6] = {172, 204, 236, 268, 300, 364};
-    void move(App& a, int d) { if (page == 3) langRow = (langRow + 5 + d) % 5; else if (page == 0) genRow = (genRow + 6 + d) % 6; else sel = (sel + 6 + d) % 6; a.playSfx(0); }
+    void move(App& a, int d) { if (page == 3) langRow = (langRow + 5 + d) % 5; else if (page == 0) genRow = (genRow + 6 + d) % 6; else if (page == 1) bRow = (bRow + 5 + d) % 5; else sel = (sel + 6 + d) % 6; a.playSfx(0); }
     void adjust(App& a, int d) {   // Left/Right on the General Settings values
+        if (page == 1) {
+            switch (bRow) {
+            case 0: bTime = 1 + (bTime - 1 + 3 + d) % 3; break;
+            case 1: bSpeed = 1 + (bSpeed - 1 + 5 + d) % 5; break;
+            case 2: bMice = !bMice; break;
+            case 3: bArrow = !bArrow; break;
+            default: return; }
+            a.playSfx(0); return;
+        }
         if (page != 0) return;
         switch (genRow) {
         case 1: genSound = !genSound; break;
@@ -2410,6 +2422,7 @@ struct DcOptionsMode : Screen {
     }
     void accept(App& a) {
         if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
+        else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.playSfx(1); } else adjust(a, 1); }
         else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 1 || genRow == 2) adjust(a, 1); }
         else openRow(a);
     }
@@ -2434,7 +2447,24 @@ struct DcOptionsMode : Screen {
         const Sheet& sh = a.dcOptions;
         { const SDL_Rect& r = sh.fr[0]; const SDL_Rect src{r.x, r.y, 640, 480}, dst{0, 0, 640, 480}; SDL_RenderCopy(a.ren, sh.tex, &src, &dst); }
         auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
-        put(page == 3 ? 3 : page == 2 ? 6 : page == 0 ? 4 : 1, 16, 88); if (page == 2) put(8, 16, 379); else put(2, 16, 407);
+        put(page == 3 ? 3 : page == 2 ? 6 : page == 0 ? 4 : page == 1 ? 5 : 1, 16, 88); if (page == 2) put(8, 16, 379); else put(2, 16, 407);
+        if (page == 1) {   // Settings for 4P Battle and Team Battle (Flycast frame 2750): labels at x 81, '<' at x 260, boxes behind the chosen values, Return at y 309
+            auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
+            auto box = [&](int x, int y, int w) { SDL_SetRenderDrawColor(a.ren, 238, 156, 17, 255); const SDL_Rect r{x, y, w, 32}; SDL_RenderFillRect(a.ren, &r); };
+            static const char* const labels[4] = {"Play time", "Game speed", "% of ? mice", "Arrow reset"};
+            static const int top[4] = {149, 181, 213, 245};
+            for (int i = 0; i < 4; ++i) { text(labels[i], 81, top[i]); text("<", 260, top[i]); }
+            box(284 + 36 * (bTime - 1), 144, 24); box(356 + 36 * (bSpeed - 1), 177, 24); box(bMice ? 429 : 284, 210, bMice ? 48 : 72); box(bArrow ? 392 : 284, 243, bArrow ? 24 : 48);
+            for (int i = 0; i < 5; ++i) { const char c[2] = {"1.2.3"[i], 0}; text(c, 290 + 18 * i, 149); } text(">", 393, 149); text("minutes", 417, 149);   // digits and dots on an 18 px pitch (Flycast frame 2750)
+            text("Slow", 285, 181); for (int i = 0; i < 9; ++i) { const char c[2] = {"1.2.3.4.5"[i], 0}; text(c, 365 + 18 * i, 181); } text("Fast", 549, 181); text(">", 609, 181);
+            text("Normal", 284, 213); text(".", 380, 213); text("High", 429, 213); text(">", 513, 213);
+            text("Off", 290, 245); text("/", 350, 245); text("On", 392, 245); text(">", 441, 245);
+            text("Return to Initial Settings", 117, 309);
+            const int cy = (bRow == 4 ? 309 : top[bRow]) + 12;
+            SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
+            for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, cy + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
+            return;
+        }
         if (page == 0) {   // General Settings (Flycast frame 2450): labels at x 80, values from x 248, the chosen value on an orange box, cell tops 149 + 32 per row, Return at 341
             auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
             auto box = [&](int x, int row, int w) { SDL_SetRenderDrawColor(a.ren, 238, 156, 17, 255); const SDL_Rect r{x, 143 + 32 * row, w, 32}; SDL_RenderFillRect(a.ren, &r); };

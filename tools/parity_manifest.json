@@ -300,6 +300,39 @@
       "note": "look-alike text font without a BIOS"
     },
     {
+      "name": "options_4p_battle",
+      "ref": "local/dc_ref/options/sub1.bmp",
+      "args": [
+        "OPTIONS"
+      ],
+      "env": {
+        "CCR_KEYS": "DE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "100"
+      },
+      "elements": {
+        "title_plate": [
+          16,
+          88,
+          520,
+          152
+        ],
+        "button_bar": [
+          16,
+          404,
+          420,
+          450
+        ],
+        "rows": [
+          16,
+          140,
+          624,
+          380
+        ]
+      },
+      "note": "look-alike text font without a BIOS"
+    },
+    {
       "name": "launch_age_{age}",
       "sweep": {
         "var": "age",
