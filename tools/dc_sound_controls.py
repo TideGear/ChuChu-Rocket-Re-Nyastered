@@ -73,6 +73,43 @@ class VoiceSetup:
             words[0] |= 0xc000
         return tuple(words)
 
+    def record(self, previous, split, layer, controller, group_parameters, curve,
+               *, split_address, group_address, group, channel, note, velocity, priority):
+        """ARM 0xfac..0x1658 voice-record writes; retain untouched bytes.
+
+        Allocation, drum exclusion and physical-channel bookkeeping happen
+        outside this helper. The accompanying registers come from words().
+        """
+        if len(previous) != 64 or len(split) < 48 or len(layer) < 16 or len(controller) < 128:
+            raise ValueError('Incomplete voice-record source fields')
+        if not 0 <= group < 8 or not 0 <= channel < 16 or not 0 <= priority <= 31 or not 0 <= note <= 127 or not 1 <= velocity <= 127:
+            raise ValueError('Invalid note-on command fields')
+        result = bytearray(previous)
+        result[0x3e], result[5], result[4] = priority, channel, group
+        struct.pack_into('<I', result, 0x38, struct.unpack_from('<I', layer, 8)[0])
+        struct.pack_into('<I', result, 0x10, split_address)
+        if controller[3] & 128:
+            result[10:12] = bytes([controller[3] & 127] * 2)
+        else:
+            result[10:12] = layer[12:14]
+        result[0x14:0x18] = controller[0x1c:0x20]
+        result[6], result[7], result[0x1c] = note, velocity, split[0x2a]
+        _, _, _, volume, pan = self.mix.words(split, controller, group_parameters, curve, velocity)
+        result[8], result[9] = volume, pan
+        struct.pack_into('<I', result, 0x18, group_address)
+        bend = struct.unpack_from('<I', controller, 4)[0]
+        depth = result[11 if bend & 0xffff0000 else 10]
+        struct.pack_into('<I', result, 12, (((bend * depth) & 0xffffffff) >> 5) & 0xffff)
+        flags = 0x80
+        if split[0x2d]:
+            result[0x3c:0x3e] = split[0x2d:0x2f]
+            if not split[1] & 2:
+                flags |= 0x20
+        if controller[0x26] & 0x40:
+            flags |= 0x40
+        result[0], result[0x2b], result[0x3f], result[3] = flags, 0, 1, 0
+        return bytes(result)
+
 
 def sample_words(split, bank_address):
     """ARM 0x1058..0x10ac: sample address, format/loop flags and endpoints.

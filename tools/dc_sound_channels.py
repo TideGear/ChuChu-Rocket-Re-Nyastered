@@ -1,11 +1,12 @@
 """MANATEE MIDI channel changes, derived from the original ARM driver."""
 import struct
-from dc_sound_controls import MixTables, modulation_word
+from dc_sound_controls import MixTables, modulation_word, VoiceSetup
 from dc_sound_pitch import PitchTable
+from dc_sound_voices import allocate_voice
 
 
 class ChannelCommands:
-    """Native MIDI channel/note-release state; no ARM execution or sample clock.
+    """Native MIDI channel and voice dispatch; no ARM execution or sample clock.
 
     RAM contains the original loaded bank/controller/voice fields. Unsupported
     commands raise instead of dropping changes needed by a sound sequence.
@@ -13,6 +14,7 @@ class ChannelCommands:
     def __init__(self, driver, ram, registers):
         self.pitch = PitchTable(driver)
         self.mix = MixTables(driver)
+        self.setup = VoiceSetup(driver)
         self.ram, self.registers = bytearray(ram), bytearray(registers)
         self.writes = []
         if len(self.ram) != 0x200000 or len(self.registers) != 0x8000:
@@ -23,6 +25,9 @@ class ChannelCommands:
         self.fallbacks = a, b
         self.group_at = struct.unpack_from('<I', image, 0x2708)[0]
         self.bank_error_at = struct.unpack_from('<I', image, 0x3544)[0]
+        self.voice_map_at = struct.unpack_from('<I', image, 0x188c)[0]
+        self.monitor_register = struct.unpack_from('<I', image, 0xd58)[0] - 0x800000
+        self.prestop_mask = struct.unpack_from('<I', image, 0x16cc)[0]
         self.ignored_controls = set()
         for control in range(128):
             address = 0x2174 + control * 4
@@ -83,6 +88,92 @@ class ChannelCommands:
             control = struct.unpack_from('<I', self.registers, reg)[0]
             self.write_register(reg, (control & 0x7ff) | 0x8000)
 
+    def arm_word(self, at):
+        at &= 0xffffffff
+        if at > len(self.ram) - 4:
+            raise NotImplementedError('Bank reference needs unmapped ARM-bus behavior')
+        value = self.read32(at & ~3)
+        shift = (at & 3) * 8
+        return ((value >> shift) | value << ((32 - shift) & 31)) & 0xffffffff
+
+    def drum_exclusion(self, group, channel, exclusion):
+        # 0x1814..0x1880 intentionally checks even inactive/stale records.
+        for _, voice, reg in self.matching(group, channel, include_empty=True):
+            if self.ram[voice + 0x3d] == exclusion:
+                control = struct.unpack_from('<I', self.registers, reg)[0]
+                self.write_register(reg, (control & ~0x4000) | 0x8000)
+                self.ram[voice] = 0
+
+    def note_on(self, group, channel, note, velocity, priority):
+        at = 0xc000 + group * 0x800 + channel * 128
+        if self.ram[at + 0x3f]:
+            return
+        controller = bytes(self.ram[at:at + 128])
+        bank, program, curves = struct.unpack_from('<3I', controller, 0x10)
+        parameters_at = self.group_at + group * 64
+        parameters = bytes(self.ram[parameters_at:parameters_at + 32])
+        for layer_index in range(4):
+            relative = self.arm_word(program + layer_index * 4)
+            if not relative:
+                continue
+            layer_at = (bank + relative) & 0xffffffff
+            if layer_at + 16 > len(self.ram):
+                raise NotImplementedError('Program layer needs unmapped ARM-bus behavior')
+            layer = bytearray(self.ram[layer_at:layer_at + 16])
+            for offset in (0, 4, 8):
+                struct.pack_into('<I', layer, offset, self.arm_word(layer_at + offset))
+            count, first = struct.unpack_from('<2I', layer)
+            if count & 128:
+                continue
+            for index in range(count & 127):
+                split_at = (bank + first + index * 48) & 0xffffffff
+                if split_at + 48 > len(self.ram) or split_at & 3:
+                    raise NotImplementedError('Split requires unverified ARM-bus/bank-layout behavior')
+                split = bytes(self.ram[split_at:split_at + 48])
+                if not split[36] <= note <= split[37] or not split[43] <= velocity <= split[44]:
+                    continue
+                if split[45] and split[46]:
+                    self.drum_exclusion(group, channel, split[46])
+                voice_count = self.count()
+                if not voice_count:
+                    return
+                records = [bytes(self.ram[0x10000 + i * 64:0x10040 + i * 64]) for i in range(voice_count)]
+                allocated = allocate_voice(records, priority, self.ram[:264])
+                if allocated.status:
+                    continue
+                voice_index = allocated.index(voice_count)
+                if voice_index is None:
+                    raise NotImplementedError('Allocator raw non-voice return requires ARM-bus handling')
+                voice, reg = allocated.voice_address, allocated.register_address - 0x800000
+                curve_at = (curves + split[42] * 128) & 0xffffffff
+                curve = bytes(self.ram[curve_at:curve_at + 128])
+                words = self.setup.words(split, layer, controller, parameters, curve, bank, note, velocity)
+                record = self.setup.record(records[voice_index], split, layer, controller, parameters, curve,
+                    split_address=split_at, group_address=parameters_at, group=group, channel=channel,
+                    note=note, velocity=velocity, priority=priority)
+                self.ram[voice:voice + 64] = record
+                self.ram[self.voice_map_at + voice_index] = group | 128
+                old_control = struct.unpack_from('<I', self.registers, reg)[0]
+                self.write_register(reg, (old_control & self.prestop_mask) | 0x8000)
+                for word in range(1, 6):
+                    self.write_register(reg + word * 4, words[word])
+                lfo = modulation_word(struct.unpack_from('<H', split, 14)[0], controller[2])
+                self.write_register(reg + 28, lfo)
+                self.write_register(reg + 32, words[8])
+                for word in range(11, 18):
+                    self.write_register(reg + word * 4, words[word])
+                self.write_register(reg + 40, words[10])
+                self.write_register(reg + 36, words[9])
+                if split[45]:
+                    poll = (self.ram[0xadc] + 1) & 63
+                    self.write_register(self.monitor_register, poll, 1)
+                    self.ram[0xadc] = poll
+                if struct.unpack_from('<I', self.registers, reg + 24)[0] != words[6]:
+                    self.write_register(reg + 24, words[6])
+                self.write_register(reg + 28, words[7])
+                self.write_register(reg, words[0])
+                break
+
     def apply(self, command):
         self.writes.clear()
         if command == 0:  # 0xd68: the zero command is the FIFO sentinel.
@@ -92,6 +183,9 @@ class ChannelCommands:
         value = command & 127
         if tag == 0 or tag == 1 and value == 0:
             self.note_off(group, channel, command >> 8 & 127)
+            return
+        if tag == 1:
+            self.note_on(group, channel, command >> 8 & 127, value, command >> 27 & 31)
             return
         if tag == 4:
             self.program(at, command >> 8 & 127)

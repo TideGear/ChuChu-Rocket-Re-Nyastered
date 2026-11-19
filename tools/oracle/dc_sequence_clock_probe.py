@@ -1,7 +1,7 @@
 """Compare a fresh sequence's events, loops and commands with original scheduler calls.
 
 Runs original context initialization/start and scheduler, draining the command
-FIFO without voice dispatch. Compares events, command words and all 64 gates
+FIFO, optionally dispatching against captured loaded sound RAM. Compares events, command words and all 64 gates
 through sequence end/pending-gate expiry or bounded infinite-loop repeats,
 not audio or CPU cycles.
 """
@@ -9,7 +9,7 @@ import argparse
 import struct
 import sys
 from pathlib import Path
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE, UC_HOOK_MEM_WRITE
 from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R12, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -20,9 +20,11 @@ from dc_sound_timing import SequenceClock
 from dc_sound_sequence import SequenceCommands
 from mlt_extract import sections
 from mlt_sequences import inventory
+from dc_aica_state import inspect
+from dc_sound_channels import ChannelCommands
 
 
-def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=False, loop_passes=2):
+def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=False, loop_passes=2, state=None):
     PitchTable(driver)
     sequence = next(b for b in inventory(mlt) if b['bank'] == bank_index)['sequences'][sequence_index]
     if short_tail_control:
@@ -43,7 +45,14 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
     sequence_address = section['address'] + sequence['file_offset'] - section['offset']
     uc = Uc(UC_ARCH_ARM, UC_MODE_ARM)
     uc.mem_map(0, 0x200000)
-    uc.mem_write(0, driver[32:])
+    if state is not None:
+        report = inspect(state, mlt)
+        base, regs = report['sound_ram_offset'], report['register_offset']
+        uc.mem_write(0, state[base:base + 0x200000])
+        uc.mem_map(0x800000, 0x10000)
+        uc.mem_write(0x800000, state[regs:regs + 0x8000])
+    else:
+        uc.mem_write(0, driver[32:])
     uc.mem_write(section['address'], mlt[section['offset']:section['offset'] + section['size']])
     bus = Arm7Bus(uc)
 
@@ -61,6 +70,15 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
         uc.reg_write(reg, value)
     call(0x891c)
     observed = []
+    channels = (ChannelCommands(driver, bytes(uc.mem_read(0, 0x200000)),
+                                bytes(uc.mem_read(0x800000, 0x8000)))
+                if state is not None else None)
+    register_writes = []
+    write_count = 0
+    def register_write(machine, access, address, size, value, unused):
+        register_writes.append((address - 0x800000, size, value & ((1 << (size * 8)) - 1)))
+    if channels is not None:
+        uc.hook_add(UC_HOOK_MEM_WRITE, register_write, begin=0x800000, end=0x807fff)
 
     def event(machine, pc, size, unused):
         pointer = machine.reg_read(UC_ARM_REG_R12)
@@ -112,6 +130,24 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
         command_count += len(actual_commands)
         # Isolate scheduling from voice dispatch, keeping FIFO capacity available.
         uc.mem_write(0x12004, bytes(uc.mem_read(0x12000, 4)))
+        if channels is not None:
+            for command in actual_commands:
+                register_writes.clear()
+                uc.reg_write(UC_ARM_REG_R1, command)
+                call(0xd68)
+                channels.apply(command)
+                if register_writes != channels.writes:
+                    raise AssertionError(('Dispatch write order', tick, hex(command), register_writes, channels.writes))
+                write_count += len(register_writes)
+                if bytes(uc.mem_read(0x800000, 0x8000)) != channels.registers:
+                    raise AssertionError(('Dispatch registers', tick, hex(command)))
+                for start, length in ((0xc000, 0x4000), (0x10000, channels.count() * 64),
+                                      (channels.voice_map_at, 64), (0xadc, 1)):
+                    actual = bytes(uc.mem_read(start, length))
+                    expected_bytes = channels.ram[start:start + length]
+                    if actual != expected_bytes:
+                        differences = [(hex(start + i), a, b) for i, (a, b) in enumerate(zip(actual, expected_bytes)) if a != b]
+                        raise AssertionError(('Dispatch RAM', tick, hex(command), differences[:12]))
         count += len(observed)
         if native.loop_remaining == 128 and native.loop_repeats >= loop_passes:
             return dict(updates=tick, sequence_end=None, pending_at_end=None,
@@ -125,7 +161,7 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
                 pending_at_end = sum(bool(g.command) for g in command_model.gates)
             if not any(g.command for g in command_model.gates):
                 return dict(updates=tick, sequence_end=end_tick, pending_at_end=pending_at_end,
-                            events=count, commands=command_count)
+                            events=count, commands=command_count, dispatch_writes=write_count)
     raise AssertionError('Sequence exceeded bounded update window')
 
 
@@ -138,9 +174,10 @@ if __name__ == '__main__':
     parser.add_argument('--all', action='store_true', help='verify every sequence in the MLT')
     parser.add_argument('--short-tail-control', action='store_true', help='synthetic control: zero the final note step')
     parser.add_argument('--loop-passes', type=int, default=2, help='infinite-loop repetitions to verify')
+    parser.add_argument('--dispatch-state', type=Path, help='also compare native dispatch using captured loaded sound RAM; no voice worker or hardware synthesis')
     args = parser.parse_args()
-    if args.all and args.short_tail_control:
-        parser.error('Choose --all or --short-tail-control, not both')
+    if args.all and (args.short_tail_control or args.dispatch_state):
+        parser.error('--all cannot be combined with --short-tail-control or --dispatch-state')
     if args.loop_passes < 1:
         parser.error('--loop-passes must be positive')
     driver, mlt = args.driver.read_bytes(), args.mlt.read_bytes()
@@ -154,4 +191,5 @@ if __name__ == '__main__':
                    post_end_updates=sum(r['updates'] - r['sequence_end'] for r in results if r['sequence_end'] is not None),
                    sequences_with_pending_tails=sum(bool(r['pending_at_end']) for r in results)))
     else:
-        print(verify(driver, mlt, args.bank, args.sequence, args.short_tail_control, args.loop_passes))
+        print(verify(driver, mlt, args.bank, args.sequence, args.short_tail_control, args.loop_passes,
+                     args.dispatch_state.read_bytes() if args.dispatch_state else None))

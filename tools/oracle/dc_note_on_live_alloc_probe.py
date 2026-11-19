@@ -11,7 +11,7 @@ register words against the complete original note-on path.
 import argparse, struct, sys
 from collections import Counter
 from pathlib import Path
-from unicorn import UcError, Uc, UC_ARCH_ARM, UC_MODE_ARM
+from unicorn import UcError, Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_MEM_WRITE
 from unicorn.arm_const import UC_ARM_REG_R1, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,6 +20,7 @@ from arm7_bus import Arm7Bus
 from dc_aica_state import inspect
 from dc_sound_voices import allocate_voice
 from dc_sound_controls import filter_words, MixTables, VoiceSetup
+from dc_sound_channels import ChannelCommands
 
 
 def run(driver, mlt, states, saturate=False):
@@ -32,12 +33,17 @@ def run(driver, mlt, states, saturate=False):
     uc.mem_map(0x800000, 0x10000)
     count_pointer = struct.unpack_from('<I', driver, 32 + 0x1884)[0]
     stats = Counter()
+    writes = []
+    def register_write(machine, access, address, size, value, unused):
+        writes.append((address - 0x800000, size, value & ((1 << (size * 8)) - 1)))
+    uc.hook_add(UC_HOOK_MEM_WRITE, register_write, begin=0x800000, end=0x807fff)
     import random; rng = random.Random()
     for path in states:
         state = path.read_bytes()
         report = inspect(state, mlt)
         base, regs = report['sound_ram_offset'], report['register_offset']
         ram = state[base:base + 0x200000]
+        native = ChannelCommands(driver, ram, state[regs:regs + 0x8000])
         count = ram[count_pointer]
         free = sum(ram[0x10000 + 64 * i:0x10004 + 64 * i] == bytes(4) for i in range(count))
         print(path.name, 'voices', count, 'free', free)
@@ -73,6 +79,7 @@ def run(driver, mlt, states, saturate=False):
                             uc.reg_write(UC_ARM_REG_R1, cmd)
                             uc.reg_write(UC_ARM_REG_SP, 0x210ff0)
                             uc.reg_write(UC_ARM_REG_LR, 0x1ff000)
+                            writes.clear()
                             try:
                                 uc.emu_start(0xd68, 0x1ff000, count=200000)
                             except UcError:
@@ -85,6 +92,18 @@ def run(driver, mlt, states, saturate=False):
                                 stats['no_return'] += 1
                                 continue
                             after = bytes(uc.mem_read(0x10000, count * 64))
+                            native.ram[:] = ram; native.registers[:] = state[regs:regs + 0x8000]
+                            native.ram[0x10000:0x10000 + count * 64] = table
+                            native.apply(cmd)
+                            if after != native.ram[0x10000:0x10000 + count * 64]:
+                                differences = [(hex(i), a, b) for i, (a, b) in enumerate(zip(after, native.ram[0x10000:0x10000 + count * 64])) if a != b]
+                                raise AssertionError(('Native note-on records', path.name, group, chan, note, vel, prio, differences[:12]))
+                            if bytes(uc.mem_read(0x800000, 0x8000)) != native.registers or writes != native.writes:
+                                raise AssertionError(('Native note-on writes', path.name, group, chan, note, vel, prio, writes, native.writes))
+                            if bytes(uc.mem_read(native.voice_map_at, 64)) != native.ram[native.voice_map_at:native.voice_map_at + 64] or uc.mem_read(0xadc, 1)[0] != native.ram[0xadc]:
+                                raise AssertionError('Native note-on channel bookkeeping differs')
+                            stats['native_command_matches'] += 1
+                            stats['native_write_events_match'] += len(writes)
                             changed = [i for i in range(count) if after[i*64:i*64+64] != records[i]]
                             for voice_index in changed:
                                 record = after[voice_index * 64:(voice_index + 1) * 64]
@@ -131,6 +150,15 @@ def run(driver, mlt, states, saturate=False):
                                     raise AssertionError(('Complete note-on setup', path.name, group, chan, note, vel, voice_index,
                                                           actual_words, expected_words))
                                 stats['all_register_words_match'] += 1
+                                expected_record = setup.record(records[voice_index], split_data, layer_data, controller_data,
+                                    bytes(uc.mem_read(parameters, 32)), bytes(uc.mem_read(curve_base, 128)),
+                                    split_address=split, group_address=parameters, group=group, channel=chan,
+                                    note=note, velocity=vel, priority=prio)
+                                if record != expected_record:
+                                    differences = [(hex(i), a, b) for i, (a, b) in enumerate(zip(record, expected_record)) if a != b]
+                                    raise AssertionError(('Complete voice record', path.name, group, chan, note, vel,
+                                                          voice_index, differences))
+                                stats['all_voice_bytes_match'] += 1
                             first = allocate_voice(records, prio, low)
                             idx = first.index(count)
                             stats['cases'] += 1
