@@ -112,7 +112,7 @@ class Pack:
                     t3 = [strip[q], strip[q + 1], strip[q + 2]]
                     if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
                     if all(x[0] in buf for x in t3) and len({x[0] for x in t3}) == 3:
-                        tris.append(((tex if tex is not None else 0) & 0x1fff, [buf[x[0]][0] + (x[1], 1.0 - x[2]) + buf[x[0]][1] for x in t3]))
+                        tris.append((10 if tex is None else tex & 0x1fff, [buf[x[0]][0] + (x[1], 1.0 - x[2]) + buf[x[0]][1] for x in t3]))
         for i, n in enumerate(order):
             if n['mp'] == 0 or n['fl'] & 8: continue
             va, pa = struct.unpack_from('<II', d, n['mp'] - BASE)
@@ -182,6 +182,9 @@ def main(root, exe):
         tris = pack.assemble_cached(order) if name == 'ghost' else pack.assemble(order, special=special)
         full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_') or name == 'ghost'    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
         mats = [tex(texlist[m if m < len(texlist) else 2]) if (m < len(texlist) or special) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
+        if name == 'ghost':
+            if 'WHITE' not in tex_ids: tex_ids['WHITE'] = len(textures); textures.append(Image.new('RGBA', (4, 4), (255, 255, 255, 255)))
+            mats.append(tex_ids['WHITE'])
         frames = pack.cat_frames(order) if name == 'cat' else motion_frames(pack, order, 0x8c0988a0, 8) if name == 'ghost' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
         out_models.append((name, tris, mats, frames))
