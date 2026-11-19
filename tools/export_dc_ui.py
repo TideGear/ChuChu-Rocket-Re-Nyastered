@@ -234,7 +234,9 @@ def export_dc_fallback_fonts(out):
         try: font.set_variation_by_axes([weight if a['name'] in (b'Weight', 'Weight') else a['default'] for a in font.get_variation_axes()])
         except (OSError, AttributeError, KeyError): pass
         return font
-    text_font, digit_font = load('DotGothic16-Regular.ttf', 24, 400), load('OpenSans.ttf', 25, 350)
+    # Glyphs are rasterised at twice the BIOS cell (24 x 48 and 48 x 48) and anti-aliased: the port draws them at the same on-screen size as the 12 x 24 / 24 x 24 BIOS cells,
+    # so the 1.6x layout scale is a smooth down-scale of a larger image instead of a hard-edged up-scale. Descenders get 12 rows below the baseline (the BIOS cell has 4 at 1x).
+    text_font, digit_font = load('DotGothic16-Regular.ttf', 44, 400), load('OpenSans.ttf', 50, 350)
     if not text_font or not digit_font: return
     def sheet_files(name, cells, w, h):
         atlas = Image.new('RGBA', (w * len(cells), h))
@@ -249,22 +251,21 @@ def export_dc_fallback_fonts(out):
         cell = Image.new('RGBA', mask.size, (255, 255, 255, 0)); cell.putalpha(mask); return cell
     glyphs = []
     for c in range(0x20, 0x7f):
-        mask = Image.new('L', (40, 48), 0)
-        ImageDraw.Draw(mask).text((10, 34), chr(c), font=text_font, fill=255, anchor='ls')
-        bits = np.array(mask.crop((10, 34 - 20, 22, 34 + 4)).point(lambda v: 255 if v > 60 else 0)) > 0   # 12 px advance at 24 px: no resampling, 1-bit
-        glyphs.append(white(Image.fromarray((bits * 255).astype('uint8'))))
-    sheet_files('dc_bios_ansi', glyphs, 12, 24)
+        mask = Image.new('L', (24, 48), 0)
+        ImageDraw.Draw(mask).text((0, 38), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 38 of 48 (19 of 24), advance 24 (12 at 1x)
+        glyphs.append(white(mask))
+    sheet_files('dc_bios_ansi', glyphs, 24, 48)
     cells = []
     for d in '0123456789':
-        mask = Image.new('L', (48, 56), 0)
-        ImageDraw.Draw(mask).text((4, 44), d, font=digit_font, fill=255, anchor='ls')
-        box = mask.getbbox(); width = 14 if d != '1' else box[2] - box[0]
-        ink = mask.crop(box).resize((width, 20), Image.Resampling.BILINEAR).point(lambda v: 255 if v > 125 else 0)
-        cell = Image.new('L', (24, 24), 0); cell.paste(ink, ((24 - width) // 2, 1)); cells.append(white(cell))
-    colon = Image.new('L', (24, 24), 0); dr = ImageDraw.Draw(colon)
-    for top in (5, 15): dr.rectangle((11, top, 12, top + 3), fill=255)
+        mask = Image.new('L', (96, 112), 0)
+        ImageDraw.Draw(mask).text((8, 88), d, font=digit_font, fill=255, anchor='ls'); box = mask.getbbox()
+        width = 28 if d != '1' else box[2] - box[0]
+        ink = mask.crop(box).resize((width, 40), Image.Resampling.LANCZOS)
+        cell = Image.new('L', (48, 48), 0); cell.paste(ink, ((48 - width) // 2, 2)); cells.append(white(cell))
+    colon = Image.new('L', (48, 48), 0); dr = ImageDraw.Draw(colon)
+    for top in (10, 30): dr.rectangle((22, top, 25, top + 7), fill=255)
     cells.append(white(colon))
-    sheet_files('dc_select_clock', cells, 24, 24)
+    sheet_files('dc_select_clock', cells, 48, 48)
 
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
