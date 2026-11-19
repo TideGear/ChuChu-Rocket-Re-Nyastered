@@ -26,7 +26,7 @@ Dome textures are one per player colour: `080ac4f8` (player 1, blue), `080ac8f8`
 * Challenge A1 (ch1): the goal dome is `080ac4f8` (blue, y 135-156) over `080accf8` (red, y 152-177).
 * Puzzle: a single piece (blue `080ac4f8`) per dome.
 
-The port draws one single-colour lid model per rocket (`lid1..lid4`), so it cannot show the split in Team Battle or Challenge.
+Both pieces in the Challenge stream have the same geometry (6 strips, 40 vertices = the 21-vertex, 28-triangle `lid` model, one per colour texture); the port's `drawDcRocketDome` already built a dome from two lid copies (yaw 90 and 270, Battle task 0x8c01b4e0) but both used the same lid. Fixed 2026-11-19: `drawFieldObjects` takes a partner-lid table: Challenge's solo rocket pairs lid 1 (blue) with lid 3 (red), Team Battle pairs 1<->3 and 2<->4, other modes stay single-colour. The Challenge A1 dome now matches Flycast pixel for pixel in a zoomed crop (blue upper, red lower; play frame 1.93 -> 1.82). Which player's rocket sits where in Team Battle (the Flycast frame has blue/red at top-right and bottom-right, green/orange on the left) is not yet compared; the port's sim assigns its own layout.
 
 ## Open in the layer audit
 

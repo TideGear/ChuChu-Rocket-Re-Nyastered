@@ -1156,7 +1156,8 @@ struct App {
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
                           float alpha, const float* puku = nullptr, FieldLayout field = {},
                           bool dcProjection = false, int soloRocket = 0,
-                          const std::array<DcRocketLid, kCols * kRows>* launchLids = nullptr, int launchAge = -1) {
+                          const std::array<DcRocketLid, kCols * kRows>* launchLids = nullptr, int launchAge = -1,
+                          const int* partnerLid = nullptr) {   // partnerLid[i]: the lid whose colour fills the dome's other half (Team Battle and Challenge domes are two lids in two colours: docs/layers.md)
         // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
         static const int mouseFrameOverride = getenv("CCR_MOUSE_FRAME") ? atoi(getenv("CCR_MOUSE_FRAME")) : -1;   // headless comparison: force the keyframe the real frame showed
         const int mouseFrame = mouseFrameOverride >= 0 ? mouseFrameOverride & 7 : std::max(0, sim.now - 1) & 7;
@@ -1234,7 +1235,7 @@ struct App {
                         const int cell = (int)(object.z / kCell) * kCols + (int)(object.x / kCell);
                         const float opening = launchLids ? (*launchLids)[cell].opening : 0.0f;
                         models3d.drawDcRocketDome(ren, *lid, {x, z}, {GW / 2.0f, GH / 2.0f},
-                                                 field.cell / kCell, puku ? puku[i] : 1.0f, 218.0f, nullptr,
+                                                 field.cell / kCell, puku ? puku[i] : 1.0f, 218.0f, partnerLid && partnerLid[i] >= 0 ? models3d.find(lids[partnerLid[i]]) : nullptr,
                                                  opening, launchAge >= 0 ? models3d.find("launch_blue") : nullptr, launchLids ? (*launchLids)[cell].age : launchAge,
                                                  launchAge >= 0 ? models3d.find("launch_base") : nullptr, models3d.find("fire"), launchLids ? &(*launchLids)[cell].smokeBirths : nullptr);
                         continue;
@@ -3344,7 +3345,7 @@ struct ChallengeMode : Screen {
         { const bool fc = supportedNow() && phase() <= ChallengeGame::Play; if (fc && !(mouseCursor && aim.inside) && dc) a.queueBracket(std::clamp(padAim.cellX(), 0, kCols - 1), std::clamp(padAim.cellY(), 0, kRows - 1), 0, cticks); }   // the corner bracket follows the controller tip's cell
         a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
         for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
-        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 0);   // Dreamcast Challenge A1 dome is the blue lid (Flycast frames 2390 and 2500; the earlier red guess did not match); other stages unchecked
+        { static const int kPartner[4] = {2, -1, -1, -1}; a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 0, nullptr, -1, kPartner); }   // Dreamcast Challenge A1 dome is the blue lid (Flycast frames 2390 and 2500; the earlier red guess did not match); other stages unchecked
         const bool fieldCursor = supportedNow() && phase() <= ChallengeGame::Play;
         if (fieldCursor && mouseCursor && aim.inside)
             a.mouseCursorAt(aim.x, aim.y, 0, cticks, field.scale());
@@ -4096,7 +4097,7 @@ struct BattleMode : Screen {
             if (a.headless && getenv("CCR_ENT_TRACE")) printf("arrow cell %d %d dir %d owner %d hits %d ttl %d\n", ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
             a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl, field);
         }
-        a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field, dcProjection);
+        { static const int kTeam[4] = {2, 3, 0, 1}; a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field, dcProjection, 0, nullptr, -1, game.teamMode ? kTeam : nullptr); }
         if (dcHud) { if (game.teamMode) a.drawDcTeamHud(game.score, lv, left, game.roundFrames); else a.drawDcBattleHud(game.score, lv, left, game.roundFrames); }
         const int ranks[] = {game.rankOf(0), game.rankOf(1), game.rankOf(2), game.rankOf(3)};
         const int taskAge = intro + game.frame;
