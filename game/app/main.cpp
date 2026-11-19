@@ -2923,7 +2923,9 @@ struct PuzzleMode : Screen {
         dcPanelDrawn = false;
         const bool hasBoardTasks = failureFrames <= kFailureHoldFrames;
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
-        SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255);   // iPad Puzzle clear colour (blue 0.1)
+        // iPad clear colour is blue 0.1 (26); the Dreamcast frame's untextured background plane is (0,0,8) in every captured Puzzle result frame.
+        const bool dcBackdrop = dreamcastPuzzleControls(a) && a.useModels3d();
+        SDL_SetRenderDrawColor(a.ren, 0, 0, dcBackdrop ? 8 : 26, 255);
         SDL_RenderClear(a.ren);
         a.stars.draw(a);
         // The real opaque TA list shares depth across floor, walls and
