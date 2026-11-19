@@ -142,6 +142,11 @@ if(MSVC)
   target_compile_options(dc_rng_test PRIVATE /W3 /fp:precise)
 endif()
 
+add_executable(dc_spawn_probe tests/dc_spawn_probe.cpp)
+if(MSVC)
+  target_compile_options(dc_spawn_probe PRIVATE /W3 /fp:precise)
+endif()
+
 add_executable(determinism_test tests/determinism_test.cpp)
 if(MSVC)
   target_compile_options(determinism_test PRIVATE /W3 /fp:precise)
