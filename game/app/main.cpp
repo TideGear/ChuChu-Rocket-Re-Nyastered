@@ -2359,7 +2359,7 @@ struct DcHelpMode : Screen {
         SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_RenderClear(a.ren);
         if (page >= 0 && page < (int)pages.size()) {
             const Sheet& pg = a.dcHelpPages; SDL_Rect clip{0, 0, 640, 480}; SDL_RenderSetClipRect(a.ren, &clip);
-            for (const Quad& q : pages[page]) { if (q.frame < 0 || q.frame >= (int)pg.fr.size()) continue; const SDL_Rect& r = pg.fr[q.frame]; const SDL_FRect d{q.x, q.y, q.w, q.h}; const bool stretched = q.w > 4.0f * r.w || q.h > 4.0f * r.h; if (stretched) SDL_SetTextureScaleMode(pg.tex, SDL_ScaleModeNearest); SDL_RenderCopyF(a.ren, pg.tex, &r, &d); if (stretched) SDL_SetTextureScaleMode(pg.tex, SDL_ScaleModeLinear); }   // the quad's own size: the 8 x 8 border strips are stretched over 576 x 8
+            for (const Quad& q : pages[page]) { if (q.frame < 0 || q.frame >= (int)pg.fr.size()) continue; const SDL_Rect& r = pg.fr[q.frame]; const SDL_FRect d{q.x, q.y, q.w, q.h}; const bool stretched = q.w > 4.0f * r.w || q.h > 4.0f * r.h; if (stretched) { SDL_RenderFlush(a.ren); SDL_SetTextureScaleMode(pg.tex, SDL_ScaleModeNearest); } SDL_RenderCopyF(a.ren, pg.tex, &r, &d); if (stretched) { SDL_RenderFlush(a.ren); SDL_SetTextureScaleMode(pg.tex, SDL_ScaleModeLinear); } }   // SDL reads the filter when the queue runs, so flush around the switch   // the quad's own size: the 8 x 8 border strips are stretched over 576 x 8
             return; }
         const Sheet& sh = a.dcHelp;
         auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
