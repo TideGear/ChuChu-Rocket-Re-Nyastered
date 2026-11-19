@@ -36,7 +36,8 @@ MODELS += [('h_%x' % o, o, HUD_TEX) for o in HUD_OFFS]
 def rot(v, a, flags):
     ax, ay, az = [t * 2 * math.pi / 65536.0 for t in a]
     x, y, z = v
-    for ax_, t in ((('x', ax), ('y', ay), ('z', az)) if flags & 0x20 else (('z', az), ('y', ay), ('x', ax))):
+    # Node rotation order (measured on Flycast frame 3550: ghost region error 10.35 -> 7.72, cat region 5.86 -> 4.79): X, then Y, then Z by default; the 0x20 flag (ZXY_ANG) selects Z, Y, X.
+    for ax_, t in ((('z', az), ('y', ay), ('x', ax)) if flags & 0x20 else (('x', ax), ('y', ay), ('z', az))):
         c, s = math.cos(t), math.sin(t)
         if ax_ == 'x': y, z = y * c - z * s, y * s + z * c
         elif ax_ == 'y': x, z = x * c + z * s, -x * s + z * c
