@@ -6,6 +6,8 @@ FLYCAST_AICA_TRACE=<csv path>. Rebuild the core, then compare its WAV with the
 unmodified core before using the timestamps. Optional FLYCAST_AICA_KEY_ON=<hex
 channel mask> invokes original KEY_ON once before the first sample, explicitly
 changing the test fixture. Leave it unset for ordinary tracing or identity checks.
+FLYCAST_AICA_TICKS=<csv> independently records driver-clock changes at their
+first observed output sample, with sampled ARM PC for context.
 No emulator sources are bundled.
 """
 import argparse
@@ -68,6 +70,39 @@ void ccr_keyon_controls()
 }
 '''
 
+TICKS = r'''
+// CCR development driver-clock observation (no timing or synthesis changes).
+namespace {
+std::FILE* ccr_tick_file = nullptr;
+bool ccr_tick_initialized = false;
+bool ccr_tick_baseline = false;
+unsigned long long ccr_tick_sample = 0;
+u32 ccr_last_tick = 0;
+
+void ccr_trace_ticks()
+{
+    if (!ccr_tick_initialized) {
+        ccr_tick_initialized = true;
+        if (const char* path = std::getenv("FLYCAST_AICA_TICKS")) {
+            ccr_tick_file = std::fopen(path, "w");
+            if (ccr_tick_file)
+                std::fprintf(ccr_tick_file, "sample,driver_tick,arm_pc_at_sample\n");
+        }
+    }
+    if (!ccr_tick_file) return;
+    const u32 tick = *(const u32*)&aica_ram[0x12418];
+    if (!ccr_tick_baseline || tick != ccr_last_tick) {
+        std::fprintf(ccr_tick_file, "%llu,%u,%08x\n", ccr_tick_sample,
+                     tick, arm::arm_Reg[arm::RN_PC].I);
+        std::fflush(ccr_tick_file);
+        ccr_last_tick = tick;
+        ccr_tick_baseline = true;
+    }
+    ++ccr_tick_sample;
+}
+}
+'''
+
 
 def patch(root, msvc=False, glext=None):
     path = root / 'core/hw/aica/sgc_if.cpp'
@@ -81,11 +116,11 @@ def patch(root, msvc=False, glext=None):
         raise ValueError('MSVC needs --glext pointing to a Khronos GL extension header (SDL_opengl_glext.h also works)')
     text = raw.decode('utf-8')
     text = text.replace('namespace aica::sgc\n{',
-                        '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n\nnamespace aica::sgc\n{\n' + TRACE, 1)
-    text = text.replace('void AICA_Sample()\n{', KEYON + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_trace_keys();', 1)
+                        '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n\nnamespace aica::sgc\n{\n' + TRACE + TICKS, 1)
+    text = text.replace('void AICA_Sample()\n{', KEYON + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
     text = text.replace('void deserialize(Deserializer& deser)\n{',
-                        'void deserialize(Deserializer& deser)\n{\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_keyon_done = false;', 1)
-    if text.count('ccr_trace_keys();') != 1 or text.count('ccr_trace_sample = 0;') != 2:
+                        'void deserialize(Deserializer& deser)\n{\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)
+    if text.count('ccr_trace_keys();') != 1 or text.count('ccr_trace_ticks();') != 1 or text.count('ccr_trace_sample = 0;') != 2:
         raise ValueError('Trace anchors did not resolve uniquely')
     path.write_bytes(text.encode('utf-8'))
     if msvc:
