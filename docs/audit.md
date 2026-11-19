@@ -70,7 +70,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Challenge pause | screen | partial | - |
 | Puzzle play Normal 01/02/08 | screen | partial | Normal 01 1.31 (CCR_GPU=1, disc-only; star twinkles not drawn, look-alike hint font without a BIOS); 02/08 not measured |
 | Puzzle pause | screen | partial | not measured; the port has no pad path to the overlay (original: overlay whole at +5 frames after Start) |
-| Puzzle result, Save Completed (clear age 218) | screen | partial | 1.37 full frame; notice text 1,377 px differ by one level (rule needs 0) |
+| Puzzle result, Save Completed (clear age 218) | screen | partial | 1.37 full frame; Save Completed notice element passes the per-element rule (mean 0.145, shift 0,0, 0 off-edge px > 8; the 1,377 one-level pixels are host-GPU rounding); banner, HUD and rocket elements not yet checked per element |
 | Puzzle hint text (BIOS font) | screen | verified | 0 px |
 | Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |
 | Battle Stage Select | screen | partial | 2.35 (preview 9.6) |

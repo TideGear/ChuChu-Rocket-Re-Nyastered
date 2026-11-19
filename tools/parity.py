@@ -88,6 +88,19 @@ def main():
             e, dx, dy = best_shift(r, p, box)
             row[name + '_mean'] = round(float(np.abs(r - p)[y0:y1, x0:x1].mean()), 4)
             row[name + '_px_gt8'] = int((err[y0:y1, x0:x1] > 8).sum())
+            # px_gt8 outside a 1 px edge band: errors > 8 that are not within 1 px of a pixel that differs from its own neighbour in the reference (an edge)
+            ref_c = r[y0:y1, x0:x1]
+            edge = np.zeros(ref_c.shape[:2], bool)
+            for ax in (0, 1):
+                d = np.abs(np.diff(ref_c, axis=ax)).max(2) > 8
+                if ax == 0: edge[:-1] |= d; edge[1:] |= d
+                else: edge[:, :-1] |= d; edge[:, 1:] |= d
+            band = edge.copy()
+            for _ in range(1):
+                b2 = band.copy(); b2[1:] |= band[:-1]; b2[:-1] |= band[1:]; b2[:, 1:] |= band[:, :-1]; b2[:, :-1] |= band[:, 1:]; band = b2
+            off = int(((err[y0:y1, x0:x1] > 8) & ~band).sum())
+            row[name + '_off_edge_gt8'] = off
+            row[name + '_pass'] = bool(row[name + '_mean'] <= 1 and (dx, dy) == (0, 0) and off == 0)
             row[name + '_shift'] = '%d,%d' % (dx, dy)
         sheet = Image.new('RGB', (r.shape[1] * 3, r.shape[0]))
         sheet.paste(Image.fromarray(r.astype(np.uint8)), (0, 0))
