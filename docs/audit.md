@@ -48,6 +48,51 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 
 - Disc-only run (2026-11-18, USA CUE/BIN only, no mobile files, no BIOS): `tools/extract_all.py --game-files local/dc_ref/disc --cache <empty dir>` completed in 87 s (128 models, 50 battle stages, 54 `dc_*` UI sheets, `dreamcast_puzzles.bin`); `ccr` then ran STARTUP, MENU, HELP, OPTIONS, BATTLE, TEAM_BATTLE, CHALLENGE_SELECT, puzzle, challenge and battle play headlessly with no errors. This covers the extraction core only: `setup.cmd`, `--prepare` and the RecompLauncher path were not run (they write to the user's config folder), and the screens were not diffed beyond the earlier per-screen comparisons.
 
+## Dreamcast coverage table (2026-11-18)
+Counts items this table lists, not the game's full content (many screens have several states). Status: verified = within the goal's error bar (full frame <= 3, text 0 px); partial = implemented and compared once; open = not built or not compared.
+
+| Item | Kind | Status | Measured error vs Flycast |
+|---|---|---|---|
+| SEGA logo | screen | verified | 0.97 |
+| Sonic Team logo | screen | verified | 0.66 |
+| Title (bg, logo, prompt) | screen | verified | 1.6-2.5 |
+| Title flying rocket | animation | partial (position exact, edge 1.6-2.5) | 1.6-2.5 |
+| Title shadow strips newtitle1/2 | screen | open | - |
+| Title attract demo | animation | open | - |
+| Mode Select | screen | partial | 2.98 |
+| Challenge select (A1, B1, B2) | screen | verified | 2.2-3.0 |
+| Challenge select clock, clear marks | screen | partial | 0 px / 1.2 |
+| Challenge intro cards A1, B2 | screen | partial | <=3 |
+| Challenge play A1 | screen | partial | see dreamcast_models.md |
+| Challenge failure | screen | partial | 4.3 |
+| Challenge clear (C1) | screen | partial | 0.7 banner |
+| Challenge pause | screen | partial | - |
+| Puzzle play Normal 01/02/08 | screen | partial | - |
+| Puzzle pause | screen | partial | - |
+| Puzzle hint text (BIOS font) | screen | verified | 0 px |
+| Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |
+| Battle Stage Select | screen | partial | 2.35 (preview 9.6) |
+| Battle play HUD, Team Battle HUD | screen | partial | - |
+| Battle pause (4P, Team) | screen | partial | - |
+| Help Menu | screen | partial | visual match |
+| Help pages (21) | screen | partial | 4.8-13 |
+| Options menu | screen | partial | 4.48 |
+| Options sub-pages (General, 4P Settings, Records, Language, F-key) | screen | open | - |
+| Mode 4, 16 (tutorial), 18-22 | screen | open | - |
+| Puzzle Edit screens | screen | open | - |
+| Network / Homepage | screen | not testable offline | - |
+| Unlock/password messages (mode 17) | screen | open | - |
+| Mouse walk cycle (8 keyframes) | animation | partial (not frame-diffed) | - |
+| Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
+| Rocket lid / lift-off / smoke | animation | open (Dreamcast not compared) | - |
+| Mouse caught, hole fall, rocket entry | animation | open | - |
+| Cursor trail | animation | partial | - |
+| Roulette | animation | open (Dreamcast) | - |
+| KapuKapu, focus ring | animation | open | - |
+| Sound: startup, menu, cues, music | sound | open (driver internals verified, no playback match) | - |
+
+**Totals: 37 items; 6 verified, 19 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.
+
 ## Dreamcast mode inventory (read from the game's mode table, 2026-11-18)
 The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `0x8c019088` rejects values >= 23 and stores the mode at `0x8c1af108`, read from RAM dumps of the captured screens); each entry points to a descriptor whose first word is the mode's init function. Entries 23-39 and up are data, not modes. Status words as above; every row stays open until its screens are matched against Flycast frames.
 | Mode | Init function | What it is | Status |
