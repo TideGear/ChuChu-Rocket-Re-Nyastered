@@ -3332,9 +3332,9 @@ struct ChallengeMode : Screen {
     }
     void draw(App& a, float alpha) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
-        SDL_SetRenderDrawColor(a.ren, 0, 0, 26, 255); SDL_RenderClear(a.ren);
-        a.stars.draw(a);
         const bool dc = dcLayout(a); const FieldLayout field = pf(a);
+        SDL_SetRenderDrawColor(a.ren, 0, 0, dc ? 8 : 26, 255); SDL_RenderClear(a.ren);   // the Dreamcast background plane is (0, 0, 8) in the Challenge frames too (iPad clear colour: blue 26)
+        a.stars.draw(a);
         a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
         for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
         a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 2);
@@ -4074,7 +4074,7 @@ struct BattleMode : Screen {
     void nextRound() { roundNo++; cur = (cur + 1) % (int)stages.list.size(); restart(); mode = 2; }   // GA_SetStageNumber(stage + 1, wrapping to 0)
     const char* next() override { if (back) { back = false; return "MENU"; } return nullptr; }
     void draw(App& a, float alpha) override {
-        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, a.useDcBattleHud() ? 8 : 0, 255); SDL_RenderClear(a.ren);   // Dreamcast background plane (0, 0, 8) in the Battle and Team Battle frames
         a.stars.draw(a);
         const bool dcHud = mode < 4 && a.useDcBattleHud() && (!game.teamMode || a.dcBattleHud.fr.size() >= 41);
         const bool dcPlayerOverlays = dcHud && a.dcBattleHud.fr.size() >= 39;
