@@ -68,13 +68,13 @@ Counts items this table lists, not the game's full content (many screens have se
 | Challenge failure | screen | partial | 4.3 |
 | Challenge clear (C1) | screen | partial | 0.7 banner |
 | Challenge pause | screen | partial | - |
-| Puzzle play Normal 01/02/08 | screen | partial | Normal 01 1.93 (CCR_GPU=1, disc-only; star twinkles not drawn, look-alike hint font without a BIOS); 02/08 not measured |
+| Puzzle play Normal 01/02/08 | screen | partial | Normal 01 1.31 (CCR_GPU=1, disc-only; star twinkles not drawn, look-alike hint font without a BIOS); 02/08 not measured |
 | Puzzle pause | screen | partial | not measured; the port has no pad path to the overlay (original: overlay whole at +5 frames after Start) |
-| Puzzle result, Save Completed (clear age 218) | screen | partial | 1.79 full frame; notice text 1,377 px differ by one level (rule needs 0) |
+| Puzzle result, Save Completed (clear age 218) | screen | partial | 1.37 full frame; notice text 1,377 px differ by one level (rule needs 0) |
 | Puzzle hint text (BIOS font) | screen | verified | 0 px |
 | Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |
 | Battle Stage Select | screen | partial | 2.35 (preview 9.6) |
-| Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 4.05 (CCR_GPU=1, stage 0, tick alignment not established, CPU cursors absent); Team Battle not measured |
+| Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 2.83 (CCR_GPU=1, stage 0, 30 ticks; tick alignment not established, CPU cursors absent); Team Battle not measured |
 | Battle pause (4P, Team) | screen | partial | - |
 | Help Menu | screen | partial | visual match |
 | Help pages (21) | screen | partial | 4.8-13 |
@@ -86,7 +86,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Unlock/password messages (mode 17) | screen | open | - |
 | Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual) | moving px 11.4 vs 5.4 static baseline |
 | Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
-| Rocket lid / lift-off / smoke | animation | partial (per-frame sweep of ages -9..80, one replay) | full-frame mean 1.82-2.41 on ages 1-80 and 1.93-2.87 on -9..-2 (CCR_GPU=1, disc-only); ages -1 (3.62) and 0 (4.57) fail: the original enlarges the domes about 1.25x then draws none, untraced |
+| Rocket lid / lift-off / smoke | animation | partial (per-frame sweep of ages -9..80, one replay) | full-frame mean 1.17-1.77 on ages 1-80 and 1.28-2.24 on -9..-2 (CCR_GPU=1, disc-only); only age 0 fails (3.92): the original draws no domes there (and enlarges them about 1.25x at age -1), untraced |
 | Mouse caught, hole fall, rocket entry | animation | open | - |
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |

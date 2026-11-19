@@ -533,8 +533,12 @@ struct App {
         std::vector<ModelPack::SoftTri> floorTris; floorTris.reserve(12 * 9 * 2);
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
             const float x0 = field.x(c), y0 = field.y(r), x1 = field.x(c + 1), y1 = field.y(r + 1);
-            const float u0 = ((c + 1) & 1) * 0.5f, v0 = (r & 1) * 0.5f, ua = u0 + 0.5f, ub = u0, va = v0 + 0.5f, vb = v0;
-            const SDL_FPoint P[4] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}; const float U[4] = {ua, ub, ub, ua}, V[4] = {va, va, vb, vb};
+            // The real floor is one quad (Flycast frame 2390, packet 0x253e10): its V runs 0.99609375 at the top edge to -3.5 at the bottom over 9 cells and its U 0 to 6 over 12 cells.
+            // The model pack stores yuka01 transposed relative to the PowerVR texture, so the port's U axis takes the quad's V and its V axis the quad's U.
+            constexpr float kV0 = 0.99609375f, kVStep = (0.99609375f + 3.5f) / 9.0f;
+            const float qua = c * 0.5f, qub = (c + 1) * 0.5f, qva = kV0 - r * kVStep, qvb = kV0 - (r + 1) * kVStep;
+            const float ua = qva, ub = qvb, va = qua, vb = qub;
+            const SDL_FPoint P[4] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}; const float U[4] = {ua, ua, ub, ub}, V[4] = {va, vb, vb, va};
             static const int kQuadTris[2][3] = {{0, 1, 2}, {0, 2, 3}};
             for (const int (&idx)[3] : kQuadTris) {
                 ModelPack::SoftTri t{}; t.tex = static_cast<int>(floorM->matTex[mat]); t.translucent = false; t.wrap = true;
