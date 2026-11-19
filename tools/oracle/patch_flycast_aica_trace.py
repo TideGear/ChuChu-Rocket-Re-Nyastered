@@ -8,6 +8,10 @@ channel mask> invokes original KEY_ON once before the first sample, explicitly
 changing the test fixture. Leave it unset for ordinary tracing or identity checks.
 FLYCAST_AICA_TICKS=<csv> independently records driver-clock changes at their
 first observed output sample, with sampled ARM PC for context.
+FLYCAST_AICA_WRITES=<csv> is a synthetic fixture: ordered rows contain sample
+(decimal), channel (decimal), offset (hex), width 1/2 (decimal), value (hex).
+It applies original byte/halfword register handlers before that output sample.
+Leave it unset for ordinary tracing and identity checks.
 No emulator sources are bundled.
 """
 import argparse
@@ -103,6 +107,53 @@ void ccr_trace_ticks()
 }
 '''
 
+WRITES = r'''
+// Synthetic timed register writes. Disabled without an explicit fixture file.
+namespace {
+std::FILE* ccr_write_file = nullptr;
+bool ccr_write_initialized = false;
+bool ccr_write_pending = false;
+unsigned long long ccr_write_sample = 0, ccr_write_next = 0;
+unsigned ccr_write_channel = 0, ccr_write_offset = 0, ccr_write_size = 0, ccr_write_value = 0;
+void ccr_read_write()
+{
+    int n = std::fscanf(ccr_write_file, "%llu,%u,%x,%u,%x", &ccr_write_next,
+        &ccr_write_channel, &ccr_write_offset, &ccr_write_size, &ccr_write_value);
+    if (n == EOF) { ccr_write_pending = false; return; }
+    if (n != 5 || ccr_write_next < ccr_write_sample || ccr_write_channel >= 64 ||
+        ccr_write_offset >= 0x48 || (ccr_write_size != 1 && ccr_write_size != 2) ||
+        (ccr_write_size == 2 && (ccr_write_offset & 1)) ||
+        ccr_write_value >= (1u << (ccr_write_size * 8))) std::abort();
+    ccr_write_pending = true;
+}
+void ccr_timed_writes()
+{
+    if (!ccr_write_initialized) {
+        ccr_write_initialized = true;
+        if (const char* path = std::getenv("FLYCAST_AICA_WRITES")) {
+            ccr_write_file = std::fopen(path, "r");
+            if (!ccr_write_file) std::abort();
+            ccr_read_write();
+        }
+    }
+    while (ccr_write_pending && ccr_write_next == ccr_write_sample) {
+        u32 address = ccr_write_channel * 128 + ccr_write_offset;
+        if (ccr_write_size == 1) aica::writeRegInternal<u8>(address, (u8)ccr_write_value);
+        else aica::writeRegInternal<u16>(address, (u16)ccr_write_value);
+        ccr_read_write();
+    }
+    ++ccr_write_sample;
+}
+void ccr_reset_writes()
+{
+    if (ccr_write_file) std::fclose(ccr_write_file);
+    ccr_write_file = nullptr;
+    ccr_write_initialized = ccr_write_pending = false;
+    ccr_write_sample = 0;
+}
+}
+'''
+
 
 def patch(root, msvc=False, glext=None):
     path = root / 'core/hw/aica/sgc_if.cpp'
@@ -117,9 +168,9 @@ def patch(root, msvc=False, glext=None):
     text = raw.decode('utf-8')
     text = text.replace('namespace aica::sgc\n{',
                         '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n\nnamespace aica::sgc\n{\n' + TRACE + TICKS, 1)
-    text = text.replace('void AICA_Sample()\n{', KEYON + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
+    text = text.replace('void AICA_Sample()\n{', KEYON + WRITES + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_timed_writes();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
     text = text.replace('void deserialize(Deserializer& deser)\n{',
-                        'void deserialize(Deserializer& deser)\n{\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)
+                        'void deserialize(Deserializer& deser)\n{\n\tccr_reset_writes();\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)
     if text.count('ccr_trace_keys();') != 1 or text.count('ccr_trace_ticks();') != 1 or text.count('ccr_trace_sample = 0;') != 2:
         raise ValueError('Trace anchors did not resolve uniquely')
     path.write_bytes(text.encode('utf-8'))

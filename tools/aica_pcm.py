@@ -124,6 +124,64 @@ class SampleStream:
         elif phase < 2:
             state['filter_state'] += 1
 
+    def write_controller(self, offset, size, value):
+        """Apply a pitch/LFO/direct-pan/TL write without restarting playback.
+
+        Offsets/widths follow Flycast ChannelEx::RegWrite. Other register
+        families, disabled voices and global KYONEX remain separate routes.
+        """
+        allowed = ((0x18, 1), (0x19, 1), (0x18, 2),
+                   (0x1c, 1), (0x1d, 1), (0x1c, 2),
+                   (0x24, 1), (0x25, 1), (0x24, 2), (0x29, 1))
+        if (offset, size) not in allowed or not 0 <= value < 1 << (size * 8):
+            raise ValueError('Unsupported controller register write')
+        words = self.channel['register_words']
+        packed = bytearray(struct.pack('<18I', *words))
+        packed[offset:offset + size] = value.to_bytes(size, 'little')
+        updated = list(struct.unpack('<18I', packed))
+        channel = dict(self.channel, register_words=updated,
+            fns=updated[6] & 1023, octave_raw=updated[6] >> 11 & 15,
+            lfo_raw=updated[7], pan_raw=updated[9] & 31,
+            direct_level=updated[9] >> 8 & 15, total_level=updated[10] >> 8)
+        if updated[7] & 7:
+            raise ValueError('Amplitude LFO is not yet validated')
+        state = dict(self.state)
+        if offset in (0x1c, 0x1d):
+            frequency = updated[7] >> 10 & 31
+            division = 128 >> (frequency >> 2)
+            state['lfo_counter'] = (division - 1) * 4 + division * (((~frequency) & 3) + 1)
+            if updated[7] & 0x8000:
+                state['lfo_phase'] = 0
+        channel['runtime'] = state
+        replacement = SampleStream(channel, self.ram)
+        replacement.output_samples = self.output_samples
+        self.__dict__.update(replacement.__dict__)
+
+    def render_stereo(self, count, *, dsp_disabled_fallback=False):
+        """Render direct output, optionally matching Flycast's DSP-off fallback.
+
+        ChannelEx::Step substitutes the send when both direct outputs round
+        to zero and DSP is disabled. This is not a DSP return calculation.
+        """
+        if self.channel['register_words'][10] & 64 or self.lfo & 7:
+            raise ValueError('Attenuation bypass/amplitude LFO is not validated')
+        signal = self.render(count, filtered=True)
+        levels = [255] + [(15 - i) * 8 for i in range(1, 16)]
+        attenuation = [self.channel['total_level'] + levels[self.channel['direct_level']]] * 2
+        pan = self.channel['pan_raw']
+        attenuation[1 if pan & 16 else 0] += levels[(~pan) & 15]
+        gains = [int(32768 / math.pow(2, a / 16)) for a in range(256)]
+        output = []
+        send = self.channel['register_words'][8] >> 4 & 15
+        dsp_attenuation = self.channel['total_level'] + levels[send]
+        for sample, ofs in zip(signal, self.attenuation):
+            pair = tuple((sample * gains[min(255, ofs + a)]) >> 19 for a in attenuation)
+            if dsp_disabled_fallback and sum(pair) == 0:
+                fallback = (sample * gains[min(255, ofs + dsp_attenuation)]) >> 19
+                pair = fallback, fallback
+            output.append(pair)
+        return output
+
     def filter(self, sample):
         if not self.filter_active:
             return sample
