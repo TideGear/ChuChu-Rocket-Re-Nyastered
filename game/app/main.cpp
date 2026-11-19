@@ -2974,8 +2974,10 @@ struct PuzzleMode : Screen {
                   a.arrowIcon(phoneX + 2 * 24.0f, phoneY + 2 * y, d, 0, 0.8f);
                   { const int h = 47; const std::string t = std::to_string(left); SDL_SetTextureColorMod(a.font.tex, 0, 0, 0); a.text(t, (int)(phoneX + 2 * 48.0f) - a.textWidth(t, h) / 2, (int)(phoneY + 2 * y) - h / 2, h); SDL_SetTextureColorMod(a.font.tex, 255, 255, 255); } y += 36.0f; } }
         } else if (dreamcastPuzzleControls(a)) {
-            SDL_RenderCopy(a.ren, a.dcPuzzleStart.tex, nullptr, &dcStartRect);
-            SDL_RenderCopy(a.ren, a.dcPuzzleCancel.tex, nullptr, &dcCancelRect);
+            // Flycast frame 2390 draws both panels as full 128 x 128 quads at (5, 32) and (5, 160) of 640 x 480; this view is 1.6 times that.
+            const SDL_FRect startQuad{8.0f, 51.2f, 204.8f, 204.8f}, cancelQuad{8.0f, 256.0f, 204.8f, 204.8f};
+            SDL_RenderCopyF(a.ren, a.dcPuzzleStart.tex, nullptr, &startQuad);
+            SDL_RenderCopyF(a.ren, a.dcPuzzleCancel.tex, nullptr, &cancelQuad);
             // The real Puzzle screen (Flycast frame 2390, docs/dreamcast_models.md) draws the bottom panel as two 256 x 96 quads of one texture at x 130 and 386, y 372 on a 640 x 480 screen; this view is 1.6 times that.
             if (a.dcPuzzlePanel.tex) {
                 const SDL_Rect src0{0, 0, 256, 96}, src1{0, 96, 256, 96};

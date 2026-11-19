@@ -392,7 +392,8 @@ def main(prs_png, out, png=None):
         if name in ('dc_puzzle_start', 'dc_puzzle_cancel', 'dc_puzzle_panel'):
             im = im.transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         # The bottom panel is two 256 x 96 quads of one texture (rows 0-95 and 96-191), so it keeps its full size.
-        if name not in ('dc_puzzle_panel', 'dc_puzzle_stage'): im = im.crop(im.getbbox())
+        # The R/L Trigger panels are full 128 x 128 quads at (5, 32) and (5, 160) of 640 x 480 (Flycast frame 2390), so they keep their whole texture too.
+        if name not in ('dc_puzzle_panel', 'dc_puzzle_stage', 'dc_puzzle_start', 'dc_puzzle_cancel'): im = im.crop(im.getbbox())
         w, h = im.size
         with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', w, h)); f.write(im.tobytes())
         with open(os.path.join(out, name + '.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
