@@ -4151,6 +4151,7 @@ int main(int argc, char** argv) {
             const auto& setup = static_cast<const DcBattleSetupMode&>(*mode);
             auto battle = std::make_unique<BattleMode>();
             for (int i = 0; i < 4; ++i) battle->lv[i] = setup.level(i);
+            battle->game.dreamcastRng = true;   // before load: start() seeds the generator's stream
             if (!battle->load(app.root, setup.chosenStage(seed), seed, nullptr, setup.team ? 1 : -1)) { puts("cannot load battle stages"); return false; }
             battle->winPoint = setup.points - 1;
             for (int i = 0; i < SDL_NumJoysticks(); ++i) if (SDL_IsGameController(i)) { SDL_Event event{}; event.type = SDL_CONTROLLERDEVICEADDED; event.cdevice.which = i; battle->event(app, event); }

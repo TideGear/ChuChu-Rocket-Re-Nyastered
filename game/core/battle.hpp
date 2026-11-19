@@ -29,6 +29,7 @@ public:
           // round length: setting-dependent in the original (not extracted yet)
     float baseScale = 1.0f;                      // GA_OnGameFlag speed-option multiplier (0.25 with the option unset)
     GenParams generatorParams;
+    bool dreamcastRng = false;   // Dreamcast Battle: spawn, cat and roulette draws come from the executable's rand() LCG (rng.hpp), not the mobile Mersenne Twister
     float charaSpeed = 1.0f;                     // GA_SetCharaSpeed (events scale cat and mouse together); base speeds 1.0 / 1.5
     int event = -1, eventLeft = 0; bool over = false;
     int rankOf(int p) const { return rank_[p]; }
@@ -79,7 +80,7 @@ public:
         sim.battle = true; sim.trace = debug; sim.load(st);
         std::vector<GenCell> cells; for (auto& g : sim.gens) cells.push_back({g.x, g.y, g.dir});
         for (auto& r : slot_) for (int& v : r) v = -1; for (int& v : ring_) v = 0;
-        gen = std::make_unique<Generator>(cells, seed, generatorParams); sim.rnd = [this]() { return gen->rng().next(); }; if (rouletteManager) roulette.reset(new Roulette(gen->rng())); else roulette.reset(new Roulette());   // RL_StartRoulette4Manager draws 128 numbers from the shared stream spawned_ = 0; lastRoll.clear();
+        gen = std::make_unique<Generator>(cells, seed, generatorParams); if (dreamcastRng) gen->rng().seedDreamcast(seed); sim.rnd = [this]() { return gen->rng().next(); }; if (rouletteManager) roulette.reset(new Roulette(gen->rng())); else roulette.reset(new Roulette());   // RL_StartRoulette4Manager draws 128 numbers from the shared stream spawned_ = 0; lastRoll.clear();
         frame = 0; over = false; event = -1; eventLeft = 0; charaSpeed = 1.0f; applySpeed();
         clock = 0; score = Scoreboard(); for (int& r : rank_) r = 0; roll_ = Roll(); evs_.clear(); lastRoller_ = 0; pendingRoll_ = -1; cpuPuts.clear(); cpuLcg.state = (uint32_t)cpuEnv.globalTime;
         cpuEnv.sim = &sim; cpuEnv.gameType = 0;
