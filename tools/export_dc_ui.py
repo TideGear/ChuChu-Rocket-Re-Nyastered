@@ -332,7 +332,7 @@ def export_dc_help(prs_png, out):
     T = Image.Transpose.TRANSPOSE
     tiles = [Image.open(x).convert('RGBA') for x in paths]
     tiles[2] = tiles[2].transpose(T); tiles[3] = tiles[3].transpose(T)
-    export_atlas(out, 'dc_help', tiles)
+    export_atlas(out, 'dc_help', [uv_span(t) for t in tiles])
 
 def export_dc_options(prs_png, out):
     """Dreamcast Options menu art (Flycast mode 11): 0 background 640 x 512 (OPTION_optionback0 at (0,0) and optionback1..4 at (512, 128k), all stored transposed),
@@ -372,7 +372,7 @@ def export_dc_help_pages(prs_png, out):
         f = os.path.join(prs_png, name + '.png') if os.path.isfile(os.path.join(prs_png, name + '.png')) else os.path.join(os.path.dirname(prs_png), 'png', name + '.png')
         if not os.path.isfile(f): return
         im = Image.open(f).convert('RGBA')
-        tiles.append(im.transpose(Image.Transpose.TRANSPOSE) if tr else im)
+        tiles.append(uv_span(im.transpose(Image.Transpose.TRANSPOSE) if tr else im))
     export_atlas(out, 'dc_help_pages', tiles)
     with open(os.path.join(out, 'dc_help_pages.bin'), 'wb') as f:
         f.write(struct.pack('<I', len(pages)))
