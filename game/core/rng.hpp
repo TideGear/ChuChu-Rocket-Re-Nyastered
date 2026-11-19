@@ -18,7 +18,13 @@ public:
         y ^= y >> 11; y ^= (y << 7) & 0x9d2c5680u; y ^= (y << 15) & 0xefc60000u; y ^= y >> 18;
         return y;
     }
-    float next() { return (float)u32() * (1.0f / 4294967296.0f); }     // njRandom: raw / 2^32 in float32
+    float next() {   // njRandom: raw / 2^32 in float32; Dreamcast mode: the executable's rand() at 0x8c060e2c, state at 0x8c0d2184
+        if (dc_) { g_rngDraws++; dcState_ = dcState_ * 1103515245u + 12345u; return (float)((dcState_ >> 16) & 0x7fffu) * (1.0f / 32768.0f); }
+        return (float)u32() * (1.0f / 4294967296.0f);
+    }
+    // Dreamcast Battle spawn draws come from rand() (an LCG), not the mobile Mersenne Twister: verified on 314 of 315 Flycast frames of a live stage-0 battle (the state advances 4 steps per
+    // frame for four generators, 5 when one passes the 0.0125 test and draws a second number). The attract demo seeds it with srand(0xdead0cab).
+    void seedDreamcast(uint32_t seed) { dc_ = true; dcState_ = seed; }
 private:
     void twist() {
         for (int k = 0; k < 624; k++) {
@@ -27,6 +33,6 @@ private:
         }
         idx_ = 0;
     }
-    uint32_t mt_[624]; int idx_;
+    uint32_t mt_[624]; int idx_; bool dc_ = false; uint32_t dcState_ = 0;
 };
 } // namespace ccr
