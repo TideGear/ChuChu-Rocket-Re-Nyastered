@@ -1090,6 +1090,9 @@ struct App {
         bool ghost = false;
     };
     std::vector<FieldObject> fieldObjects;
+    struct PendingMarker { const Model3D* model; SDL_FPoint centre; float size; };
+    std::vector<PendingMarker> pendingMarkers;
+    void flushMarkers() { for (const auto& m : pendingMarkers) models3d.drawMarkerQuad(ren, *m.model, m.centre, m.size, 6.75f); pendingMarkers.clear(); }
     // Dreamcast 3D characters (docs/dreamcast_models.md): the basic mouse plays its eight keyframes by the low three bits of the shared clock (0x8c019b0c writes them, 0x8c019e26 draws the frame
     // directly); the cat plays its 24-frame walk cycle from the walk phase (provisional mapping). Orientation: the heading angle (heading << 14) turns the model about the vertical axis.
     bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z,
@@ -1114,7 +1117,7 @@ struct App {
                 constexpr float persp = 218.0f / (218.0f - 9.5f);
                 const float ppu = cell / 15.0f, cx = GW / 2.0f, cy = GH / 2.0f;
                 const SDL_FPoint centre{cx + (x - cx) * persp, cy + ((z - 10.0f * ppu) - cy) * persp};
-                models3d.drawMarkerQuad(ren, *marker, centre, 13.5f * ppu * persp, 6.75f);
+                pendingMarkers.push_back({marker, centre, 13.5f * ppu * persp});   // submitted after the cursor trails and before the cursor arrows (Flycast frame 3550)
             }
         return true;
     }
@@ -1125,6 +1128,7 @@ struct App {
         static const int mouseFrameOverride = getenv("CCR_MOUSE_FRAME") ? atoi(getenv("CCR_MOUSE_FRAME")) : -1;   // headless comparison: force the keyframe the real frame showed
         const int mouseFrame = mouseFrameOverride >= 0 ? mouseFrameOverride & 7 : std::max(0, sim.now - 1) & 7;
         fieldObjects.clear();
+        pendingMarkers.clear();
         auto rocket = [&](int x, int y, int player) {
             float z = (y + 0.5f) * kCell;
             fieldObjects.push_back({static_cast<int>(z), (x + 0.5f) * kCell, z,
@@ -3848,6 +3852,7 @@ struct BattleMode : Screen {
         if (dcPlayerOverlays) { if (game.teamMode) a.drawDcTeamCrowns(taskAge, game.score); else a.drawDcScoreCrowns(taskAge, game.score, ranks); }
         for (int p = 0; p < 4; ++p)
             if (lv[p] < 0) cursorTrails[p].draw(a, p, field.cell, dcProjection);
+        a.flushMarkers();
         const float cursorAlpha = paused ? 1.0f : alpha;
         for (int p = 0; p < 4; ++p) {
             if (lv[p] >= 0) continue;
