@@ -73,7 +73,7 @@ def main():
         env = dict(os.environ, **man['defaults']['env'], **case.get('env', {}), CCR_SHOT=shot)
         if os.path.exists(shot):
             os.remove(shot)
-        subprocess.run([exe, assets] + case['args'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+        subprocess.run([exe, os.path.join(ROOT, case['assets']) if 'assets' in case else assets] + case['args'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
         if not os.path.isfile(shot):
             rows.append({'case': case['name'], 'status': 'port capture failed'})
             print(case['name'], 'port capture failed')

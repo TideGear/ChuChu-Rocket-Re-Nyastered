@@ -2380,7 +2380,8 @@ struct DcOptionsMode : Screen {
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
-        if (sel == 3 && hasLanguagePage(a)) {
+        if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
+        else if (sel == 3 && hasLanguagePage(a)) {
             page = 3; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) langRow = i; a.playSfx(1);
         } else { a.playSfx(1); leave = true; }
     }
@@ -2407,7 +2408,21 @@ struct DcOptionsMode : Screen {
         const Sheet& sh = a.dcOptions;
         { const SDL_Rect& r = sh.fr[0]; const SDL_Rect src{r.x, r.y, 640, 480}, dst{0, 0, 640, 480}; SDL_RenderCopy(a.ren, sh.tex, &src, &dst); }
         auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
-        put(page == 3 ? 3 : 1, 16, 88); put(2, 16, 407);
+        put(page == 3 ? 3 : page == 2 ? 6 : 1, 16, 88); if (page == 2) put(8, 16, 379); else put(2, 16, 407);
+        if (page == 2) {   // Records (Flycast Options sub-page): Stage Challenge total of the best times and the number of cleared stages, from the port's challenge.bin (mask + 25 best times)
+            uint32_t mask = 0, best[25] = {}; if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "rb")) { if (fread(&mask, 4, 1, f) != 1 || fread(best, 4, 25, f) != 25) { mask = 0; memset(best, 0, sizeof best); } fclose(f); }
+            uint32_t total = 0; int cleared = 0; for (int i = 0; i < 25; ++i) { total += best[i]; if (mask >> i & 1) ++cleared; }
+            auto text = [&](const std::string& t, int x, int y) { for (char c : t) { const unsigned char ch = c; if (ch > 0x20 && ch < 0x7f) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } x += 12; } };
+            text("Stage Challenge", 113, 192);
+            SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); const SDL_Rect dot{139, 233, 3, 3}; SDL_RenderFillRect(a.ren, &dot);
+            text("Total time", 147, 224);
+            if (a.dcSelectClock.tex && a.dcSelectClock.fr.size() == 11) {
+                const int m = std::min<uint32_t>(99, total / 60), sec = total % 60, g[5] = {m / 10, m % 10, 10, sec / 10, sec % 10};
+                for (int i = 0; i < 5; ++i) { const SDL_Rect d{287 + 24 * i, 224, 24, 24}; SDL_RenderCopy(a.ren, a.dcSelectClock.tex, &a.dcSelectClock.fr[g[i]], &d); }
+            }
+            text(std::to_string(cleared) + " stages cleared", 181, 256);
+            return;
+        }
         if (page == 3) {   // Language page (Flycast frame 3050): the list of five, the current language on an orange box, the red cursor arrow
             auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
             static const char* const names[5] = {nullptr, "English", "Deutsch", "Francais", "Espanol"};

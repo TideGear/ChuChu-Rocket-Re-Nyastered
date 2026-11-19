@@ -233,6 +233,40 @@
       "note": "look-alike text font without a BIOS"
     },
     {
+      "name": "options_records",
+      "ref": "local/dc_ref/options/sub2.bmp",
+      "assets": "local/star-trace/recsave/a",
+      "args": [
+        "OPTIONS"
+      ],
+      "env": {
+        "CCR_KEYS": "DDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "100"
+      },
+      "elements": {
+        "title_plate": [
+          16,
+          88,
+          272,
+          152
+        ],
+        "footer": [
+          14,
+          376,
+          250,
+          452
+        ],
+        "text": [
+          100,
+          185,
+          430,
+          285
+        ]
+      },
+      "note": "needs a save with 1 stage cleared in 19 s; look-alike font without a BIOS"
+    },
+    {
       "name": "launch_age_{age}",
       "sweep": {
         "var": "age",
