@@ -1166,7 +1166,7 @@ struct App {
         } else {
             for (int y = 0; y < kRows; ++y)
                 for (int x = 0; x < kCols; ++x)
-                    if (sim.coll[y][x] & kRocket) rocket(x, y, dcProjection ? soloRocket : 0);   // Dreamcast domes: Puzzle's single rocket is the blue lid, Challenge A1's is red (Flycast frames)
+                    if (sim.coll[y][x] & kRocket) rocket(x, y, dcProjection ? soloRocket : 0);   // Dreamcast domes: Puzzle's single rocket is the blue lid, Challenge A1 uses the same blue lid (Flycast frames 2390/2500)
         }
 
         while (prev.size() < sim.ents.size()) prev.push_back({sim.ents[prev.size()].x, sim.ents[prev.size()].z});
@@ -3337,7 +3337,7 @@ struct ChallengeMode : Screen {
         a.stars.draw(a);
         a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
         for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
-        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 2);
+        a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 0);   // Dreamcast Challenge A1 dome is the blue lid (Flycast frames 2390 and 2500; the earlier red guess did not match); other stages unchecked
         const bool fieldCursor = supportedNow() && phase() <= ChallengeGame::Play;
         if (fieldCursor && mouseCursor && aim.inside)
             a.mouseCursorAt(aim.x, aim.y, 0, cticks, field.scale());

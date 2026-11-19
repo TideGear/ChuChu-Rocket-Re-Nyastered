@@ -358,6 +358,41 @@
       }
     },
     {
+      "name": "challenge_play_a1_0m29",
+      "ref": "local/dc_ref/ch1/p__02500.bmp",
+      "args": [
+        "challenge",
+        "0"
+      ],
+      "env": {
+        "CCR_MODELS": "1",
+        "CCR_KEYS": "E",
+        "CCR_KEY_TICK": "5",
+        "CCR_TICKS": "202"
+      },
+      "elements": {
+        "timer_panel": [
+          0,
+          16,
+          135,
+          130
+        ],
+        "rocket_gauge": [
+          30,
+          150,
+          110,
+          440
+        ],
+        "board": [
+          136,
+          16,
+          604,
+          368
+        ]
+      },
+      "note": "tick 202 found by search; mice/cursor phase not exact"
+    },
+    {
       "name": "help_0_2",
       "ref": "local/star-trace/hp/e0/p_02600.bmp",
       "args": [
