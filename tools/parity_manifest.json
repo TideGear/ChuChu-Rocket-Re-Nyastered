@@ -267,28 +267,6 @@
       "note": "needs a save with 1 stage cleared in 19 s; look-alike font without a BIOS"
     },
     {
-      "name": "help_menu",
-      "ref": "local/star-trace/hp/h_02000.bmp",
-      "args": [
-        "HELP"
-      ],
-      "env": {
-        "CCR_TICKS": "100"
-      }
-    },
-    {
-      "name": "help_basics_1",
-      "ref": "local/star-trace/hp/h_02500.bmp",
-      "args": [
-        "HELP"
-      ],
-      "env": {
-        "CCR_KEYS": "E",
-        "CCR_KEY_TICK": "30",
-        "CCR_TICKS": "100"
-      }
-    },
-    {
       "name": "launch_age_{age}",
       "sweep": {
         "var": "age",
@@ -307,6 +285,688 @@
         "CCR_KEYS": "U ",
         "CCR_GLOBAL_TIME": "1887",
         "CCR_TICKS": "{1521+age}"
+      }
+    },
+    {
+      "name": "help_0_1",
+      "ref": "local/star-trace/hp/e0/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "E",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_0_2",
+      "ref": "local/star-trace/hp/e0/p_02600.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "EE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_0_3",
+      "ref": "local/star-trace/hp/e0/p_02750.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "EEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_0_4",
+      "ref": "local/star-trace/hp/e0/p_02900.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "EEEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_0_5",
+      "ref": "local/star-trace/hp/e0/p_03050.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "EEEEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_0_6",
+      "ref": "local/star-trace/hp/e0/p_03200.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "EEEEEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_1_1",
+      "ref": "local/star-trace/hp/e1/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_1_2",
+      "ref": "local/star-trace/hp/e1/p_02600.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_2_1",
+      "ref": "local/star-trace/hp/e2/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_3_1",
+      "ref": "local/star-trace/hp/e3/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_3_2",
+      "ref": "local/star-trace/hp/e3/p_02600.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_4_1",
+      "ref": "local/star-trace/hp/e4/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_4_2",
+      "ref": "local/star-trace/hp/e4/p_02600.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_5_1",
+      "ref": "local/star-trace/hp/e5/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_5_2",
+      "ref": "local/star-trace/hp/e5/p_02600.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_6_1",
+      "ref": "local/star-trace/hp/e6/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_6_2",
+      "ref": "local/star-trace/hp/e6/p_02600.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDDEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_6_3",
+      "ref": "local/star-trace/hp/e6/p_02750.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDDEEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_6_4",
+      "ref": "local/star-trace/hp/e6/p_02900.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDDEEEE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_7_1",
+      "ref": "local/star-trace/hp/e7/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDDDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_8_1",
+      "ref": "local/star-trace/hp/e8/p_02450.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDDDDDDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "120"
+      },
+      "elements": {
+        "title": [
+          16,
+          40,
+          330,
+          92
+        ],
+        "body": [
+          28,
+          100,
+          612,
+          392
+        ],
+        "footer": [
+          40,
+          405,
+          600,
+          445
+        ]
+      }
+    },
+    {
+      "name": "help_menu",
+      "ref": "local/star-trace/hp/h_02000.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_TICKS": "100"
       }
     }
   ]

@@ -76,8 +76,8 @@ Counts items this table lists, not the game's full content (many screens have se
 | Battle Stage Select | screen | partial | 2.35 (preview 9.6) |
 | Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 2.83 (CCR_GPU=1, stage 0, 30 ticks; tick alignment not established, CPU cursors absent); Team Battle not measured |
 | Battle pause (4P, Team) | screen | partial | - |
-| Help Menu | screen | partial | visual match |
-| Help pages (21) | screen | partial | 4.8-13 |
+| Help Menu | screen | partial | 0.34 (CCR_GPU=1, disc-only) |
+| Help pages (21) | screen | partial | all 21 pages captured from Flycast and measured (CCR_GPU=1, disc-only): full-frame 0.29-0.62; title and footer crops pass on all 21, body crops mean 0.20-0.80 but each has 66-256 off-edge px above 8 levels at the frame's top corners (not closed) |
 | Options menu | screen | partial | 4.48 |
 | Options sub-pages (General, 4P Settings, Records, Language, F-key) | screen | open | - |
 | Mode 4, 16 (tutorial), 18-22 | screen | open | - |
