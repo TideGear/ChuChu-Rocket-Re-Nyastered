@@ -5,7 +5,7 @@ Support every feature of every version where sensible. Where versions differ (ru
 Working rules
 - Inventory each version's code, data and runtime behavior (screens, modes, controls, rules, content, saves); cross-check static findings headlessly.
 - Trace behavior from triggers through callbacks to effects, incl. alternate routes, rare conditions, failures and cleanup, across versions and modes.
-- "Verified" means diffed against the original's own frame loop and tasks as the game runs them, not hand-driven pieces; say which was used. Record evidence and gaps in the roadmap; untested paths stay open. Capture protocol: headless flyhost shots; per-frame RAM via FLY_WATCH (its frame numbers run 1 ahead of shot frames). Pass: full-frame mean RGB error <= 3, isolated art <= 1, text and 1-bit art 0 differing pixels; explain any residue. Compare with tools/diff_heatmap.py and view the heatmap.
+- "Verified" means diffed against the original's own frame loop and tasks as the game runs them, not hand-driven pieces; say which was used. Record evidence and gaps in the roadmap; untested paths stay open. Capture protocol: headless flyhost shots; per-frame RAM via FLY_WATCH (its frame numbers run 1 ahead of shot frames). Pass: full-frame mean RGB error <= 3; each graphic element (sprite, glyph, model, effect) in its own crop: mean <= 1, best alignment shift (0,0), no pixel off by more than 8 levels outside a 1 px edge band. 1-2 level differences are emulator/GPU rounding, not errors; trace larger residue to a named Flycast limitation. Measure with tools/parity.py (CCR_GPU=1) and view heatmaps. Aim for perfect, but time-box traces; record and move on.
 - Completeness: never assume a feature is absent or present. Up front, enumerate every mode, task and screen from the original's mode/task tables (1ST_READ) in docs/audit.md; that list defines done. List every draw routine, callback, effect, trail, table and screen of each original in docs/audit.md as open until traced, matched and verified against a real Flycast frame or the original's loop; revisit whenever a gap is noticed. Test data must exercise the feature; investigate unexplained differences.
 - Trace draw order, depth ties, clipping, overlays before editing scenes; verify headlessly without using the user's screen/audio. Phase order is a default; user priority wins. Commit verified changes without AI attribution, push. No placeholders.
 - Progress is counted, not guessed: docs/audit.md keeps a table of screens, animations and sounds per version with status and measured error; quote its totals (verified/total) when asked how far along the work is.
@@ -27,8 +27,6 @@ Dreamcast-only acceptance: in a clean data directory with only the disc image (n
 Documentation
 
 - Plan and status: `goal.md`, `HANDOFF.md`, `audit.md`, `roadmap.md`, `verification.md`. The audit owns current coverage. The roadmap retains implementation and test evidence. The handoff holds the next task and capture commands.
-- Presentation: `presentation_audit.md`, `ui_art.md`, `audio.md`, `animation.md`, `dreamcast_models.md`, `dreamcast_meshes.md`, `dreamcast_mesh_poses.md`.
-- Behavior and content: `modes.md`, `rules_arrows.md`, `rules_battle.md`, `rules_events.md`, `rules_movement.md`, `cpu_ai.md`, `roulette.md`, `gba_notes.md`, `stages.md`, `dlc.md`, `unlockables.md`.
-- Sources and distribution: `version_matrix.md`, `asset_pairs.md`, `asset_quality.md`, `provenance.md`, `distribution.md`, `research_check.md`, the research file, `README.md`.
+- Topic docs (presentation, behavior, content, sources, distribution) live in docs/; keep each current with its topic.
 
 Track every requirement and research claim in the audit: evidence plus verified, partial, open or not testable.
