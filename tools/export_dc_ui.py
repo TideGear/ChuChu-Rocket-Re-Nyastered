@@ -249,7 +249,7 @@ def export_dc_fallback_fonts(out):
     glyphs = []
     for c in range(0x20, 0x7f):
         wide = Image.new('L', (40, 48), 0)
-        ImageDraw.Draw(wide).text((0, 40), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
+        ImageDraw.Draw(wide).text((0, 42), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
         mask = wide.crop((0, 0, 34, 48)).resize((24, 48), Image.Resampling.BOX)            # squeeze the 0.6 em mono advance to the BIOS cell's narrow, tall proportions
         glyphs.append(white(mask.point(lambda v: min(255, int(v * 1.3)))))
     sheet_files('dc_bios_ansi', glyphs, 24, 48)
@@ -258,7 +258,7 @@ def export_dc_fallback_fonts(out):
         mask = Image.new('L', (300, 340), 0)
         ImageDraw.Draw(mask).text((20, 260), d, font=digit_font, fill=255, anchor='ls'); box = mask.getbbox()
         width = 32 if d != '1' else round((box[2] - box[0]) * 40 / (box[3] - box[1]))   # 16 x 20 digits at 1x like the BIOS ovals (the 1 keeps its natural width)
-        ink = mask.crop(box).resize((width, 40), Image.Resampling.BOX)
+        ink = mask.crop(box).resize((width, 40), Image.Resampling.BOX).point(lambda v: min(255, int(v * 1.5)))   # a little bolder, like the BIOS strokes
         cell = Image.new('L', (48, 48), 0); cell.paste(ink, ((48 - width) // 2, 2)); cells.append(white(cell))   # rows 1-20 at 1x, like the BIOS digits
     colon = Image.new('L', (48, 48), 0); dr = ImageDraw.Draw(colon)
     for top in (10, 30): dr.rectangle((22, top, 25, top + 7), fill=255)
