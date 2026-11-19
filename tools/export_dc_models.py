@@ -26,7 +26,8 @@ MODELS = [('cat', 0x778c4, CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o i
     # The Flycast stream shows 'outs' at hole tiles in Challenge and 'ins' at
     # generators in Battle and Team Battle. Keep the historical pack names.
     ('wall', 0xa20fc, BATTLE_TEX), ('floor', 0xa21e8, BATTLE_TEX),
-    ('hole_out', 0xa2990, BATTLE_TEX), ('hole_in', 0xa2628, BATTLE_TEX)]
+    ('hole_out', 0xa2990, BATTLE_TEX), ('hole_in', 0xa2628, BATTLE_TEX),
+    ('roulette', 0xa302c, BATTLE_TEX)]  # FUN_8c01d9a0 submits object 0x8c0b302c
 
 MODELS += [('h_%x' % o, o, HUD_TEX) for o in HUD_OFFS]
 

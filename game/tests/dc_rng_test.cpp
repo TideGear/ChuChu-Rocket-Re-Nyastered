@@ -1,7 +1,7 @@
 // The Dreamcast rand() model (game/core/rng.hpp seedDreamcast) against states read from the real game (Flycast, 4-generator stage-0 Battle, per-frame watch of RAM 0x8c0d2184).
 // Each row: frame, state before, state after the frame, and the number of rand() calls the game made that frame (4 = one test draw per generator, 5 = one spawn, 8 = two).
 // The model must reach the "after" state in exactly that many steps and return (state >> 16) & 0x7fff / 32768 each time.
-#include "../core/rng.hpp"
+#include "../core/battle.hpp"
 #include <cstdio>
 struct Row { int frame; uint32_t before, after; int draws; };
 static const Row kRows[] = {
@@ -28,6 +28,19 @@ int main() {
         }
         if (state != row.after) { ++bad; printf("frame %d: state mismatch\n", row.frame); }
     }
-    printf("dreamcast rand model: %d mismatches over %zu recorded frames\n", bad, sizeof kRows / sizeof kRows[0]);
+    // Reusing a BattleGame must reset the spawn-log cursor and both roulette-manager paths.
+    for (bool dc : {false, true}) for (bool manager : {false, true}) {
+        ccr::Stage st{}; st.tiles[13] = 5;
+        ccr::BattleGame g; g.dreamcastRng = dc; g.rouletteManager = manager;
+        g.generatorParams.pSpawn = 1.0f;
+        g.generatorParams.pSpecial1 = g.generatorParams.pSpecial2 = g.generatorParams.pCat = 0.0f;
+        for (int run = 0; run < 2; ++run) {
+            g.lastRoll.push_back(7); g.start(st, 777); g.tick();
+            if (g.sim.ents.size() != 1 || !g.lastRoll.empty() || !g.roulette) {
+                ++bad; printf("battle restart mismatch: dc=%d manager=%d run=%d\n", dc, manager, run);
+            }
+        }
+    }
+    printf("dreamcast rand model and battle restart: %d mismatches over %zu recorded frames and 8 starts\n", bad, sizeof kRows / sizeof kRows[0]);
     return bad ? 1 : 0;
 }

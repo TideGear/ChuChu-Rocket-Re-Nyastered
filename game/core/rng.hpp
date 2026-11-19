@@ -24,6 +24,7 @@ public:
     }
     // Dreamcast Battle spawn draws come from rand() (an LCG), not the mobile Mersenne Twister: verified on 314 of 315 Flycast frames of a live stage-0 battle (the state advances 4 steps per
     // frame for four generators, 5 when one passes the 0.0125 test and draws a second number). The attract demo seeds it with srand(0xdead0cab).
+    uint32_t dreamcastState() const { return dcState_; }   // read-only Flycast stream comparison
     void seedDreamcast(uint32_t seed) { dc_ = true; dcState_ = seed; }
 private:
     void twist() {

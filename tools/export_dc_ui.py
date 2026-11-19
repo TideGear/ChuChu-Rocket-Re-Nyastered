@@ -175,7 +175,8 @@ def export_dc_startup(prs_png, png, out):
     """Dreamcast SEGA logo, Sonic Team bubble and Title screen art, laid out from Flycast frames 600/800/1200 (docs/HANDOFF.md).
     Frames: 0 SEGA canvas 768 x 512 (SEGALOGO tiles, stored transposed, 3 x 2 grid, drawn at (-64, 0)); 1 Sonic Team bubble 256 x 256 (LOGO, transposed, at (193, 160));
     2 Title background 640 x 480 (TITLE_titlegamen0..7 at (0,0) (512,0) (0,256) (512,256) (0,384) (512,384) (0,448) (512,448); tile 3 is transposed);
-    3 Title logo 512 x 256 (at (16, 64)); 4 PRESS START 512 x 32 (at (176, 360))."""
+    3 Title logo 512 x 256 (at (16, 64)); 4 Title PRESS START (176,360);
+    5 flying rocket; 6 logo edge shadow; 7 disc PRESSSTART for the demo (176,220)."""
     seg = [os.path.join(prs_png, f'SEGALOGO_segalogo{i}.png') for i in range(6)]
     logo = os.path.join(png, 'ENGLISH__LOGO.png') if png else ''
     title = [os.path.join(prs_png, f'TITLE_titlegamen{i}.png') for i in range(8)]
@@ -191,7 +192,7 @@ def export_dc_startup(prs_png, png, out):
         tile = read(f)
         bg.alpha_composite(tile.transpose(Image.Transpose.TRANSPOSE) if i == 3 else tile, at)
     rocket = os.path.join(prs_png, 'TITLE_titlerocket.png')
-    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket), read(os.path.join(prs_png, 'TITLE_newtitle1.png'))])   # frame 5: the flying rocket, 128 x 256 upright; frame 6: the logo's 8 x 32 right-edge shadow strip at (528,152)
+    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket), read(os.path.join(prs_png, 'TITLE_newtitle1.png')), read(os.path.join(png, 'ENGLISH__PRESSSTART.png'))])   # frame 5: the flying rocket, 128 x 256 upright; frame 6: the logo's 8 x 32 right-edge shadow strip at (528,152)
 
 def export_dc_battle_setup(prs_png, out):
     """Dreamcast 4P Battle 'Select Players' and 'Stage Select' art (Flycast frames 1900/2300, packets matched to disc textures with 0 differing values).

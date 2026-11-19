@@ -262,6 +262,34 @@ public:
         softRender(ren, out);
     }
 
+    // FUN_8c01d9a0: Translate(position), RotateX(angle), Scale(uniform), native chunk drum.
+    void drawDcRoulette(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera,
+                        float pixelsPerUnit, float height, float angle, float size) const {
+        const float c = cosf(angle), s = sinf(angle);
+        const float ox = (planePos.x - camera.x) / pixelsPerUnit;
+        const float oz = (planePos.y - camera.y) / pixelsPerUnit;
+        std::vector<SoftTri> out;
+        for (const auto& tri : m.tris) {
+            SoftTri o{}; o.tex = tri.mat < m.matTex.size() ? static_cast<int>(m.matTex[tri.mat]) : -1;
+            for (int k = 0; k < 3; ++k) {
+                const auto& v = tri.v[k];
+                const float y = height + (v.y * c - v.z * s) * size;
+                const float z = (v.y * s + v.z * c) * size;
+                const float depth = 218.0f - y;
+                const float scale = pixelsPerUnit * 218.0f / depth;
+                const float ny = (v.ny * c - v.nz * s) * size;
+                const float nz = (v.ny * s + v.nz * c) * size;
+                o.p[k] = {camera.x + (ox + v.x * size) * scale, camera.y + (oz + z) * scale};
+                o.iw[k] = 1.0f / depth; o.u[k] = 1.0f - v.v; o.v[k] = v.u;
+                // The chunk path transforms normals with the scaled model matrix.
+                // Keep that length: normalization would darken the bright front faces.
+                o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, 0.5f * ny - 0.25f * nz));
+            }
+            out.push_back(o);
+        }
+        softRender(ren, out);
+    }
+
     // Draws the model centred at (cx, cy) on screen. Scale is in pixels per model unit and angles are in degrees.
     void draw(SDL_Renderer* ren, const Model3D& m, float cx, float cy, float scale, float yawDeg, float pitchDeg, float brightness = 1.0f, int frame = -1, int forceMat = -1, uint64_t skipMats = 0) const {
         const std::vector<float>* pose = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;

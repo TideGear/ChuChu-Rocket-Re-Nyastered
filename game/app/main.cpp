@@ -5,6 +5,8 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include "../core/battle.hpp"
+#include "../core/dc_cursor.hpp"
+#include "../core/dc_demo.hpp"
 #include "../core/angle.hpp"
 #include "battle_preview.hpp"
 #include "roulette_pose.hpp"
@@ -851,12 +853,16 @@ struct App {
     void drawDcPlayerTag(int player, int tick, SDL_FPoint start) {
         constexpr int release = 180;
         constexpr float step = 6.283185307f / 16.0f;
-        for (int i = 0; i < std::min(tick, release) % 16; ++i)
-            start.y -= 2.5f * std::sin(i * step);
+        for (int i = 0; i < std::min(tick, release); ++i)
+            start.y -= 2.5f * std::sin(((i + 4 * player) & 15) * step);
         const int fall = std::max(0, tick - release);
         const float angle = (1 - 4 * player) * step;
-        start.x += fall * std::cos(angle);
-        start.y += fall * (std::sin(angle) + 0.1f * (fall + 1));
+        float vy = std::sin(angle);
+        for (int i = 0; i < fall; ++i) {
+            vy += 0.2f;
+            start.x += std::cos(angle);
+            start.y += vy;
+        }
         if (start.y < 480) dcBattleSprite(35 + player, start.x, start.y, 208, 52);
     }
 
@@ -1238,8 +1244,8 @@ struct ModelViewerMode : Screen {
 // the exit request is at s = 365 or a press and its first dimmed frame is 5 ticks later (k = s - request - 4, black from k = 11); Title starts 13 ticks after the request (u = 0): black until u = 9, brightness (u - 8) / 11 for u = 10..19;
 // the prompt appears at u = 89 and is hidden for 8 of every 30 ticks from u = 145. Not traced yet: the flying rocket, `newtitle1/2` and music 18.
 struct DcStartupMode : Screen {
-    int phase = 0, t = 0, request = -1; bool leave = false;
-    static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() == 7; }
+    int phase = 0, t = 0, request = -1; bool leave = false, attract = false;
+    static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() >= 7; }
     void event(App&, const SDL_Event& e) override {
         const bool press = (e.type == SDL_KEYDOWN && !e.key.repeat) || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN || e.type == SDL_CONTROLLERBUTTONDOWN;
         if (!press) return;
@@ -1248,13 +1254,14 @@ struct DcStartupMode : Screen {
     }
     void tick(App&) override {
         ++t;
+        if (phase == 2 && t >= 600) attract = true;
         if (phase == 0 && t >= 144) { phase = 1; t = 0; }
         else if (phase == 1) {
             if (request < 0 && t >= 365) request = t;
             if (request >= 0 && t >= request + 13) { phase = 2; t = 0; }
         }
     }
-    const char* next() override { return std::exchange(leave, false) ? "MENU" : nullptr; }
+    const char* next() override { if (std::exchange(leave, false)) return "MENU"; return std::exchange(attract, false) ? "DC_DEMO" : nullptr; }
     static float step(int k) { return std::clamp(k, 0, 11) / 11.0f; }   // fade progress for step k
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
@@ -1285,7 +1292,7 @@ struct DcStartupMode : Screen {
             copy(3, 16, 64); copy(6, 528, 152);   // newtitle1: the 8 x 32 logo-edge strip, quad read from the Flycast frame-1200 list
             const bool hidden = t >= 145 && (t - 145) % 30 < 8;
             if (t >= 89 && !hidden) copy(4, 176, 360);
-            black = t < 10 ? 1.0f : 1.0f - step(t - 8);
+            black = std::max(t < 10 ? 1.0f : 1.0f - step(t - 8), step(t - 588));
         }
         if (black > 0.0f) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)std::lround(black * 255.0f)); SDL_RenderFillRect(a.ren, nullptr); }
     }
@@ -2568,9 +2575,9 @@ struct CursorTrail {
     }
 };
 
-struct PadAim {
-    float x, y, previousX = x, previousY = y;
-    int targetX = -1, targetY = -1;
+struct PadAim : DcCursor {
+    float previousX, previousY;
+    PadAim(float px = 0, float py = 0) : DcCursor{px, py}, previousX(px), previousY(py) {}
     float logicalX(float fraction = 1.0f, FieldLayout field = {}) const {
         return field.x((previousX + (x - previousX) * fraction) / kCell);
     }
@@ -2582,34 +2589,13 @@ struct PadAim {
     void tick(SDL_GameController* pad) {
         previousX = x;
         previousY = y;
-        const auto axis = [&](SDL_GameControllerAxis which) {
-            const int value = SDL_GameControllerGetAxis(pad, which);
-            const float delta = (value >> 8) * 256 * 0.00009f;
-            return std::fabs(delta) < 0.09f ? 0.0f : delta;
-        };
-        const float dx = axis(SDL_CONTROLLER_AXIS_LEFTX), dy = axis(SDL_CONTROLLER_AXIS_LEFTY);
-        if (dx != 0 || dy != 0) {
-            x = std::clamp(x + dx, 0.0f, kCols * kCell - 0.01f);
-            y = std::clamp(y + dy, 0.0f, kRows * kCell - 0.01f);
-            targetX = targetY = -1;
-            return;
-        }
-        const auto step = [&](float& position, int& target, int cells,
-                              SDL_GameControllerButton negative, SDL_GameControllerButton positive) {
-            if (target < 0) {
-                const int direction = SDL_GameControllerGetButton(pad, positive) -
-                                      SDL_GameControllerGetButton(pad, negative);
-                if (!direction) return;
-                const int next = static_cast<int>(position / kCell) + direction;
-                if (next < 0 || next >= cells) return;
-                target = next;
-            }
-            const float center = (target + 0.5f) * kCell;
-            if (std::fabs(center - position) <= 1.8f) target = -1;
-            else position += center > position ? 1.8f : -1.8f;
-        };
-        step(x, targetX, kCols, SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-        step(y, targetY, kRows, SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+        uint32_t held = 0;
+        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) held |= 0x80;
+        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) held |= 0x40;
+        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)) held |= 0x20;
+        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP)) held |= 0x10;
+        DcCursor::tick(held, SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) >> 8,
+                             SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY) >> 8);
     }
 
     void draw(App& app, int player, int ticks, float alpha, FieldLayout field = {}) const {
@@ -2745,8 +2731,8 @@ struct PuzzleMode : Screen {
         if (pad && state == 0) {
             padAim.tick(pad);
             if (padAim.x != padAim.previousX || padAim.y != padAim.previousY) mouseCursor = false;
-            curX = static_cast<int>(padAim.x / kCell);
-            curY = static_cast<int>(padAim.y / kCell);
+            curX = padAim.cellX();
+            curY = padAim.cellY();
         }
         cursorTrail.tick(mouseCursor ? aim.x : padAim.logicalX(1.0f, pf(a)), mouseCursor ? aim.y : padAim.logicalY(1.0f, pf(a)),
                          state == 0 && (!mouseCursor || aim.inside), mouseCursor);
@@ -2882,7 +2868,7 @@ struct PuzzleMode : Screen {
         else a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv && labelRow < 0) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
-            std::string hint; if (discNames) { hint = stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == ' ')) hint.pop_back(); } else if (const std::string* hs = a.hdString(0x1e8 + cur)) hint = *hs;
+            std::string hint; if (discNames) { hint = stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == '\0')) hint.pop_back(); } else if (const std::string* hs = a.hdString(0x1e8 + cur)) hint = *hs;
             const bool biosHint = dcBubble && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95 && !hint.empty();
             if (biosHint) {   // the game draws the hint with the BIOS ANSI font, left-aligned in a 1:1 texture glyphs at (336, 370) of 640 x 480 (texture at y 368, text row 2), 12 px per character, colour (32, 32, 64); the port's layout is 1.6 times that
                 SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 32, 32, 64);
@@ -3160,8 +3146,8 @@ struct ChallengeMode : Screen {
             const float x = padAim.logicalX(1.0f, field), y = padAim.logicalY(1.0f, field);
             a.drawDcBattlePadCursor(x, y, 0, cticks);
             // The corner bracket follows the same cell as the controller tip.
-            const int col = std::clamp(static_cast<int>(padAim.x / kCell), 0, kCols - 1);
-            const int row = std::clamp(static_cast<int>(padAim.y / kCell), 0, kRows - 1);
+            const int col = std::clamp(padAim.cellX(), 0, kCols - 1);
+            const int row = std::clamp(padAim.cellY(), 0, kRows - 1);
             a.cursor(col, row, 0, cticks, true, field);
         }
         SDL_RenderSetViewport(a.ren, nullptr);
@@ -3624,7 +3610,7 @@ struct BattleMode : Screen {
         game.rocketPulseDecay = dcProjection ? 0.05f : 0.0f;
         game.gbaCpu = getenv("CCR_CPU") ? std::string(getenv("CCR_CPU")) == "gba" : (gApp && gApp->settings.cpuStyle == "gba");
         game.rouletteManager = true;
-        game.rotateOwn = true;
+        game.rotateOwn = !game.dreamcastRng;
         game.generatorParams = GenParams{};
         if (rules) {
             // HD 1.0 GA_OnGameFlag and GE_StartGenerator4Manager.
@@ -3756,8 +3742,8 @@ struct BattleMode : Screen {
                 auto& pointer = padAim[p];
                 pointer.tick(pads[p]);
                 if (p == 0 && (pointer.x != pointer.previousX || pointer.y != pointer.previousY)) mouseCursor = false;
-                curX[p] = static_cast<int>(pointer.x / kCell);
-                curY[p] = static_cast<int>(pointer.y / kCell);
+                curX[p] = pointer.cellX();
+                curY[p] = pointer.cellY();
             }
         } else {
             for (auto& pointer : padAim) { pointer.previousX = pointer.x; pointer.previousY = pointer.y; }
@@ -3822,7 +3808,7 @@ struct BattleMode : Screen {
             const bool mouse = p == 0 && mouseCursor;
             if (lv[p] >= 0 || (mouse && !aim.inside)) continue;
             const int x = mouse ? aim.cellX() : curX[p], y = mouse ? aim.cellY() : curY[p];
-            if (game.sim.coll[y][x] & 0xF00) a.cursor(x, y, p, game.frame, true, field);
+            if ((dcProjection && !mouse) || (game.sim.coll[y][x] & 0xF00)) a.cursor(x, y, p, game.frame, true, field);
         }
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field, dcProjection);
         if (dcHud) { if (game.teamMode) a.drawDcTeamHud(game.score, lv, left, game.roundFrames); else a.drawDcBattleHud(game.score, lv, left, game.roundFrames); }
@@ -3869,7 +3855,12 @@ struct BattleMode : Screen {
             const auto& cell = game.sim.rocketPos[roller];
             const auto pose = battleRoulettePose(rollTick, cell[0], cell[1], outcome, field.left, field.top, field.cell / kCell);
             // Slot 99 is byte-identical across the five exported iPad language packs.
-            a.rouletteDraw.draw(a.ren, a.root + "/ret_all/loc_en/img_99", pose, GW, GH);
+            if (dcProjection && a.models3d.find("roulette")) {
+                const auto native = dreamcastRoulettePose(rollTick, cell[0], cell[1], outcome);
+                a.models3d.drawDcRoulette(a.ren, *a.models3d.find("roulette"),
+                    {field.x(native.x / kCell), field.y(native.z / kCell)}, {GW / 2.0f, GH / 2.0f},
+                    field.cell / kCell, native.height, native.angle * (6.283185307179586f / 65536.0f), native.scale);
+            } else a.rouletteDraw.draw(a.ren, a.root + "/ret_all/loc_en/img_99", pose, GW, GH);
             if (a.headless && getenv("CCR_ROULETTE_DRAW_TRACE"))
                 printf("roulette %d %d %d %d %d %a %a %a %a\n", game.frame, rollTick, roller,
                        cell[0], cell[1], pose.x, pose.y, pose.degrees, pose.scale);
@@ -3905,6 +3896,81 @@ struct BattleMode : Screen {
             }
             a.drawDcPause(-60.0f, 270.0f);
         }   // Flycast Battle pause frame: the Puzzle overlay 60 pixels higher (the "Player 1" plate and the win boxes are not drawn yet)
+    }
+};
+
+// Title attract playback: USA KEY_STAGE000.BIN, measured against the original task loop.
+struct DcAttractMode : BattleMode {
+    DcDemo demo;
+    size_t record = 0;
+    int loading = 11; // synchronous Flycast seed -> first replay frame; black through record zero
+    int exitTick = -1;
+    bool naturalEnd = false;
+    bool loadDemo(App& a) {
+        if (!demo.load((a.root + "/dreamcast/files/ENGLISH/KEY_STAGE000.BIN").c_str())) return false;
+        for (int& level : lv) level = -1;
+        game.dreamcastRng = true;
+        if (!load(a.root, 0, 0xdead0cabu, nullptr, 0)) return false;
+        a.angs.clear(); a.cphase.clear();
+        game.rotateOwn = false; // original arrow manager flag at 0x8c186171 is zero
+        game.gtOff = -1; // first roll: original TI_GetGameTime 309, simulation frame 310
+        return true;
+    }
+    void event(App&, const SDL_Event& e) override {
+        if ((e.type == SDL_KEYDOWN && !e.key.repeat &&
+             (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE)) ||
+            e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN ||
+            (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START)) {
+            if (exitTick < 0) exitTick = 0;
+        }
+    }
+    void tick(App& a) override {
+        if (loading > 0) { --loading; return; }
+        if (exitTick >= 0) { BattleMode::tick(a); ++exitTick; return; }
+        if (++record >= demo.frames.size()) { naturalEnd = true; exitTick = 0; return; }
+        if (intro >= 120 && !game.rollPending()) {
+            static constexpr uint32_t masks[] = {4, 0x400, 0x200, 2};
+            for (int p = 0; p < 4; ++p) {
+                auto& cursor = padAim[p];
+                cursor.previousX = cursor.x; cursor.previousY = cursor.y;
+                const auto& input = demo.frames[record][p];
+                cursor.DcCursor::tick(input.held, input.x, input.y);
+                curX[p] = cursor.cellX(); curY[p] = cursor.cellY();
+                for (int dir = 0; dir < 4; ++dir) if (demo.pressed(record, p) & masks[dir])
+                    game.placeArrow(p, curX[p], curY[p], dir);
+            }
+        } else for (auto& cursor : padAim) { cursor.previousX = cursor.x; cursor.previousY = cursor.y; }
+        BattleMode::tick(a);
+        if (a.headless && getenv("CCR_DEMO_STATE_TRACE"))
+            printf("demo %zu %d %08x %d %d %d %d %.9g %.9g\n", record, game.frame,
+                   game.gen->rng().dreamcastState(), game.score.player[0], game.score.player[1],
+                   game.score.player[2], game.score.player[3], padAim[0].x, padAim[0].y);
+    }
+    const char* next() override { return exitTick >= 13 ? (naturalEnd ? "STARTUP" : "DC_TITLE") : nullptr; }
+    void draw(App& a, float alpha) override {
+        if (loading > 0 || record == 0) {
+            SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren); return;
+        }
+        BattleMode::draw(a, alpha);
+        // FUN_8c015160: counter & 0x18, at (176,220), UV ends 255/256.
+        if (exitTick < 0 && ((record + 1) & 0x18) && a.dcStartup.fr.size() >= 8) {
+            SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
+            const SDL_Rect& r = a.dcStartup.fr[7];
+            const float u0 = (float)r.x / a.dcStartup.w, v0 = (float)r.y / a.dcStartup.h;
+            const float u1 = (r.x + r.w * (255.0f / 256.0f)) / a.dcStartup.w;
+            const float v1 = (r.y + r.h * (255.0f / 256.0f)) / a.dcStartup.h;
+            const SDL_Color white{255,255,255,255};
+            SDL_Vertex v[4] = {{{176,220},white,{u0,v0}},{{176,252},white,{u0,v1}},
+                               {{688,220},white,{u1,v0}},{{688,252},white,{u1,v1}}};
+            const int indices[] = {0,1,2,2,1,3};
+            SDL_RenderGeometry(a.ren, a.dcStartup.tex, v, 4, indices, 6);
+        }
+        if (exitTick > 0) {
+            SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
+            SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(a.ren, 0, 0, 0, static_cast<Uint8>(std::lround(std::min(exitTick,11) * (255.0f / 11.0f))));
+            SDL_RenderFillRect(a.ren, nullptr);
+        }
     }
 };
 
@@ -4127,7 +4193,13 @@ int main(int argc, char** argv) {
     std::unique_ptr<Screen> mode;
     auto enter = [&](const std::string& name) -> bool {
         app.log.write(2, ("screen " + name).c_str());
-        if (name == "STARTUP" && !app.titleOk && DcStartupMode::available(app)) mode = std::make_unique<DcStartupMode>();
+        if (name == "DC_DEMO") {
+            auto demo = std::make_unique<DcAttractMode>();
+            if (!demo->loadDemo(app)) { puts("cannot load Dreamcast demo recording"); return false; }
+            mode = std::move(demo);
+        }
+        else if (name == "DC_TITLE") { auto title = std::make_unique<DcStartupMode>(); title->phase = 2; mode = std::move(title); }
+        else if (name == "STARTUP" && !app.titleOk && DcStartupMode::available(app)) mode = std::make_unique<DcStartupMode>();
         else if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
         else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }

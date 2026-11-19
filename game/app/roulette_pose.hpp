@@ -8,6 +8,32 @@ struct RoulettePose {
     float x, y, degrees, scale;
 };
 
+struct DcRoulettePose { float x, height, z, scale; int angle; };
+// FUN_8c01d774; stopped angles at 0x8c07686c. Raw task transform before draw.
+inline DcRoulettePose dreamcastRoulettePose(int tick, int rocketX, int rocketY, int outcome) {
+    constexpr int angles[] = {0x4000,0x6000,0xe000,0xc000,0x2000,0,0x8000,0xa000};
+    DcRoulettePose p{87.5f,25.0f,67.5f,30.0f,angles[outcome]};
+    if (tick < 30) {
+        p = {(rocketX + 0.5f) * 15.0f, 0, (rocketY + 0.5f) * 15.0f, 1, (tick + 1) * 0x1000};
+        for (int i = 0; i < tick; ++i) {
+            p.x += (87.5f - p.x) * 0.1f;
+            p.height += (25.0f - p.height) * 0.1f;
+            p.z += (67.5f - p.z) * 0.1f;
+            p.scale += (30.0f - p.scale) * 0.5f;
+        }
+    } else {
+        // (1 + 0.25 * FSCA(counter << 11).sin) * 30. SH-4 FSCA differs by
+        // a few ULPs from host sinf; these exact results are measured at task +44.
+        constexpr float pulse[] = {
+            0x1.ep+4f,0x1.f7692cp+4f,0x1.06f604p+5f,0x1.11558ep+5f,
+            0x1.1a6d28p+5f,0x1.21e36p+5f,0x1.276ecap+5f,0x1.2ad8dcp+5f,
+            0x1.2cp+5f,0x1.2ad8dcp+5f,0x1.276ecap+5f,0x1.21e36p+5f,
+            0x1.1a6d28p+5f,0x1.11558ep+5f,0x1.06f604p+5f,0x1.f7692cp+4f};
+        p.scale = pulse[std::min(tick - 30, 15)];
+    }
+    return p;
+}
+
 // HD 1.0 RL_RouletteExec, followed by RL_RouletteDrawPriority. The first
 // visible frame is tick 0, after the task's first execution.
 inline RoulettePose battleRoulettePose(int tick, int rocketX, int rocketY, int outcome,

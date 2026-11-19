@@ -149,7 +149,9 @@ static bool env(unsigned cmd, void* data) {
     case 27: ((retro_log_callback*)data)->log = logf_; return true;                // GET_LOG_INTERFACE
     case 15: {                                                                    // GET_VARIABLE
         auto* variable = static_cast<retro_variable*>(data);
-        if ((getenv("FLYHOST_SYNC") || getenv("FLYHOST_WAV")) && strcmp(variable->key, "reicast_threaded_rendering") == 0) {
+        // The emulation thread can advance past retro_run() before RAM is observed.
+        // Memory watches must use the synchronous path, just like indexed audio captures.
+        if ((getenv("FLYHOST_SYNC") || getenv("FLYHOST_WAV") || getenv("FLY_WATCH")) && strcmp(variable->key, "reicast_threaded_rendering") == 0) {
             variable->value = "disabled";
             if (!gSyncOptionSet) fprintf(stderr, "synchronous capture: disabled reicast_threaded_rendering\n");
             gSyncOptionSet = true;
