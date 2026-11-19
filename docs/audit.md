@@ -63,8 +63,8 @@ Counts items this table lists, not the game's full content (many screens have se
 | Mode Select | screen | partial | 0.91 (CCR_GPU=1, 640x480, one frame, animation phase not aligned) |
 | Challenge select (A1, B1, B2) | screen | verified | 2.2-3.0 |
 | Challenge select clock, clear marks | screen | partial | 0 px / 1.2 |
-| Challenge intro cards A1, B2 | screen | partial | <=3 |
-| Challenge play A1 | screen | partial | see dreamcast_models.md |
+| Challenge intro cards A1, B2 | screen | partial | A1 0.81 full frame (CCR_GPU=1, disc-only): card 0.81, timer panel 0.41, rocket gauge 0.50 pass the element rule, board crop 1.15 with 58 off-edge px; B2 not re-measured |
+| Challenge play A1 | screen | partial | 2.13 full frame at searched tick 202 vs Flycast frame 2500 (timer 0:29); timer panel 0.40; mice headings/cursor phase not aligned, stars not drawn |
 | Challenge failure | screen | partial | 4.3 |
 | Challenge clear (C1) | screen | partial | 0.7 banner |
 | Challenge pause | screen | partial | - |
@@ -74,7 +74,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Puzzle hint text (BIOS font) | screen | verified | 0 px |
 | Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |
 | Battle Stage Select | screen | partial | 2.35 (preview 9.6) |
-| Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 2.83 (CCR_GPU=1, stage 0, 30 ticks; tick alignment not established, CPU cursors absent); Team Battle not measured |
+| Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 2.22 (CCR_GPU=1, stage 0, 30 ticks; tick alignment not established, CPU cursors absent, START sprite not drawn); left panel passes, score panels 2.06, board 3.03 with 325 off-edge px; Team Battle not measured |
 | Battle pause (4P, Team) | screen | partial | - |
 | Help Menu | screen | partial | 0.34 (CCR_GPU=1, disc-only) |
 | Help pages (21) | screen | partial | all 21 pages captured from Flycast and measured (CCR_GPU=1, disc-only): full-frame 0.29-0.62; title and footer crops pass on all 21, body crops mean 0.20-0.80 but each has 66-256 off-edge px above 8 levels at the frame's top corners (not closed) |
