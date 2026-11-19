@@ -33,3 +33,9 @@ Both pieces in the Challenge stream have the same geometry (6 strips, 40 vertice
 * Port draw order per mode versus these tables: Puzzle, Challenge and Battle brackets fixed; arrows, holes, domes, mice, cat, effects (smoke, flames, hit stars), result banner and pause overlays still to compare mode by mode, including Team Battle and the Puzzle launch and pause states.
 * Dome pieces: find the lower-hemisphere model in the object table and the rule that picks the two colours per mode (the Ghidra side: the rocket draw task that submits both pieces).
 * The Ghidra decompile only reaches these tasks through indirect calls (`PTR_FUN_...`), so the stream is the reliable source; each fix is checked with `tools/parity.py` heatmaps.
+
+## Team Battle submission order (tb1/t_03600.state, 2026-11-19)
+
+Opaque list: floor (`080af0f8`), wall pieces (`080b08f8`), the centre piece `080a7d58`, the eight dome pieces (4 colour textures x 2 halves), then mice and the cat (`08065030..08065430`), all at 1/w 0.0045-0.0049.
+Translucent / 2D list, in order: HUD panels and score plates (z 0.0050-0.0053), then per player the pad cursor (`100ad4f8`, `100ad6f8`, `100ad8f8`, `100adaf8`, z 0.0055) immediately followed by its corner bracket (`000adcf8`, z 0.0046), then the arrow tiles (`080b0ff8`, `080b13f8`, `080b17f8`, z 0.0046), then mouse/cat shadows and small effects.
+Consequences checked against the port: the bracket and the arrows share the floor depth, so walls and opaque pieces hide them where nearer, and an arrow draws over a bracket on the same cell (equal depth, later submission); mice and domes (opaque, nearer than the floor plane) hide both. The port's order (floor, queued brackets, walls, arrows, domes and mice sorted by depth, cursor arrow last) matches this except that the port draws arrows over wall tops (arrow tiles are 34 px in 38 px cells, so only a wall post can overlap them; not measured).
