@@ -563,6 +563,7 @@ struct App {
     }
     void board(const Stage& st, int floorColor, int wallColor, FieldLayout field = {}) {
         const bool three = board3d(floorColor, wallColor, field);
+        struct Flush { App& a; FieldLayout f; ~Flush() { a.flushBrackets(f); } } flushOnExit{*this, field};   // 2D boards: brackets after everything, as before
         const Model3D* hole = three ? models3d.find("hole_out") : nullptr;
         const Model3D* generator = three ? models3d.find("hole_in") : nullptr;
         const float pixelsPerUnit = field.cell / 15.0f;
@@ -583,7 +584,7 @@ struct App {
             if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay, field.scale());
             else if (isGenerator) blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
         }
-        if (three) { walls3d(st, wallColor, field); return; }   // walls3d applies the wall plane itself (it was applied twice before)
+        if (three) { flushBrackets(field); walls3d(st, wallColor, field); return; }   // walls3d applies the wall plane itself (it was applied twice before)
         // HD 1.0 createPlayfield draws horizontal and vertical edge rows in
         // alternation. Keep its wall footprint and use the higher-resolution art.
         auto wall = [&](int frame, int x, int y, int w, int h) {
@@ -1059,6 +1060,11 @@ struct App {
             dcCursorAt(dcCursorBracket, x, y, 0, CELL * scale);
         else blit(cur, bracket ? 4 : player & 3, x, y, scale);
     }
+    // Corner brackets are drawn by board() between the floor and the walls: in Flycast (Challenge frame 2500) the walls hide parts of the bracket.
+    struct QueuedBracket { int cx, cy, player, ticks; };
+    std::vector<QueuedBracket> queuedBrackets;
+    void queueBracket(int cx, int cy, int player, int ticks) { queuedBrackets.push_back({cx, cy, player, ticks}); }
+    void flushBrackets(FieldLayout field) { auto q = std::move(queuedBrackets); queuedBrackets.clear(); for (const auto& b : q) cursor(b.cx, b.cy, b.player, b.ticks, true, field); }
     void cursor(int cx, int cy, int player, int ticks, bool bracket = false, FieldLayout field = {}) {
         cursorAt(field.x(cx + 0.5f), field.y(cy + 0.5f), player, ticks, bracket, field.scale());
     }
@@ -2978,14 +2984,14 @@ struct PuzzleMode : Screen {
         // rockets. Keep it across their separate software draw calls.
         const bool launchDepth = state == 2 && dreamcastPuzzleControls(a) && a.useModels3d();
         if (launchDepth) a.models3d.beginDepthScene(a.ren);
+        const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
+        const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
         if (hasBoardTasks) {
+            if (showCursor && ((dreamcastPuzzleControls(a) && !mouseCursor) || (sim.coll[aimY][aimX] & 0xF00))) a.queueBracket(aimX, aimY, 0, cticks);   // Flycast Puzzle 01 and 02: the pad cursor's corner bracket
             const int set = gApp ? gApp->stageSet : 0;
             a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
             for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, pf(a));
         }
-        const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
-        const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
-        if (showCursor && ((dreamcastPuzzleControls(a) && !mouseCursor) || (sim.coll[aimY][aimX] & 0xF00))) a.cursor(aimX, aimY, 0, cticks, true, pf(a));   // Flycast Puzzle 01 and 02: the pad cursor's corner bracket sits on cell (6, 4) even over a mouse, so the Dreamcast pad cursor always shows it
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a), 0,
                                             state == 2 ? &launchLids : nullptr, state == 2 ? clearFrames * (dash ? 2 : 1) : -1);
         if (launchDepth) a.models3d.endDepthScene();
@@ -3335,6 +3341,7 @@ struct ChallengeMode : Screen {
         const bool dc = dcLayout(a); const FieldLayout field = pf(a);
         SDL_SetRenderDrawColor(a.ren, 0, 0, dc ? 8 : 26, 255); SDL_RenderClear(a.ren);   // the Dreamcast background plane is (0, 0, 8) in the Challenge frames too (iPad clear colour: blue 26)
         a.stars.draw(a);
+        { const bool fc = supportedNow() && phase() <= ChallengeGame::Play; if (fc && !(mouseCursor && aim.inside) && dc) a.queueBracket(std::clamp(padAim.cellX(), 0, kCols - 1), std::clamp(padAim.cellY(), 0, kRows - 1), 0, cticks); }   // the corner bracket follows the controller tip's cell
         a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
         for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
         a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 0);   // Dreamcast Challenge A1 dome is the blue lid (Flycast frames 2390 and 2500; the earlier red guess did not match); other stages unchecked
@@ -3344,10 +3351,7 @@ struct ChallengeMode : Screen {
         else if (fieldCursor && dc) {
             const float x = padAim.logicalX(1.0f, field), y = padAim.logicalY(1.0f, field);
             a.drawDcBattlePadCursor(x, y, 0, cticks);
-            // The corner bracket follows the same cell as the controller tip.
-            const int col = std::clamp(padAim.cellX(), 0, kCols - 1);
-            const int row = std::clamp(padAim.cellY(), 0, kRows - 1);
-            a.cursor(col, row, 0, cticks, true, field);
+            // (the bracket was queued before the board is drawn)
         }
         SDL_RenderSetViewport(a.ren, nullptr);
         std::string line;
@@ -4081,16 +4085,16 @@ struct BattleMode : Screen {
         const int left = game.over ? 0 : std::max(0, game.roundFrames - game.clock);
         const int seconds = (left + 59) / 60;
         if (!dcHud) a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
-        { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0, field); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
-        for (auto& ar : game.sim.arrows) if (ar.live) {
-            if (a.headless && getenv("CCR_ENT_TRACE")) printf("arrow cell %d %d dir %d owner %d hits %d ttl %d\n", ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
-            a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl, field);
-        }
         for (int p = 0; p < 4; ++p) {
             const bool mouse = p == 0 && mouseCursor;
             if (lv[p] >= 0 || (mouse && !aim.inside)) continue;
             const int x = mouse ? aim.cellX() : curX[p], y = mouse ? aim.cellY() : curY[p];
-            if ((dcProjection && !mouse) || (game.sim.coll[y][x] & 0xF00)) a.cursor(x, y, p, game.frame, true, field);
+            if ((dcProjection && !mouse) || (game.sim.coll[y][x] & 0xF00)) a.queueBracket(x, y, p, game.frame);
+        }
+        { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0, field); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
+        for (auto& ar : game.sim.arrows) if (ar.live) {
+            if (a.headless && getenv("CCR_ENT_TRACE")) printf("arrow cell %d %d dir %d owner %d hits %d ttl %d\n", ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl);
+            a.arrow(ar.x, ar.y, ar.dir, ar.owner, ar.hits, ar.ttl, field);
         }
         a.drawFieldObjects(game.sim, prev, paused ? 1.0f : alpha, game.puku, field, dcProjection);
         if (dcHud) { if (game.teamMode) a.drawDcTeamHud(game.score, lv, left, game.roundFrames); else a.drawDcBattleHud(game.score, lv, left, game.roundFrames); }
