@@ -3354,7 +3354,7 @@ struct ChallengeSelectMode : Screen {
 // Dreamcast 4P Battle setup: "Select Players" then "Stage Select" (Flycast frames 1900 and 2300; every packet matched to a disc texture with 0 differing values, layout and depth order in docs/HANDOFF.md).
 // Players: P1 Human, P2-P4 Computer, CPU type Weak / Hates cats / Loves mice / Tough (levels 0-3, docs/cpu_ai.md), Random (4), None (no player). The original's type pop-up list is not captured yet: Enter cycles the types.
 struct DcBattleSetupMode : Screen {
-    int phase = 0, col = 0, row = 0, stage = 0, points = 3, ticks = 0; bool human[4] = {true, false, false, false}; int type[4] = {0, 0, 0, 0};
+    int phase = 0, col = 0, row = 0, stage = 0, points = 3, ticks = 0; bool team = false; bool human[4] = {true, false, false, false}; int type[4] = {0, 0, 0, 0};
     Stages stages; const char* destination = nullptr; bool leave = false;
     static bool available(App& a) { return a.dcBattleSetup.tex && a.dcBattleSetup.fr.size() == 30 && a.useModels3d(); }
     bool load(App& a) { return loadStages((a.root + "/battle_stages.bin").c_str(), stages, 2) && stages.list.size() >= 25; }
@@ -3427,7 +3427,7 @@ struct DcBattleSetupMode : Screen {
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         if (phase == 0) {
             { const SDL_Rect& r = sh.fr[0]; const SDL_Rect src{r.x, r.y, 640, 480}, dst{0, 0, 640, 480}; SDL_RenderCopy(a.ren, sh.tex, &src, &dst); }
-            put(2, 16, 32); put(3, 528, 32);
+            put(team ? 4 : 2, 16, 32); put(team ? 5 : 3, 528, 32);
             static const int x0[4] = {42, 194, 346, 495}, plate[4] = {52, 204, 356, 505}, text[4] = {60, 212, 364, 513}, hx[4] = {57, 209, 361, 510}, cx[4] = {48, 200, 352, 501};
             for (int c = 0; c < 4; ++c) { put(human[c] ? 11 : 10, x0[c], 136); put(human[c] ? 10 : 11, x0[c], 195); }
             put(6, 348, 48);
@@ -3438,7 +3438,7 @@ struct DcBattleSetupMode : Screen {
             }
         } else {
             { const SDL_Rect& r = sh.fr[1]; SDL_RenderCopy(a.ren, sh.tex, &r, nullptr); }
-            put(2, 16, 32); put(3, 528, 32);
+            put(team ? 4 : 2, 16, 32); put(team ? 5 : 3, 528, 32);
             for (int i = 0; i < 25; ++i) put(i == stage ? 18 : 19, 36 + 54 * (i % 5), 115 + 34 * (i / 5));
             put(20, 32, 112); put(21, 16, 300); put(22, 16, 372); put(23 + points - 1, 88, 304);
             const SDL_Rect aperture{364, 244, 252, 187}; SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderFillRect(a.ren, &aperture);
@@ -4122,12 +4122,12 @@ int main(int argc, char** argv) {
         }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
-        else if (name == "BATTLE" && !BattleSetupMode::available(app) && DcBattleSetupMode::available(app)) { auto m = std::make_unique<DcBattleSetupMode>(); if (!m->load(app)) { puts("cannot load battle stages"); return false; } mode = std::move(m); }
+        else if ((name == "BATTLE" || name == "TEAM_BATTLE") && !BattleSetupMode::available(app) && DcBattleSetupMode::available(app)) { auto m = std::make_unique<DcBattleSetupMode>(); m->team = name == "TEAM_BATTLE"; if (!m->load(app)) { puts("cannot load battle stages"); return false; } mode = std::move(m); }
         else if (name == "DC_BATTLE_MATCH") {
             const auto& setup = static_cast<const DcBattleSetupMode&>(*mode);
             auto battle = std::make_unique<BattleMode>();
             for (int i = 0; i < 4; ++i) battle->lv[i] = setup.level(i);
-            if (!battle->load(app.root, setup.chosenStage(seed), seed, nullptr, -1)) { puts("cannot load battle stages"); return false; }
+            if (!battle->load(app.root, setup.chosenStage(seed), seed, nullptr, setup.team ? 1 : -1)) { puts("cannot load battle stages"); return false; }
             battle->winPoint = setup.points - 1;
             for (int i = 0; i < SDL_NumJoysticks(); ++i) if (SDL_IsGameController(i)) { SDL_Event event{}; event.type = SDL_CONTROLLERDEVICEADDED; event.cdevice.which = i; battle->event(app, event); }
             mode = std::move(battle);
