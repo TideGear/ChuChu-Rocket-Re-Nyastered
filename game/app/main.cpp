@@ -1193,6 +1193,7 @@ struct App {
             }
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
+            if (headless && getenv("CCR_ENT_TRACE")) printf("ent %zu %s type %d world %.2f %.2f ang %04x frame %d\n", i, en.mouse ? "mouse" : "cat", en.type, object.x / kCell * 15.0f, object.z / kCell * 15.0f, ang & 0xffff, mouseFrame);
             if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell)) continue;
             if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter * field.scale(), 255);
