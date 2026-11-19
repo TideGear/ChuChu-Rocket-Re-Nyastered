@@ -1,0 +1,1 @@
+M PLUS Rounded 1c (Regular), Copyright 2016 The Rounded M+ Project Authors, from the Google Fonts repository (ofl/mplusrounded1c). Google Fonts lists the license as OFL; that repository ships no licence file for this family, so OFL.txt here is the upstream M+ FONTS project text (github.com/coz-m/MPLUS_FONTS). The font file is bundled unmodified.

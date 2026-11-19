@@ -221,10 +221,9 @@ def export_dc_battle_setup(prs_png, out):
 
 def export_dc_fallback_fonts(out):
     """No-BIOS look-alikes for the text the Dreamcast draws with its BIOS ROM font (tools/export_dc_bios_font.py overwrites these files when the user supplies a BIOS):
-    dc_bios_ansi (95 glyphs of 12 x 24, characters 0x20..0x7e) and dc_select_clock (digits 0-9 and the colon in 24 x 24 cells), both 1-bit like the originals.
-    Text: DotGothic16 (SIL OFL, a Japanese dot-matrix gothic like the BIOS font) at 24 px; clock digits: Open Sans (SIL OFL) at weight 350. Chosen by scoring candidate free fonts against the BIOS glyph bitmaps
-    (best text and digit scores of 16 fonts; the BIOS zero is a plain oval and its 1 has no base, which rules out the mono faces for digits). Licences in tools/fonts/."""
-    import numpy as np
+    dc_bios_ansi (95 glyphs, characters 0x20..0x7e, 24 x 48 cells = the BIOS 12 x 24 cell at twice the size) and dc_select_clock (digits 0-9 and the colon in 48 x 48 cells = 24 x 24 at 2x).
+    Text: Roboto Mono (SIL OFL); clock digits: M PLUS Rounded 1c Regular (OFL); both bundled unmodified in tools/fonts/. Chosen by scoring 20 free fonts against the BIOS glyph bitmaps and by eye;
+    Roboto Mono has the single-storey g and open t of the BIOS font, and M PLUS Rounded's digits are the closest in curve and weight to its plain oval zero and base-less 1. Glyphs are anti-aliased at 2x so the port's 1.6x layout is a smooth down-scale."""
     from PIL import ImageDraw, ImageFont
     here = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
     def load(name, size, weight):
@@ -234,10 +233,7 @@ def export_dc_fallback_fonts(out):
         try: font.set_variation_by_axes([weight if a['name'] in (b'Weight', 'Weight') else a['default'] for a in font.get_variation_axes()])
         except (OSError, AttributeError, KeyError): pass
         return font
-    # Glyphs are rasterised at twice the BIOS cell (24 x 48 and 48 x 48) and anti-aliased: the port draws them at the same on-screen size as the 12 x 24 / 24 x 24 BIOS cells,
-    # so the 1.6x layout scale is a smooth down-scale of a larger image instead of a hard-edged up-scale. Descenders get 12 rows below the baseline (the BIOS cell has 4 at 1x).
-    text_font, digit_font = load('DotGothic16-Regular.ttf', 48, 400), load('OpenSans.ttf', 50, 350)
-    g_font = load('RobotoMono.ttf', 46, 450)
+    text_font, digit_font = load('RobotoMono.ttf', 56, 400), load('MPLUSRounded1c-Regular.ttf', 200, 400)
     if not text_font or not digit_font: return
     def sheet_files(name, cells, w, h):
         atlas = Image.new('RGBA', (w * len(cells), h))
@@ -252,19 +248,18 @@ def export_dc_fallback_fonts(out):
         cell = Image.new('RGBA', mask.size, (255, 255, 255, 0)); cell.putalpha(mask); return cell
     glyphs = []
     for c in range(0x20, 0x7f):
-        mask = Image.new('L', (24, 48), 0)
-        font_c = g_font if (c == ord('g') and g_font) else text_font   # DotGothic16's g is a squashed double-storey form; the BIOS font has the single-storey g
-        ImageDraw.Draw(mask).text((0, 40), chr(c), font=font_c, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24 like the BIOS cell: descenders are cut at the cell bottom, as in the original), advance 24 (12 at 1x)
-        glyphs.append(white(mask.point(lambda v: min(255, int(v * 1.6)))))   # darker edges: the BIOS strokes are solid 2 px
+        wide = Image.new('L', (40, 48), 0)
+        ImageDraw.Draw(wide).text((0, 40), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
+        mask = wide.crop((0, 0, 34, 48)).resize((24, 48), Image.Resampling.BOX)            # squeeze the 0.6 em mono advance to the BIOS cell's narrow, tall proportions
+        glyphs.append(white(mask.point(lambda v: min(255, int(v * 1.3)))))
     sheet_files('dc_bios_ansi', glyphs, 24, 48)
     cells = []
-    huge = load('OpenSans.ttf', 200, 350)   # 4x supersample of the 2x cell, so the final down-scale is smooth (no ringing) and the curves stay round
     for d in '0123456789':
-        mask = Image.new('L', (240, 280), 0)
-        ImageDraw.Draw(mask).text((20, 220), d, font=huge, fill=255, anchor='ls'); box = mask.getbbox()
+        mask = Image.new('L', (300, 340), 0)
+        ImageDraw.Draw(mask).text((20, 260), d, font=digit_font, fill=255, anchor='ls'); box = mask.getbbox()
         width = 32 if d != '1' else round((box[2] - box[0]) * 40 / (box[3] - box[1]))   # 16 x 20 digits at 1x like the BIOS ovals (the 1 keeps its natural width)
         ink = mask.crop(box).resize((width, 40), Image.Resampling.BOX)
-        cell = Image.new('L', (48, 48), 0); cell.paste(ink, ((48 - width) // 2, 4)); cells.append(white(cell))
+        cell = Image.new('L', (48, 48), 0); cell.paste(ink, ((48 - width) // 2, 2)); cells.append(white(cell))   # rows 1-20 at 1x, like the BIOS digits
     colon = Image.new('L', (48, 48), 0); dr = ImageDraw.Draw(colon)
     for top in (10, 30): dr.rectangle((22, top, 25, top + 7), fill=255)
     cells.append(white(colon))
