@@ -55,6 +55,49 @@ class ChannelCommands:
             raise ValueError('Voice count exceeds AICA capacity')
         return count
 
+    def update_voices(self):
+        """ARM 0xb6c..0xc08: age held notes, start delays, stop ended drums.
+
+        The hardware-status observer supplies voice+0x2b separately. This
+        worker does not infer sample completion or consume KYONEX itself.
+        """
+        self.writes.clear()
+        for index in range(self.count()):
+            at, reg = 0x10000 + index * 64, index * 128
+            flags = self.ram[at]
+            if not flags:
+                continue
+            if flags & 0xc0:
+                self.ram[at + 0x3f] = (self.ram[at + 0x3f] + 1) & 255
+            delay = self.read32(at + 0x38)
+            if delay:
+                self.write32(at + 0x38, delay - 1)
+                if delay == 1:
+                    self.write_register(reg, int.from_bytes(self.registers[reg:reg + 4], 'little') | 0xc000)
+            if flags & 0x20 and self.ram[at + 0x2b]:
+                control = int.from_bytes(self.registers[reg:reg + 4], 'little')
+                self.write_register(reg, (control & ~0x4000) | 0x8000)
+                self.ram[at] = 0
+
+    def observe_voice(self, index, status):
+        """Sampled-voice branch of ARM 0x93c..0x9cc, given AICA monitor data.
+
+        Streaming-channel branches are separate. The hardware chooses the
+        status word and clears its loop latch on read; this models RAM effects.
+        """
+        if not 0 <= index < self.count() or not 0 <= status <= 0xffffffff:
+            raise ValueError('Expected a sampled voice index and monitor word')
+        at = 0x10000 + index * 64
+        if status & 0x8000 and self.ram[at + 0x3c]:
+            self.ram[at + 0x2b] = self.ram[at + 0x3c]
+        level = 0xff if status & 0x1f00 else status & 0xff
+        level ^= 0xff
+        if (status >> 13 & 3) != 3:
+            level = 0xff
+        self.ram[at + 3] = level
+        if not self.read32(at):
+            self.ram[self.voice_map_at + index] = 0
+
     def matching(self, group, channel, include_empty=False):
         for index in range(self.count()):
             at = 0x10000 + index * 64

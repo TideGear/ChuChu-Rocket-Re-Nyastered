@@ -24,7 +24,9 @@ from dc_aica_state import inspect
 from dc_sound_channels import ChannelCommands
 
 
-def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=False, loop_passes=2, state=None):
+def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=False, loop_passes=2, state=None, voice_worker=False):
+    if voice_worker and state is None:
+        raise ValueError('Voice worker comparison requires loaded dispatch state')
     PitchTable(driver)
     sequence = next(b for b in inventory(mlt) if b['bank'] == bank_index)['sequences'][sequence_index]
     if short_tail_control:
@@ -148,6 +150,15 @@ def verify(driver, mlt, bank_index=0, sequence_index=19, short_tail_control=Fals
                     if actual != expected_bytes:
                         differences = [(hex(start + i), a, b) for i, (a, b) in enumerate(zip(actual, expected_bytes)) if a != b]
                         raise AssertionError(('Dispatch RAM', tick, hex(command), differences[:12]))
+            if voice_worker:
+                register_writes.clear()
+                call(0xb6c)
+                channels.update_voices()
+                if register_writes != channels.writes or bytes(uc.mem_read(0x800000, 0x8000)) != channels.registers:
+                    raise AssertionError(('Voice worker registers', tick))
+                if bytes(uc.mem_read(0x10000, channels.count() * 64)) != channels.ram[0x10000:0x10000 + channels.count() * 64]:
+                    raise AssertionError(('Voice worker records', tick))
+                write_count += len(register_writes)
         count += len(observed)
         if native.loop_remaining == 128 and native.loop_repeats >= loop_passes:
             return dict(updates=tick, sequence_end=None, pending_at_end=None,
@@ -175,11 +186,14 @@ if __name__ == '__main__':
     parser.add_argument('--short-tail-control', action='store_true', help='synthetic control: zero the final note step')
     parser.add_argument('--loop-passes', type=int, default=2, help='infinite-loop repetitions to verify')
     parser.add_argument('--dispatch-state', type=Path, help='also compare native dispatch using captured loaded sound RAM; no voice worker or hardware synthesis')
+    parser.add_argument('--voice-worker', action='store_true', help='also call voice worker after each manual tick; no hardware status reads or real main-loop timing')
     args = parser.parse_args()
     if args.all and (args.short_tail_control or args.dispatch_state):
         parser.error('--all cannot be combined with --short-tail-control or --dispatch-state')
     if args.loop_passes < 1:
         parser.error('--loop-passes must be positive')
+    if args.voice_worker and not args.dispatch_state:
+        parser.error('--voice-worker requires --dispatch-state')
     driver, mlt = args.driver.read_bytes(), args.mlt.read_bytes()
     if args.all:
         results = [verify(driver, mlt, bank['bank'], sequence['index'], loop_passes=args.loop_passes)
@@ -192,4 +206,4 @@ if __name__ == '__main__':
                    sequences_with_pending_tails=sum(bool(r['pending_at_end']) for r in results)))
     else:
         print(verify(driver, mlt, args.bank, args.sequence, args.short_tail_control, args.loop_passes,
-                     args.dispatch_state.read_bytes() if args.dispatch_state else None))
+                     args.dispatch_state.read_bytes() if args.dispatch_state else None, args.voice_worker))
