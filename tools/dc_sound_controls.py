@@ -50,3 +50,36 @@ def envelope_words(split_amplitude, attack, decay, decay_level, release):
     word5 = (max(1, adjusted(upper & 31, release)) |
              adjusted((upper >> 5) & 31, decay_level) << 5 | upper & 0x7c00)
     return word4, word5
+
+
+def filter_words(split, controller):
+    """ARM 0x1258..0x1464: Q/bypass, five levels and four filter rates.
+
+    Returns word 10's filter bits followed by words 11..17. Word 10's
+    high-byte total level is prepared separately and must be retained.
+    Keep the original wrapped arithmetic and
+    bit-mask saturation: it is not a generic floating-point filter clamp.
+    Controller offsets are the driver's 0x80-byte MIDI channel record.
+    """
+    if len(split) < 36 or len(controller) < 0x44:
+        raise ValueError('Expected complete filter split and controller fields')
+    raw = struct.unpack_from('<I', split, 0x14)[0]
+    resonance = min(31, max(0, (raw & 31) + controller[0x27] - 64))
+    bypass = controller[0x3d]
+    bypass = (raw & 32) if not bypass else (0 if bypass & 64 else 32)
+    coarse = struct.unpack_from('<I', controller, 0x40)[0]
+    levels = []
+    for index in range(5):
+        level = struct.unpack_from('<H', split, 0x16 + index * 2)[0]
+        offset = struct.unpack_from('<H', controller, 0x28 + index * 2)[0]
+        value = (level + offset - 0x2000 + coarse) & 0xffffffff
+        if value & 0x80000000 or value < 8:
+            value = 8
+        if (value + 8) & 0xe000:
+            value = 0x1ff8
+        levels.append(value)
+    rates = struct.unpack_from('<I', split, 0x20)[0]
+    adjusted = [min(31, max(0, ((rates >> shift) & 31) + controller[at] - 32))
+                for shift, at in ((8, 0x32), (0, 0x33), (24, 0x34), (16, 0x35))]
+    return (resonance | bypass, *levels, adjusted[0] << 8 | adjusted[1],
+            adjusted[2] << 8 | adjusted[3])

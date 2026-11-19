@@ -19,7 +19,7 @@ from unicorn.arm_const import UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R5, UC_AR
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from arm7_bus import Arm7Bus
-from dc_sound_controls import modulation_word, envelope_words, sample_words
+from dc_sound_controls import modulation_word, envelope_words, sample_words, filter_words
 from dc_sound_pitch import PitchTable
 from dc_aica_state import inspect
 from mlt_programs import inventory as program_inventory, matching_splits
@@ -80,6 +80,9 @@ def verify(driver, state, mlt):
         offsets = [ram[controller + at] for at in (0x37, 0x38, 0x39, 0x3b)]
         if envelope_words(amplitude, *offsets) != tuple(channel['register_words'][4:6]):
             raise AssertionError('Calculated amplitude setup differs from live channel')
+        actual_filter = (channel['register_words'][10] & 63, *channel['register_words'][11:18])
+        if filter_words(ram[split:split + 36], ram[controller:controller + 0x80]) != actual_filter:
+            raise AssertionError('Calculated filter setup differs from live channel')
         lfo = struct.unpack_from('<H', ram, split + 14)[0]
         if modulation_word(lfo, ram[controller + 2]) & 0x7fff != channel['lfo_raw']:
             raise AssertionError('Calculated LFO differs from live channel')

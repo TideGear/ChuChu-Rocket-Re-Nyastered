@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from arm7_bus import Arm7Bus
 from dc_aica_state import inspect
 from dc_sound_voices import allocate_voice
+from dc_sound_controls import filter_words
 
 
 def run(driver, mlt, states, saturate=False):
@@ -81,6 +82,18 @@ def run(driver, mlt, states, saturate=False):
                                 continue
                             after = bytes(uc.mem_read(0x10000, count * 64))
                             changed = [i for i in range(count) if after[i*64:i*64+64] != records[i]]
+                            for voice_index in changed:
+                                record = after[voice_index * 64:(voice_index + 1) * 64]
+                                if record[:4] == bytes(4) or tuple(record[4:8]) != (group, chan, note, vel):
+                                    continue
+                                split = struct.unpack_from('<I', record, 0x10)[0]
+                                expected_filter = filter_words(bytes(uc.mem_read(split, 36)), bytes(uc.mem_read(ctl, 0x80)))
+                                actual_filter = struct.unpack('<8I', uc.mem_read(0x800000 + voice_index * 128 + 40, 32))
+                                actual_filter = (actual_filter[0] & 63, *actual_filter[1:])
+                                if actual_filter != expected_filter:
+                                    raise AssertionError(('Filter setup', path.name, group, chan, note, vel, voice_index,
+                                                          actual_filter, expected_filter))
+                                stats['filter_words_match'] += 1
                             first = allocate_voice(records, prio, low)
                             idx = first.index(count)
                             stats['cases'] += 1

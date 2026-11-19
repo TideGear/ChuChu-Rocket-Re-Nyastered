@@ -11,7 +11,7 @@ from unicorn.arm_const import UC_ARM_REG_R2, UC_ARM_REG_R5, UC_ARM_REG_R8, UC_AR
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dc_sound_pitch import PitchTable
-from dc_sound_controls import envelope_words, sample_words
+from dc_sound_controls import envelope_words, sample_words, filter_words
 
 
 def verify(driver):
@@ -74,9 +74,51 @@ def verify_samples(driver):
     return count
 
 
+def verify_filters(driver):
+    """Compare native setup with actual ARM instructions, including clamps."""
+    import random
+    PitchTable(driver)
+    uc = Uc(UC_ARCH_ARM, UC_MODE_ARM)
+    uc.mem_map(0, 0x200000)
+    uc.mem_map(0x210000, 0x1000)
+    uc.mem_map(0x800000, 0x10000)
+    uc.mem_write(0, driver[32:])
+    for reg, value in ((UC_ARM_REG_R2, 0x210000), (UC_ARM_REG_R5, 0x210100), (UC_ARM_REG_R8, 0x800000)):
+        uc.reg_write(reg, value)
+    rng = random.Random(0x12581464)
+    for case in range(8192):
+        split, control = bytearray(36), bytearray(0x80)
+        # Every raw rate and byte offset, with distinct permutations for
+        # other fields; seeded arbitrary levels, signed coarse offsets and
+        # the exact lower/upper saturation boundaries.
+        rate, offset = case // 256, case & 255
+        rates = rate << 8 | (rate ^ 31) | ((rate + 7) & 31) << 24 | ((rate + 19) & 31) << 16
+        struct.pack_into('<I', split, 0x20, rates)
+        control[0x32:0x36] = bytes((offset, 255 - offset, (offset + 37) & 255, (offset * 17) & 255))
+        control[0x27], control[0x3d] = offset, (case * 13) & 255
+        struct.pack_into('<H', split, 0x14, case & 63)
+        coarse = rng.choice((0, 7, 8, -8, -0x2000, 0x1ff7, 0x1ff8, 0x1ff9, rng.getrandbits(32)))
+        struct.pack_into('<I', control, 0x40, coarse & 0xffffffff)
+        for index in range(5):
+            struct.pack_into('<H', split, 0x16 + index * 2, rng.getrandbits(16))
+            struct.pack_into('<H', control, 0x28 + index * 2, rng.getrandbits(16))
+        uc.mem_write(0x210000, bytes(split))
+        uc.mem_write(0x210100, bytes(control))
+        uc.emu_start(0x1258, 0x1468, count=1000)
+        if uc.reg_read(UC_ARM_REG_PC) != 0x1468:
+            raise AssertionError('Filter setup did not finish')
+        actual = (struct.unpack('<I', uc.mem_read(0x16d4, 4))[0],
+                  *struct.unpack('<7I', uc.mem_read(0x80002c, 28)))
+        expected = filter_words(split, control)
+        if actual != expected:
+            raise AssertionError(('Filter setup', case, actual, expected))
+    return 8192
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('driver', type=Path)
     args = parser.parse_args()
     print(f'{verify(args.driver.read_bytes())} amplitude setup cases match original ARM')
     print(f'{verify_samples(args.driver.read_bytes())} sample setup cases match original ARM')
+    print(f'{verify_filters(args.driver.read_bytes())} filter setup cases match original ARM')
