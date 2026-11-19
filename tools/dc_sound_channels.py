@@ -5,7 +5,7 @@ from dc_sound_pitch import PitchTable
 
 
 class ChannelCommands:
-    """Native non-note command state; no ARM execution or sample clock.
+    """Native MIDI channel/note-release state; no ARM execution or sample clock.
 
     RAM contains the original loaded bank/controller/voice fields. Unsupported
     commands raise instead of dropping changes needed by a sound sequence.
@@ -65,11 +65,34 @@ class ChannelCommands:
         banks = {address: bytes(self.ram[address:address + self.read32(address + 8)])}
         self.ram[at:at + 128] = program_change(record, value, melodic, drums, banks, self.fallbacks)
 
+    def note_off(self, group, channel, note):
+        # 0xdd8..0xe80: held-key bit gates release. Flags 0x40/0x20
+        # suppress hardware stop while still clearing the held-key bit.
+        for _, voice, reg in self.matching(group, channel):
+            flags = self.ram[voice]
+            if not flags & 0x80 or self.ram[voice + 6] != note:
+                continue
+            flags &= ~0x80
+            self.ram[voice] = flags
+            if flags & 0x60:
+                continue
+            self.ram[voice + 0x3f] = 0
+            self.write32(voice + 0x38, 0)
+            self.ram[voice + 3] = 255
+            self.ram[voice] &= ~0x20
+            control = struct.unpack_from('<I', self.registers, reg)[0]
+            self.write_register(reg, (control & 0x7ff) | 0x8000)
+
     def apply(self, command):
         self.writes.clear()
+        if command == 0:  # 0xd68: the zero command is the FIFO sentinel.
+            return
         tag, group, channel = command >> 24 & 7, command >> 20 & 7, command >> 16 & 15
         at = 0xc000 + group * 0x800 + channel * 128
         value = command & 127
+        if tag == 0 or tag == 1 and value == 0:
+            self.note_off(group, channel, command >> 8 & 127)
+            return
         if tag == 4:
             self.program(at, command >> 8 & 127)
             return
