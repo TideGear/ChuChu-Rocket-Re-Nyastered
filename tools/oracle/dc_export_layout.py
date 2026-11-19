@@ -22,11 +22,11 @@ def layout(path, assets='local/cache/assets'):
     live = []
     for o, w, v in rows:
         xs = [p[1] for p in v]; ys = [p[2] for p in v]
-        if live and min(xs) == 0 and min(ys) == 0 and round(max(xs) - min(xs)) == 512 and round(max(ys) - min(ys)) == 512: break
         live.append((o, w, v))
-    out = []
     T = Image.Transpose.TRANSPOSE
-    for o, w, v in sorted(live, key=lambda r: (r[2][0][3], r[0])):
+    matched = []
+    titles = 0
+    for o, w, v in live:   # memory order: the live page first, then stale lists; a second Help title marks the start of a stale one
         a = m.decode(state, base, w[3], w[2])
         if a is None: continue
         xs = [p[1] for p in v]; ys = [p[2] for p in v]
@@ -40,7 +40,11 @@ def layout(path, assets='local/cache/assets'):
                 sc = float(e + ((a[..., 3] > 127) != (b[..., 3] > 127)).mean() * 100)
                 if best is None or sc < best[0]: best = (sc, os.path.basename(f)[:-4], tr)
         if best and best[0] < 1.0:
-            out.append({'png': best[1], 'transposed': best[2], 'x': round(min(xs), 1), 'y': round(min(ys), 1), 'w': round(max(xs) - min(xs)), 'h': round(max(ys) - min(ys))})
+            if best[1].startswith('HELP2_htitle'):
+                titles += 1
+                if titles > 1: break
+            matched.append((v[0][3], o, {'png': best[1], 'transposed': best[2], 'x': round(min(xs), 1), 'y': round(min(ys), 1), 'w': round(max(xs) - min(xs)), 'h': round(max(ys) - min(ys))}))
+    out = [q for _, _, q in sorted(matched, key=lambda t: (t[0], t[1]))]
     return out
 
 if __name__ == '__main__':

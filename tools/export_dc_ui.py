@@ -290,7 +290,7 @@ def export_dc_options(prs_png, out):
 
 def export_dc_help_pages(prs_png, out):
     """Dreamcast Help pages from tools/data/dc_help_layout.json (made by tools/oracle/dc_export_layout.py from Flycast frames): every distinct disc piece goes in one atlas
-    (dc_help_pages, stored upright) and dc_help_pages.bin lists, per page, quads (frame, x, y, w, h) in draw order: u32 pages, then per page u32 quads and 5 x f32 per quad."""
+    (dc_help_pages, stored upright) and dc_help_pages.bin lists, per page, quads (frame, x, y, w, h) in draw order: u32 pages, then per page u32 entry (Help Menu entry 0-8, the digit before '_' in the page key), u32 quads and 5 x f32 per quad."""
     import json
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'dc_help_layout.json')
     if not os.path.isfile(path): return
@@ -307,8 +307,8 @@ def export_dc_help_pages(prs_png, out):
     export_atlas(out, 'dc_help_pages', tiles)
     with open(os.path.join(out, 'dc_help_pages.bin'), 'wb') as f:
         f.write(struct.pack('<I', len(pages)))
-        for name in sorted(pages):
-            f.write(struct.pack('<I', len(pages[name])))
+        for name in sorted(pages, key=lambda k: (int(k.split('_')[0]), int(k.split('_')[1]))):
+            f.write(struct.pack('<2I', int(name.split('_')[0]), len(pages[name])))
             for q in pages[name]: f.write(struct.pack('<5f', pieces[(q['png'], q['transposed'])], q['x'], q['y'], q['w'], q['h']))
 
 def main(prs_png, out, png=None):

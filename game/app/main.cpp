@@ -2229,27 +2229,27 @@ struct HdMenuMode : Screen {
 // Dreamcast Mode Select. Positions and layering from the PowerVR
 // draw list in Flycast frame 2750 (state offsets 0x19bd543 through 0x19be623).
 // Dreamcast Help Menu (Flycast frame 2000, mode 6): title bar, prompt, nine entries and the controls strip from disc art; the red arrow is a triangle at the selected entry.
-// The help pages behind each entry (HELP1-3 textures) are not built yet: Enter returns to Mode Select.
+
 struct DcHelpMode : Screen {
     struct Quad { int frame; float x, y, w, h; };
-    int sel = 0, page = -1; bool leave = false; std::vector<std::vector<Quad>> pages;   // pages: The Basics 1..6 (dc_help_pages.bin, layouts read from Flycast frames)
+    int sel = 0, page = -1, first = 0, last = 0; bool leave = false; std::vector<std::vector<Quad>> pages; std::vector<int> pageEntry;   // pages of every Help entry (dc_help_pages.bin, layouts read from Flycast frames)
     static bool available(App& a) { return a.dcHelp.tex && a.dcHelp.fr.size() == 4; }
     void loadPages(App& a) {
         if (!pages.empty() || !a.dcHelpPages.tex) return;
         FILE* f = fopen((a.root + "/ret_all/dc_help_pages.bin").c_str(), "rb"); if (!f) return;
         uint32_t n = 0; if (fread(&n, 4, 1, f) == 1) for (uint32_t i = 0; i < n; ++i) {
-            uint32_t c = 0; if (fread(&c, 4, 1, f) != 1) break; std::vector<Quad> q;
+            uint32_t hdr[2] = {0, 0}; if (fread(hdr, 4, 2, f) != 2) break; const uint32_t c = hdr[1]; std::vector<Quad> q; pageEntry.push_back((int)hdr[0]);
             for (uint32_t k = 0; k < c; ++k) { float v[5]; if (fread(v, 4, 5, f) != 5) break; q.push_back({(int)v[0], v[1], v[2], v[3], v[4]}); }
             pages.push_back(q); }
         fclose(f);
     }
     void act(App& a, int what) {   // 0 A/Enter, 2 B/Esc, 3 X (Help Menu)
         if (page >= 0) {
-            if (what == 0) { a.playSfx(1); if (++page >= (int)pages.size()) page = -1; }
-            else if (what == 2) { a.playSfx(1); if (--page < 0) page = -1; }
+            if (what == 0) { a.playSfx(1); if (++page > last) page = -1; }
+            else if (what == 2) { a.playSfx(1); if (--page < first) page = -1; }
             else if (what == 3) { a.playSfx(1); page = -1; }
             return; }
-        if (what == 0 && sel == 0) { loadPages(a); if (!pages.empty()) { a.playSfx(1); page = 0; return; } }
+        if (what == 0) { loadPages(a); first = last = -1; for (int i = 0; i < (int)pages.size(); ++i) if (pageEntry[i] == sel) { if (first < 0) first = i; last = i; } if (first >= 0) { a.playSfx(1); page = first; return; } }
         if (what == 0) a.playSfx(1);
         if (what == 0 || what == 2) leave = true;   // the pages of the other entries are not built yet: back to Mode Select
     }
