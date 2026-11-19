@@ -233,7 +233,7 @@ def export_dc_fallback_fonts(out):
         try: font.set_variation_by_axes([weight if a['name'] in (b'Weight', 'Weight') else a['default'] for a in font.get_variation_axes()])
         except (OSError, AttributeError, KeyError): pass
         return font
-    text_font, digit_font = load('RobotoMono.ttf', 46, 400), load('MPLUSRounded1c-Regular.ttf', 200, 400)
+    text_font, digit_font = load('RobotoMono.ttf', 50, 400), load('MPLUSRounded1c-Regular.ttf', 200, 400)
     if not text_font or not digit_font: return
     def sheet_files(name, cells, w, h):
         atlas = Image.new('RGBA', (w * len(cells), h))
@@ -249,7 +249,7 @@ def export_dc_fallback_fonts(out):
     glyphs = []
     for c in range(0x20, 0x7f):
         wide = Image.new('L', (40, 48), 0)
-        ImageDraw.Draw(wide).text((0, 38), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
+        ImageDraw.Draw(wide).text((0, 42 - (4 if chr(c) == 'g' else 0)), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
         mask = wide.crop((0, 0, 34, 48)).resize((24, 48), Image.Resampling.BOX)            # squeeze the 0.6 em mono advance to the BIOS cell's narrow, tall proportions
         glyphs.append(white(mask.point(lambda v: min(255, int(v * 1.3)))))
     sheet_files('dc_bios_ansi', glyphs, 24, 48)
