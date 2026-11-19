@@ -267,6 +267,28 @@
       "note": "needs a save with 1 stage cleared in 19 s; look-alike font without a BIOS"
     },
     {
+      "name": "help_menu",
+      "ref": "local/star-trace/hp/h_02000.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_TICKS": "100"
+      }
+    },
+    {
+      "name": "help_basics_1",
+      "ref": "local/star-trace/hp/h_02500.bmp",
+      "args": [
+        "HELP"
+      ],
+      "env": {
+        "CCR_KEYS": "E",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "100"
+      }
+    },
+    {
       "name": "launch_age_{age}",
       "sweep": {
         "var": "age",
