@@ -369,6 +369,10 @@ def export_dc_help_pages(prs_png, out):
             f.write(struct.pack('<2I', int(name.split('_')[0]), len(pages[name])))
             for q in pages[name]: f.write(struct.pack('<5f', pieces[(q['png'], q['transposed'])], q['x'], q['y'], q['w'], q['h']))
 
+def uv_span(tile, sx=255 / 256, sy=255 / 256):
+    """Flycast frame 2390 samples every Puzzle HUD sprite over UV 0..0.99609375 (255/256), the bottom panel halves over 95 of 96 rows; resample the tile the same way."""
+    return tile.transform(tile.size, Image.Transform.AFFINE, (sx, 0, 0, 0, sy, 0), Image.Resampling.BILINEAR)
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_puzzle_result(prs_png, out)
@@ -394,6 +398,10 @@ def main(prs_png, out, png=None):
         # The bottom panel is two 256 x 96 quads of one texture (rows 0-95 and 96-191), so it keeps its full size.
         # The R/L Trigger panels are full 128 x 128 quads at (5, 32) and (5, 160) of 640 x 480 (Flycast frame 2390), so they keep their whole texture too.
         if name not in ('dc_puzzle_panel', 'dc_puzzle_stage', 'dc_puzzle_start', 'dc_puzzle_cancel'): im = im.crop(im.getbbox())
+        if name in ('dc_puzzle_start', 'dc_puzzle_cancel', 'dc_puzzle_stage'): im = uv_span(im)
+        elif name == 'dc_puzzle_panel':   # two 256 x 96 quads of rows 0-95 and 96-191, V 0..95/256 and 96/256..191/256
+            for top in (0, 96):
+                im.paste(uv_span(im.crop((0, top, 256, top + 96)), 255 / 256, 95 / 96), (0, top))
         w, h = im.size
         with open(os.path.join(out, name + '.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', w, h)); f.write(im.tobytes())
         with open(os.path.join(out, name + '.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
@@ -419,12 +427,12 @@ def main(prs_png, out, png=None):
         # The Puzzle plate/bubble texture (word 04046c00 in Flycast frame 2390) is this 278 x 42 bar with no tail. It starts at row 0 of the 512 x 64 texture: the Normal plate and the bubble, two quads of this texture, both start 2 rows too low with the bar at row 2 and align with it at row 0 (frame error 3.97 -> 3.04).
         plate = Image.new('RGBA', (512, 44))
         plate.paste(Image.open(board).convert('RGBA').crop((0, 0, 512, 42)), (0, 0))
-        sheet('dc_puzzle_plate', plate)
+        sheet('dc_puzzle_plate', uv_span(plate))
     elif os.path.exists(bubble): sheet('dc_puzzle_plate', Image.open(bubble).convert('RGBA').crop((0, 0, 512, 44)))
     names = [os.path.join(prs_png, f'PUZZLE_{n}.png') for n in ('normal', 'hard', 'mania', 'original', 'special')]
     if all(os.path.exists(n) for n in names):
         labels = Image.new('RGBA', (256, 32 * len(names)))
-        for i, n in enumerate(names): labels.paste(Image.open(n).convert('RGBA'), (0, i * 32))
+        for i, n in enumerate(names): labels.paste(uv_span(Image.open(n).convert('RGBA')), (0, i * 32))
         sheet('dc_puzzle_labels', labels)
     # The Puzzle pause screen (Flycast Puzzle pause frame): the two PAUSED board pieces (the square left one is stored rotated like the other menu sheets), the cat, the two speech bubbles
     # with their tips, and the RESUME and QUIT labels, packed into one 512 x 320 sheet; regions are fixed in main.cpp (dcPauseRegions).
