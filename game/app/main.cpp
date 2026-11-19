@@ -511,21 +511,22 @@ struct App {
         const Model3D* floorM = models3d.find("floor"); const Model3D* wallM = models3d.find("wall"); if (!floorM || !wallM) return false;
         const int dcFloor = wallColor == 0 ? 0 : floorColor;   // Dreamcast Battle and Team Battle boards all use yuka01 (purple and tan), read from the 25 stage-select previews of the real game; other modes keep the mobile rule until their Dreamcast frames are checked
         const int mat = 29 + std::max(0, std::min(5, getenv("CCR_FLOOR3D") ? atoi(getenv("CCR_FLOOR3D")) : dcFloor)); if (mat >= (int)floorM->matTex.size()) return false;
-        SDL_Texture* tex = models3d.textures[floorM->matTex[mat]];
-        std::vector<SDL_Vertex> verts; verts.reserve(12 * 9 * 6);
-        const SDL_Color floorLight{204, 204, 204, 255};   // exact: the real floor quad's vertex intensity is 0.8000 (0.3 + 0.5 * normal up)
+        // The real floor is one 180 x 135 quad whose texture repeats (yuka01 holds 2 x 2 cells) and is filtered bilinearly across the wrap. It samples the texture backwards across each cell
+        // (Flycast frame 3550: a purple-to-tan seam shows texel 0 then texel 63), so cell c, r runs u from u0 + 0.5 down to u0 and v from v0 + 0.5 down to v0; the DC starts the checkerboard
+        // in the right-hand quarter. Drawn through the software rasteriser (bilinear, wrapped) at the vertex intensity 0.8.
+        std::vector<ModelPack::SoftTri> floorTris; floorTris.reserve(12 * 9 * 2);
         for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) {
-            const float x0 = field.x(c), y0 = field.y(r);
-            // Each cell is stretched by a fraction of an output pixel on its right and lower side (with its UVs): the SDL triangle fill leaves one-pixel cracks along some shared edges, and the real floor is one quad with none.
-            const float kOverlap = field.cell < 25.0f ? 1.0f : 0.6f;   // small previews (about 20 px cells) need a larger overlap to close the cracks
-            const float x1 = field.x(c + 1) + kOverlap, y1 = field.y(r + 1) + kOverlap;
-            // The Dreamcast starts the checkerboard in the right-hand texture quarter.
-            const float u0 = ((c + 1) & 1) * 0.5f, v0 = (r & 1) * 0.5f;
-            const float u1 = std::min(1.0f, u0 + 0.5f * (1.0f + kOverlap / (field.cell))), v1 = std::min(1.0f, v0 + 0.5f * (1.0f + kOverlap / (field.cell)));   // SDL's software fill drops triangles whose UVs leave [0, 1]
-            SDL_Vertex a{{x0, y0}, floorLight, {u0, v0}}, b{{x1, y0}, floorLight, {u1, v0}}, d{{x1, y1}, floorLight, {u1, v1}}, e{{x0, y1}, floorLight, {u0, v1}};
-            verts.push_back(a); verts.push_back(b); verts.push_back(d); verts.push_back(a); verts.push_back(d); verts.push_back(e);
+            const float x0 = field.x(c), y0 = field.y(r), x1 = field.x(c + 1), y1 = field.y(r + 1);
+            const float u0 = ((c + 1) & 1) * 0.5f, v0 = (r & 1) * 0.5f, ua = u0 + 0.5f, ub = u0, va = v0 + 0.5f, vb = v0;
+            const SDL_FPoint P[4] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}; const float U[4] = {ua, ub, ub, ua}, V[4] = {va, va, vb, vb};
+            static const int kQuadTris[2][3] = {{0, 1, 2}, {0, 2, 3}};
+            for (const int (&idx)[3] : kQuadTris) {
+                ModelPack::SoftTri t{}; t.tex = static_cast<int>(floorM->matTex[mat]); t.translucent = false; t.wrap = true;
+                for (int k = 0; k < 3; ++k) { t.p[k] = P[idx[k]]; t.u[k] = U[idx[k]]; t.v[k] = V[idx[k]]; t.iw[k] = 1.0f; t.light[k] = 0.8f; }
+                floorTris.push_back(t);
+            }
         }
-        SDL_RenderGeometry(ren, tex, verts.data(), (int)verts.size(), nullptr, 0);
+        models3d.softRender(ren, floorTris);
         return true;
     }
     void walls3d(const Stage& st, int wallColor, FieldLayout field) {

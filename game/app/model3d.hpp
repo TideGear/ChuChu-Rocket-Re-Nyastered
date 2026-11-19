@@ -81,7 +81,7 @@ private:
         return true;
     }
 public:
-    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; };
+    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; };   // wrap: repeat the texture (the floor quad's UVs run past 1)
 
     // The Battle draw task builds a dome from two copies of the lid,
     // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
@@ -133,12 +133,12 @@ public:
         if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return;
         static std::vector<uint32_t> color; static std::vector<float> depth;
         color.assign((size_t)W * H, 0u); depth.assign((size_t)W * H, -1.0f);
-        auto sample = [&](int tex, float u, float v, float out[4]) {
+        auto sample = [&](int tex, float u, float v, bool wrap, float out[4]) {
             if (tex < 0 || tex >= (int)cpuPixels.size()) { out[0] = out[1] = out[2] = 0; out[3] = 255; return; }
             const int tw = cpuSize[tex].x, th = cpuSize[tex].y; const uint8_t* px = cpuPixels[tex].data();
             const float fx = u * tw - 0.5f, fy = v * th - 0.5f; const int ix = (int)std::floor(fx), iy = (int)std::floor(fy); const float ax = fx - ix, ay = fy - iy;
             for (int c = 0; c < 4; ++c) {
-                auto at = [&](int x, int y) { x = std::max(0, std::min(tw - 1, x)); y = std::max(0, std::min(th - 1, y)); return (float)px[((size_t)y * tw + x) * 4 + c]; };
+                auto at = [&](int x, int y) { if (wrap) { x = ((x % tw) + tw) % tw; y = ((y % th) + th) % th; } else { x = std::max(0, std::min(tw - 1, x)); y = std::max(0, std::min(th - 1, y)); } return (float)px[((size_t)y * tw + x) * 4 + c]; };
                 out[c] = (at(ix, iy) * (1 - ax) + at(ix + 1, iy) * ax) * (1 - ay) + (at(ix, iy + 1) * (1 - ax) + at(ix + 1, iy + 1) * ax) * ay;
             }
         };
@@ -160,7 +160,7 @@ public:
                     const float w0 = b0 * t.iw[0], w1 = b1 * t.iw[1], w2 = b2 * t.iw[2], ws = w0 + w1 + w2;
                     const float u = (w0 * t.u[0] + w1 * t.u[1] + w2 * t.u[2]) / ws, v = (w0 * t.v[0] + w1 * t.v[1] + w2 * t.v[2]) / ws;
                     const float lum = b0 * t.light[0] + b1 * t.light[1] + b2 * t.light[2];
-                    float c[4]; sample(t.tex, u, v, c);
+                    float c[4]; sample(t.tex, u, v, t.wrap, c);
                     uint32_t& dst = color[(size_t)y * W + x];
                     const float r = std::min(255.0f, c[0] * lum), g = std::min(255.0f, c[1] * lum), bl = std::min(255.0f, c[2] * lum);
                     if (!t.translucent) { dst = (uint32_t)(r + 0.5f) | (uint32_t)(g + 0.5f) << 8 | (uint32_t)(bl + 0.5f) << 16 | 0xFF000000u; zb = iw; }
