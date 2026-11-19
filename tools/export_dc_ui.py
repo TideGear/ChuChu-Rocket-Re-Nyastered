@@ -220,14 +220,22 @@ def export_dc_battle_setup(prs_png, out):
     export_atlas(out, 'dc_battle_setup', tiles)
 
 def export_dc_fallback_fonts(out):
-    """No-BIOS look-alikes for the text the Dreamcast draws with its BIOS ROM font (see tools/export_dc_bios_font.py, which overwrites these files when the user supplies a BIOS):
-    dc_bios_ansi (95 glyphs of 12 x 24, characters 0x20..0x7e) and dc_select_clock (digits 0-9 and the colon in 24 x 24 cells). Rasterised from Share Tech Mono (SIL OFL, tools/fonts/),
-    the closest free monospace face found (squared, even-width strokes; scored against the BIOS glyphs next to Anonymous Pro, Oxygen Mono, Fira Mono, Space Mono, Inconsolata)."""
+    """No-BIOS look-alikes for the text the Dreamcast draws with its BIOS ROM font (tools/export_dc_bios_font.py overwrites these files when the user supplies a BIOS):
+    dc_bios_ansi (95 glyphs of 12 x 24, characters 0x20..0x7e) and dc_select_clock (digits 0-9 and the colon in 24 x 24 cells), both 1-bit like the originals.
+    Text: DotGothic16 (SIL OFL, a Japanese dot-matrix gothic like the BIOS font) at 24 px; clock digits: Open Sans (SIL OFL) at weight 350. Chosen by scoring candidate free fonts against the BIOS glyph bitmaps
+    (best text and digit scores of 16 fonts; the BIOS zero is a plain oval and its 1 has no base, which rules out the mono faces for digits). Licences in tools/fonts/."""
     import numpy as np
     from PIL import ImageDraw, ImageFont
-    ttf = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts', 'ShareTechMono-Regular.ttf')
-    if not os.path.isfile(ttf): return
-    font = ImageFont.truetype(ttf, 26)
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+    def load(name, size, weight):
+        path = os.path.join(here, name)
+        if not os.path.isfile(path): return None
+        font = ImageFont.truetype(path, size)
+        try: font.set_variation_by_axes([weight if a['name'] in (b'Weight', 'Weight') else a['default'] for a in font.get_variation_axes()])
+        except (OSError, AttributeError, KeyError): pass
+        return font
+    text_font, digit_font = load('DotGothic16-Regular.ttf', 24, 400), load('OpenSans.ttf', 25, 350)
+    if not text_font or not digit_font: return
     def sheet_files(name, cells, w, h):
         atlas = Image.new('RGBA', (w * len(cells), h))
         for k, cell in enumerate(cells): atlas.paste(cell, (w * k, 0))
@@ -241,17 +249,18 @@ def export_dc_fallback_fonts(out):
         cell = Image.new('RGBA', mask.size, (255, 255, 255, 0)); cell.putalpha(mask); return cell
     glyphs = []
     for c in range(0x20, 0x7f):
-        mask = Image.new('L', (13, 24), 0)
-        ImageDraw.Draw(mask).text((0, 20), chr(c), font=font, fill=255, anchor='ls')
-        glyphs.append(white(mask.resize((12, 24), Image.Resampling.BILINEAR)))
+        mask = Image.new('L', (40, 48), 0)
+        ImageDraw.Draw(mask).text((10, 34), chr(c), font=text_font, fill=255, anchor='ls')
+        bits = np.array(mask.crop((10, 34 - 20, 22, 34 + 4)).point(lambda v: 255 if v > 60 else 0)) > 0   # 12 px advance at 24 px: no resampling, 1-bit
+        glyphs.append(white(Image.fromarray((bits * 255).astype('uint8'))))
     sheet_files('dc_bios_ansi', glyphs, 12, 24)
     cells = []
-    small = ImageFont.truetype(ttf, 27)   # the original's 24 x 24 digits are 1-bit with 2 px strokes: render light, keep the aspect nearly natural, then threshold
     for d in '0123456789':
-        mask = Image.new('L', (32, 40), 0)
-        ImageDraw.Draw(mask).text((4, 32), d, font=small, fill=255, anchor='ls')
-        ink = mask.crop(mask.getbbox()); ink = ink.resize((15 if d != '1' else ink.width, 20), Image.Resampling.BILINEAR).point(lambda v: 255 if v > 175 else 0)
-        cell = Image.new('L', (24, 24), 0); cell.paste(ink, ((24 - ink.width) // 2, 1)); cells.append(white(cell))
+        mask = Image.new('L', (48, 56), 0)
+        ImageDraw.Draw(mask).text((4, 44), d, font=digit_font, fill=255, anchor='ls')
+        box = mask.getbbox(); width = 14 if d != '1' else box[2] - box[0]
+        ink = mask.crop(box).resize((width, 20), Image.Resampling.BILINEAR).point(lambda v: 255 if v > 125 else 0)
+        cell = Image.new('L', (24, 24), 0); cell.paste(ink, ((24 - width) // 2, 1)); cells.append(white(cell))
     colon = Image.new('L', (24, 24), 0); dr = ImageDraw.Draw(colon)
     for top in (5, 15): dr.rectangle((11, top, 12, top + 3), fill=255)
     cells.append(white(colon))
