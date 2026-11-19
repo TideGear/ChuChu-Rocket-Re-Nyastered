@@ -236,7 +236,8 @@ def export_dc_fallback_fonts(out):
         return font
     # Glyphs are rasterised at twice the BIOS cell (24 x 48 and 48 x 48) and anti-aliased: the port draws them at the same on-screen size as the 12 x 24 / 24 x 24 BIOS cells,
     # so the 1.6x layout scale is a smooth down-scale of a larger image instead of a hard-edged up-scale. Descenders get 12 rows below the baseline (the BIOS cell has 4 at 1x).
-    text_font, digit_font = load('DotGothic16-Regular.ttf', 44, 400), load('OpenSans.ttf', 50, 350)
+    text_font, digit_font = load('DotGothic16-Regular.ttf', 48, 400), load('OpenSans.ttf', 50, 350)
+    g_font = load('RobotoMono.ttf', 46, 450)
     if not text_font or not digit_font: return
     def sheet_files(name, cells, w, h):
         atlas = Image.new('RGBA', (w * len(cells), h))
@@ -252,16 +253,18 @@ def export_dc_fallback_fonts(out):
     glyphs = []
     for c in range(0x20, 0x7f):
         mask = Image.new('L', (24, 48), 0)
-        ImageDraw.Draw(mask).text((0, 38), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 38 of 48 (19 of 24), advance 24 (12 at 1x)
-        glyphs.append(white(mask))
+        font_c = g_font if (c == ord('g') and g_font) else text_font   # DotGothic16's g is a squashed double-storey form; the BIOS font has the single-storey g
+        ImageDraw.Draw(mask).text((0, 40), chr(c), font=font_c, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24 like the BIOS cell: descenders are cut at the cell bottom, as in the original), advance 24 (12 at 1x)
+        glyphs.append(white(mask.point(lambda v: min(255, int(v * 1.6)))))   # darker edges: the BIOS strokes are solid 2 px
     sheet_files('dc_bios_ansi', glyphs, 24, 48)
     cells = []
+    huge = load('OpenSans.ttf', 200, 350)   # 4x supersample of the 2x cell, so the final down-scale is smooth (no ringing) and the curves stay round
     for d in '0123456789':
-        mask = Image.new('L', (96, 112), 0)
-        ImageDraw.Draw(mask).text((8, 88), d, font=digit_font, fill=255, anchor='ls'); box = mask.getbbox()
-        width = 28 if d != '1' else box[2] - box[0]
-        ink = mask.crop(box).resize((width, 40), Image.Resampling.LANCZOS)
-        cell = Image.new('L', (48, 48), 0); cell.paste(ink, ((48 - width) // 2, 2)); cells.append(white(cell))
+        mask = Image.new('L', (240, 280), 0)
+        ImageDraw.Draw(mask).text((20, 220), d, font=huge, fill=255, anchor='ls'); box = mask.getbbox()
+        width = 32 if d != '1' else round((box[2] - box[0]) * 40 / (box[3] - box[1]))   # 16 x 20 digits at 1x like the BIOS ovals (the 1 keeps its natural width)
+        ink = mask.crop(box).resize((width, 40), Image.Resampling.BOX)
+        cell = Image.new('L', (48, 48), 0); cell.paste(ink, ((48 - width) // 2, 4)); cells.append(white(cell))
     colon = Image.new('L', (48, 48), 0); dr = ImageDraw.Draw(colon)
     for top in (10, 30): dr.rectangle((22, top, 25, top + 7), fill=255)
     cells.append(white(colon))
