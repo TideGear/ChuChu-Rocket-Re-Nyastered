@@ -67,7 +67,7 @@ def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False):
                 expected.extend(max(-32768, min(32767, sum(pair[side] for pair in pairs))) for side in (0, 1))
         if channel is not None:
             if bank is not None:
-                bank.write(channel, offset, size, value)
+                bank.write_arm(channel * 128 + offset, size, value)
             else:
                 models[channel].write_controller(offset, size, value)
         position = at

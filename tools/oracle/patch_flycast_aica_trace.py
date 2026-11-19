@@ -9,8 +9,9 @@ changing the test fixture. Leave it unset for ordinary tracing or identity check
 FLYCAST_AICA_TICKS=<csv> independently records driver-clock changes at their
 first observed output sample, with sampled ARM PC for context.
 FLYCAST_AICA_WRITES=<csv> is a synthetic fixture: ordered rows contain sample
-(decimal), channel (decimal), offset (hex), width 1/2 (decimal), value (hex).
+(decimal), channel (decimal), offset (hex), width 1/2/4 (decimal), value (hex).
 It applies original byte/halfword register handlers before that output sample.
+Word writes call the original ARM handler, which truncates to a halfword.
 Leave it unset for ordinary tracing and identity checks.
 No emulator sources are bundled.
 """
@@ -121,9 +122,10 @@ void ccr_read_write()
         &ccr_write_channel, &ccr_write_offset, &ccr_write_size, &ccr_write_value);
     if (n == EOF) { ccr_write_pending = false; return; }
     if (n != 5 || ccr_write_next < ccr_write_sample || ccr_write_channel >= 64 ||
-        ccr_write_offset >= 0x48 || (ccr_write_size != 1 && ccr_write_size != 2) ||
+        ccr_write_offset >= 0x48 || (ccr_write_size != 1 && ccr_write_size != 2 && ccr_write_size != 4) ||
         (ccr_write_size == 2 && (ccr_write_offset & 1)) ||
-        ccr_write_value >= (1u << (ccr_write_size * 8))) std::abort();
+        (ccr_write_size == 4 && (ccr_write_offset & 3)) ||
+        (ccr_write_size < 4 && ccr_write_value >= (1u << (ccr_write_size * 8)))) std::abort();
     ccr_write_pending = true;
 }
 void ccr_timed_writes()
@@ -139,7 +141,8 @@ void ccr_timed_writes()
     while (ccr_write_pending && ccr_write_next == ccr_write_sample) {
         u32 address = ccr_write_channel * 128 + ccr_write_offset;
         if (ccr_write_size == 1) aica::writeRegInternal<u8>(address, (u8)ccr_write_value);
-        else aica::writeRegInternal<u16>(address, (u16)ccr_write_value);
+        else if (ccr_write_size == 2) aica::writeRegInternal<u16>(address, (u16)ccr_write_value);
+        else aica::arm::writeReg<u32>(address, ccr_write_value);
         ccr_read_write();
     }
     ++ccr_write_sample;
@@ -167,7 +170,7 @@ def patch(root, msvc=False, glext=None):
         raise ValueError('MSVC needs --glext pointing to a Khronos GL extension header (SDL_opengl_glext.h also works)')
     text = raw.decode('utf-8')
     text = text.replace('namespace aica::sgc\n{',
-                        '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n\nnamespace aica::sgc\n{\n' + TRACE + TICKS, 1)
+                        '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n#include "hw/arm7/arm_mem.h"\n\nnamespace aica::sgc\n{\n' + TRACE + TICKS, 1)
     text = text.replace('void AICA_Sample()\n{', KEYON + WRITES + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_timed_writes();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
     text = text.replace('void deserialize(Deserializer& deser)\n{',
                         'void deserialize(Deserializer& deser)\n{\n\tccr_reset_writes();\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)

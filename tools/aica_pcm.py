@@ -411,6 +411,16 @@ class SampledVoiceBank:
     def sync_control(self, index):
         struct.pack_into('<I', self.registers, index * 128, self.models[index].channel['register_words'][0])
 
+    def write_arm(self, address, size, value):
+        """Consume an ARM channel-register write (offset from 0x800000).
+
+        arm_mem.cpp::writeReg<u32> writes only its low halfword. Common/DSP
+        registers and unaligned accesses remain separate unsupported routes.
+        """
+        if size not in (1, 2, 4) or not 0 <= address < 0x2000 or address % size or not 0 <= value < 1 << (size * 8):
+            raise ValueError('Unsupported ARM channel-register write')
+        self.write(address // 128, address % 128, min(size, 2), value & (0xff if size == 1 else 0xffff))
+
     def write(self, index, offset, size, value):
         if not 0 <= index < 64 or size not in (1, 2) or not 0 <= value < 1 << (size * 8):
             raise ValueError('Invalid channel write')
