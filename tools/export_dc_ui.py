@@ -233,7 +233,7 @@ def export_dc_fallback_fonts(out):
         try: font.set_variation_by_axes([weight if a['name'] in (b'Weight', 'Weight') else a['default'] for a in font.get_variation_axes()])
         except (OSError, AttributeError, KeyError): pass
         return font
-    text_font, digit_font = load('RobotoMono.ttf', 56, 400), load('MPLUSRounded1c-Regular.ttf', 200, 400)
+    text_font, digit_font = load('RobotoMono.ttf', 46, 400), load('MPLUSRounded1c-Regular.ttf', 200, 400)
     if not text_font or not digit_font: return
     def sheet_files(name, cells, w, h):
         atlas = Image.new('RGBA', (w * len(cells), h))
@@ -249,7 +249,7 @@ def export_dc_fallback_fonts(out):
     glyphs = []
     for c in range(0x20, 0x7f):
         wide = Image.new('L', (40, 48), 0)
-        ImageDraw.Draw(wide).text((0, 42), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
+        ImageDraw.Draw(wide).text((0, 38), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
         mask = wide.crop((0, 0, 34, 48)).resize((24, 48), Image.Resampling.BOX)            # squeeze the 0.6 em mono advance to the BIOS cell's narrow, tall proportions
         glyphs.append(white(mask.point(lambda v: min(255, int(v * 1.3)))))
     sheet_files('dc_bios_ansi', glyphs, 24, 48)
@@ -264,6 +264,17 @@ def export_dc_fallback_fonts(out):
     for top in (10, 30): dr.rectangle((22, top, 25, top + 7), fill=255)
     cells.append(white(colon))
     sheet_files('dc_select_clock', cells, 48, 48)
+
+def export_dc_help(prs_png, out):
+    """Dreamcast Help Menu art (Flycast frame 2000): 0 title bar 512 x 32 at (16,48), 1 'Select a mode.' 512 x 64 at (104,88), 2 entry list 256 x 256 (stored transposed) at (280,160),
+    3 controls strip 128 x 128 (transposed) at (16,320). Frame word z order: all .333; the red arrow cursor is drawn by the game (a 30 x 22 triangle), not a texture."""
+    names = ['HELP1_helptop01', 'HELP1_helptop02', 'HELP1_helptop03', 'HELP1_helptop04']
+    paths = [os.path.join(prs_png, n + '.png') for n in names]
+    if not all(os.path.isfile(x) for x in paths): return
+    T = Image.Transpose.TRANSPOSE
+    tiles = [Image.open(x).convert('RGBA') for x in paths]
+    tiles[2] = tiles[2].transpose(T); tiles[3] = tiles[3].transpose(T)
+    export_atlas(out, 'dc_help', tiles)
 
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
@@ -364,6 +375,7 @@ def main(prs_png, out, png=None):
     export_challenge_select(prs_png, png, out)
     export_dc_startup(prs_png, png, out)
     export_dc_battle_setup(prs_png, out)
+    export_dc_help(prs_png, out)
     export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)
