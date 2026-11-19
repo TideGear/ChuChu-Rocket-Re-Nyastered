@@ -2381,25 +2381,44 @@ struct DcHelpMode : Screen {
 // each entry are not built yet: Enter returns to Mode Select.
 struct DcOptionsMode : Screen {
     int sel = 0; bool leave = false;
-    int page = -1, langRow = 1;   // page: -1 = the menu, 3 = Language (Flycast Options frames 2250 and 3050); the other four pages are not built yet
+    int page = -1, langRow = 1;   // page: -1 = the menu, 0 = General Settings, 2 = Records, 3 = Language (Flycast Options frames 2250, 2450, 3050); 1 and 4 are not built yet
+    // General Settings state (Flycast frame 2450): Character, Sound output, Jump Pack, Music test, SE test, Return to Initial Settings. What each value does in the original is not traced
+    // yet; Sound output, Jump Pack and the test numbers are kept for the session only and the SE test plays the port's sound effect of that number.
+    int genRow = 0, genSound = 1, genJump = 0, genMusic = 0, genSe = 0;
     // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
     static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
-        if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
+        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; a.playSfx(1); }
+        else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {
             page = 3; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) langRow = i; a.playSfx(1);
         } else { a.playSfx(1); leave = true; }
     }
     static constexpr int kRows[6] = {172, 204, 236, 268, 300, 364};
-    void move(App& a, int d) { if (page == 3) langRow = (langRow + 5 + d) % 5; else sel = (sel + 6 + d) % 6; a.playSfx(0); }
-    void accept(App& a) { if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); } else openRow(a); }
+    void move(App& a, int d) { if (page == 3) langRow = (langRow + 5 + d) % 5; else if (page == 0) genRow = (genRow + 6 + d) % 6; else sel = (sel + 6 + d) % 6; a.playSfx(0); }
+    void adjust(App& a, int d) {   // Left/Right on the General Settings values
+        if (page != 0) return;
+        switch (genRow) {
+        case 1: genSound = !genSound; break;
+        case 2: genJump = !genJump; break;
+        case 3: genMusic = (genMusic + 100 + d) % 100; break;
+        case 4: genSe = (genSe + 1000 + d) % 1000; break;
+        default: return; }
+        a.playSfx(0);
+    }
+    void accept(App& a) {
+        if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
+        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 1 || genRow == 2) adjust(a, 1); }
+        else openRow(a);
+    }
     void back(App& a) { if (page >= 0) { page = -1; a.playSfx(0); } else leave = true; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             switch (e.key.keysym.sym) {
             case SDLK_UP: case SDLK_w: move(a, -1); break; case SDLK_DOWN: case SDLK_s: move(a, 1); break;
+            case SDLK_LEFT: case SDLK_a: adjust(a, -1); break; case SDLK_RIGHT: case SDLK_d: adjust(a, 1); break;
             case SDLK_RETURN: case SDLK_SPACE: accept(a); break;
             case SDLK_ESCAPE: back(a); break; default: break; }
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
@@ -2415,7 +2434,26 @@ struct DcOptionsMode : Screen {
         const Sheet& sh = a.dcOptions;
         { const SDL_Rect& r = sh.fr[0]; const SDL_Rect src{r.x, r.y, 640, 480}, dst{0, 0, 640, 480}; SDL_RenderCopy(a.ren, sh.tex, &src, &dst); }
         auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
-        put(page == 3 ? 3 : page == 2 ? 6 : 1, 16, 88); if (page == 2) put(8, 16, 379); else put(2, 16, 407);
+        put(page == 3 ? 3 : page == 2 ? 6 : page == 0 ? 4 : 1, 16, 88); if (page == 2) put(8, 16, 379); else put(2, 16, 407);
+        if (page == 0) {   // General Settings (Flycast frame 2450): labels at x 80, values from x 248, the chosen value on an orange box, cell tops 149 + 32 per row, Return at 341
+            auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
+            auto box = [&](int x, int row, int w) { SDL_SetRenderDrawColor(a.ren, 238, 156, 17, 255); const SDL_Rect r{x, 143 + 32 * row, w, 32}; SDL_RenderFillRect(a.ren, &r); };
+            auto digits = [&](int value, int n, int x, int y) { if (!a.dcSelectClock.tex || a.dcSelectClock.fr.size() != 11) return; for (int i = 0; i < n; ++i) { int p = 1; for (int k = i + 1; k < n; ++k) p *= 10; const SDL_Rect d{x + 20 * i, y, 24, 24}; SDL_RenderCopy(a.ren, a.dcSelectClock.tex, &a.dcSelectClock.fr[(value / p) % 10], &d); } };
+            static const char* const labels[5] = {"Character", "Sound output", "Jump Pack", "Music test", "SE test"};
+            for (int i = 0; i < 5; ++i) text(labels[i], 80, 149 + 32 * i);
+            box(260, 0, 96); box(genSound ? 416 : 0, 1, genSound ? 96 : 0); box(genJump ? 0 : 272, 2, genJump ? 0 : 48); if (genJump) box(374, 2, 36);
+            for (int i = 0; i < 5; ++i) text("<", 248, 149 + 32 * i);
+            text("Normal", 272, 149); text(".?.?.", 362, 149); text("Download", 465, 149); text(">", 584, 149);
+            text("Monaural", 272, 181); text("/", 384, 181); text("Stereo", 428, 181); text(">", 524, 181);
+            text("Off", 278, 213); text("/", 337, 213); text("On", 380, 213); text(">", 428, 213);
+            digits(genMusic, 2, 274, 245); text(">", 332, 245);
+            digits(genSe, 3, 274, 277); text(">", 356, 277);
+            text("Return to Initial Settings", 117, 341);
+            const int cy = (genRow == 5 ? 341 : 149 + 32 * genRow) + 12;
+            SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
+            for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, cy + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
+            return;
+        }
         if (page == 2) {   // Records (Flycast Options sub-page): Stage Challenge total of the best times and the number of cleared stages, from the port's challenge.bin (mask + 25 best times)
             uint32_t mask = 0, best[25] = {}; if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "rb")) { if (fread(&mask, 4, 1, f) != 1 || fread(best, 4, 25, f) != 25) { mask = 0; memset(best, 0, sizeof best); } fclose(f); }
             uint32_t total = 0; int cleared = 0; for (int i = 0; i < 25; ++i) { total += best[i]; if (mask >> i & 1) ++cleared; }

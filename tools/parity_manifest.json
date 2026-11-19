@@ -267,6 +267,39 @@
       "note": "needs a save with 1 stage cleared in 19 s; look-alike font without a BIOS"
     },
     {
+      "name": "options_general",
+      "ref": "local/dc_ref/options/sub0.bmp",
+      "args": [
+        "OPTIONS"
+      ],
+      "env": {
+        "CCR_KEYS": "E",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "100"
+      },
+      "elements": {
+        "title_plate": [
+          16,
+          88,
+          272,
+          152
+        ],
+        "button_bar": [
+          16,
+          404,
+          420,
+          450
+        ],
+        "rows": [
+          16,
+          140,
+          624,
+          380
+        ]
+      },
+      "note": "look-alike text font without a BIOS"
+    },
+    {
       "name": "launch_age_{age}",
       "sweep": {
         "var": "age",
