@@ -1,4 +1,4 @@
-Latest handoff: [preview release and next original-code work](PREVIEW_HANDOFF.md). Read this first; the older chronological notes below include superseded findings.
+Latest handoff: [NEXT_SESSION.md](NEXT_SESSION.md). The user requested commit/push and a stop for a new conversation. Sound components are committed through df653d7; driver-to-playback integration remains open. The retained rendering checkpoint is partial and not a release. Read the new handoff before the historical notes below.
 
 # Handoff
 

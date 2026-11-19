@@ -27,6 +27,13 @@ inline ModelLight& modelLight() {
 struct ModelPack {
     std::vector<SDL_Texture*> textures; std::vector<Model3D> models;
     std::vector<std::vector<uint8_t>> cpuPixels; std::vector<SDL_Point> cpuSize;   // RGBA bytes of every texture, for the software rasteriser (softRender)
+    mutable std::vector<float> sceneDepth;
+    mutable int sceneWidth = 0, sceneHeight = 0;
+    void beginDepthScene(SDL_Renderer* ren) const {
+        SDL_GetRendererOutputSize(ren, &sceneWidth, &sceneHeight);
+        sceneDepth.assign((size_t)sceneWidth * sceneHeight, -1.0f);
+    }
+    void endDepthScene() const { sceneWidth = sceneHeight = 0; }
     ModelPack() = default;
     ModelPack(const ModelPack&) = delete;
     ModelPack& operator=(const ModelPack&) = delete;
@@ -81,14 +88,22 @@ private:
         return true;
     }
 public:
-    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; };   // wrap: repeat the texture (the floor quad's UVs run past 1)
+    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool additive = false; };   // wrap: repeat the texture (the floor quad's UVs run past 1)
 
     // The Battle draw task builds a dome from two copies of the lid,
     // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
     void drawDcRocketDome(SDL_Renderer* ren, const Model3D& lid, SDL_FPoint floorPosition,
                           SDL_FPoint cameraCenter, float pixelsPerUnit, float pulse,
-                          float cameraDistance = 218.0f, const Model3D* oppositeLid = nullptr) const {
+                          float cameraDistance = 218.0f, const Model3D* oppositeLid = nullptr,
+                          float opening = 0.0f, const Model3D* launchedBody = nullptr, int launchAge = -1,
+                          const Model3D* launchBase = nullptr, const Model3D* flame = nullptr,
+                          const std::vector<int>* smokeBirths = nullptr) const {
         const float scale = pixelsPerUnit * pulse;
+        // Original 0x8c01b628: TranslateZ(+/-opening), RotateY(+/-90),
+        // RotateZ(-int(opening * 12743.111328125)). Keep one shared depth
+        // buffer for both lid halves and the body as in the original scene.
+        const float angle = -(int)(opening * 12743.111328125f) * (6.283185307f / 65536.0f);
+        const float ca = std::cos(angle), sa = std::sin(angle);
         std::vector<SoftTri> projected;
         projected.reserve(2 * lid.tris.size());
         for (float side : {1.0f, -1.0f}) {
@@ -99,11 +114,13 @@ public:
                 out.tex = half.matTex[tri.mat];
                 for (int i = 0; i < 3; ++i) {
                     const auto& v = tri.v[i];
-                    const float depth = cameraDistance - v.y * pulse;
+                    const float vx = v.x * ca - v.y * sa, vy = v.x * sa + v.y * ca;
+                    const float nx = v.nx * ca - v.ny * sa, ny = v.nx * sa + v.ny * ca;
+                    const float depth = cameraDistance - vy * pulse;
                     const float perspective = cameraDistance / depth;
                     const float dx = floorPosition.x - cameraCenter.x + side * v.z * scale;
-                    const float dy = floorPosition.y - cameraCenter.y - side * v.x * scale;
-                    const float light = 0.3f + std::max(0.0f, 0.5f * v.ny + 0.25f * side * v.nx);
+                    const float dy = floorPosition.y - cameraCenter.y - side * vx * scale + side * opening * pixelsPerUnit;
+                    const float light = 0.3f + std::max(0.0f, 0.5f * ny + 0.25f * side * nx);
                     out.p[i] = {cameraCenter.x + dx * perspective, cameraCenter.y + dy * perspective};
                     out.iw[i] = 1.0f / depth;
                     out.light[i] = light;
@@ -114,6 +131,47 @@ public:
                 projected.push_back(out);
             }
         }
+        auto emit = [&](const Model3D* model, float height, int yawUnits, float diffuse, bool shadow, bool additive, int frame, bool translucent = false, bool unlit = false) {
+            if (!model) return;
+            const float yaw = yawUnits * (6.283185307f / 65536.0f), cy = std::cos(yaw), sy = std::sin(yaw);
+            const std::vector<float>* pose = frame >= 0 && !model->frames.empty() ? &model->frames[frame % model->frames.size()] : nullptr;
+            for (size_t ti = 0; ti < model->tris.size(); ++ti) {
+                const auto& tri = model->tris[ti];
+                if (tri.mat >= model->matTex.size()) continue;
+                SoftTri out{}; out.tex = model->matTex[tri.mat]; out.translucent = additive || translucent; out.additive = additive; bool clipped = false;
+                for (int i = 0; i < 3; ++i) {
+                    auto v = tri.v[i];
+                    if (pose) { const float* p = &(*pose)[ti * 18 + i * 6]; v.x = p[0]; v.y = p[1]; v.z = p[2]; v.nx = p[3]; v.ny = p[4]; v.nz = p[5]; }
+                    const float x = v.x * cy + v.z * sy, z = -v.x * sy + v.z * cy;
+                    const float nz = -v.nx * sy + v.nz * cy;
+                    const float depth = cameraDistance - height - v.y;
+                    if (depth <= 0) { clipped = true; break; }
+                    const float perspective = cameraDistance / depth;
+                    out.p[i] = {cameraCenter.x + (floorPosition.x - cameraCenter.x + x * pixelsPerUnit) * perspective,
+                                cameraCenter.y + (floorPosition.y - cameraCenter.y + z * pixelsPerUnit) * perspective};
+                    out.iw[i] = 1.0f / depth;
+                    out.light[i] = shadow ? 0.0f : unlit ? 1.0f : diffuse * (0.3f + std::max(0.0f, 0.5f * v.ny - 0.25f * nz));
+                    out.u[i] = 1.0f - v.v; out.v[i] = v.u;
+                }
+                if (!clipped) projected.push_back(out);
+            }
+        };
+        // Base wrapper 0x8c0e9d44 disables directional lights; material ambient is zero.
+        if (launchAge >= 0) emit(launchBase, 0, 0, 1, true, false, -1);
+        if (launchAge >= 0 && launchAge <= 200) {
+            emit(launchedBody, (float)launchAge, launchAge * 0x200, 178.0f / 255.0f, false, false, -1);
+            // 0x8c01b7e4: TranslateY(-7), 16-frame vertex morph. Real
+            // packet TSP 0x3891a4db uses ONE / DST_ALPHA (additive on the opaque scene).
+            emit(flame, launchAge - 7.0f, launchAge * 0x200, 1.0f, false, true, launchAge & 15);
+        }
+        if (smokeBirths) for (int born : *smokeBirths)
+            emit(find("smoke" + std::to_string(launchAge - born)), born - 11.0f, 0, 1, false, false, -1, true, true);
+        // Flycast ta_util.cpp sortTriangles: translucent triangles sort by
+        // their minimum reciprocal depth, far to near, retaining ties.
+        std::stable_sort(projected.begin(), projected.end(), [](const SoftTri& a, const SoftTri& b) {
+            if (a.translucent != b.translucent) return !a.translucent;
+            return a.translucent && std::min({a.iw[0], a.iw[1], a.iw[2]}) < std::min({b.iw[0], b.iw[1], b.iw[2]});
+        });
         softRender(ren, projected);
     }
 
@@ -131,8 +189,8 @@ public:
         if (!(maxx > minx) || !(maxy > miny)) return;
         const int x0 = (int)std::floor(minx * sc) - 1, y0 = (int)std::floor(miny * sc) - 1, W = (int)std::ceil(maxx * sc) + 1 - x0, H = (int)std::ceil(maxy * sc) + 1 - y0;
         if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return;
-        static std::vector<uint32_t> color; static std::vector<float> depth;
-        color.assign((size_t)W * H, 0u); depth.assign((size_t)W * H, -1.0f);
+        static std::vector<uint32_t> color, added; static std::vector<float> depth;
+        color.assign((size_t)W * H, 0u); added.assign((size_t)W * H, 0u); bool hasAdditive = false; depth.assign((size_t)W * H, -1.0f);
         auto sample = [&](int tex, float u, float v, bool wrap, float out[4]) {
             if (tex < 0 || tex >= (int)cpuPixels.size()) { out[0] = out[1] = out[2] = 0; out[3] = 255; return; }
             const int tw = cpuSize[tex].x, th = cpuSize[tex].y; const uint8_t* px = cpuPixels[tex].data();
@@ -155,7 +213,9 @@ public:
                     const float b1 = ((px - X[0]) * (Y[2] - Y[0]) - (X[2] - X[0]) * (py - Y[0])) / det, b2 = ((X[1] - X[0]) * (py - Y[0]) - (px - X[0]) * (Y[1] - Y[0])) / det, b0 = 1.0f - b1 - b2;
                     if (b0 < -1e-4f || b1 < -1e-4f || b2 < -1e-4f) continue;
                     const float iw = b0 * t.iw[0] + b1 * t.iw[1] + b2 * t.iw[2]; if (iw <= 0) continue;
-                    float& zb = depth[(size_t)y * W + x];
+                    const int screenX = x + x0, screenY = y + y0;
+                    float& zb = screenX >= 0 && screenX < sceneWidth && screenY >= 0 && screenY < sceneHeight
+                        ? sceneDepth[(size_t)screenY * sceneWidth + screenX] : depth[(size_t)y * W + x];
                     if (iw < zb - 2e-7f) continue;                                   // nearer (greater 1/w) wins; equal depth (within float noise): the later polygon wins
                     const float w0 = b0 * t.iw[0], w1 = b1 * t.iw[1], w2 = b2 * t.iw[2], ws = w0 + w1 + w2;
                     const float u = (w0 * t.u[0] + w1 * t.u[1] + w2 * t.u[2]) / ws, v = (w0 * t.v[0] + w1 * t.v[1] + w2 * t.v[2]) / ws;
@@ -163,10 +223,23 @@ public:
                     float c[4]; sample(t.tex, u, v, t.wrap, c);
                     uint32_t& dst = color[(size_t)y * W + x];
                     const float r = std::min(255.0f, c[0] * lum), g = std::min(255.0f, c[1] * lum), bl = std::min(255.0f, c[2] * lum);
-                    if (!t.translucent) { dst = (uint32_t)(r + 0.5f) | (uint32_t)(g + 0.5f) << 8 | (uint32_t)(bl + 0.5f) << 16 | 0xFF000000u; zb = iw; }
+                    if (t.additive) {
+                        uint32_t& d = added[(size_t)y * W + x];
+                        const auto rr = (uint32_t)std::min(255.0f, (d & 255) + r + 0.5f);
+                        const auto gg = (uint32_t)std::min(255.0f, (d >> 8 & 255) + g + 0.5f);
+                        const auto bb = (uint32_t)std::min(255.0f, (d >> 16 & 255) + bl + 0.5f);
+                        d = rr | gg << 8 | bb << 16 | 0xff000000u; hasAdditive = true;
+                    }
+                    else if (!t.translucent) { dst = (uint32_t)(r + 0.5f) | (uint32_t)(g + 0.5f) << 8 | (uint32_t)(bl + 0.5f) << 16 | 0xFF000000u; zb = iw; }
                     else {
                         const float a = c[3] / 255.0f; const float dr = (float)(dst & 255), dg = (float)(dst >> 8 & 255), db = (float)(dst >> 16 & 255), da = (float)(dst >> 24) / 255.0f;
                         const float oa = a + da * (1 - a); const float orr = oa > 0 ? (r * a + dr * da * (1 - a)) / oa : 0, og = oa > 0 ? (g * a + dg * da * (1 - a)) / oa : 0, ob = oa > 0 ? (bl * a + db * da * (1 - a)) / oa : 0;
+                        // A later source-alpha sprite also covers previously
+                        // accumulated additive light (flame before smoke).
+                        uint32_t& ad = added[(size_t)y * W + x];
+                        ad = (uint32_t)((ad & 255) * (1 - a) + 0.5f) |
+                             (uint32_t)((ad >> 8 & 255) * (1 - a) + 0.5f) << 8 |
+                             (uint32_t)((ad >> 16 & 255) * (1 - a) + 0.5f) << 16 | (ad & 0xff000000u);
                         dst = (uint32_t)(orr + 0.5f) | (uint32_t)(og + 0.5f) << 8 | (uint32_t)(ob + 0.5f) << 16 | (uint32_t)(oa * 255.0f + 0.5f) << 24;
                     }
                 }
@@ -183,6 +256,10 @@ public:
         SDL_SetTextureScaleMode(buffer, SDL_ScaleModeNearest);
         const SDL_Rect src{0, 0, W, H}; SDL_UpdateTexture(buffer, &src, color.data(), W * 4);
         const SDL_FRect dst{x0 / sc, y0 / sc, W / sc, H / sc}; SDL_RenderCopyF(ren, buffer, &src, &dst);
+        if (hasAdditive) {
+            SDL_UpdateTexture(buffer, &src, added.data(), W * 4); SDL_SetTextureBlendMode(buffer, SDL_BLENDMODE_ADD);
+            SDL_RenderCopyF(ren, buffer, &src, &dst); SDL_SetTextureBlendMode(buffer, SDL_BLENDMODE_BLEND);
+        }
     }
 
     // A board piece (wall bar, generator or hole pad) exactly as the Dreamcast board task submits it (Flycast Puzzle 01 stream, wall piece at state offset 0x253eb0; fitted with zero residual):

@@ -200,6 +200,14 @@ def export_puzzle_result(prs_png, out):
         tiles[i] = tile.transform(tile.size, Image.Transform.AFFINE,
                                  (255 / 256, 0, 0, 0, 255 / 256, 0), Image.Resampling.BILINEAR)
     export_atlas(out, 'dc_puzzle_result', tiles)
+    # s00320.state packet 0x19be17b uses full 0..1 UVs, unlike the
+    # banner's 0..255/256 range. Preserve the full texture coordinate range.
+    saved = Image.open(os.path.join(prs_png, 'PUZZLECLEAR_saving.png')).convert('RGBA')
+    # Flycast ta_vtx.cpp: intensity 1 * face white -> 255*255/256 =
+    # 254 in the vertex RGB, then fragment texture modulation rounds.
+    r, g, b, alpha = saved.split()
+    saved = Image.merge('RGBA', tuple(c.point(lambda v: round(v * 254 / 255)) for c in (r, g, b)) + (alpha,))
+    export_atlas(out, 'dc_puzzle_saved', [saved])
 
 def export_puzzle_select(prs_png, out):
     # Normal 01, real result -> selector route, a00249.state packets

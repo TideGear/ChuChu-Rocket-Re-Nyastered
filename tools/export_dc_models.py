@@ -29,6 +29,12 @@ MODELS = [('cat', 0x778c4, CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o i
     ('hole_out', 0xa2990, BATTLE_TEX), ('hole_in', 0xa2628, BATTLE_TEX),
     ('roulette', 0xa302c, BATTLE_TEX)]  # FUN_8c01d9a0 submits object 0x8c0b302c
 
+# 0x8c01b77c draws bare models from table 0x8c0b4a50. The object nodes
+# above add y=9.5 and are different draw inputs; retain them for other callers.
+MODELS += [(name, off, BATTLE_TEX) for name, off in (
+    ('launch_blue', 0x9a328), ('launch_orange', 0x9b478),
+    ('launch_red', 0x9c5c8), ('launch_green', 0x9d718), ('launch_base', 0x98438))]
+
 # Mouse draw dispatcher 0x8c019e26 part trees (roots 0x8c08e138 kind 2, 0x8c0960ec kind 1, 0x8c096be8 chain); texture slots as MOUSE_TEX
 MODELS += [('mouse_a', 0x7e138, MOUSE_TEX), ('mouse_b', 0x860ec, MOUSE_TEX), ('mouse_c', 0x86be8, MOUSE_TEX), ('ghost', 0x87e44, MOUSE_TEX)]   # ghost: object 0x8c097e44 + motion 0x8c0988a0 (8 frames), drawn by 0x8c0192e0 with texture list 0x8c085d18
 MODELS += [('h_%x' % o, o, HUD_TEX) for o in HUD_OFFS]
@@ -63,7 +69,7 @@ class Pack:
                 if n['ch']: walk(n['ch'], len(order) - 1)
                 a = n['sb']
         walk(BASE + root_off, None); return order
-    def assemble(self, order, pos=None, ang=None, head=None, special=False):
+    def assemble(self, order, pos=None, ang=None, head=None, special=False, untextured=0):
         """Triangles of the object tree: list of (material, [(x, y, z, u, v, nx, ny, nz) x 3]). pos/ang: per-node overrides (animation); head: replacement positions of node 0's vertices."""
         pos = pos or [list(n['pos']) for n in order]; ang = ang or [list(n['ang']) for n in order]
         def world(i, v, normal=False):
@@ -90,7 +96,7 @@ class Pack:
                     if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
                     a, b, c = t3[0][0], t3[1][0], t3[2][0]
                     if a in remap and b in remap and c in remap and len({a, b, c}) == 3:
-                        tris.append((10 if special and mat[0] == 17 and (tex & 0x1fff) == 2 else (tex if tex is not None else 0) & 0x1fff, [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
+                        tris.append((10 if special and mat[0] == 17 and tex is not None and (tex & 0x1fff) == 2 else (tex if tex is not None else untextured) & 0x1fff, [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
         return tris
     def assemble_cached(self, order, pos=None, ang=None):
         """Objects whose polygon lists live apart from their vertex lists (the ghost 0x8c097e44): every node's vertex chunk writes its vertices, transformed by that node's matrix, into one shared
@@ -186,6 +192,24 @@ def motion_frames(pack, order, md, nframes):
         frames.append(pack.assemble_cached(order, pos, ang))
     return frames
 
+def flame_frames(pack, order):
+    """0x8c01b7e4: morph motion 0x8c0b1e08, type 0x30, 16 frames.
+    Its normal track is null; nine (frame, vertex-array) keys at 0x8c0b1db0
+    deform the 64 vertices, with linear interpolation on odd frames.
+    The simultaneous node motion 0x8c0b02a4 has no transform keys.
+    """
+    data, count = struct.unpack_from('<I4xI', pack.d, 0xa1df8)
+    keys = [struct.unpack_from('<2I', pack.d, data - BASE + 8 * i) for i in range(count)]
+    n = len(pack.models[order[0]['mp']][0])
+    arrays = [[struct.unpack_from('<3f', pack.d, p - BASE + 12 * i) for i in range(n)] for f, p in keys]
+    frames = []
+    for frame in range(16):
+        i = next((i for i in range(len(keys) - 1) if keys[i][0] <= frame < keys[i + 1][0]), len(keys) - 2)
+        t = (frame - keys[i][0]) / (keys[i + 1][0] - keys[i][0])
+        head = [tuple(a + (b - a) * t for a, b in zip(v0, v1)) for v0, v1 in zip(arrays[i], arrays[i + 1])]
+        frames.append(pack.assemble(order, head=head))
+    return frames
+
 def main(root, exe):
     pack = Pack(exe); tex_ids, textures = {}, []
     def tex(name):
@@ -195,15 +219,27 @@ def main(root, exe):
     out_models = []
     for name, off, texlist in MODELS:
         order = pack.tree(off); special = name.startswith('mouse') and name[5:].isdigit()   # mouse keyframes: the 4-vertex cream run (material flags 17, texture 2) is lit by its own light, so it gets material slot 10 (texture 2 again)
-        tris = pack.assemble_cached(order) if name == 'ghost' else pack.assemble(order, special=special)
+        launch = name.startswith('launch_')
+        tris = pack.assemble_cached(order) if name == 'ghost' else pack.assemble(order, special=special, untextured=len(texlist) if launch else 0)
         full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_') or name == 'ghost'    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
         mats = [tex(texlist[m if m < len(texlist) else 2]) if (m < len(texlist) or special) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
+        if launch:
+            if 'WHITE' not in tex_ids: tex_ids['WHITE'] = len(textures); textures.append(Image.new('RGBA', (4, 4), (255, 255, 255, 255)))
+            mats[len(texlist)] = tex_ids['WHITE']
         if name == 'ghost':
             if 'WHITE' not in tex_ids: tex_ids['WHITE'] = len(textures); textures.append(Image.new('RGBA', (4, 4), (255, 255, 255, 255)))
             mats.append(tex_ids['WHITE'])
-        frames = pack.cat_frames(order) if name == 'cat' else motion_frames(pack, order, 0x8c0988a0, 8) if name == 'ghost' else []
+        frames = pack.cat_frames(order) if name == 'cat' else motion_frames(pack, order, 0x8c0988a0, 8) if name == 'ghost' else flame_frames(pack, order) if name == 'fire' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
         out_models.append((name, tris, mats, frames))
+    # Sprite 0x8c0b4ba8 / frame table 0x8c0b4a68: 32x32, pivot
+    # (16,16), scale .5; EFFECT slots 40..55. Live stream quads are
+    # 16 world units square, camera-facing, with source-alpha blending.
+    for frame in range(16):
+        def smokev(x, z, u, v): return (x, 0.0, z, u, v, 0.0, 1.0, 0.0)
+        a, b, c, d = smokev(-8, -8, 0, 1), smokev(-8, 8, 0, 0), smokev(8, -8, 1, 1), smokev(8, 8, 1, 0)
+        out_models.append(('smoke%d' % frame, [(0, [a, b, c]), (0, [c, b, d])],
+                           [tex('EFFECT_smoke%02d' % (frame + 1))], []))
     # Mouse marker quads (0x8c056d00): a 13.5-unit plane (half size 6.75) textured with texture 46 + 3 * kind of the CHALLENGECLEAR list: kind 0 = plus50 (golden mouse), kind 1 = hatena (roulette mouse)
     for qname, qtex in (('marker_plus50', 'CHALLENGECLEAR_plus50'), ('marker_hatena', 'CHALLENGECLEAR_hatena')):
         h = 6.75
