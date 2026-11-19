@@ -143,3 +143,44 @@ The goal text covers them only through its general version-comparison duties; th
 
 ## Public-repo check (2026-11-17)
 The repo is public. Scan of all 459 commits: no game binaries, extracted assets, saves or dump files were ever committed (no `.bin/.dat/.ogg/.wav/.vms/.vmi/.gba/.apk/.ipa/.so/.tex/.pvr/.prs`; largest blobs are `main.cpp` and `roadmap.md`). The only game-derived files are three gameplay screenshots in `docs/screenshots/` (README states the artwork belongs to the rights holders). `docs/stage_registry.json` is not tracked. Re-run this scan before each release.
+
+### KapuKapu mesh nodes and Battle crown (2026-11-18)
+- KapuKapu node trees read from `1ST_READ.BIN` (NJS_OBJECT 52 bytes: flags, model, pos, BAMS rot, scale, child, sibling). Root A body `0x8c08e138` (model `0x8c08e120`, pos 0,3,0, scale 1.5) with child chain `0x8c08dd10`->`0x8c08db40`->`0x8c08d970`->`0x8c08d6f8`->`0x8c08d480`->`0x8c08d324`->`0x8c08d1c8` (models `08dcf8, 08db28, 08d958, 08d6e0, 08d468, 08d30c, 08d1b0`). Root B `0x8c0960ec` (model `0x8c0960d4`, pos 0,3,0) with children `0x8c095c80`, `0x8c095af0`, `0x8c095980`, `0x8c095810`, `0x8c0956a4`. Root C parts `0x8c0967c4`, `0x8c096920`, `0x8c096be8` (+`0x8c096a8c`), scale 1.5. Motion (animation) data and the per-mouse-type selection are **not yet found**; port still draws these mice as plain mice. Status: **open** (static pose only).
+- Rocket crown (`FUN_8c029340` -> `8c02971c`): **partial**. Drawn from disc art (frame 31 of dc_battle_hud); blink gate `(tick&31)<=10` matches Flycast frame 3550 at port tick 1772. Full-frame mean RGB error there is 9.71 (pass needs <= 3); isolated crown art not yet diffed.
+- Correction (2026-11-18): the node trees above are reached from the mouse draw dispatcher `0x8c019e26` (root A `0x8c08e138` at `0x8c019fe0`, root B `0x8c0960ec` at `0x8c019fc4`; task type at +0x08 selects kind 0/1/2, kind 2 swaps textures `c_mouse02/04` and `c_mouse03/05` around the draw). Calling them "KapuKapu" was an unverified label from earlier notes; the Flycast "?" mouse in frame 3550 is a pink mouse variant drawn through this dispatcher. Open: which task type value the sim's roulette mouse (`type 2`) produces, and the per-kind motion routines; the port draws all three kinds as the plain mouse.
+- Roulette (pink) mouse, 2026-11-18: `tools/export_dc_models.py` now exports `mouse_a/b/c` (roots `0x8c08e138`, `0x8c0960ec`, `0x8c096be8`) with the full 10-texture list; the port draws sim mouse `type == 2` as `mouse_a` with the dispatcher's texture substitution (c_mouse02->04, c_mouse03->05, material slots 1->4, 2->3; `drawDcCharacter` `texRemap`). Headless tick 1772 vs Flycast frame 3550: pink body and red feet now present at the right cell. **Still open:** the yellow "?" above it (separate object, not found), the node animation (static pose only), heading/tilt of the pose, golden mouse (kind 1, `mouse_b`). Full-frame error unchanged at 9.7 (object is small); crop-level diff not done.
+
+## iPad HD 1.0 coverage table (2026-11-18)
+The mobile counterpart of the Dreamcast table. Reference: the iPad HD 1.0 binary run under Unicorn (`tools/oracle/hd_*_probe.py`), compared call for call by the `tools/*_diff.py` scripts. **Verified** = zero differing draw calls / values over the stated cases (the original's own routines as the game runs them). The goal's full-frame RGB bar (mean <= 3) is not measured for mobile: no original iPad frames exist locally, so rendering residue (filtering, blends) is open for every row until a reference frame is captured. Rows marked partial or open give what is missing. Evidence quoted from ui_art.md / roadmap.md; re-run the named tool to re-verify.
+
+| Item | Kind | Status | Evidence |
+|---|---|---|---|
+| Battle HUD (scores, timer, crowns, blink) | screen | verified | `battle_hud_diff`: 1,384 calls / 64 frames |
+| Round banners, 3-2-1 count tasks | animation | verified | `banner_diff`: 48 cases |
+| Battle result, free-for-all | screen | verified | `judge_diff`: 30 cases |
+| Battle result, Team | screen | verified | `judge_team_diff`: 27 cases |
+| Speech bubbles | screen | verified | `bubble_diff`: 11 traces |
+| Battle preview boards | screen | verified | `battle_preview_diff`: 50 uploads byte for byte |
+| Mouse ghost (overhead draw) | animation | verified | `mouse_ghost_diff`: 564 draws |
+| Rocket launch and smoke | animation | verified | `rocket_launch_diff`: 86,400 draws / 72 cases |
+| Rocket lid | animation | verified | `rocket_lid_diff`: 92,160 updates |
+| Roulette drum mesh | animation | verified | `roulette_mesh_diff`: 432 poses |
+| Roulette pose and timing | animation | verified | `roulette_pose_diff`: 3,840 frames |
+| Players pane (render) | screen | verified | `players_render_diff`: 1,236 calls / 27 frames |
+| Players pad pane (render) | screen | verified | `players_pad_render_diff`: 856 calls / 22 frames |
+| Stage select (iPad grid) | screen | verified | `ss_diff`: 6 cases |
+| Options > Sounds | screen | partial | `options_diff`: 7 volume / drag cases; other rows unchecked |
+| Battle Settings pane | screen | partial | `levellist_diff` 25/25 rows, `fill_diff`, `panels_diff` 4/4, `scroll_diff` 4/4, `hit_diff` 53 points; lists' panels and sheets not ported |
+| Startup, main menu | screen | partial | `startup_diff` exists; layouts reproduced, residue not measured |
+| Options list, How to Play (Help) | screen | partial | `options_diff`, `help_diff`; The Basics, Costumes open |
+| Puzzle pause and banner | screen | partial | traced from `PuzzleGameScreen::render`; no diff script |
+| The Basics pages | screen | open | - |
+| Costumes | screen | open | - |
+| Celebration rockets | animation | open | - |
+| Phone / larger-device HUD layouts | screen | open | - |
+| Tutorial highlights | screen | open | - |
+| Split-screen | screen | open | - |
+
+**Totals: 25 items; 14 verified, 5 partial, 6 open.** Update this table in the same commit as any iPad change. Next: capture or derive an original iPad frame per row so the RGB bar can be applied.
+- Newest-build check (2026-11-18, package metadata read from the local files): iOS 1.1.2 universal (newest packaged entry 2013-04-25) is the latest build; then Android 1.15 (2011-12-03), Android 1.14 (2011-11-23), iOS 1.1 (2010-12-19), iOS 1.0.2 (2010-12-04), HD 1.0 and the ORBiT repacks (2010-10-28..30; HD 1.0 store release date 2010-10-28). Zip entry dates are packaging times, not store dates. The iPad table above uses HD 1.0 because its layouts are the ones already diffed; iOS 1.1.2 is the newer reference and should become the oracle for any row where it differs (open: its device class >= 10 resource table does not fit the shipped `ccrret` pack, ui_art.md "Open question found while mapping").
+- Battle "?" (2026-11-18, `local/dc_ref/tp1/t_03400.state`, Team pause frame; parse regions 0x253e10 and 0x1900003 work for this state, not for `tasks-full_*.state`): the yellow "?" over the pink mouse is ONE textured quad in the second list at state offset `0x19e3e43`: ctrl `828c000a`, tsp `9491a4db` (64x64 texture, matches the 64x64 `CHALLENGECLEAR_hatena`, not yet matched pixel by pixel), tex word `90051ad8`, 4 vertices at x 569.83..605.81, y 287.30..323.28 (35.975 px square), 1/w 0.0048, UV (0,0)-(1,1), submitted after the opaque pink mouse parts (`0x25e530` n=36 strips 10/8/8/10, and feet/body parts at `0x26b810`..`0x26ce50`). A 36 px quad at this projection (about 2.56 px per unit) is about 14 units, consistent with a 13.5-unit plane at height about 8.5 (the crown plane is also 13.5 units). **Open:** the original routine and its offset from the mouse position (find the callee that submits this quad from the mouse task callback), the texture identity check, then draw it in the port.

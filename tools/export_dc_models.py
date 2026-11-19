@@ -29,6 +29,8 @@ MODELS = [('cat', 0x778c4, CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o i
     ('hole_out', 0xa2990, BATTLE_TEX), ('hole_in', 0xa2628, BATTLE_TEX),
     ('roulette', 0xa302c, BATTLE_TEX)]  # FUN_8c01d9a0 submits object 0x8c0b302c
 
+# Mouse draw dispatcher 0x8c019e26 part trees (roots 0x8c08e138 kind 2, 0x8c0960ec kind 1, 0x8c096be8 chain); texture slots as MOUSE_TEX
+MODELS += [('mouse_a', 0x7e138, MOUSE_TEX), ('mouse_b', 0x860ec, MOUSE_TEX), ('mouse_c', 0x86be8, MOUSE_TEX)]
 MODELS += [('h_%x' % o, o, HUD_TEX) for o in HUD_OFFS]
 
 def rot(v, a, flags):
@@ -114,11 +116,17 @@ def main(root, exe):
     out_models = []
     for name, off, texlist in MODELS:
         order = pack.tree(off); tris = pack.assemble(order)
-        full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_')    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
+        full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_')    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
         mats = [tex(texlist[m]) if m < len(texlist) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
         frames = pack.cat_frames(order) if name == 'cat' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
         out_models.append((name, tris, mats, frames))
+    # Mouse marker quads (0x8c056d00): a 13.5-unit plane (half size 6.75) textured with texture 46 + 3 * kind of the CHALLENGECLEAR list: kind 0 = plus50 (golden mouse), kind 1 = hatena (roulette mouse)
+    for qname, qtex in (('marker_plus50', 'CHALLENGECLEAR_plus50'), ('marker_hatena', 'CHALLENGECLEAR_hatena')):
+        h = 6.75
+        def qv(x, y, u, v): return (x, y, 0.0, u, v, 0.0, 0.0, 1.0)
+        qtris = [(0, [qv(-h, h, 0, 0), qv(-h, -h, 0, 1), qv(h, h, 1, 0)]), (0, [qv(h, h, 1, 0), qv(-h, -h, 0, 1), qv(h, -h, 1, 1)])]
+        out_models.append((qname, qtris, [tex(qtex)], []))
     out = bytearray(b'CCM3' + struct.pack('<I', len(textures)))
     for im in textures: out += struct.pack('<HH', im.width, im.height) + im.tobytes()
     out += struct.pack('<I', len(out_models))

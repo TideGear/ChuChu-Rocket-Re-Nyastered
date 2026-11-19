@@ -230,7 +230,7 @@ public:
     // sy with Z. Lighting per vertex: 0.3 + max(0, light . R n). `blend` > 0 mixes pose frame `frame` with pose frame `frame + 1` (the cat's head morph and walk pose are interpolated by
     // the fractional part of its phase); mice pass blend 0 and use one of their eight keyframe models.
     void drawDcCharacter(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, float translateZ,
-                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0) const {
+                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr) const {
         if (m.tris.empty()) return;
         const float ya = yawDeg * 0.017453292f, cy = cosf(ya), sy = sinf(ya);
         constexpr float kTilt = -45.0f * 0.017453292f; const float ct = cosf(kTilt), st = sinf(kTilt);
@@ -239,7 +239,7 @@ public:
         const std::vector<float>* b = (frame >= 0 && !m.frames.empty() && blend > 0.0f) ? &m.frames[(frame + 1) % (int)m.frames.size()] : nullptr;
         std::vector<SoftTri> out; out.reserve(m.tris.size());
         for (size_t ti = 0; ti < m.tris.size(); ++ti) {
-            const auto& tri = m.tris[ti]; SoftTri o{}; o.tex = (tri.mat < m.matTex.size()) ? (int)m.matTex[tri.mat] : -1; o.translucent = (translucentMaterials >> (tri.mat & 31)) & 1u;
+            const auto& tri = m.tris[ti]; SoftTri o{}; const size_t mat = (texRemap && tri.mat < 10) ? (size_t)texRemap[tri.mat] : (size_t)tri.mat; o.tex = (mat < m.matTex.size()) ? (int)m.matTex[mat] : -1; o.translucent = (translucentMaterials >> (tri.mat & 31)) & 1u;
             for (int k = 0; k < 3; ++k) {
                 float vx = tri.v[k].x, vy = tri.v[k].y, vz = tri.v[k].z, nx = tri.v[k].nx, ny = tri.v[k].ny, nz = tri.v[k].nz;
                 if (a) {
@@ -256,6 +256,21 @@ public:
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
                 const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - tri.v[k].v, tri.v[k].u} : SDL_FPoint{tri.v[k].u, tri.v[k].v};
                 o.u[k] = uv.x; o.v[k] = uv.y;
+            }
+            out.push_back(o);
+        }
+        softRender(ren, out);
+    }
+
+    // 0x8c056d00 marker quad: an unlit white-vertex plane of half size h centred on `centre`, drawn as a screen-aligned square of `size` pixels (the field camera looks straight down at it).
+    void drawMarkerQuad(SDL_Renderer* ren, const Model3D& m, SDL_FPoint centre, float size, float halfUnits) const {
+        std::vector<SoftTri> out; out.reserve(m.tris.size());
+        for (const auto& tri : m.tris) {
+            SoftTri o{}; o.tex = tri.mat < m.matTex.size() ? (int)m.matTex[tri.mat] : -1; o.translucent = true;
+            for (int k = 0; k < 3; ++k) {
+                o.light[k] = 1.0f; o.iw[k] = 1.0f;
+                o.p[k] = {centre.x + tri.v[k].x / halfUnits * size * 0.5f, centre.y - tri.v[k].y / halfUnits * size * 0.5f};
+                o.u[k] = tri.v[k].v; o.v[k] = 1.0f - tri.v[k].u;   // the exported PNG is the quad's texture turned a quarter turn: quad UV (X, Y) reads PNG (Y, 1 - X)
             }
             out.push_back(o);
         }
