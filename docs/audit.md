@@ -46,6 +46,8 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Portable mode, commented settings, rotating logs: **done** (userdata_test; headless app check).
 - Version matrix, asset provenance, README, unofficial-project statement: **partial** (README and distribution notes exist; matrix not regenerated for this audit).
 
+- Disc-only run (2026-11-18, USA CUE/BIN only, no mobile files, no BIOS): `tools/extract_all.py --game-files local/dc_ref/disc --cache <empty dir>` completed in 87 s (128 models, 50 battle stages, 54 `dc_*` UI sheets, `dreamcast_puzzles.bin`); `ccr` then ran STARTUP, MENU, HELP, OPTIONS, BATTLE, TEAM_BATTLE, CHALLENGE_SELECT, puzzle, challenge and battle play headlessly with no errors. This covers the extraction core only: `setup.cmd`, `--prepare` and the RecompLauncher path were not run (they write to the user's config folder), and the screens were not diffed beyond the earlier per-screen comparisons.
+
 ## Dreamcast mode inventory (read from the game's mode table, 2026-11-18)
 The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `0x8c019088` rejects values >= 23 and stores the mode at `0x8c1af108`, read from RAM dumps of the captured screens); each entry points to a descriptor whose first word is the mode's init function. Entries 23-39 and up are data, not modes. Status words as above; every row stays open until its screens are matched against Flycast frames.
 | Mode | Init function | What it is | Status |
