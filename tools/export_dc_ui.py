@@ -233,7 +233,7 @@ def export_dc_fallback_fonts(out):
         try: font.set_variation_by_axes([weight if a['name'] in (b'Weight', 'Weight') else a['default'] for a in font.get_variation_axes()])
         except (OSError, AttributeError, KeyError): pass
         return font
-    text_font, digit_font = load('RobotoMono.ttf', 50, 400), load('MPLUSRounded1c-Regular.ttf', 200, 400)
+    text_font, digit_font = load('RobotoMono.ttf', 47, 400), load('MPLUSRounded1c-Regular.ttf', 200, 400)
     if not text_font or not digit_font: return
     def sheet_files(name, cells, w, h):
         atlas = Image.new('RGBA', (w * len(cells), h))
