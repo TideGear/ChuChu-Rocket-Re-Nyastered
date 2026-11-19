@@ -388,3 +388,75 @@ def direct_stereo_words(words, sound_ram, count, *, lfo_counter, lfo_phase, key_
         direct_level=(words[9] >> 8) & 15, total_level=words[10] >> 8,
         runtime=dict(lfo_counter=lfo_counter, lfo_phase=lfo_phase))
     return direct_stereo(channel, sound_ram, count, key_off_samples, start=True)
+
+
+class SampledVoiceBank:
+    """Persistent sampled voices with the global AICA KYONEX scan.
+
+    Unlisted voices must be disabled. Requesting their key-on raises; creating
+    voices from changing sample/format registers is a separate route.
+    """
+    def __init__(self, models, registers):
+        if len(registers) != 0x8000 or any(not 0 <= i < 64 for i in models):
+            raise ValueError('Expected AICA registers and physical voice indexes')
+        self.models = dict(models)
+        self.registers = bytearray(registers)
+        for index, model in self.models.items():
+            if list(struct.unpack_from('<18I', self.registers, index * 128)) != model.channel['register_words']:
+                raise ValueError('Voice model and bank registers disagree')
+
+    def control(self, index):
+        return struct.unpack_from('<I', self.registers, index * 128)[0]
+
+    def sync_control(self, index):
+        struct.pack_into('<I', self.registers, index * 128, self.models[index].channel['register_words'][0])
+
+    def write(self, index, offset, size, value):
+        if not 0 <= index < 64 or size not in (1, 2) or not 0 <= value < 1 << (size * 8):
+            raise ValueError('Invalid channel write')
+        if offset not in (0, 1):
+            if index not in self.models:
+                raise ValueError('Controller write requires a modeled voice')
+            self.models[index].write_controller(offset, size, value)
+            at = index * 128 + offset
+            self.registers[at:at + size] = value.to_bytes(size, 'little')
+            return
+        if offset == 1 and size != 1:
+            raise ValueError('Unaligned control write')
+        previous = self.control(index)
+        mask = ((1 << (size * 8)) - 1) << (offset * 8)
+        control = (previous & ~mask) | value << (offset * 8)
+        if (previous ^ control) & ~0xc000:
+            raise ValueError('Sample/stream control changes are not implemented')
+        execute = (offset == 1 or size == 2) and bool(control & 0x8000)
+        if execute:
+            for other in range(64):
+                candidate = control if other == index else self.control(other)
+                if candidate & 0x4000 and other not in self.models:
+                    raise ValueError('Global key-on reaches an unmodeled voice')
+            control &= ~0x8000
+        struct.pack_into('<I', self.registers, index * 128, control)
+        if index in self.models:
+            self.models[index].channel['register_words'][0] = control
+        if execute:
+            for other, model in self.models.items():
+                if self.control(other) & 0x4000:
+                    model.key_on()
+                elif model.state['amplitude_state'] != 3:
+                    model.key_off()
+                self.sync_control(other)
+
+    def render(self, count, *, dsp_disabled_fallback=False):
+        if count < 0:
+            raise ValueError('Negative sample count')
+        blocks = []
+        for index, model in self.models.items():
+            before = model.state['amplitude_state']
+            blocks.append(model.render_stereo(count, dsp_disabled_fallback=dsp_disabled_fallback))
+            if before != 3 and model.state['amplitude_state'] == 3:
+                model.channel['register_words'][0] &= ~0x4000
+                self.sync_control(index)
+        if not blocks:
+            return [(0, 0)] * count
+        return [tuple(max(-32768, min(32767, sum(pair[side] for pair in pairs))) for side in (0, 1))
+                for pairs in zip(*blocks)]

@@ -11,11 +11,11 @@ import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from aica_pcm import SampleStream
+from aica_pcm import SampleStream, SampledVoiceBank
 from dc_aica_state import inspect
 
 
-def verify(state, mlt, schedule, wav, *, dsp_disabled=False):
+def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False):
     report = inspect(state, mlt)
     base, regs = report['sound_ram_offset'], report['register_offset']
     if any(state[regs + 0x2000:regs + 0x2048]):
@@ -23,11 +23,25 @@ def verify(state, mlt, schedule, wav, *, dsp_disabled=False):
     if struct.unpack_from('<H', state, regs + 0x2800)[0] & 0x810f != 15:
         raise ValueError('Expected full-volume stereo 16-bit master output')
     ram = state[base:base + 0x200000]
+    if any(c['runtime']['enabled'] for c in report['channels'] if c['channel'] not in (8, 9)):
+        raise ValueError('Isolated fixture has an enabled unmodeled voice')
+    bank_registers = bytearray(state[regs:regs + 0x8000])
+    if key_bank:
+        # Flycast deserialize calls SetAegState before the synthetic KEY_ON.
+        # Release-state channels lose KYONB there; KEY_ON doesn't set it back.
+        for channel in report['channels']:
+            if channel['runtime']['amplitude_state'] == 3:
+                at = channel['channel'] * 128
+                control = struct.unpack_from('<I', bank_registers, at)[0] & ~0x4000
+                struct.pack_into('<I', bank_registers, at, control)
     models = {}
     for index in (8, 9):
         channel = next(c for c in report['channels'] if c['channel'] == index)
+        if key_bank:
+            channel = dict(channel, register_words=list(struct.unpack_from('<18I', bank_registers, index * 128)))
         models[index] = SampleStream.from_registers(channel, ram,
             lfo_counter=channel['runtime']['lfo_counter'], lfo_phase=channel['runtime']['lfo_phase'])
+    bank = SampledVoiceBank(models, bank_registers) if key_bank else None
     with wave.open(str(wav), 'rb') as stream:
         if (stream.getnchannels(), stream.getsampwidth(), stream.getframerate()) != (2, 2, 44100):
             raise ValueError('Expected stereo PCM16 / 44100 Hz')
@@ -37,7 +51,7 @@ def verify(state, mlt, schedule, wav, *, dsp_disabled=False):
     for row in schedule.read_text().splitlines():
         at, channel, offset, size, value = row.split(',')
         event = (int(at), int(channel), int(offset, 16), int(size), int(value, 16))
-        if not 0 <= event[0] < count or event[1] not in models or events and event[0] < events[-1][0]:
+        if not 0 <= event[0] < count or not 0 <= event[1] < 64 or (not key_bank and event[1] not in models) or events and event[0] < events[-1][0]:
             raise ValueError('Unordered/out-of-range fixture write')
         events.append(event)
     if not events:
@@ -45,11 +59,17 @@ def verify(state, mlt, schedule, wav, *, dsp_disabled=False):
     expected = []
     position = 0
     for at, channel, offset, size, value in events + [(count, None, None, None, None)]:
-        blocks = [model.render_stereo(at - position, dsp_disabled_fallback=dsp_disabled) for model in models.values()]
-        for pairs in zip(*blocks):
-            expected.extend(max(-32768, min(32767, sum(pair[side] for pair in pairs))) for side in (0, 1))
+        if bank is not None:
+            expected.extend(sample for pair in bank.render(at - position, dsp_disabled_fallback=dsp_disabled) for sample in pair)
+        else:
+            blocks = [model.render_stereo(at - position, dsp_disabled_fallback=dsp_disabled) for model in models.values()]
+            for pairs in zip(*blocks):
+                expected.extend(max(-32768, min(32767, sum(pair[side] for pair in pairs))) for side in (0, 1))
         if channel is not None:
-            models[channel].write_controller(offset, size, value)
+            if bank is not None:
+                bank.write(channel, offset, size, value)
+            else:
+                models[channel].write_controller(offset, size, value)
         position = at
     if not any(expected):
         raise AssertionError('Silent write fixture')
@@ -67,5 +87,6 @@ if __name__ == '__main__':
     parser.add_argument('schedule', type=Path)
     parser.add_argument('wav', type=Path)
     parser.add_argument('--dsp-disabled', action='store_true', help='reference core has DSP disabled: include its zero-direct-output send fallback')
+    parser.add_argument('--key-bank', action='store_true', help='consume control writes with the global 64-channel KYONEX scan')
     args = parser.parse_args()
-    verify(args.state.read_bytes(), args.mlt.read_bytes(), args.schedule, args.wav, dsp_disabled=args.dsp_disabled)
+    verify(args.state.read_bytes(), args.mlt.read_bytes(), args.schedule, args.wav, dsp_disabled=args.dsp_disabled, key_bank=args.key_bank)
