@@ -3015,7 +3015,7 @@ struct PuzzleMode : Screen {
         }
         if (labelRow < 0) a.drawFrame5(90, 410, 180);
         const bool dcBubble = dcLeft && a.dcPuzzlePlate.tex;   // the hint bubble reuses the plate texture at x 316-828, y 365.2-416.4 of 640 x 480 (the full 512 x 64 texture, so rows 0-43 span 35 px); the text is a separate 512 x 256 sprite at (336, 370)
-        if (dcBubble) { const SDL_Rect bubble{506, 584, 819, 56}; SDL_RenderCopy(a.ren, a.dcPuzzlePlate.tex, nullptr, &bubble); }
+        if (dcBubble) { const SDL_FRect bubble{316.0f * 1.6f, 365.2f * 1.6f, 512.0f * 1.6f, 35.2f * 1.6f}; SDL_RenderCopyF(a.ren, a.dcPuzzlePlate.tex, nullptr, &bubble); }   // Flycast frame 2390: the 512 x 64 plate is a 512 x 51.2 quad at (316, 365.2) of 640 x 480; the exported sheet keeps its 44 visible rows, 44 x 0.8 = 35.2
         else a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv && labelRow < 0) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);

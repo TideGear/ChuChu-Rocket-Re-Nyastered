@@ -416,9 +416,9 @@ def main(prs_png, out, png=None):
     bubble = os.path.join(prs_png, 'PUZZLE_puzzlefukidasi.png')
     board = os.path.join(prs_png, 'PUZZLECLEAR_challengeboard.png')
     if os.path.exists(board):
-        # The Puzzle plate/bubble texture (word 04046c00 in Flycast frame 2390) is this 278 x 42 bar, two rows lower in the 512 x 64 texture (0 differing RGB values), with no tail.
+        # The Puzzle plate/bubble texture (word 04046c00 in Flycast frame 2390) is this 278 x 42 bar with no tail. It starts at row 0 of the 512 x 64 texture: the Normal plate and the bubble, two quads of this texture, both start 2 rows too low with the bar at row 2 and align with it at row 0 (frame error 3.97 -> 3.04).
         plate = Image.new('RGBA', (512, 44))
-        plate.paste(Image.open(board).convert('RGBA').crop((0, 0, 512, 42)), (0, 2))
+        plate.paste(Image.open(board).convert('RGBA').crop((0, 0, 512, 42)), (0, 0))
         sheet('dc_puzzle_plate', plate)
     elif os.path.exists(bubble): sheet('dc_puzzle_plate', Image.open(bubble).convert('RGBA').crop((0, 0, 512, 44)))
     names = [os.path.join(prs_png, f'PUZZLE_{n}.png') for n in ('normal', 'hard', 'mania', 'original', 'special')]
