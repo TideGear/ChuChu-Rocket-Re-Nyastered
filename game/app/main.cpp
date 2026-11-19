@@ -3023,7 +3023,9 @@ struct PuzzleMode : Screen {
             const bool biosHint = dcBubble && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95 && !hint.empty();
             if (biosHint) {   // the game draws the hint with the BIOS ANSI font, left-aligned in a 1:1 texture glyphs at (336, 370) of 640 x 480 (texture at y 368, text row 2), 12 px per character, colour (32, 32, 64); the port's layout is 1.6 times that
                 SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 32, 32, 64);
-                for (size_t k = 0; k < hint.size() && k < 59; ++k) { const unsigned char c = hint[k]; if (c <= 0x20 || c > 0x7e) continue; const SDL_Rect d{(int)std::lround((336 + 12 * (int)k) * 1.6), (int)std::lround(370 * 1.6), 20, 39}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); }
+                for (size_t k = 0; k < hint.size() && k < 59; ++k) { const unsigned char c = hint[k]; if (c <= 0x20 || c > 0x7e) continue; const bool exactCell = a.dcBiosAnsi.h == 24;   // the BIOS ROM atlas has 12 x 24 cells, drawn 1:1 by the game; the 2x look-alike atlas keeps its tuned rectangle
+                    const SDL_FRect d = exactCell ? SDL_FRect{(336 + 12 * (int)k) * 1.6f, 370 * 1.6f, 12 * 1.6f, 24 * 1.6f} : SDL_FRect{(float)std::lround((336 + 12 * (int)k) * 1.6), (float)std::lround(370 * 1.6), 20.0f, 39.0f};
+                    SDL_RenderCopyF(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); }
                 SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
             } else if (discNames) {   // no BIOS font: mixed-case 5 x 7 glyphs, left-aligned where the original draws its text, navy, heavier strokes, 18 px advance (the original's 12 px x 1.6 is 19)
                 SDL_SetRenderDrawColor(a.ren, 32, 32, 64, 255);
