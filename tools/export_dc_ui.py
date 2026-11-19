@@ -250,7 +250,7 @@ def export_dc_fallback_fonts(out):
     for c in range(0x20, 0x7f):
         wide = Image.new('L', (40, 48), 0)
         ImageDraw.Draw(wide).text((0, 40), chr(c), font=text_font, fill=255, anchor='ls')   # baseline at row 40 of 48 (20 of 24, like the BIOS cell: descenders are cut at the cell bottom, as in the original)
-        mask = wide.crop((0, 0, 34, 48)).resize((24, 48), Image.Resampling.BOX)            # squeeze the 0.6 em mono advance to the BIOS cell's narrow, tall proportions
+        mask = wide.crop((0, 0, 28, 48)).resize((24, 48), Image.Resampling.BOX)            # squeeze the 0.6 em mono advance to the BIOS cell's narrow, tall proportions
         glyphs.append(white(mask.point(lambda v: min(255, int(v * 1.3)))))
     sheet_files('dc_bios_ansi', glyphs, 24, 48)
     cells = []
