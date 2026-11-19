@@ -57,7 +57,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Sonic Team logo | screen | verified | 0.66 |
 | Title (bg, logo, prompt) | screen | verified | 1.6-2.5 |
 | Title flying rocket | animation | partial (position exact, edge 1.6-2.5) | 1.6-2.5 |
-| Title shadow strips newtitle1/2 | screen | open | - |
+| Title shadow strip newtitle1 (newtitle2 not in that frame) | screen | partial | edge region 0.6 |
 | Title attract demo | animation | open | - |
 | Mode Select | screen | partial | 2.98 |
 | Challenge select (A1, B1, B2) | screen | verified | 2.2-3.0 |

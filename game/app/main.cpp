@@ -1239,7 +1239,7 @@ struct ModelViewerMode : Screen {
 // the prompt appears at u = 89 and is hidden for 8 of every 30 ticks from u = 145. Not traced yet: the flying rocket, `newtitle1/2` and music 18.
 struct DcStartupMode : Screen {
     int phase = 0, t = 0, request = -1; bool leave = false;
-    static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() == 6; }
+    static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() == 7; }
     void event(App&, const SDL_Event& e) override {
         const bool press = (e.type == SDL_KEYDOWN && !e.key.repeat) || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN || e.type == SDL_CONTROLLERBUTTONDOWN;
         if (!press) return;
@@ -1282,7 +1282,7 @@ struct DcStartupMode : Screen {
                 const int idx[6] = {0, 1, 2, 2, 1, 3};
                 SDL_RenderGeometry(a.ren, sh.tex, v, 4, idx, 6);
             }
-            copy(3, 16, 64);
+            copy(3, 16, 64); copy(6, 528, 152);   // newtitle1: the 8 x 32 logo-edge strip, quad read from the Flycast frame-1200 list
             const bool hidden = t >= 145 && (t - 145) % 30 < 8;
             if (t >= 89 && !hidden) copy(4, 176, 360);
             black = t < 10 ? 1.0f : 1.0f - step(t - 8);

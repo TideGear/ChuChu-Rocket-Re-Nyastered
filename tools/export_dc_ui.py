@@ -191,7 +191,7 @@ def export_dc_startup(prs_png, png, out):
         tile = read(f)
         bg.alpha_composite(tile.transpose(Image.Transpose.TRANSPOSE) if i == 3 else tile, at)
     rocket = os.path.join(prs_png, 'TITLE_titlerocket.png')
-    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket)])   # frame 5: the flying rocket, 128 x 256 upright
+    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket), read(os.path.join(prs_png, 'TITLE_newtitle1.png'))])   # frame 5: the flying rocket, 128 x 256 upright; frame 6: the logo's 8 x 32 right-edge shadow strip at (528,152)
 
 def export_dc_battle_setup(prs_png, out):
     """Dreamcast 4P Battle 'Select Players' and 'Stage Select' art (Flycast frames 1900/2300, packets matched to disc textures with 0 differing values).
