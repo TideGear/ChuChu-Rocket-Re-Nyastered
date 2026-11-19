@@ -412,7 +412,7 @@ def main(prs_png, out, png=None):
         atlas = Image.new('RGBA', (640, 64))
         for i, d in enumerate(digits):
             g = Image.open(d).convert('RGBA').transpose(Image.Transpose.ROTATE_270).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-            atlas.paste(g, (i * 64, 0))
+            atlas.paste(uv_span(g), (i * 64, 0))
         with open(os.path.join(out, 'dc_puzzle_digits.tex.bin'), 'wb') as f: f.write(struct.pack('<2I', 640, 64)); f.write(atlas.tobytes())
         with open(os.path.join(out, 'dc_puzzle_digits.frames.bin'), 'wb') as f: f.write(struct.pack('<I', 1)); f.write(struct.pack('<9f', 0, 0, 1, 1, 0, 0, 0, 0, 0))
         print('dc_puzzle_digits 640x64')

@@ -2957,10 +2957,10 @@ struct PuzzleMode : Screen {
         }
         SDL_RenderSetViewport(a.ren, nullptr);   // puzzle HUD (HD 1.0 renderPuzzleHudiPad 0x137c4): image 0x5c frame 2 at (origin + 40, 690), frame 3 ten times every 64, frame 4;
         const bool dcLeft = dreamcastPuzzleControls(a) && a.dcPuzzleStage.tex;   // real draw list: the 128 x 64 "stage" quad at (5, 325) of 640 x 480, drawn here at 1.6 times that
-        if (dcLeft) { const SDL_Rect dst{8, 520, 205, 102}; SDL_RenderCopy(a.ren, a.dcPuzzleStage.tex, nullptr, &dst); int n = cur % 25 + 1;
+        if (dcLeft) { const SDL_FRect dst{5.0f * 1.6f, 325.0f * 1.6f, 128.0f * 1.6f, 64.0f * 1.6f}; SDL_RenderCopyF(a.ren, a.dcPuzzleStage.tex, nullptr, &dst); int n = cur % 25 + 1;
             if (a.dcPuzzleDigits.tex) {   // real draw list: 51 x 51 quads at x 38.2 and 68.2, y 375.2 of 640 x 480 (the glyphs are PUZZLECLEAR_new0..9)
-                const SDL_Rect src0{(n / 10) * 64, 0, 64, 64}, src1{(n % 10) * 64, 0, 64, 64}, dst0{61, 600, 82, 82}, dst1{109, 600, 82, 82};
-                SDL_RenderCopy(a.ren, a.dcPuzzleDigits.tex, &src0, &dst0); SDL_RenderCopy(a.ren, a.dcPuzzleDigits.tex, &src1, &dst1);
+                const SDL_Rect src0{(n / 10) * 64, 0, 64, 64}, src1{(n % 10) * 64, 0, 64, 64}; const SDL_FRect dst0f{38.2f * 1.6f, 375.2f * 1.6f, 51.0f * 1.6f, 51.0f * 1.6f}, dst1f{68.2f * 1.6f, 375.2f * 1.6f, 51.0f * 1.6f, 51.0f * 1.6f};
+                SDL_RenderCopyF(a.ren, a.dcPuzzleDigits.tex, &src0, &dst0f); SDL_RenderCopyF(a.ren, a.dcPuzzleDigits.tex, &src1, &dst1f);
             } else { a.blit(a.hdStageNum, n / 10, 102.0f, 641.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 150.0f, 641.0f, 1.3f); } }
         else
         { int n = cur % 25 + 1; a.blit(a.hdPhud, 1, 90.0f, 520.0f, 1.3f); a.blit(a.hdStageNum, n / 10, 70.0f, 584.0f, 1.3f); a.blit(a.hdStageNum, n % 10, 120.0f, 584.0f, 1.3f); }   // renderPuzzleHudiPad: "stage" label (0x5c frame 1) at (90, 520) and the number (image 0x84, (stage mod 25) + 1, tens at (70, 584), ones at (120, 584)), all at scale 1.3; the stage-name frame and text are not drawn yet
@@ -3013,8 +3013,9 @@ struct PuzzleMode : Screen {
                 for (int k = 0; k < 5; ++k) if (lower.find(kinds[k]) != std::string::npos) labelRow = k;
             } else { static const int groupRow[4] = {0, 1, 4, 2}; labelRow = groupRow[cur / 25]; }
             if (labelRow >= 0) {
-                const SDL_Rect plateDst{5, 445, 369, 50}, labelSrc{0, labelRow * 32, 256, 32}, labelDst{25, 454, 287, 36};
-                SDL_RenderCopy(a.ren, a.dcPuzzlePlate.tex, nullptr, &plateDst); SDL_RenderCopy(a.ren, a.dcPuzzleLabels.tex, &labelSrc, &labelDst);
+                // Flycast frame 2390 (0x1a08f63, 0x1a09003): plate quad (3.05, 278.3)-(233.45, 323.1) of 640 x 480 for the 512 x 64 texture (the 44 exported rows are 44 x 0.7 = 30.8 tall), label quad (15.4, 283.5)-(194.6, 305.9).
+                const SDL_FRect plateDst{3.05f * 1.6f, 278.3f * 1.6f, 230.4f * 1.6f, 30.8f * 1.6f}, labelDst{15.4f * 1.6f, 283.5f * 1.6f, 179.2f * 1.6f, 22.4f * 1.6f}; const SDL_Rect labelSrc{0, labelRow * 32, 256, 32};
+                SDL_RenderCopyF(a.ren, a.dcPuzzlePlate.tex, nullptr, &plateDst); SDL_RenderCopyF(a.ren, a.dcPuzzleLabels.tex, &labelSrc, &labelDst);
             }
         }
         if (labelRow < 0) a.drawFrame5(90, 410, 180);
