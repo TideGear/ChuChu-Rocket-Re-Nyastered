@@ -520,6 +520,8 @@ struct App {
     // Colours by game type (Render::createPlayfieldPreview, 0x38458): free-for-all and team battle: floor {1,3,4,5}[stage & 3], wall 0; challenge: floor 1, wall 1; puzzle: floor (group & 3) + 2, wall 2.
     // Dreamcast board (models_3d): the floor is the game's single 180 x 135 quad textured with yuka01-06 (floor colour N = yuka N+1), each wall edge a kabetx01-03 piece (wall colour N = kabetx N+1),
     // The Dreamcast holes and generators use separate meshes over the same floor.
+    // Floor vertex intensity 0.8 (Flycast frame 2390, state 0x253e10) goes through ta_vtx.cpp:730: satint = int(0.8 * 256) = 204 and the colour is 255 * 204 / 256 = 203 in integers, not 0.8 * 255 = 204.
+    static constexpr float kFloorVertexColour = 203.0f / 255.0f;
     bool board3d(int floorColor, int wallColor, FieldLayout field) {
         if (!useModels3d()) return false;
         const Model3D* floorM = models3d.find("floor"); const Model3D* wallM = models3d.find("wall"); if (!floorM || !wallM) return false;
@@ -536,7 +538,7 @@ struct App {
             static const int kQuadTris[2][3] = {{0, 1, 2}, {0, 2, 3}};
             for (const int (&idx)[3] : kQuadTris) {
                 ModelPack::SoftTri t{}; t.tex = static_cast<int>(floorM->matTex[mat]); t.translucent = false; t.wrap = true;
-                for (int k = 0; k < 3; ++k) { t.p[k] = P[idx[k]]; t.u[k] = U[idx[k]]; t.v[k] = V[idx[k]]; t.iw[k] = 1.0f / field.cameraDistance; t.light[k] = 0.8f; }
+                for (int k = 0; k < 3; ++k) { t.p[k] = P[idx[k]]; t.u[k] = U[idx[k]]; t.v[k] = V[idx[k]]; t.iw[k] = 1.0f / field.cameraDistance; t.light[k] = kFloorVertexColour; }
                 floorTris.push_back(t);
             }
         }
