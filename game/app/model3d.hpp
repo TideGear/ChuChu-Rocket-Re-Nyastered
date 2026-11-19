@@ -230,7 +230,7 @@ public:
     // sy with Z. Lighting per vertex: 0.3 + max(0, light . R n). `blend` > 0 mixes pose frame `frame` with pose frame `frame + 1` (the cat's head morph and walk pose are interpolated by
     // the fractional part of its phase); mice pass blend 0 and use one of their eight keyframe models.
     void drawDcCharacter(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, float translateZ,
-                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr) const {
+                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f) const {
         if (m.tris.empty()) return;
         const float ya = yawDeg * 0.017453292f, cy = cosf(ya), sy = sinf(ya);
         constexpr float kTilt = -45.0f * 0.017453292f; const float ct = cosf(kTilt), st = sinf(kTilt);
@@ -252,7 +252,7 @@ public:
                 const float n1x = nx * cy + nz * sy, n1z = -nx * sy + nz * cy;
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
-                o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z));   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
+                o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z)) * (tri.mat == 10 ? run10Diffuse : 1.0f);   // material slot 10 = the mouse's cream run with chunk diffuse b2b2b2 (0xb2 / 255)   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
                 const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - tri.v[k].v, tri.v[k].u} : SDL_FPoint{tri.v[k].u, tri.v[k].v};
                 o.u[k] = uv.x; o.v[k] = uv.y;

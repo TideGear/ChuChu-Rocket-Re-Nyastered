@@ -1108,7 +1108,7 @@ struct App {
         static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.5f, -0.25f};
         float phase = 0.0f; int frame = -1;
         if (!en.mouse) { phase = (i < cphase.size() ? cphase[i] * 1.2f : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
-        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u, pink ? kind2Remap : nullptr);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
+        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u, pink ? kind2Remap : nullptr, (en.mouse && !pink) ? 178.0f / 255.0f : 1.0f);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
 
         // FUN_8c056e1e -> FUN_8c056d00: type 1 (golden) and type 2 (roulette) mice carry a 13.5-unit marker quad (texture 46 + 3 * kind of the CHALLENGECLEAR list: plus50, hatena) at
         // (x, height 9.5, z - 10), RotateY(0x8000); perspective 218 / (218 - 9.5) as for the crown.

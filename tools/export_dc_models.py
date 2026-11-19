@@ -62,7 +62,7 @@ class Pack:
                 if n['ch']: walk(n['ch'], len(order) - 1)
                 a = n['sb']
         walk(BASE + root_off, None); return order
-    def assemble(self, order, pos=None, ang=None, head=None):
+    def assemble(self, order, pos=None, ang=None, head=None, special=False):
         """Triangles of the object tree: list of (material, [(x, y, z, u, v, nx, ny, nz) x 3]). pos/ang: per-node overrides (animation); head: replacement positions of node 0's vertices."""
         pos = pos or [list(n['pos']) for n in order]; ang = ang or [list(n['ang']) for n in order]
         def world(i, v, normal=False):
@@ -89,7 +89,7 @@ class Pack:
                     if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
                     a, b, c = t3[0][0], t3[1][0], t3[2][0]
                     if a in remap and b in remap and c in remap and len({a, b, c}) == 3:
-                        tris.append(((tex if tex is not None else 0) & 0x1fff, [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
+                        tris.append((10 if special and mat[0] == 17 and (tex & 0x1fff) == 2 else (tex if tex is not None else 0) & 0x1fff, [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
         return tris
     def cat_frames(self, order):
         """The cat's 24 poses: motion A (skeleton keys of nodes 1, 2, 3, 5) and motion B (head vertex morph, table at 0x7ceb4)."""
@@ -115,9 +115,10 @@ def main(root, exe):
         return tex_ids[name]
     out_models = []
     for name, off, texlist in MODELS:
-        order = pack.tree(off); tris = pack.assemble(order)
+        order = pack.tree(off); special = name.startswith('mouse') and name[5:].isdigit()   # mouse keyframes: the 4-vertex cream run (material flags 17, texture 2) is lit by its own light, so it gets material slot 10 (texture 2 again)
+        tris = pack.assemble(order, special=special)
         full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_')    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
-        mats = [tex(texlist[m]) if m < len(texlist) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
+        mats = [tex(texlist[m if m < len(texlist) else 2]) if (m < len(texlist) or special) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
         frames = pack.cat_frames(order) if name == 'cat' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
         out_models.append((name, tris, mats, frames))
