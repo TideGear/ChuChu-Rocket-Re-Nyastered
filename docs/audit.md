@@ -82,7 +82,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Puzzle Edit screens | screen | open | - |
 | Network / Homepage | screen | not testable offline | - |
 | Unlock/password messages (mode 17) | screen | open | - |
-| Mouse walk cycle (8 keyframes) | animation | partial (not frame-diffed) | - |
+| Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual) | moving px 11.4 vs 5.4 static baseline |
 | Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
 | Rocket lid / lift-off / smoke | animation | open (Dreamcast not compared) | - |
 | Mouse caught, hole fall, rocket entry | animation | open | - |
