@@ -60,7 +60,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Title flying rocket | animation | partial (position exact, edge 1.6-2.5) | 1.6-2.5 |
 | Title shadow strip newtitle1 (newtitle2 not in that frame) | screen | partial | edge region 0.6 |
 | Title attract demo | animation | open | - |
-| Mode Select | screen | partial | 2.98 |
+| Mode Select | screen | partial | 0.91 (CCR_GPU=1, 640x480, one frame, animation phase not aligned) |
 | Challenge select (A1, B1, B2) | screen | verified | 2.2-3.0 |
 | Challenge select clock, clear marks | screen | partial | 0 px / 1.2 |
 | Challenge intro cards A1, B2 | screen | partial | <=3 |
@@ -68,12 +68,13 @@ Counts items this table lists, not the game's full content (many screens have se
 | Challenge failure | screen | partial | 4.3 |
 | Challenge clear (C1) | screen | partial | 0.7 banner |
 | Challenge pause | screen | partial | - |
-| Puzzle play Normal 01/02/08 | screen | partial | - |
-| Puzzle pause | screen | partial | - |
+| Puzzle play Normal 01/02/08 | screen | partial | Normal 01 1.93 (CCR_GPU=1, disc-only; star twinkles not drawn, look-alike hint font without a BIOS); 02/08 not measured |
+| Puzzle pause | screen | partial | not measured; the port has no pad path to the overlay (original: overlay whole at +5 frames after Start) |
+| Puzzle result, Save Completed (clear age 218) | screen | partial | 1.79 full frame; notice text 1,377 px differ by one level (rule needs 0) |
 | Puzzle hint text (BIOS font) | screen | verified | 0 px |
 | Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |
 | Battle Stage Select | screen | partial | 2.35 (preview 9.6) |
-| Battle play HUD, Team Battle HUD | screen | partial | - |
+| Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 4.05 (CCR_GPU=1, stage 0, tick alignment not established, CPU cursors absent); Team Battle not measured |
 | Battle pause (4P, Team) | screen | partial | - |
 | Help Menu | screen | partial | visual match |
 | Help pages (21) | screen | partial | 4.8-13 |
@@ -85,14 +86,14 @@ Counts items this table lists, not the game's full content (many screens have se
 | Unlock/password messages (mode 17) | screen | open | - |
 | Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual) | moving px 11.4 vs 5.4 static baseline |
 | Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
-| Rocket lid / lift-off / smoke | animation | partial (8 live-state samples; sampled frames exceed visual threshold) | shared depth: upper-board mean 3.42 / 6.38 / 4.40 / 2.84 at ages 4 / 19 / 44 / 69; see rocket continuation in roadmap |
+| Rocket lid / lift-off / smoke | animation | partial (per-frame sweep of ages -9..80, one replay) | full-frame mean 1.82-2.41 on ages 1-80 and 1.93-2.87 on -9..-2 (CCR_GPU=1, disc-only); ages -1 (3.62) and 0 (4.57) fail: the original enlarges the domes about 1.25x then draws none, untraced |
 | Mouse caught, hole fall, rocket entry | animation | open | - |
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |
 | KapuKapu, focus ring | animation | open | - |
 | Sound: startup, menu, cues, music | sound | open (driver internals verified, no playback match) | - |
 
-**Totals: 37 items; 6 verified, 19 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.
+**Totals: 38 items; 6 verified, 20 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.
 
 ## Dreamcast mode inventory (read from the game's mode table, 2026-11-18)
 The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `0x8c019088` rejects values >= 23 and stores the mode at `0x8c1af108`, read from RAM dumps of the captured screens); each entry points to a descriptor whose first word is the mode's init function. Entries 23-39 and up are data, not modes. Status words as above; every row stays open until its screens are matched against Flycast frames.
