@@ -50,7 +50,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Disc-only run (2026-11-18, USA CUE/BIN only, no mobile files, no BIOS): `tools/extract_all.py --game-files local/dc_ref/disc --cache <empty dir>` completed in 87 s (128 models, 50 battle stages, 54 `dc_*` UI sheets, `dreamcast_puzzles.bin`); `ccr` then ran STARTUP, MENU, HELP, OPTIONS, BATTLE, TEAM_BATTLE, CHALLENGE_SELECT, puzzle, challenge and battle play headlessly with no errors. This covers the extraction core only: `setup.cmd`, `--prepare` and the RecompLauncher path were not run (they write to the user's config folder), and the screens were not diffed beyond the earlier per-screen comparisons.
 
 ## Dreamcast coverage table (2026-11-18)
-Counts items this table lists, not the game's full content (many screens have several states). Status: verified = within the goal's error bar (full frame <= 3, text 0 px); partial = implemented and compared once; open = not built or not compared.
+Counts items this table lists, not the game's full content (many screens have several states). Status: verified = within the goal's error bar (full frame <= 3; each element mean <= 1, no shift, no pixel off by more than 8 levels outside a 1 px edge band; measured with tools/parity.py); partial = implemented and compared once; open = not built or not compared.
 
 | Item | Kind | Status | Measured error vs Flycast |
 |---|---|---|---|
