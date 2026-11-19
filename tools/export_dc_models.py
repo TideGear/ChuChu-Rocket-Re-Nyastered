@@ -30,7 +30,7 @@ MODELS = [('cat', 0x778c4, CAT_TEX)] + [('mouse%d' % i, o, MOUSE_TEX) for i, o i
     ('roulette', 0xa302c, BATTLE_TEX)]  # FUN_8c01d9a0 submits object 0x8c0b302c
 
 # Mouse draw dispatcher 0x8c019e26 part trees (roots 0x8c08e138 kind 2, 0x8c0960ec kind 1, 0x8c096be8 chain); texture slots as MOUSE_TEX
-MODELS += [('mouse_a', 0x7e138, MOUSE_TEX), ('mouse_b', 0x860ec, MOUSE_TEX), ('mouse_c', 0x86be8, MOUSE_TEX)]
+MODELS += [('mouse_a', 0x7e138, MOUSE_TEX), ('mouse_b', 0x860ec, MOUSE_TEX), ('mouse_c', 0x86be8, MOUSE_TEX), ('ghost', 0x87e44, MOUSE_TEX)]   # ghost: object 0x8c097e44 + motion 0x8c0988a0 (8 frames), drawn by 0x8c0192e0 with texture list 0x8c085d18
 MODELS += [('h_%x' % o, o, HUD_TEX) for o in HUD_OFFS]
 
 def rot(v, a, flags):
@@ -91,6 +91,42 @@ class Pack:
                     if a in remap and b in remap and c in remap and len({a, b, c}) == 3:
                         tris.append((10 if special and mat[0] == 17 and (tex & 0x1fff) == 2 else (tex if tex is not None else 0) & 0x1fff, [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
         return tris
+    def assemble_cached(self, order, pos=None, ang=None):
+        """Objects whose polygon lists live apart from their vertex lists (the ghost 0x8c097e44): every node's vertex chunk writes its vertices, transformed by that node's matrix, into one shared
+        buffer in tree order; a polygon list that starts with a CachePolygonList chunk (type 4, index in the flags byte) is stored, and a DrawPolygonList chunk (type 5) draws the stored list with
+        the buffer as it is at that node; a plain polygon list draws at once. Same triangle format as `assemble`."""
+        d = self.d
+        pos = pos or [list(n['pos']) for n in order]; ang = ang or [list(n['ang']) for n in order]
+        def world(i, v, normal=False):
+            while i is not None:
+                n = order[i]; fl = n['fl']
+                if not normal and not fl & 4: v = (v[0] * n['scl'][0], v[1] * n['scl'][1], v[2] * n['scl'][2])
+                if not fl & 2: v = rot(v, ang[i], fl)
+                if not normal and not fl & 1: v = (v[0] + pos[i][0], v[1] + pos[i][1], v[2] + pos[i][2])
+                i = n['parent']
+            return v
+        buf = {}; cache = {}; tris = []
+        def draw(strips):
+            for strip, rev, tex, mat in strips:
+                for q in range(len(strip) - 2):
+                    t3 = [strip[q], strip[q + 1], strip[q + 2]]
+                    if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
+                    if all(x[0] in buf for x in t3) and len({x[0] for x in t3}) == 3:
+                        tris.append(((tex if tex is not None else 0) & 0x1fff, [buf[x[0]][0] + (x[1], 1.0 - x[2]) + buf[x[0]][1] for x in t3]))
+        for i, n in enumerate(order):
+            if n['mp'] == 0 or n['fl'] & 8: continue
+            va, pa = struct.unpack_from('<II', d, n['mp'] - BASE)
+            if va:
+                for k, (p, nr) in M.parse_vlist(d, va - BASE).items():
+                    w = world(i, p); nw = world(i, nr if nr else (0.0, 1.0, 0.0), True); l = math.sqrt(nw[0] ** 2 + nw[1] ** 2 + nw[2] ** 2) or 1.0
+                    buf[k] = (tuple(w), (nw[0] / l, nw[1] / l, nw[2] / l))
+            if pa:
+                kind, idx = d[pa - BASE], d[pa - BASE + 1]
+                strips = M.parse_plist(d, pa - BASE if kind != 5 else pa - BASE + 2, 0xffff) if kind != 5 else None
+                if kind == 4: cache[idx] = strips
+                elif kind == 5: draw(cache.get(idx) or [])
+                elif strips: draw(strips)
+        return tris
     def cat_frames(self, order):
         """The cat's 24 poses: motion A (skeleton keys of nodes 1, 2, 3, 5) and motion B (head vertex morph, table at 0x7ceb4)."""
         d = self.d
@@ -107,6 +143,33 @@ class Pack:
             frames.append(self.assemble(order, pos, ang, head))
         return frames
 
+def motion_frames(pack, order, md, nframes):
+    """Poses of an object tree driven by a Ninja motion (NJS_MOTION data at `md`: per node, in tree order, three keyframe tracks (position, angle, scale), each a pointer and a count;
+    keyframe = u32 frame + three values; position and scale are floats, angle is a 16-bit-turn integer). Linear interpolation between keyframes, as the ghost task uses (0x8c0988a0)."""
+    d = pack.d
+    md = struct.unpack_from('<I', d, md - BASE)[0]   # NJS_MOTION { mdata pointer, frame count, type, inp_fn }
+    def track(p, n, fmt):
+        return [(struct.unpack_from('<I', d, p - BASE + 16 * i)[0], list(struct.unpack_from(fmt, d, p - BASE + 16 * i + 4))) for i in range(n)]
+    tracks = []
+    for k in range(len(order)):
+        e = struct.unpack_from('<6I', d, md - BASE + 24 * k)
+        tracks.append([track(e[j], e[3 + j], '<3i' if j == 1 else '<3f') if e[j] and e[3 + j] else None for j in range(3)])
+    def sample(kfs, f):
+        if f <= kfs[0][0]: return list(kfs[0][1])
+        for (f0, v0), (f1, v1) in zip(kfs, kfs[1:]):
+            if f <= f1:
+                t = (f - f0) / float(f1 - f0)
+                return [a + (b - a) * t for a, b in zip(v0, v1)]
+        return list(kfs[-1][1])
+    frames = []
+    for f in range(nframes):
+        pos = [list(n['pos']) for n in order]; ang = [list(n['ang']) for n in order]
+        for k, (tp, ta, ts) in enumerate(tracks):
+            if tp: pos[k] = sample(tp, f)
+            if ta: ang[k] = [int(round(x)) for x in sample(ta, f)]
+        frames.append(pack.assemble_cached(order, pos, ang))
+    return frames
+
 def main(root, exe):
     pack = Pack(exe); tex_ids, textures = {}, []
     def tex(name):
@@ -116,10 +179,10 @@ def main(root, exe):
     out_models = []
     for name, off, texlist in MODELS:
         order = pack.tree(off); special = name.startswith('mouse') and name[5:].isdigit()   # mouse keyframes: the 4-vertex cream run (material flags 17, texture 2) is lit by its own light, so it gets material slot 10 (texture 2 again)
-        tris = pack.assemble(order, special=special)
-        full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_')    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
+        tris = pack.assemble_cached(order) if name == 'ghost' else pack.assemble(order, special=special)
+        full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_') or name == 'ghost'    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
         mats = [tex(texlist[m if m < len(texlist) else 2]) if (m < len(texlist) or special) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
-        frames = pack.cat_frames(order) if name == 'cat' else []
+        frames = pack.cat_frames(order) if name == 'cat' else motion_frames(pack, order, 0x8c0988a0, 8) if name == 'ghost' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
         out_models.append((name, tris, mats, frames))
     # Mouse marker quads (0x8c056d00): a 13.5-unit plane (half size 6.75) textured with texture 46 + 3 * kind of the CHALLENGECLEAR list: kind 0 = plus50 (golden mouse), kind 1 = hatena (roulette mouse)

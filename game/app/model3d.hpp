@@ -230,7 +230,7 @@ public:
     // sy with Z. Lighting per vertex: 0.3 + max(0, light . R n). `blend` > 0 mixes pose frame `frame` with pose frame `frame + 1` (the cat's head morph and walk pose are interpolated by
     // the fractional part of its phase); mice pass blend 0 and use one of their eight keyframe models.
     void drawDcCharacter(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, float translateZ,
-                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f) const {
+                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f, float height = 0.0f, float modelScale = 1.0f) const {
         if (m.tris.empty()) return;
         const float ya = yawDeg * 0.017453292f, cy = cosf(ya), sy = sinf(ya);
         constexpr float kTilt = -45.0f * 0.017453292f; const float ct = cosf(kTilt), st = sinf(kTilt);
@@ -247,8 +247,10 @@ public:
                     vx = pa[0]; vy = pa[1]; vz = pa[2]; nx = pa[3]; ny = pa[4]; nz = pa[5];
                     if (b) { const float* pb = &(*b)[ti * 18 + k * 6]; const float f = blend; vx += (pb[0] - vx) * f; vy += (pb[1] - vy) * f; vz += (pb[2] - vz) * f; nx += (pb[3] - nx) * f; ny += (pb[4] - ny) * f; nz += (pb[5] - nz) * f; }
                 }
+                vx *= modelScale; vy *= modelScale; vz *= modelScale;                              // Scale (the ghost task shrinks its model at the end of its life)
                 const float x1 = vx * cy + vz * sy, z1 = -vx * sy + vz * cy;                 // RotateY(yaw)
-                const float y2 = vy * ct - z1 * st, z2 = vy * st + z1 * ct;                  // RotateX(-45)
+                const float y2 = vy * ct - z1 * st + height, z2 = vy * st + z1 * ct;         // RotateX(-45), then the task position's height
+
                 const float n1x = nx * cy + nz * sy, n1z = -nx * sy + nz * cy;
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
