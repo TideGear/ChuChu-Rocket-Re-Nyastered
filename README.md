@@ -1,6 +1,8 @@
 # ChuChu Rocket! Re-Nyastered
 
-On Windows, start with your own supported iOS or Android copy of ChuChu Rocket! Use its containing folder in RecompLauncher's Easy Setup, or follow [Windows build and setup](#build-and-setup-windows) from a checkout. Dreamcast, GBA and Dreamcast Express files are optional. Pre-built Windows releases (ZIP with checksum, no game files inside) are on the [GitHub releases page](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/releases): extract one, run `ccr.exe --prepare` with the folder that holds your original files (or let RecompLauncher do it), then start `ccr.exe`.
+Start with your own supported copy of ChuChu Rocket! The tested USA Dreamcast CUE/BIN image alone can supply playable assets; no mobile files or BIOS are required. Supported iOS, Android, GBA and Dreamcast Express files provide other assets and content. Use the containing folder in RecompLauncher's Easy Setup, or follow [Windows build and setup](#build-and-setup-windows) from a checkout. Pre-built releases contain the program and setup tools, with no game files: extract one, run `ccr.exe --prepare` with the folder that holds your originals (or let RecompLauncher do it), then start `ccr.exe`.
+
+**Latest progress preview:** [v2026.11.21-preview.1 — Windows, Linux and macOS](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/releases/tag/v2026.11.21-preview.1). This adds native Dreamcast Puzzle selection and clear-result controls and fixes cursor atlas bleeding. Dreamcast sound effects and the Puzzle shuttle launch are still unfinished. Rerun Easy Setup after updating to regenerate the new UI assets.
 
 **This is a fully human-driven, AI-powered reimplementation of SEGA's ChuChu Rocket!** I direct the project and set the standard for accepting changes. AI assists with reverse engineering, implementation, testing and documentation. When a feature is verified against an original release, the documentation shows how the comparison ran and which cases it covered.
 
@@ -12,11 +14,11 @@ On Windows, start with your own supported iOS or Android copy of ChuChu Rocket! 
 | --- | --- |
 | ![Puzzle stage 25, Gang of cats](docs/screenshots/puzzle-wip.png) | ![Battle against three CPU opponents](docs/screenshots/battle-wip.png) |
 
-**This is very much a work in progress.** These captures show the current development build. Menus, visuals, and gameplay will continue to change as more of the original releases are reproduced and verified.
+**This is very much a work in progress.** These are earlier development captures; the latest preview prefers native Dreamcast presentation when disc assets are available. Menus, visuals, and gameplay continue to change as more of the original releases are reproduced and verified.
 
 > **Unofficial fan project.** This project has no affiliation with SEGA. The artwork shown in the screenshots, along with the original games’ music, stages and marks, belongs to the respective rights holders. Use your own lawfully obtained game files to generate the assets required to play. See [asset handling and release notes](docs/distribution.md).
 
-The project brings together the strongest parts of the Dreamcast, Game Boy Advance, iOS and Android releases in a portable C++ and SDL2 implementation. The current build pairs the iPad layout with the Dreamcast title logo and CD music when those assets are available. Each [asset and rule source](docs/provenance.md) is documented separately.
+The project brings together the strongest parts of the Dreamcast, Game Boy Advance, iOS and Android releases in a portable C++ and SDL2 implementation. The current build prefers Dreamcast models and disc UI where implemented, with version-specific presentation and content still being completed. Each [asset and rule source](docs/provenance.md) is documented separately.
 
 [Build and play](#build-and-setup-windows) · [Original files needed by mode](#which-original-files-do-i-need) · [Status and plan](#status-and-plan) · [Verification results](docs/verification.md)
 

@@ -41,8 +41,17 @@ Ghidra source is `analysis/decomp/dc_1st/1ST_READ.BIN.c`; several callbacks were
 
 ## Release verification
 
-- Windows archive prepared as `local/preview-release/packages/ChuChuRocketReNyastered-v2026.11.21-preview.1-windows-x64.zip` with a static MSVC C/C++ runtime. Fresh build directory, pinned local SDL/stb dependencies; no compilation outputs through the D: junction. Archive SHA256: `00a4e5e26010dd16870119309b074238f56e25aae47f0608656ea6d62212b0d2`.
+- Windows archive prepared as `local/preview-release/packages/ChuChuRocketReNyastered-v2026.11.21-preview.1-windows-x64.zip` with a static MSVC C/C++ runtime. Fresh build directory, pinned local SDL/stb dependencies; no compilation outputs through the D: junction. Archive SHA256: `5a4dbc29eb901e681e5eab03f0fa0ad5f9c9db4774862f8ff7bc232e6e9dd8c1`.
 - Ran the archive's `tools/prepare.ps1` against only `local/dc_ref/disc` into `local/preview-release/fresh-disc`, using an installed Python/Pillow runtime. Completed with Puzzle, Battle and Stage Challenge playable; no mobile input or BIOS. The Python-download path, full setup.cmd/RecompLauncher UI and other image formats were not tested by this run.
 - Final archive executable passed STARTUP, MENU, STAGES, DC_DEMO tick 1772, CHALLENGE_SELECT and Challenge 0 headless captures. Natural Puzzle 01 clear, Next to 02, and Stage Select with a saved check mark were captured and visually inspected in smoke-review.png. Fresh-disc Battle frame mean error 5.48125; the older-cache comparison was 5.50016. Screenshot verification is not an audio pass.
 - Archive inspection found no .bin/.cue/.gdi/.chd/.wav/.ogg/.png/.state/.ram entries. It contains only the program, setup sources, launcher manifest, README, licenses and openly licensed fonts. Packaged executable SHA256 equals the final clean-build executable.
-- Release notes: `docs/releases/v2026.11.21-preview.1.md`. The GitHub publication and final repository state will be recorded below after completion.
+- Release notes: `docs/releases/v2026.11.21-preview.1.md`. Publication and final repository state are recorded below.
+
+
+## Published preview and stopping point
+
+Published [v2026.11.21-preview.1](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/releases/tag/v2026.11.21-preview.1) as a prerelease. All four platform archives and SHA256SUMS.txt are uploaded. The release API reports draft=false and prerelease=true; GitHub asset digests match the final local archives. Their README was corrected to explain disc-only setup; native archive binaries were preserved from CI, and the Windows executable still matches the clean-build hash.
+
+Source commit/tag: a20f0e85f5bbd6ce81a9535b50742e0d1fdbb323 / v2026.11.21-preview.1. Both the [main build](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/actions/runs/44481758711) and [tag build](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/actions/runs/44481804388) completed successfully. Tag jobs built/tested/packaged Linux x64, macOS arm64 and macOS x64; macOS architecture checks passed. Windows was built/tested locally with a static runtime (dumpbin shows Windows system DLLs only).
+
+The final follow-up commit contains this publication record and the corrected README, not further gameplay changes. Existing user changes to game/tests/determinism_test.cpp and .vscode/ remain uncommitted. The requested release-and-handoff task is complete after that commit is pushed. Stop here; begin the rocket/audio/remaining-screen work only when the user resumes it in a new conversation.
