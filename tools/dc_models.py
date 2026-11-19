@@ -25,7 +25,7 @@ def parse_vlist(d, o):
             p = o + 8 + i * stride
             pos = struct.unpack_from('<3f', d, p)
             nrm = None
-            if stride in (24, 28) and t in (35, 40, 41, 42): nrm = struct.unpack_from('<3f', d, p + 12)
+            if stride in (24, 28) and t in (35, 40, 41, 42, 44): nrm = struct.unpack_from('<3f', d, p + 12)
             elif stride == 32 and t in (34, ): nrm = struct.unpack_from('<3f', d, p + 16)
             if any(abs(c) > 5000 or c != c for c in pos): return None
             verts[idx0 + i] = (pos, nrm)

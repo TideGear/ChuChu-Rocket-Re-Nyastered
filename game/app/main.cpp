@@ -1176,20 +1176,22 @@ struct App {
             size_t i = object.index;
             if (object.ghost) {
                 const auto& ghost = sim.effects[i];
+                if (headless && getenv("CCR_ENT_TRACE"))
+                    printf("ghost %zu age %d world %.2f %.2f angle %04x image %d flags %d scale %.3f\n", i, ghost.age, ghost.x / kCell * 15.0f, ghost.z / kCell * 15.0f, ghost.angle & 0xffff, ghost.image(), ghost.flags(), ghost.scale());
                 if (dcProjection && useModels3d()) if (const Model3D* ghostModel = models3d.find("ghost")) {
                     // Dreamcast ghost task (draw 0x8c0192e0, update 0x8c0191d4): the animated model 0x8c097e44 with motion 0x8c0988a0 at frame age & 7, height age * 0.17675, scale 1 until
                     // age / 48 exceeds 0.8 and then (1 - age / 48) * 5, yaw -angle, the usual character tilt.
                     static const float ghostLight[3] = {0.00913053f, 0.79143601f, 0.11638579f};
                     const float lifeFraction = ghost.age / 48.0f;
                     const float ghostScale = lifeFraction > 0.8f ? (1.0f - lifeFraction) * 5.0f : 1.0f;
-                    const float ghostTurn = static_cast<float>(ghost.angle & 0xffff) * (360.0f / 65536.0f);
-                    models3d.drawDcCharacter(ren, *ghostModel, {x, z}, {GW / 2.0f, GH / 2.0f}, field.cell / 15.0f, -ghostTurn, 3.0f, ghostLight, ghost.age & 7, 0.0f, 1, 0u, nullptr, 1.0f,
+                    static const float ghostYawFit = getenv("CCR_GHOST_YAW") ? static_cast<float>(atof(getenv("CCR_GHOST_YAW"))) : 0.0f;   // headless comparison only
+                    static const float ghostSign = getenv("CCR_GHOST_SIGN") ? static_cast<float>(atof(getenv("CCR_GHOST_SIGN"))) : 1.0f;
+                    const float ghostTurn = ghostSign * static_cast<float>(ghost.angle & 0xffff) * (360.0f / 65536.0f) + ghostYawFit;
+                    models3d.drawDcCharacter(ren, *ghostModel, {x, z}, {GW / 2.0f, GH / 2.0f}, field.cell / 15.0f, -ghostTurn, 3.0f, ghostLight, (getenv("CCR_GHOST_FRAME") ? atoi(getenv("CCR_GHOST_FRAME")) : ghost.age) & 7, 0.0f, 1, 0u, nullptr, 1.0f,
                                              ghost.age * 0.17675f, ghostScale);
                     continue;
                 }
                 drawImage(ghost.image(), ghost.age & 7, x, z, ghost.flags(), ghost.scale() * field.scale(), 255);
-                if (headless && getenv("CCR_ENT_TRACE"))
-                    printf("ghost %zu age %d world %.2f %.2f image %d flags %d scale %.3f\n", i, ghost.age, ghost.x / kCell * 15.0f, ghost.z / kCell * 15.0f, ghost.image(), ghost.flags(), ghost.scale());
                 if (headless && getenv("CCR_MOUSE_GHOST_LIVE_TRACE"))
                     printf("mouse ghost %d %.3f %.3f\n", ghost.age, x, z);
                 continue;

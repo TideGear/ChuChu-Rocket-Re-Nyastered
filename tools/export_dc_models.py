@@ -105,7 +105,7 @@ class Pack:
                 if not normal and not fl & 1: v = (v[0] + pos[i][0], v[1] + pos[i][1], v[2] + pos[i][2])
                 i = n['parent']
             return v
-        buf = {}; cache = {}; tris = []
+        buf = {}; blend = {}; cache = {}; tris = []
         def draw(strips):
             for strip, rev, tex, mat in strips:
                 for q in range(len(strip) - 2):
@@ -117,9 +117,24 @@ class Pack:
             if n['mp'] == 0 or n['fl'] & 8: continue
             va, pa = struct.unpack_from('<II', d, n['mp'] - BASE)
             if va:
-                for k, (p, nr) in M.parse_vlist(d, va - BASE).items():
-                    w = world(i, p); nw = world(i, nr if nr else (0.0, 1.0, 0.0), True); l = math.sqrt(nw[0] ** 2 + nw[1] ** 2 + nw[2] ** 2) or 1.0
-                    buf[k] = (tuple(w), (nw[0] / l, nw[1] / l, nw[2] / l))
+                # Vertex chunks: type 41 (position, normal) assign their slots; type 44 (position, normal, Ninja flags) are weighted contributions: slot = chunk start + (flags & 0xffff),
+                # weight = (flags >> 16) / 255, and the contributions of the nodes that share a slot add up to one (checked on the ghost's tail and body chunks).
+                o = va - BASE
+                while d[o] != 0xff:
+                    t = d[o]; size = struct.unpack_from('<H', d, o + 2)[0]; idx0, cnt = struct.unpack_from('<HH', d, o + 4); stride = (size - 1) * 4 // cnt
+                    for k in range(cnt):
+                        q = o + 8 + k * stride; p = struct.unpack_from('<3f', d, q); nr = struct.unpack_from('<3f', d, q + 12) if stride >= 24 else (0.0, 1.0, 0.0)
+                        w = world(i, p); nw = world(i, nr, True)
+                        if t == 44:
+                            fl = struct.unpack_from('<I', d, q + 24)[0]; slot = idx0 + (fl & 0xffff); wt = (fl >> 16) / 255.0
+                            if slot in blend: bw, bp, bn = blend[slot]; blend[slot] = (bw + wt, [a + wt * b for a, b in zip(bp, w)], [a + wt * b for a, b in zip(bn, nw)])
+                            else: blend[slot] = (wt, [wt * c for c in w], [wt * c for c in nw])
+                        else:
+                            blend.pop(idx0 + k, None); buf[idx0 + k] = (tuple(w), tuple(c / (math.sqrt(sum(x * x for x in nw)) or 1.0) for c in nw))
+                    o += 4 + size * 4
+                for slot, (bw, bp, bn) in blend.items():
+                    l = math.sqrt(sum(x * x for x in bn)) or 1.0
+                    buf[slot] = (tuple(c / (bw or 1.0) for c in bp), tuple(c / l for c in bn))   # divide by the summed weight so a slot that has not collected every share yet is still a point
             if pa:
                 kind, idx = d[pa - BASE], d[pa - BASE + 1]
                 strips = M.parse_plist(d, pa - BASE if kind != 5 else pa - BASE + 2, 0xffff) if kind != 5 else None
