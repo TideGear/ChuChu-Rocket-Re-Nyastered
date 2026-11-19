@@ -15,7 +15,9 @@ from aica_pcm import SampleStream, SampledVoiceBank, sampled_channel
 from dc_aica_state import inspect
 
 
-def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False, fresh_registers=False):
+def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False, fresh_registers=False, monitor_reads=None, monitor_queries=None):
+    if (monitor_reads is None) != (monitor_queries is None):
+        raise ValueError('Provide both monitor queries and results')
     if fresh_registers and not key_bank:
         raise ValueError('Fresh register setup requires the key bank')
     report = inspect(state, mlt)
@@ -66,20 +68,48 @@ def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False, fre
         events.append(event)
     if not events:
         raise ValueError('A write fixture must exercise register changes')
+    timeline = [(at, 0, channel, offset, size, value) for at, channel, offset, size, value in events]
+    read_count = loop_reads = 0
+    if monitor_reads is not None:
+        if bank is None or monitor_queries is None:
+            raise ValueError('Monitor comparison requires a voice bank and its query schedule')
+        queries = [tuple(int(x, 16 if i in (1, 2) else 10) for i, x in enumerate(row.split(',')))
+                   for row in monitor_queries.read_text().splitlines()]
+        previous = -1
+        for row in monitor_reads.read_text().splitlines():
+            at, select, address, size, value = row.split(',')
+            at, select, address, size, value = int(at), int(select, 16), int(address, 16), int(size), int(value, 16)
+            if not 0 <= at < count or at < previous:
+                raise ValueError('Unordered/out-of-range monitor trace')
+            if read_count >= len(queries) or queries[read_count] != (at, select, address, size):
+                raise AssertionError('Monitor result does not match the requested read schedule')
+            previous = at
+            timeline.append((at, 1, select, address, size, value))
+            read_count += 1
+        if not read_count or read_count != len(queries):
+            raise ValueError('Monitor trace is empty or incomplete')
+    timeline.sort(key=lambda row: (row[0], row[1]))
     expected = []
     position = 0
-    for at, channel, offset, size, value in events + [(count, None, None, None, None)]:
+    for at, kind, channel, offset, size, value in timeline + [(count, 2, None, None, None, None)]:
         if bank is not None:
             expected.extend(sample for pair in bank.render(at - position, dsp_disabled_fallback=dsp_disabled) for sample in pair)
         else:
             blocks = [model.render_stereo(at - position, dsp_disabled_fallback=dsp_disabled) for model in models.values()]
             for pairs in zip(*blocks):
                 expected.extend(max(-32768, min(32767, sum(pair[side] for pair in pairs))) for side in (0, 1))
-        if channel is not None:
+        if kind == 0:
             if bank is not None:
                 bank.write_arm(channel * 128 + offset, size, value)
             else:
                 models[channel].write_controller(offset, size, value)
+        elif kind == 1:
+            bank.write_arm(0x280d, 1, channel)
+            observed = bank.read_arm(offset, size)
+            if observed != value:
+                raise AssertionError(('Monitor read', at, hex(channel), hex(offset), size, hex(observed), hex(value)))
+            loop_reads += bool((offset == 0x2810 and size != 1 and value & 0x8000) or
+                               (offset == 0x2811 and value & 0x80))
         position = at
     if not any(expected):
         raise AssertionError('Silent write fixture')
@@ -87,7 +117,10 @@ def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False, fre
     if different or len(actual) != len(expected):
         first = [(i // 2, i % 2, a, b) for i, (a, b) in enumerate(zip(actual, expected)) if a != b][:12]
         raise AssertionError((different, 'different samples', 'peak error', max(abs(a - b) for a, b in zip(actual, expected)), first))
-    print(dict(stereo_pairs=count, timed_writes=len(events), differing_samples=0))
+    if monitor_reads is not None and not loop_reads:
+        raise AssertionError('Monitor trace never exercises a set loop latch')
+    print(dict(stereo_pairs=count, timed_writes=len(events), differing_samples=0,
+               monitor_reads=read_count, set_loop_reads=loop_reads))
 
 
 if __name__ == '__main__':
@@ -99,5 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('--dsp-disabled', action='store_true', help='reference core has DSP disabled: include its zero-direct-output send fallback')
     parser.add_argument('--key-bank', action='store_true', help='consume control writes with the global 64-channel KYONEX scan')
     parser.add_argument('--fresh-registers', action='store_true', help='leave voices disabled until the write schedule starts them; do not force core KEY_ON')
+    parser.add_argument('--monitor-reads', type=Path, help='compare original timed monitor results, including repeated latch reads')
+    parser.add_argument('--monitor-queries', type=Path, help='the matching complete monitor query schedule')
     args = parser.parse_args()
-    verify(args.state.read_bytes(), args.mlt.read_bytes(), args.schedule, args.wav, dsp_disabled=args.dsp_disabled, key_bank=args.key_bank, fresh_registers=args.fresh_registers)
+    verify(args.state.read_bytes(), args.mlt.read_bytes(), args.schedule, args.wav, dsp_disabled=args.dsp_disabled, key_bank=args.key_bank, fresh_registers=args.fresh_registers, monitor_reads=args.monitor_reads, monitor_queries=args.monitor_queries)

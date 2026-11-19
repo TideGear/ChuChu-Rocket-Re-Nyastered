@@ -452,12 +452,49 @@ class SampledVoiceBank:
     def write_arm(self, address, size, value):
         """Consume an ARM channel-register write (offset from 0x800000).
 
-        arm_mem.cpp::writeReg<u32> writes only its low halfword. Common/DSP
-        registers and unaligned accesses remain separate unsupported routes.
+        arm_mem.cpp::writeReg<u32> writes only its low halfword. The monitor
+        selector byte is supported; other common/DSP and unaligned accesses
+        remain separate unsupported routes.
         """
-        if size not in (1, 2, 4) or not 0 <= address < 0x2000 or address % size or not 0 <= value < 1 << (size * 8):
+        if size not in (1, 2, 4) or address % size or not 0 <= value < 1 << (size * 8):
             raise ValueError('Unsupported ARM channel-register write')
+        if address == 0x280d and size == 1:
+            self.registers[address] = value
+            return
+        if not 0 <= address < 0x2000:
+            raise ValueError('Unsupported ARM common/DSP register write')
         self.write(address // 128, address % 128, min(size, 2), value & (0xff if size == 1 else 0xffff))
+
+    def read_arm(self, address, size):
+        """Read sampled monitor status/position, including the loop latch.
+
+        ARM word reads zero-extend a halfword. AFSEL's FEG route is not
+        implemented in the pinned reference core and remains unsupported.
+        """
+        if size not in (1, 2, 4) or address % min(size, 2) or address not in (0x2810, 0x2811, 0x2814, 0x2815):
+            raise ValueError('Unsupported ARM monitor read')
+        selected = self.registers[0x280d]
+        if selected & 0x40:
+            raise ValueError('FEG monitor is not supported by the reference core')
+        index = selected & 63
+        if index not in self.models:
+            raise ValueError('Monitor read requires a modeled voice')
+        model = self.models[index]
+        state = model.state
+        if address in (0x2810, 0x2811):
+            attenuation = state['amplitude_value'] >> 16
+            level = 0x1fff if attenuation > 0x3bf else attenuation & 0x1fff
+            status = level | (state['amplitude_state'] & 3) << 13 | bool(state['looped']) << 15
+            struct.pack_into('<H', self.registers, 0x2810, status)
+            if size != 1 or address == 0x2811:
+                state['looped'] = 0
+        else:
+            position = state['position']
+            start, end = model.channel['loop_start'], model.channel['loop_end']
+            if end > start and end > 3:
+                position = min(position, end - 3)
+            struct.pack_into('<H', self.registers, 0x2814, position & 0xffff)
+        return int.from_bytes(self.registers[address:address + min(size, 2)], 'little')
 
     def write(self, index, offset, size, value):
         if not 0 <= index < 64 or size not in (1, 2) or not 0 <= value < 1 << (size * 8):
@@ -497,6 +534,8 @@ class SampledVoiceBank:
     def render(self, count, *, dsp_disabled_fallback=False):
         if count < 0:
             raise ValueError('Negative sample count')
+        if not count:
+            return []
         blocks = []
         for index, model in self.models.items():
             before = model.state['amplitude_state']

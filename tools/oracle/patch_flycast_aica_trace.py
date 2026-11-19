@@ -13,6 +13,10 @@ FLYCAST_AICA_WRITES=<csv> is a synthetic fixture: ordered rows contain sample
 It applies original byte/halfword register handlers before that output sample.
 Word writes call the original ARM handler, which truncates to a halfword.
 Leave it unset for ordinary tracing and identity checks.
+FLYCAST_AICA_READS=<csv> plus FLYCAST_AICA_READS_OUT=<csv> enables synthetic
+monitor queries: sample(decimal),selector(hex),address(hex),width(decimal).
+Results append the hexadecimal value. These reads consume loop latches;
+leave both unset during ordinary original-loop observation.
 No emulator sources are bundled.
 """
 import argparse
@@ -157,6 +161,63 @@ void ccr_reset_writes()
 }
 '''
 
+READS = r'''
+// Synthetic monitor reads. Each read changes the selected/latch state.
+namespace {
+std::FILE* ccr_read_file = nullptr;
+std::FILE* ccr_read_output = nullptr;
+bool ccr_read_initialized = false, ccr_read_pending = false;
+unsigned long long ccr_read_sample = 0, ccr_read_next = 0;
+unsigned ccr_read_select = 0, ccr_read_address = 0, ccr_read_size = 0;
+void ccr_next_read()
+{
+    int n = std::fscanf(ccr_read_file, "%llu,%x,%x,%u", &ccr_read_next,
+                       &ccr_read_select, &ccr_read_address, &ccr_read_size);
+    if (n == EOF) { ccr_read_pending = false; return; }
+    if (n != 4 || ccr_read_next < ccr_read_sample || ccr_read_select > 255 ||
+        (ccr_read_size != 1 && ccr_read_size != 2 && ccr_read_size != 4) ||
+        (ccr_read_address != 0x2810 && ccr_read_address != 0x2811 &&
+         ccr_read_address != 0x2814 && ccr_read_address != 0x2815) ||
+        (ccr_read_size != 1 && (ccr_read_address & 1))) std::abort();
+    ccr_read_pending = true;
+}
+void ccr_timed_reads()
+{
+    if (!ccr_read_initialized) {
+        ccr_read_initialized = true;
+        if (const char* path = std::getenv("FLYCAST_AICA_READS")) {
+            const char* output = std::getenv("FLYCAST_AICA_READS_OUT");
+            if (!output) std::abort();
+            ccr_read_file = std::fopen(path, "r");
+            ccr_read_output = std::fopen(output, "w");
+            if (!ccr_read_file || !ccr_read_output) std::abort();
+            ccr_next_read();
+        }
+    }
+    while (ccr_read_pending && ccr_read_next == ccr_read_sample) {
+        aica::arm::writeReg<u8>(0x280d, (u8)ccr_read_select);
+        u32 value;
+        if (ccr_read_size == 1) value = aica::arm::readReg<u8>(ccr_read_address);
+        else if (ccr_read_size == 2) value = aica::arm::readReg<u16>(ccr_read_address);
+        else value = aica::arm::readReg<u32>(ccr_read_address);
+        std::fprintf(ccr_read_output, "%llu,%x,%x,%u,%x\n", ccr_read_sample,
+            ccr_read_select, ccr_read_address, ccr_read_size, value);
+        std::fflush(ccr_read_output);
+        ccr_next_read();
+    }
+    ++ccr_read_sample;
+}
+void ccr_reset_reads()
+{
+    if (ccr_read_file) std::fclose(ccr_read_file);
+    if (ccr_read_output) std::fclose(ccr_read_output);
+    ccr_read_file = ccr_read_output = nullptr;
+    ccr_read_initialized = ccr_read_pending = false;
+    ccr_read_sample = 0;
+}
+}
+'''
+
 
 def patch(root, msvc=False, glext=None):
     path = root / 'core/hw/aica/sgc_if.cpp'
@@ -171,9 +232,9 @@ def patch(root, msvc=False, glext=None):
     text = raw.decode('utf-8')
     text = text.replace('namespace aica::sgc\n{',
                         '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n#include "hw/arm7/arm_mem.h"\n\nnamespace aica::sgc\n{\n' + TRACE + TICKS, 1)
-    text = text.replace('void AICA_Sample()\n{', KEYON + WRITES + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_timed_writes();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
+    text = text.replace('void AICA_Sample()\n{', KEYON + WRITES + READS + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_timed_writes();\n\tccr_timed_reads();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
     text = text.replace('void deserialize(Deserializer& deser)\n{',
-                        'void deserialize(Deserializer& deser)\n{\n\tccr_reset_writes();\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)
+                        'void deserialize(Deserializer& deser)\n{\n\tccr_reset_reads();\n\tccr_reset_writes();\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)
     if text.count('ccr_trace_keys();') != 1 or text.count('ccr_trace_ticks();') != 1 or text.count('ccr_trace_sample = 0;') != 2:
         raise ValueError('Trace anchors did not resolve uniquely')
     path.write_bytes(text.encode('utf-8'))
