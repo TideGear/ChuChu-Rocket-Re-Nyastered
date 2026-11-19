@@ -288,6 +288,29 @@ def export_dc_options(prs_png, out):
     for k in range(4): bg.alpha_composite(Image.open(paths[k + 1]).convert('RGBA').transpose(T), (512, 128 * k))
     export_atlas(out, 'dc_options', [bg, Image.open(paths[5]).convert('RGBA'), Image.open(paths[6]).convert('RGBA')])
 
+def export_dc_help_pages(prs_png, out):
+    """Dreamcast Help pages from tools/data/dc_help_layout.json (made by tools/oracle/dc_export_layout.py from Flycast frames): every distinct disc piece goes in one atlas
+    (dc_help_pages, stored upright) and dc_help_pages.bin lists, per page, quads (frame, x, y, w, h) in draw order: u32 pages, then per page u32 quads and 5 x f32 per quad."""
+    import json
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'dc_help_layout.json')
+    if not os.path.isfile(path): return
+    pages = json.load(open(path, encoding='utf-8'))
+    pieces = {}
+    for quads in pages.values():
+        for q in quads: pieces.setdefault((q['png'], q['transposed']), len(pieces))
+    tiles = []
+    for (name, tr), _ in sorted(pieces.items(), key=lambda kv: kv[1]):
+        f = os.path.join(prs_png, name + '.png') if os.path.isfile(os.path.join(prs_png, name + '.png')) else os.path.join(os.path.dirname(prs_png), 'png', name + '.png')
+        if not os.path.isfile(f): return
+        im = Image.open(f).convert('RGBA')
+        tiles.append(im.transpose(Image.Transpose.TRANSPOSE) if tr else im)
+    export_atlas(out, 'dc_help_pages', tiles)
+    with open(os.path.join(out, 'dc_help_pages.bin'), 'wb') as f:
+        f.write(struct.pack('<I', len(pages)))
+        for name in sorted(pages):
+            f.write(struct.pack('<I', len(pages[name])))
+            for q in pages[name]: f.write(struct.pack('<5f', pieces[(q['png'], q['transposed'])], q['x'], q['y'], q['w'], q['h']))
+
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
     export_mode_select(prs_png, png, out)
@@ -389,6 +412,7 @@ def main(prs_png, out, png=None):
     export_dc_battle_setup(prs_png, out)
     export_dc_help(prs_png, out)
     export_dc_options(prs_png, out)
+    export_dc_help_pages(prs_png, out)
     export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)

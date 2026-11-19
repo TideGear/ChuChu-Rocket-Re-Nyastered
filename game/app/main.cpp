@@ -252,7 +252,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -330,6 +330,7 @@ struct App {
         loadSheet(ret + "dc_startup", dcStartup);
         loadSheet(ret + "dc_battle_setup", dcBattleSetup);
         loadSheet(ret + "dc_help", dcHelp);
+        loadSheet(ret + "dc_help_pages", dcHelpPages);
         loadSheet(ret + "dc_options", dcOptions);
         loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
         loadSheet(ret + "dc_bios_ansi", dcBiosAnsi);   // optional: BIOS ANSI glyphs for the hint text
@@ -2230,27 +2231,50 @@ struct HdMenuMode : Screen {
 // Dreamcast Help Menu (Flycast frame 2000, mode 6): title bar, prompt, nine entries and the controls strip from disc art; the red arrow is a triangle at the selected entry.
 // The help pages behind each entry (HELP1-3 textures) are not built yet: Enter returns to Mode Select.
 struct DcHelpMode : Screen {
-    int sel = 0; bool leave = false;
+    struct Quad { int frame; float x, y, w, h; };
+    int sel = 0, page = -1; bool leave = false; std::vector<std::vector<Quad>> pages;   // pages: The Basics 1..6 (dc_help_pages.bin, layouts read from Flycast frames)
     static bool available(App& a) { return a.dcHelp.tex && a.dcHelp.fr.size() == 4; }
-    void act(App& a, int what) { if (what == 0) { a.playSfx(1); leave = true; } else if (what == 2) leave = true; }
+    void loadPages(App& a) {
+        if (!pages.empty() || !a.dcHelpPages.tex) return;
+        FILE* f = fopen((a.root + "/ret_all/dc_help_pages.bin").c_str(), "rb"); if (!f) return;
+        uint32_t n = 0; if (fread(&n, 4, 1, f) == 1) for (uint32_t i = 0; i < n; ++i) {
+            uint32_t c = 0; if (fread(&c, 4, 1, f) != 1) break; std::vector<Quad> q;
+            for (uint32_t k = 0; k < c; ++k) { float v[5]; if (fread(v, 4, 5, f) != 5) break; q.push_back({(int)v[0], v[1], v[2], v[3], v[4]}); }
+            pages.push_back(q); }
+        fclose(f);
+    }
+    void act(App& a, int what) {   // 0 A/Enter, 2 B/Esc, 3 X (Help Menu)
+        if (page >= 0) {
+            if (what == 0) { a.playSfx(1); if (++page >= (int)pages.size()) page = -1; }
+            else if (what == 2) { a.playSfx(1); if (--page < 0) page = -1; }
+            else if (what == 3) { a.playSfx(1); page = -1; }
+            return; }
+        if (what == 0 && sel == 0) { loadPages(a); if (!pages.empty()) { a.playSfx(1); page = 0; return; } }
+        if (what == 0) a.playSfx(1);
+        if (what == 0 || what == 2) leave = true;   // the pages of the other entries are not built yet: back to Mode Select
+    }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             switch (e.key.keysym.sym) {
-            case SDLK_UP: case SDLK_w: sel = (sel + 8) % 9; a.playSfx(0); break;
-            case SDLK_DOWN: case SDLK_s: sel = (sel + 1) % 9; a.playSfx(0); break;
+            case SDLK_UP: case SDLK_w: if (page < 0) { sel = (sel + 8) % 9; a.playSfx(0); } break;
+            case SDLK_DOWN: case SDLK_s: if (page < 0) { sel = (sel + 1) % 9; a.playSfx(0); } break;
             case SDLK_RETURN: case SDLK_SPACE: act(a, 0); break;
-            case SDLK_ESCAPE: act(a, 2); break; default: break; }
+            case SDLK_ESCAPE: act(a, 2); break; case SDLK_x: act(a, 3); break; default: break; }
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
             switch (e.cbutton.button) {
-            case SDL_CONTROLLER_BUTTON_DPAD_UP: sel = (sel + 8) % 9; a.playSfx(0); break;
-            case SDL_CONTROLLER_BUTTON_DPAD_DOWN: sel = (sel + 1) % 9; a.playSfx(0); break;
-            case SDL_CONTROLLER_BUTTON_A: act(a, 0); break; case SDL_CONTROLLER_BUTTON_B: act(a, 2); break; default: break; }
+            case SDL_CONTROLLER_BUTTON_DPAD_UP: if (page < 0) { sel = (sel + 8) % 9; a.playSfx(0); } break;
+            case SDL_CONTROLLER_BUTTON_DPAD_DOWN: if (page < 0) { sel = (sel + 1) % 9; a.playSfx(0); } break;
+            case SDL_CONTROLLER_BUTTON_A: act(a, 0); break; case SDL_CONTROLLER_BUTTON_B: act(a, 2); break; case SDL_CONTROLLER_BUTTON_X: act(a, 3); break; default: break; }
         }
     }
     const char* next() override { return std::exchange(leave, false) ? "MENU" : nullptr; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_RenderClear(a.ren);
+        if (page >= 0 && page < (int)pages.size()) {
+            const Sheet& pg = a.dcHelpPages; SDL_Rect clip{0, 0, 640, 480}; SDL_RenderSetClipRect(a.ren, &clip);
+            for (const Quad& q : pages[page]) { if (q.frame < 0 || q.frame >= (int)pg.fr.size()) continue; const SDL_Rect& r = pg.fr[q.frame]; const SDL_Rect d{(int)std::lround(q.x), (int)std::lround(q.y), r.w, r.h}; SDL_RenderCopy(a.ren, pg.tex, &r, &d); }
+            return; }
         const Sheet& sh = a.dcHelp;
         auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
         put(0, 16, 48); put(1, 104, 88); put(2, 280, 160); put(3, 16, 320);
