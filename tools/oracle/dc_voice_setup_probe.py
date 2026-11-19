@@ -1,6 +1,7 @@
-"""Compare note-on sample/envelope setup to original ARM blocks.
+"""Compare native note-on field setup to original ARM instructions.
 
-Executes 0x1058..0x10ac and 0x10b0..0x1184, not complete voice allocation.
+Executes sample/envelope, filter and mix setup blocks. Full note-on/voice
+allocation comparisons are in dc_note_on_live_alloc_probe.py.
 """
 import argparse
 import struct
@@ -11,7 +12,8 @@ from unicorn.arm_const import UC_ARM_REG_R2, UC_ARM_REG_R5, UC_ARM_REG_R8, UC_AR
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dc_sound_pitch import PitchTable
-from dc_sound_controls import envelope_words, sample_words, filter_words
+from dc_sound_controls import envelope_words, sample_words, filter_words, MixTables
+from arm7_bus import Arm7Bus
 
 
 def verify(driver):
@@ -115,6 +117,49 @@ def verify_filters(driver):
     return 8192
 
 
+def verify_mix(driver):
+    import random
+    tables = MixTables(driver)
+    uc = Uc(UC_ARCH_ARM, UC_MODE_ARM)
+    bus = Arm7Bus(uc)
+    uc.mem_map(0, 0x200000)
+    uc.mem_map(0x210000, 0x1000)
+    uc.mem_map(0x800000, 0x10000)
+    uc.mem_write(0, driver[32:])
+    uc.mem_write(0x16bc, struct.pack('<I', 0x210300))
+    uc.mem_write(0x16d4, struct.pack('<I', 0x2a))
+    from unicorn.arm_const import UC_ARM_REG_R6
+    for reg, value in ((UC_ARM_REG_R2, 0x210000), (UC_ARM_REG_R5, 0x210100),
+                       (UC_ARM_REG_R6, 0x210200), (UC_ARM_REG_R8, 0x800000)):
+        uc.reg_write(reg, value)
+    rng = random.Random(0x11f01588)
+    for case in range(8192):
+        split, control, group = bytearray(48), bytearray(128), bytearray(32)
+        split[0x10:0x16] = rng.randbytes(6)
+        control[0x36], control[0x46] = case & 255, (case * 13) & 255
+        control[10], control[11] = (case * 17) & 127, (case * 31) & 127
+        struct.pack_into('<I', control, 0x18, 0x210400)
+        for at, value in ((4, case >> 5), (6, case * 29), (9, case * 37), (11, case * 41)):
+            group[at] = value & 255
+        curve = rng.randbytes(128)
+        velocity = case & 127
+        uc.mem_write(0x210000, bytes(split)); uc.mem_write(0x210100, bytes(control))
+        uc.mem_write(0x210300, bytes(group)); uc.mem_write(0x210400, curve)
+        uc.mem_write(0x16b0, bytes([velocity]))
+        for start, stop in ((0x11f0, 0x1258), (0x1468, 0x158c)):
+            uc.emu_start(start, stop, count=1000)
+            bus.flush()
+            if uc.reg_read(UC_ARM_REG_PC) != stop:
+                raise AssertionError('Mix setup did not finish')
+        dsp, direct, full_level = struct.unpack('<3I', uc.mem_read(0x800020, 12))
+        volume, pan = uc.mem_read(0x210208, 2)
+        actual = dsp, direct, full_level & ~63, volume, pan
+        expected = tables.words(split, control, group, curve, velocity)
+        if actual != expected or full_level & 63 != 0x2a:
+            raise AssertionError(('Mix setup', case, actual, expected, full_level))
+    return 8192
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('driver', type=Path)
@@ -122,3 +167,4 @@ if __name__ == '__main__':
     print(f'{verify(args.driver.read_bytes())} amplitude setup cases match original ARM')
     print(f'{verify_samples(args.driver.read_bytes())} sample setup cases match original ARM')
     print(f'{verify_filters(args.driver.read_bytes())} filter setup cases match original ARM')
+    print(f'{verify_mix(args.driver.read_bytes())} mix setup cases match original ARM')

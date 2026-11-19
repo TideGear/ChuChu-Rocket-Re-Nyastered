@@ -5,6 +5,8 @@ For each state, commands use every populated MIDI controller (bank pointer set)
 with several keys/velocities/priorities. The captured driver voice table and
 voice-count byte stay in place. Reports returns, which voice records changed,
 and whether the first changed record equals the Python allocator's first pick.
+For allocated notes, compare native filter/mix fields and all 18 prepared
+register words against the complete original note-on path.
 """
 import argparse, struct, sys
 from collections import Counter
@@ -17,10 +19,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from arm7_bus import Arm7Bus
 from dc_aica_state import inspect
 from dc_sound_voices import allocate_voice
-from dc_sound_controls import filter_words
+from dc_sound_controls import filter_words, MixTables, VoiceSetup
 
 
 def run(driver, mlt, states, saturate=False):
+    mix_tables = MixTables(driver)
+    setup = VoiceSetup(driver)
     uc = Uc(UC_ARCH_ARM, UC_MODE_ARM)
     bus = Arm7Bus(uc)
     uc.mem_map(0, 0x200000)
@@ -94,6 +98,39 @@ def run(driver, mlt, states, saturate=False):
                                     raise AssertionError(('Filter setup', path.name, group, chan, note, vel, voice_index,
                                                           actual_filter, expected_filter))
                                 stats['filter_words_match'] += 1
+                                split_data = bytes(uc.mem_read(split, 48))
+                                controller_data = bytes(uc.mem_read(ctl, 128))
+                                curve_base = struct.unpack_from('<I', controller_data, 0x18)[0] + split_data[0x2a] * 128
+                                parameters = struct.unpack_from('<I', record, 0x18)[0]
+                                expected_mix = mix_tables.words(split_data, controller_data,
+                                    bytes(uc.mem_read(parameters, 32)), bytes(uc.mem_read(curve_base, 128)), vel)
+                                dsp, direct, level = struct.unpack('<3I', uc.mem_read(0x800000 + voice_index * 128 + 32, 12))
+                                actual_mix = dsp, direct, level & ~63, record[8], record[9]
+                                if actual_mix != expected_mix:
+                                    raise AssertionError(('Mix setup', path.name, group, chan, note, vel, voice_index,
+                                                          actual_mix, expected_mix))
+                                stats['mix_words_match'] += 1
+                                bank_address, program = struct.unpack_from('<2I', controller_data, 0x10)
+                                layer_data = None
+                                for layer_index in range(4):
+                                    relative = struct.unpack('<I', uc.mem_read(program + layer_index * 4, 4))[0]
+                                    if not relative:
+                                        continue
+                                    header = bytes(uc.mem_read(bank_address + relative, 16))
+                                    split_count, split_start = struct.unpack_from('<2I', header)
+                                    first_split = bank_address + split_start
+                                    if first_split <= split < first_split + (split_count & 127) * 48 and (split - first_split) % 48 == 0:
+                                        layer_data = header
+                                        break
+                                if layer_data is None:
+                                    raise AssertionError('Allocated split has no source program layer')
+                                expected_words = setup.words(split_data, layer_data, controller_data,
+                                    bytes(uc.mem_read(parameters, 32)), bytes(uc.mem_read(curve_base, 128)), bank_address, note, vel)
+                                actual_words = struct.unpack('<18I', uc.mem_read(0x800000 + voice_index * 128, 72))
+                                if actual_words != expected_words:
+                                    raise AssertionError(('Complete note-on setup', path.name, group, chan, note, vel, voice_index,
+                                                          actual_words, expected_words))
+                                stats['all_register_words_match'] += 1
                             first = allocate_voice(records, prio, low)
                             idx = first.index(count)
                             stats['cases'] += 1

@@ -1,5 +1,77 @@
 """Controller calculations from the tested MANATEE ARM driver, not synthesis."""
 import struct
+from dc_sound_pitch import PitchTable
+
+
+class MixTables:
+    """MANATEE 0x11f0..0x1254 and 0x1468..0x1588 routing/level setup."""
+    def __init__(self, driver):
+        PitchTable(driver)  # Reject unknown driver revisions/tables.
+        image = driver[32:]
+        pointers = struct.unpack_from('<4I', image, 0x1894)
+        self.send, self.attenuation, self.split_pan, self.pan = [
+            image[p:p + size] for p, size in zip(pointers, (64, 256, 32, 128))]
+
+    def words(self, split, controller, group, curve, velocity):
+        """Return words 8/9, word10 TL bits, retained volume/pan bytes.
+
+        Word10's separate filter fields must be ORed in by the caller.
+        curve is the selected split's 128-entry velocity curve; group is
+        the original global/group parameter record addressed at 0x16bc.
+        """
+        if len(split) < 0x2b or len(controller) < 0x47 or len(group) < 12 or len(curve) != 128 or not 0 <= velocity <= 127:
+            raise ValueError('Incomplete original mix fields or invalid velocity')
+        if controller[10] > 127 or controller[11] > 127:
+            raise ValueError('MIDI volume and pan must be seven-bit controller values')
+
+        def send(raw, global_byte):
+            level = min(63, max(0, raw + (global_byte >> 1) - 64))
+            return self.send[level]
+
+        raw = controller[0x36] or split[0x10]
+        bus = split[0x10] if controller[0x46] & 0xf0 else controller[0x46]
+        dsp = send((raw & 0xf0) >> 2, group[9]) << 4 | (bus & 15)
+        volume = (((curve[velocity] + 1) * (controller[10] + 1) * (256 - split[0x15]) - 1) >> 14) & 255
+        level = min(255, max(0, volume + group[4] * 2 - 256))
+        total_level = self.attenuation[level] << 8
+        pan = min(127, max(0, self.split_pan[split[0x12] & 31] + controller[11] - 64))
+        final_pan = min(127, max(0, pan + group[6] - 128))
+        packed = struct.unpack_from('<H', split, 0x12)[0]
+        direct = self.pan[final_pan] | send((packed >> 6) & 63, group[11]) << 8
+        return dsp, direct, total_level, volume, pan
+
+
+class VoiceSetup:
+    """Compose fresh note-on registers from original bank/controller fields.
+
+    Allocation, delayed triggering, reused-channel clocks and later controller
+    changes remain the caller's responsibility. No captured AICA runtime is used.
+    """
+    def __init__(self, driver):
+        self.pitch = PitchTable(driver)
+        self.mix = MixTables(driver)
+
+    def words(self, split, layer, controller, group, curve, bank_address, note, velocity):
+        if len(split) < 48 or len(layer) < 16 or len(controller) < 128 or len(group) < 20 or not 0 <= note <= 127 or not 1 <= velocity <= 127:
+            raise ValueError('Incomplete note-on source fields')
+        words = list(sample_words(split, bank_address))
+        words += list(envelope_words(struct.unpack_from('<I', split, 8)[0],
+            *(controller[at] for at in (0x37, 0x38, 0x39, 0x3b))))
+        bend = struct.unpack_from('<I', controller, 4)[0]
+        sensitivity = controller[3] & 127 if controller[3] & 128 else layer[13 if bend & 0xffff0000 else 12]
+        adjusted = ((bend * sensitivity) & 0xffffffff) >> 5 & 0xffff
+        adjusted += struct.unpack_from('<I', controller, 0x1c)[0]
+        adjusted += struct.unpack_from('<I', group, 0x10)[0] - 0x8000
+        words.append(self.pitch.word(note, split[0x26] & 127,
+            struct.unpack_from('<b', split, 0x27)[0], adjusted))
+        words.append(modulation_word(struct.unpack_from('<H', split, 14)[0], controller[2]) & 0x7fff)
+        dsp, direct, level, _, _ = self.mix.words(split, controller, group, curve, velocity)
+        words += [dsp, direct]
+        filters = filter_words(split, controller)
+        words += [filters[0] | level, *filters[1:]]
+        if not struct.unpack_from('<I', layer, 8)[0]:
+            words[0] |= 0xc000
+        return tuple(words)
 
 
 def sample_words(split, bank_address):

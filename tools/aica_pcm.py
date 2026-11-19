@@ -312,3 +312,21 @@ def direct_stereo(channel, sound_ram, count, key_off_samples=(), start=False):
     output = [tuple((sample * gains[min(255, ofs + a)]) >> 19 for a in attenuation)
               for sample, ofs in zip(signal, model.attenuation)]
     return output, model.state
+
+
+def direct_stereo_words(words, sound_ram, count, *, lfo_counter, lfo_phase, key_off_samples=()):
+    """Fresh native note from 18 prepared registers and an explicit LFO clock.
+
+    No captured stream, envelope, filter or ADPCM runtime is consumed.
+    DSP returns and command/sample scheduling are outside this function.
+    """
+    if len(words) != 18 or any(not isinstance(w, int) or not 0 <= w <= 0xffffffff for w in words):
+        raise ValueError('Expected 18 unsigned AICA register words')
+    control = words[0]
+    channel = dict(register_words=list(words), pcm_mode=(control >> 7) & 3,
+        sample_address=(control & 127) << 16 | words[1], loop=bool(control & 0x200),
+        loop_start=words[2], loop_end=words[3], fns=words[6] & 1023,
+        octave_raw=(words[6] >> 11) & 15, lfo_raw=words[7], pan_raw=words[9] & 31,
+        direct_level=(words[9] >> 8) & 15, total_level=words[10] >> 8,
+        runtime=dict(lfo_counter=lfo_counter, lfo_phase=lfo_phase))
+    return direct_stereo(channel, sound_ram, count, key_off_samples, start=True)
