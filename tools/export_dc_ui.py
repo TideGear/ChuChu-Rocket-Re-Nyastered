@@ -344,7 +344,18 @@ def export_dc_options(prs_png, out):
     bg = Image.new('RGBA', (640, 512))
     bg.alpha_composite(Image.open(paths[0]).convert('RGBA').transpose(T), (0, 0))
     for k in range(4): bg.alpha_composite(Image.open(paths[k + 1]).convert('RGBA').transpose(T), (512, 128 * k))
-    export_atlas(out, 'dc_options', [bg, Image.open(paths[5]).convert('RGBA'), Image.open(paths[6]).convert('RGBA')])
+    extra = ['OPTION_language', 'OPTION_allmode', 'OPTION_4pbattle', 'OPTION_record', 'OPTION_fkey', 'OPTION_newsousa1']
+    tiles = [bg, Image.open(paths[5]).convert('RGBA'), Image.open(paths[6]).convert('RGBA')]
+    tiles += [Image.open(os.path.join(prs_png, n + '.png')).convert('RGBA') for n in extra]
+    # Frame 9: the Language page's first row, 'nihongo' (three 24 x 24 kanji, white). The BIOS ROM draws them; this look-alike uses M PLUS Rounded 1c (OFL, tools/fonts).
+    from PIL import ImageDraw, ImageFont
+    kanji = Image.new('RGBA', (72, 24), (255, 255, 255, 0))
+    kp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts', 'MPLUSRounded1c-Regular.ttf')
+    if os.path.isfile(kp):
+        font = ImageFont.truetype(kp, 22)
+        for i, ch in enumerate('日本語'): ImageDraw.Draw(kanji).text((i * 24 + 1, 0), ch, font=font, fill=(255, 255, 255, 255))
+    tiles.append(kanji)
+    export_atlas(out, 'dc_options', tiles)
 
 def export_dc_help_pages(prs_png, out):
     """Dreamcast Help pages from tools/data/dc_help_layout.json (made by tools/oracle/dc_export_layout.py from Flycast frames): every distinct disc piece goes in one atlas

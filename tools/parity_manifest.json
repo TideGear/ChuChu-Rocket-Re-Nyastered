@@ -200,6 +200,39 @@
       }
     },
     {
+      "name": "options_language",
+      "ref": "local/dc_ref/options/p__02720.bmp",
+      "args": [
+        "OPTIONS"
+      ],
+      "env": {
+        "CCR_KEYS": "DDDE",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "100"
+      },
+      "elements": {
+        "title_plate": [
+          16,
+          88,
+          272,
+          152
+        ],
+        "button_bar": [
+          16,
+          404,
+          420,
+          450
+        ],
+        "list": [
+          16,
+          140,
+          624,
+          330
+        ]
+      },
+      "note": "look-alike text font without a BIOS"
+    },
+    {
       "name": "launch_age_{age}",
       "sweep": {
         "var": "age",

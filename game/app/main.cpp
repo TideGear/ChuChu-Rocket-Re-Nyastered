@@ -2374,19 +2374,30 @@ struct DcHelpMode : Screen {
 // each entry are not built yet: Enter returns to Mode Select.
 struct DcOptionsMode : Screen {
     int sel = 0; bool leave = false;
-    static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() == 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
+    int page = -1, langRow = 1;   // page: -1 = the menu, 3 = Language (Flycast Options frames 2250 and 3050); the other four pages are not built yet
+    // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
+    static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
+    static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
+    bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
+    void openRow(App& a) {
+        if (sel == 3 && hasLanguagePage(a)) {
+            page = 3; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) langRow = i; a.playSfx(1);
+        } else { a.playSfx(1); leave = true; }
+    }
     static constexpr int kRows[6] = {172, 204, 236, 268, 300, 364};
-    void move(App& a, int d) { sel = (sel + 6 + d) % 6; a.playSfx(0); }
+    void move(App& a, int d) { if (page == 3) langRow = (langRow + 5 + d) % 5; else sel = (sel + 6 + d) % 6; a.playSfx(0); }
+    void accept(App& a) { if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); } else openRow(a); }
+    void back(App& a) { if (page >= 0) { page = -1; a.playSfx(0); } else leave = true; }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             switch (e.key.keysym.sym) {
             case SDLK_UP: case SDLK_w: move(a, -1); break; case SDLK_DOWN: case SDLK_s: move(a, 1); break;
-            case SDLK_RETURN: case SDLK_SPACE: a.playSfx(1); leave = true; break;
-            case SDLK_ESCAPE: leave = true; break; default: break; }
+            case SDLK_RETURN: case SDLK_SPACE: accept(a); break;
+            case SDLK_ESCAPE: back(a); break; default: break; }
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
             switch (e.cbutton.button) {
             case SDL_CONTROLLER_BUTTON_DPAD_UP: move(a, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: move(a, 1); break;
-            case SDL_CONTROLLER_BUTTON_A: a.playSfx(1); leave = true; break; case SDL_CONTROLLER_BUTTON_B: leave = true; break; default: break; }
+            case SDL_CONTROLLER_BUTTON_A: accept(a); break; case SDL_CONTROLLER_BUTTON_B: back(a); break; default: break; }
         }
     }
     const char* next() override { return std::exchange(leave, false) ? "MENU" : nullptr; }
@@ -2396,7 +2407,21 @@ struct DcOptionsMode : Screen {
         const Sheet& sh = a.dcOptions;
         { const SDL_Rect& r = sh.fr[0]; const SDL_Rect src{r.x, r.y, 640, 480}, dst{0, 0, 640, 480}; SDL_RenderCopy(a.ren, sh.tex, &src, &dst); }
         auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
-        put(1, 16, 88); put(2, 16, 407);
+        put(page == 3 ? 3 : 1, 16, 88); put(2, 16, 407);
+        if (page == 3) {   // Language page (Flycast frame 3050): the list of five, the current language on an orange box, the red cursor arrow
+            auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
+            static const char* const names[5] = {nullptr, "English", "Deutsch", "Francais", "Espanol"};
+            int cur = 1; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) cur = i;
+            SDL_SetRenderDrawColor(a.ren, 246, 180, 0, 255); const SDL_Rect box{75, 149 + 32 * cur - 3, 106, 32}; SDL_RenderFillRect(a.ren, &box);
+            for (int i = 0; i < 5; ++i) {
+                const int y = 149 + 32 * i;
+                if (i == 0) { const SDL_Rect& r = sh.fr[9]; const SDL_Rect d{82, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); } else text(names[i], 80, y);
+            }
+            const int cy = 149 + 32 * langRow + 12;
+            SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
+            for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, cy + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
+            return;
+        }
         static const char* const labels[6] = {"General Settings", "Settings for 4P Battle and Team Battle", "Records", "Language", "Keyboard F-key Settings", "Return to Initial Settings"};
         for (int i = 0; i < 6; ++i) {
             int x = 100; const int y = kRows[i] - 12;
