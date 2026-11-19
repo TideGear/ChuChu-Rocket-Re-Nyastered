@@ -11,6 +11,8 @@ Working rules
 - Progress is counted, not guessed: docs/audit.md keeps a table of screens, animations and sounds per version with status and measured error; quote its totals (verified/total) when asked how far along the work is.
 - Animations are verified frame by frame: for each, capture the original (Flycast frames, or the mobile original's loop) and the port at the same frames and diff them; logic-only checks do not close an animation.
 - Run setup end to end as a new user would (setup.cmd, --prepare, RecompLauncher) against a throwaway config folder, never the real one; record the result with the date.
+- Timing and benchmarks run through tools/quiet.ps1 (the PC is shared); never record TAINTED runs. The monitor is 60 Hz: test higher rates headless with a simulated rate.
+- View the image before naming a sprite or reporting a gap. Audit per-frame screen code (input gates, phase machines), not only the simulation.
 - Working style: chip away continuously. Each update gives only new findings (frame, address, measured error) and the next step. Never recap the unmet goal or open lists, and never say the goal cannot be finished this session; a stop-hook reminder is not a request for status.
 - Exactness: derive every number (UVs, axes, angles, scales, lights, colours, layouts) from the original code (Ghidra, tools/oracle) or the real Flycast stream, recording its address; never commit an eyeballed fit. Audit every mesh and variant (costume, pose, LOD).
 Phases
