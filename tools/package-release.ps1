@@ -5,7 +5,10 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^v?\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$')]
     [string]$Version,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$Executable = '',
+    [string]$DependencyDirectory = '',
+    [string]$OutputDirectory = ''
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -13,14 +16,14 @@ if (-not $SkipBuild) {
     & (Join-Path $root 'build.cmd') --target ccr
     if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 }
-$exe = Join-Path $root 'build\game\ccr.exe'
+$exe = if ($Executable) { (Resolve-Path -LiteralPath $Executable).ProviderPath } else { Join-Path $root 'build\game\ccr.exe' }
 if (-not (Test-Path -LiteralPath $exe)) { throw "ccr.exe not found: build first" }
 $name = "ChuChuRocketReNyastered-$Version-windows-x64"
-$dist = Join-Path $root 'dist'
+$dist = if ($OutputDirectory) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory) } else { Join-Path $root 'dist' }
 $temp = Join-Path $dist ([guid]::NewGuid().ToString('N'))
 $stage = Join-Path $temp 'release'
 $zip = Join-Path $dist "$name.zip"
-$deps = Join-Path $root 'build/game-zig/_deps'
+$deps = if ($DependencyDirectory) { (Resolve-Path -LiteralPath $DependencyDirectory).ProviderPath } else { Join-Path $root 'build/game-zig/_deps' }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'tools'), (Join-Path $stage 'licenses') | Out-Null
 try {
@@ -33,7 +36,7 @@ try {
 
     $extractors = @(
         'bhunpack', 'dc_models', 'dc_objects', 'export_android_ui', 'export_battle',
-        'export_dc_models', 'export_dc_solutions', 'export_dc_ui', 'export_dlc_stages', 'export_hd_geometry',
+        'export_dc_bios_font', 'export_dc_models', 'export_dc_solutions', 'export_dc_ui', 'export_dlc_stages', 'export_hd_geometry',
         'export_hd_images', 'export_hd_locale', 'export_pad_ui', 'export_sprites',
         'export_strings', 'export_testdata', 'export_tilemaps', 'extract_all',
         'extract_android', 'extract_ios_locale', 'extract_packs', 'gba_stages', 'gdi_extract',
@@ -44,6 +47,7 @@ try {
     foreach ($file in $tools) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $stage 'tools')
     }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fonts') -Destination (Join-Path $stage 'tools/fonts') -Recurse
     $pendingZip = Join-Path $temp "$name.zip"
     Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $pendingZip
     Move-Item -LiteralPath $pendingZip -Destination $zip -Force

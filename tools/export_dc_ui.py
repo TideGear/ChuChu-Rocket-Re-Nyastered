@@ -2,7 +2,7 @@
 import os, struct, sys
 from PIL import Image
 
-def export_player_sheet(prs_png, out, sources, name, transpose=False):
+def export_player_sheet(prs_png, out, sources, name, transpose=False, gutter=0):
     paths = [os.path.join(prs_png, source) for source in sources]
     if not all(os.path.isfile(path) for path in paths):
         return
@@ -12,16 +12,30 @@ def export_player_sheet(prs_png, out, sources, name, transpose=False):
     width, height = tiles[0].size
     if not all(tile.size == (width, height) for tile in tiles):
         return
-    atlas = Image.new('RGBA', (4 * width, height))
+    # Power-of-two dimensions also keep frame UVs exactly representable,
+    # matching the original separate 32x32 textures at fractional pulse sizes.
+    pitch = (1 << (width + 2 * gutter - 1).bit_length()) if gutter else width
+    atlas_height = (1 << (height + 2 * gutter - 1).bit_length()) if gutter else height
+    atlas = Image.new('RGBA', (4 * pitch, atlas_height))
     for i, tile in enumerate(tiles):
-        atlas.paste(tile, (i * width, 0))
+        x = i * pitch + gutter
+        atlas.paste(tile, (x, gutter))
+        if gutter:
+            # Separate textures in the original; emulate their clamped edges.
+            # Linear filtering a fractional-size cursor must never read the
+            # first column of the next player's cursor from our shared atlas.
+            for dx in range(-gutter, width + gutter):
+                for dy in range(-gutter, height + gutter):
+                    if 0 <= dx < width and 0 <= dy < height: continue
+                    atlas.putpixel((x + dx, gutter + dy), tile.getpixel((max(0, min(width - 1, dx)), max(0, min(height - 1, dy)))))
     with open(os.path.join(out, name + '.tex.bin'), 'wb') as f:
         f.write(struct.pack('<2I', *atlas.size))
         f.write(atlas.tobytes())
     with open(os.path.join(out, name + '.frames.bin'), 'wb') as f:
         f.write(struct.pack('<I', 4))
         for i in range(4):
-            f.write(struct.pack('<9f', i / 4, 0, (i + 1) / 4, 1, 0, 0, 0, 0, 0))
+            f.write(struct.pack('<9f', (i * pitch + gutter) / atlas.width, gutter / atlas.height,
+                                (i * pitch + gutter + width) / atlas.width, (gutter + height) / atlas.height, 0, 0, 0, 0, 0))
 
 def export_battle_hud(prs_png, out):
     sources = ['GAMEMENU_' + name for name in
@@ -171,6 +185,41 @@ def export_challenge_result(prs_png, out):
                             Image.Resampling.BILINEAR) for tile in tiles]
     export_atlas(out, 'dc_challenge_result', tiles)
 
+def export_puzzle_result(prs_png, out):
+    # Live Normal 01 clear: s00320.state, packets 0x19bd53b..0x19bd99b.
+    names = ['puzzleclear', 'titleline0', 'titleline1', 'puzzlesetumei0']
+    names += ['new' + str(i) for i in range(10)]
+    names += ['normal', 'hard', 'special', 'mania', 'original', 'challengeboard']
+    paths = [os.path.join(prs_png, 'PUZZLECLEAR_' + n + '.png') for n in names]
+    if not all(os.path.isfile(p) for p in paths): return
+    tiles = [Image.open(p).convert('RGBA') for p in paths]
+    for i in (2, *range(4, 14)):
+        tiles[i] = tiles[i].transpose(Image.Transpose.TRANSPOSE)
+    for i in (0, 1, 2, *range(4, 14)):
+        tile = tiles[i]
+        tiles[i] = tile.transform(tile.size, Image.Transform.AFFINE,
+                                 (255 / 256, 0, 0, 0, 255 / 256, 0), Image.Resampling.BILINEAR)
+    export_atlas(out, 'dc_puzzle_result', tiles)
+
+def export_puzzle_select(prs_png, out):
+    # Normal 01, real result -> selector route, a00249.state packets
+    # 0x19bd59b..0x19bee9b. Same tiled backing arrangement as Challenge.
+    read = lambda name: Image.open(os.path.join(prs_png, 'PUZZLE_' + name + '.png')).convert('RGBA')
+    names = ['stageselecttitle6', 'stageselecttitle7', 'selectsetumei2', 'puzzleselect',
+             'puzzlefukidasi', 'puzzlenumber', 'bluedaen', 'orangedaen', 'check',
+             'normal', 'hard', 'special', 'mania']
+    if not all(os.path.isfile(os.path.join(prs_png, 'PUZZLE_' + n + '.png')) for n in names + [f'selectback{i}' for i in range(8)]): return
+    background = Image.new('RGBA', (640, 512))
+    for i, at in enumerate(((0, 0), (512, 0), (512, 128), (512, 256), (512, 384), (256, 0), (0, 256), (256, 256))):
+        background.paste(read(f'selectback{i}').transpose(Image.Transpose.TRANSPOSE), at)
+    tiles = [read(n) for n in names]
+    for i in (5, 8): tiles[i] = tiles[i].transpose(Image.Transpose.TRANSPOSE)
+    for i in (6, 7, 8):
+        tile = tiles[i]
+        tiles[i] = tile.transform(tile.size, Image.Transform.AFFINE,
+                                 (255 / 256, 0, 0, 0, 255 / 256, 0), Image.Resampling.BILINEAR)
+    export_atlas(out, 'dc_puzzle_select', [background, *tiles])
+
 def export_dc_startup(prs_png, png, out):
     """Dreamcast SEGA logo, Sonic Team bubble and Title screen art, laid out from Flycast frames 600/800/1200 (docs/HANDOFF.md).
     Frames: 0 SEGA canvas 768 x 512 (SEGALOGO tiles, stored transposed, 3 x 2 grid, drawn at (-64, 0)); 1 Sonic Team bubble 256 x 256 (LOGO, transposed, at (193, 160));
@@ -314,6 +363,8 @@ def export_dc_help_pages(prs_png, out):
 
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
+    export_puzzle_result(prs_png, out)
+    export_puzzle_select(prs_png, out)
     export_mode_select(prs_png, png, out)
     for src, name, src_dir in (
         ('TITLE_newtitle0.png', 'dlogo', prs_png),
@@ -419,10 +470,10 @@ def main(prs_png, out, png=None):
     export_challenge_failure(prs_png, out)
     export_challenge_result(prs_png, out)
     export_player_sheet(prs_png, out, [f'YAJIRUSI_yp{i:02}.png' for i in range(1, 5)], 'dc_arrows')
-    export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors')
+    export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}.png' for i in range(1, 5)], 'dc_cursors', gutter=1)
     # The cursor trail quad at 0x8c013f7e maps U down and V across the board.
     export_player_sheet(prs_png, out, [f'BATTLEMODELS_newk{i}s.png' for i in range(1, 5)],
-                        'dc_cursor_trail', transpose=True)
+                        'dc_cursor_trail', transpose=True, gutter=1)
     export_battle_hud(prs_png, out)
 
 if __name__ == '__main__': main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)

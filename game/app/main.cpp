@@ -207,6 +207,7 @@ struct App {
     void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
+    Sheet dcPuzzleResult, dcPuzzleSelect;
     void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
     bool isCleared(int s) { loadProgress(); return s >= 0 && s < 100 && ((clr[s / 25] >> (s % 25)) & 1); }
     int maxStage() { if (settings.unlockAll) return 3; loadProgress(); for (int i = 0; i < 3; i++) if ((clr[i] & 0x1ffffff) != 0x1ffffff) return i; return 3; }   // VMU::getPuzzleMaxStage 0x372b4
@@ -345,6 +346,8 @@ struct App {
         loadSheet(ret + "dc_puzzle_panel", dcPuzzlePanel);
         loadSheet(ret + "dc_puzzle_stage", dcPuzzleStage);
         loadSheet(ret + "dc_puzzle_digits", dcPuzzleDigits);
+        loadSheet(ret + "dc_puzzle_result", dcPuzzleResult);
+        loadSheet(ret + "dc_puzzle_select", dcPuzzleSelect);
         loadSheet(ret + "dc_puzzle_plate", dcPuzzlePlate);
         loadSheet(ret + "dc_puzzle_labels", dcPuzzleLabels);
         loadSheet(ret + "dc_pause", dcPause);
@@ -585,7 +588,10 @@ struct App {
     // Arrow sprite (image 0x5f, frame = owner; the art points up, rotated clockwise by the heading); a struck arrow is drawn at 0.7 (AR_ArrowDrawPriority).
     void arrow(int x, int y, int dir, int owner, int hits = 0, int ttl = -1, FieldLayout field = {}) {
         if (ttl >= 0 && !(ttl > 60 || (ttl > 0 && (ttl & 1)))) return;   // in the last 60 ticks the arrow flickers (drawn only on odd ticks)
-        arrowIcon(field.x(x + 0.5f), field.y(y + 0.5f), dir, owner, (hits ? 0.7f : 1.0f) * field.scale());
+        // DC Battle draw 0x8c0103e2 submits quad 0x8c075aac: x/z +/-6.75
+        // inside a 15-unit cell. Hit scaling (0x8c0104b0) is additional.
+        const float tileScale = settings.models3d && dcArrows.tex && dcArrows.fr.size() == 4 ? 13.5f / 15.0f : 1.0f;
+        arrowIcon(field.x(x + 0.5f), field.y(y + 0.5f), dir, owner, (hits ? 0.7f : 1.0f) * tileScale * field.scale());
     }
     void arrowIcon(float cx, float cy, int dir, int owner, float sc) {
         static const double rot[4] = {180.0, 270.0, 0.0, 90.0};
@@ -2661,6 +2667,13 @@ struct PuzzleMode : Screen {
     CursorTrail cursorTrail;
     bool mouseCursor = false;
     int failureFrames = 0;
+    int clearFrames = 0;
+    // Original Puzzle phase 4 (0x8c02bf00): 210 ticks, or 105 with Dash.
+    bool resultReady() const { return state == 2 && clearFrames >= (dash ? 105 : 210); }
+    void nextPuzzle() {
+        if ((cur + 1) % 25 == 0 || cur + 1 >= (int)stages.list.size()) { back = true; return; }
+        ++cur; reset();
+    }
     PadAim padAim{97.5f, 67.5f};   // Flycast Normal Puzzle 01 and 02: the pad cursor starts on cell (6, 4), its pointer at the cell centre
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 6, curY = 4; SDL_GameController* pad = nullptr;
@@ -2672,7 +2685,7 @@ struct PuzzleMode : Screen {
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
         cursorTrail = {};
-        sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
+        sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
@@ -2681,6 +2694,24 @@ struct PuzzleMode : Screen {
     int used(int d) const { int n = 0; for (auto& a : sim.arrows) if (a.live && a.dir == d) n++; return n; }
     ~PuzzleMode() override { if (pad) SDL_GameControllerClose(pad); }
     void event(App& a, const SDL_Event& e) override {
+        if (state == 2) {
+            if (!resultReady()) return;
+            if (e.type == SDL_KEYDOWN && !e.key.repeat) {
+                if (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN) nextPuzzle();
+                else if (e.key.keysym.sym == SDLK_ESCAPE) back = true;
+            } else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad &&
+                       SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cbutton.which) {
+                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) nextPuzzle();
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B) back = true;
+            } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                float x, y; SDL_RenderSetLogicalSize(a.ren, 640, 480);
+                SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+                SDL_RenderSetLogicalSize(a.ren, GW, GH);
+                if (x >= 32 && x < 288 && y >= 382 && y < 414) nextPuzzle();
+                else if (x >= 32 && x < 288 && y >= 414 && y < 446) back = true;
+            }
+            return;
+        }
         if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
             aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
                           e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, pf(a));
@@ -2797,6 +2828,11 @@ struct PuzzleMode : Screen {
             if (failureFrames++ == kFailureHoldFrames) return;   // clear the task pass before rebuilding
         }
         if (state == 2 || state == 3) {
+            if (state == 2) {
+                ++clearFrames;
+                if (a.headless && getenv("CCR_PUZZLE_CLEAR_TRACE") && resultReady() && clearFrames == (dash ? 105 : 210))
+                    printf("puzzle result stage %d tick %d clear-age %d\n", cur, cticks, clearFrames);
+            }
             // Keep character effects ticking while the result holds the board.
             ++sim.now;
             sim.tickEffects();
@@ -2808,9 +2844,29 @@ struct PuzzleMode : Screen {
         sim.tick(); a.stepAngles(sim);
         if (dash) { sim.tick(); a.stepAngles(sim); }   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
-        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur); }
+        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; clearFrames = 0; if (gApp && gApp->stageSet == 0) gApp->setCleared(cur);
+            if (a.headless && getenv("CCR_PUZZLE_CLEAR_TRACE")) printf("puzzle clear stage %d tick %d saved %d\n", cur, cticks, sim.saved);
+        }
     }
     const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
+    void drawClearResult(App& a) const {
+        if (!resultReady() || !a.dcPuzzleResult.tex || a.dcPuzzleResult.fr.size() != 20) return;
+        SDL_RenderSetLogicalSize(a.ren, 640, 480);
+        auto part = [&](int frame, float x, float y) {
+            const SDL_Rect& src = a.dcPuzzleResult.fr[frame];
+            const SDL_FRect dst{x, y, (float)src.w, (float)src.h};
+            SDL_RenderCopyF(a.ren, a.dcPuzzleResult.tex, &src, &dst);
+        };
+        // Original live draw packets, Normal 01 clear s00320.state:
+        // 0x19bd53b banner, 0x19bd5db/67b line, 0x19bd71b controls,
+        // 0x19bd7bb/85b digits, 0x19bd8fb/99b difficulty and its plate.
+        part(1, 0, 125); part(2, 512, 125); part(0, 96, 142);
+        const int number = cur % 25 + 1;
+        part(4 + number / 10, 288, 150); part(4 + number % 10, 331, 150);
+        part(19, 185, 70.5f); part(14 + std::min(3, cur / 25), 250, 75);
+        part(3, 32, 382);
+        SDL_RenderSetLogicalSize(a.ren, GW, GH);
+    }
     void drawFailureFocus(App& a) const {
         if (failureFrames <= 0 || failureFrames > kFailureHoldFrames) return;
         const int passes = dash ? 2 : 1;
@@ -2934,6 +2990,7 @@ struct PuzzleMode : Screen {
         const bool phonePause = phonePauseAvailable(a);
         if (phonePause) a.blit(a.phonePauseButton, 5, phoneX + 58, phoneY + 616, 2.0f);
         else if (ipadPauseAvailable(a) && !dcPanelDrawn) a.blit(a.hdHud68, 5, 92.0f, 690.0f);   // the real Dreamcast Puzzle screen has no Pause plate
+        drawClearResult(a);
         drawFailureFocus(a);
         if (paused && dreamcastPuzzleControls(a) && a.dcPause.tex) {   // Flycast Puzzle pause frame (docs/dreamcast_models.md)
             a.drawDcPause(0.0f);
@@ -3519,7 +3576,84 @@ struct DcBattleSetupMode : Screen {
 
 struct StageSelectMode : Screen {
     Stages stages; int cur = 0, page = 0; bool go = false, back = false; static constexpr int COLS = 5, ROWS = 4, PER = COLS * ROWS;
-    int music() override { return orig() ? (phase == 0x20 ? -1 : 5) : 0; }
+    bool dc() const { return gApp && gApp->stageSet == 0 && gApp->settings.models3d && gApp->dcPuzzleSelect.tex && stages.list.size() >= 100; }
+    void dcGroup(App& a, int delta) {
+        int group = cur / 25 + delta;
+        if (group < 0 || group > a.maxStage()) { a.playSfx(0x13); return; }
+        cur = group * 25 + cur % 25; a.playSfx(1);
+    }
+    void dcEvent(App& a, const SDL_Event& e) {
+        // Live original selector: Up or Left from 01 wraps to 25, rather
+        // than carrying a column through modulo arithmetic (up00049.state).
+        auto move = [&](int delta) { int selected = cur % 25 + delta; selected = selected < 0 ? 24 : selected >= 25 ? 0 : selected; cur = cur / 25 * 25 + selected; a.playSfx(0); };
+        if (e.type == SDL_KEYDOWN) {
+            switch (e.key.keysym.sym) {
+            case SDLK_LEFT: move(-1); break; case SDLK_RIGHT: move(1); break;
+            case SDLK_UP: move(-5); break; case SDLK_DOWN: move(5); break;
+            case SDLK_PAGEUP: dcGroup(a, -1); break; case SDLK_PAGEDOWN: dcGroup(a, 1); break;
+            case SDLK_RETURN: case SDLK_SPACE: go = true; break; case SDLK_ESCAPE: back = true; break;
+            }
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+            switch (e.cbutton.button) {
+            case SDL_CONTROLLER_BUTTON_DPAD_LEFT: move(-1); break; case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: move(1); break;
+            case SDL_CONTROLLER_BUTTON_DPAD_UP: move(-5); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: move(5); break;
+            case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: dcGroup(a, -1); break;
+            case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: dcGroup(a, 1); break;
+            case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_Y: case SDL_CONTROLLER_BUTTON_START: go = true; break;
+            case SDL_CONTROLLER_BUTTON_B: back = true; break;
+            }
+        } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_RenderSetLogicalSize(a.ren, 640, 480); float x, y;
+            SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+            if (y >= 300 && y < 340) { if (x >= 16 && x < 60) dcGroup(a, -1); else if (x >= 272 && x < 316) dcGroup(a, 1); }
+            for (int i = 0; i < 25; ++i) {
+                const int cx = 36 + 54 * (i % 5), cy = 115 + 34 * (i / 5);
+                if (x >= cx && x < cx + 44 && y >= cy && y < cy + 28) {
+                    if (cur % 25 == i) go = true; else { cur = cur / 25 * 25 + i; a.playSfx(0); }
+                    break;
+                }
+            }
+            if (x >= 16 && x < 344 && y >= 406 && y < 448) {
+                if (x >= 240) back = true; else if (x >= 136) go = true;
+            }
+        }
+    }
+    void dcDraw(App& a) {
+        SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
+        SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); SDL_RenderClear(a.ren);
+        const Sheet& sh = a.dcPuzzleSelect;
+        auto part = [&](int frame, int x, int y) {
+            const SDL_Rect& src = sh.fr[frame]; const SDL_Rect dst{x, y, src.w, src.h};
+            SDL_RenderCopy(a.ren, sh.tex, &src, &dst);
+        };
+        // Real selector packets a00249.state, 0x19bd59b..0x19bee9b.
+        part(0, 0, 0); part(1, 16, 32); part(2, 528, 32);
+        part(3, 16, 372); part(4, 16, 300); part(5, 356, 168);
+        for (int i = 0; i < 25; ++i) part(i == cur % 25 ? 8 : 7, 36 + 54 * (i % 5), 115 + 34 * (i / 5));
+        for (int i = 0; i < 25; ++i) if (a.isCleared(cur / 25 * 25 + i)) part(9, 43 + 54 * (i % 5), 112 + 34 * (i / 5));
+        part(6, 32, 112); part(10 + cur / 25, 95, 304);
+        // The original runtime hint uses the BIOS ANSI glyphs, shared with
+        // Puzzle play. Setup supplies the documented font fallback without BIOS.
+        const std::string hint = stages.list[cur].title;
+        if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() >= 95) {
+            SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 32, 32, 64);
+            for (size_t i = 0; i < hint.size() && i < 20; ++i) {
+                const unsigned char c = hint[i]; if (c <= 32 || c > 126) continue;
+                const SDL_Rect dst{374 + (int)i * 12, 179, 12, 24};
+                SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 32], &dst);
+            }
+            SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
+        }
+        const SDL_Rect aperture{364, 244, 252, 187};
+        SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderFillRect(a.ren, &aperture);
+        const auto& field = ChallengeSelectMode::preview; const Stage& stage = stages.list[cur].st;
+        a.board(stage, ((cur / 25) & 3) + 2, 2, field);
+        if (const Model3D* lid = a.models3d.find("lid1"))
+            for (int r = 0; r < kRows; ++r) for (int c = 0; c < kCols; ++c)
+                if (stage.tiles[r * kCols + c] == T_Rocket)
+                    a.models3d.drawDcRocketDome(a.ren, *lid, {field.x(c + 0.5f), field.y(r + 0.5f)}, field.camera, field.cell / 15.0f, 1.0f, field.cameraDistance);
+    }
+    int music() override { return dc() ? 5 : orig() ? (phase == 0x20 ? -1 : 5) : 0; }
     std::string rootDir; bool load(const std::string& root, int start) { rootDir = root; if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = start % (int)stages.list.size(); page = cur / PER; selPage = cur / 25; sel = cur % 25; lastItem = sel; return true; }
     // ---- the original iPad layout (HD 1.0 StageSelectScreen 0x10b54 grid branch, device class > 10), used for the 100 original puzzles; other stage sets keep the plain list below
     int phase = 0x20, selPage = 0, sel = 0, lastItem = 0, chosen = 0, prevKey = -1; double timer = 500000.0; bool leave = false, leaveBack = false;
@@ -3565,6 +3699,7 @@ struct StageSelectMode : Screen {
         if (timer > 0) a.fillRect(0, 0, GW, GH, 0, 0, 0, (int)(timer / 500000.0 * 255.0));
     }
     void event(App& a, const SDL_Event& e) override {
+        if (dc()) { dcEvent(a, e); return; }
         if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_TAB && gApp) {
             if (orig() && phase != 0x21) return;
             for (int offset = 1; offset < kStageSets; ++offset) {
@@ -3589,9 +3724,10 @@ struct StageSelectMode : Screen {
         else if (k == SDLK_RETURN || k == SDLK_SPACE) go = true; else if (k == SDLK_ESCAPE) back = true;
         page = cur / PER;
     }
-    void tick(App& a) override { if (orig()) origTick(a); }
-    const char* next() override { if (orig()) { if (!leave) return nullptr; leave = false; if (leaveBack) return "MENU"; int s = std::max(0, std::min(99, chosen + selPage * 25)); if (gApp) gApp->nextStage = s; return "PUZZLE"; } if (back) { back = false; return "MENU"; } if (go) { go = false; if (gApp) gApp->nextStage = cur; return "PUZZLE"; } return nullptr; }
+    void tick(App& a) override { if (!dc() && orig()) origTick(a); }
+    const char* next() override { if (!dc() && orig()) { if (!leave) return nullptr; leave = false; if (leaveBack) return "MENU"; int s = std::max(0, std::min(99, chosen + selPage * 25)); if (gApp) gApp->nextStage = s; return "PUZZLE"; } if (back) { back = false; return "MENU"; } if (go) { go = false; if (gApp) gApp->nextStage = cur; return "PUZZLE"; } return nullptr; }
     void draw(App& a, float) override {
+        if (dc()) { dcDraw(a); return; }
         if (orig()) { origDraw(a); return; }
         SDL_RenderSetLogicalSize(a.ren, W, H);
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
