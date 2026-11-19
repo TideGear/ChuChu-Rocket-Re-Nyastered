@@ -30,11 +30,12 @@ ATTACK_MS = (-1, -1, 8100, 6900, 6000, 4800, 4000, 3400, 3000, 2400, 2000,
 
 class SampleStream:
     @classmethod
-    def from_registers(cls, channel, sound_ram, *, lfo_counter, lfo_phase):
-        """Start a sampled voice, preserving the caller's channel LFO clock.
+    def from_registers(cls, channel, sound_ram, *, lfo_counter, lfo_phase, start=True):
+        """Initialize a sampled voice with the caller's channel LFO clock.
 
         KEY_ON does not reset that clock; register-write timing controls it.
         The remaining runtime fields are initialized without a saved voice.
+        start=False leaves it disabled for later register setup and KEY_ON.
         """
         if not isinstance(lfo_phase, int) or not 0 <= lfo_phase <= 255:
             raise ValueError('Invalid channel LFO phase')
@@ -42,16 +43,19 @@ class SampleStream:
         initial['runtime'] = dict(sample_address=channel['sample_address'], position=0,
             fraction=0, s0=0, s1=0, lfo_counter=lfo_counter, lfo_phase=lfo_phase,
             enabled=True, looped=0, amplitude_value=0x3ff << 16, amplitude_state=3,
-            filter_value=channel['register_words'][11] << 16, filter_state=3,
+            filter_value=(channel['register_words'][11] & 0x1fff) << 16, filter_state=3,
             filter_previous1=0, filter_previous2=0, filter_fraction=0,
             adpcm_quant=127, adpcm_loop_quant=0, adpcm_loop_previous=0, adpcm_in_loop=False)
         model = cls(initial, sound_ram)
-        model.key_on()
+        if start:
+            model.key_on()
+        else:
+            model.state['enabled'] = False
         return model
 
     def __init__(self, channel, sound_ram):
-        if channel['pcm_mode'] not in (0, 1, 2, 3) or not channel['runtime']['enabled']:
-            raise ValueError('An enabled sampled channel is required')
+        if channel['pcm_mode'] not in (0, 1, 2, 3):
+            raise ValueError('A sampled channel is required')
         if channel['register_words'][0] & 0x400:
             raise ValueError('Noise voices are not yet supported')
         self.channel = channel
@@ -97,13 +101,13 @@ class SampleStream:
         self.attack_delta = (0 if milliseconds < 0 else 65536 if milliseconds == 0 else
                              int(math.floor(65536 / (1 - 1 / math.pow(640, 1 / (44.1 * milliseconds))) + .5)))
         self.loop_link = bool(words[5] & 0x4000)
-        self.filter_active = not (words[10] & 32) and (any(v < 0x1ff8 for v in words[11:16]) or (words[10] & 31) != 4)
+        self.filter_active = not (words[10] & 32) and (any((v & 0x1fff) < 0x1ff8 for v in words[11:16]) or (words[10] & 31) != 4)
         if self.filter_active:
             if self.state['filter_state'] not in range(4):
                 raise ValueError('Invalid filter envelope state')
             self.filter_deltas = (decay_delta((words[16] >> 8) & 31), decay_delta(words[16] & 31),
                                   decay_delta((words[17] >> 8) & 31), decay_delta(words[17] & 31))
-            self.filter_targets = [value << 16 for value in words[12:16]]
+            self.filter_targets = [(value & 0x1fff) << 16 for value in words[12:16]]
             self.resonance = (2048, 1536, 1024, 512, 0, -256, -512, -768, -1024, -1280,
                          -1536, -1792, -2048, -2176, -2304, -2432, -2560, -2688,
                          -2816, -2944, -3072, -3136, -3200, -3264, -3328, -3392,
@@ -128,24 +132,41 @@ class SampleStream:
         """Apply a pitch/LFO/direct-pan/TL write without restarting playback.
 
         Offsets/widths follow Flycast ChannelEx::RegWrite. Other register
-        families, disabled voices and global KYONEX remain separate routes.
+        families use write_register; global KYONEX uses SampledVoiceBank.
         """
         allowed = ((0x18, 1), (0x19, 1), (0x18, 2),
                    (0x1c, 1), (0x1d, 1), (0x1c, 2),
                    (0x24, 1), (0x25, 1), (0x24, 2), (0x29, 1))
         if (offset, size) not in allowed or not 0 <= value < 1 << (size * 8):
             raise ValueError('Unsupported controller register write')
+        self.write_register(offset, size, value)
+
+    def write_register(self, offset, size, value):
+        """Update sampled channel fields without replacing playback history.
+
+        Global KYONEX execution belongs to SampledVoiceBank. Only implemented
+        sampled/filter/LFO modes are accepted, including while disabled.
+        """
+        if size not in (1, 2) or offset % size or not 0 <= offset < 0x48 or offset % 4 >= 2 or not 0 <= value < 1 << (size * 8):
+            raise ValueError('Unsupported sampled register write')
         words = self.channel['register_words']
         packed = bytearray(struct.pack('<18I', *words))
         packed[offset:offset + size] = value.to_bytes(size, 'little')
         updated = list(struct.unpack('<18I', packed))
         channel = dict(self.channel, register_words=updated,
+            pcm_mode=updated[0] >> 7 & 3, loop=bool(updated[0] & 0x200),
+            loop_start=updated[2] & 0xffff, loop_end=updated[3] & 0xffff,
             fns=updated[6] & 1023, octave_raw=updated[6] >> 11 & 15,
             lfo_raw=updated[7], pan_raw=updated[9] & 31,
-            direct_level=updated[9] >> 8 & 15, total_level=updated[10] >> 8)
+            direct_level=updated[9] >> 8 & 15, total_level=updated[10] >> 8 & 255)
         if updated[7] & 7:
             raise ValueError('Amplitude LFO is not yet validated')
         state = dict(self.state)
+        if offset in (0, 4, 5):
+            address = (updated[0] & 127) << 16 | (updated[1] & 0xffff)
+            if channel['pcm_mode'] == 0:
+                address &= ~1
+            channel['sample_address'] = state['sample_address'] = address
         if offset in (0x1c, 0x1d):
             frequency = updated[7] >> 10 & 31
             division = 128 >> (frequency >> 2)
@@ -154,6 +175,19 @@ class SampleStream:
                 state['lfo_phase'] = 0
         channel['runtime'] = state
         replacement = SampleStream(channel, self.ram)
+        # RegWrite updates only the source handler's derived blocks. In
+        # particular KRS writes update AEG but leave FEG rates latched until
+        # a pitch/filter write; recomputing everything would change playback.
+        if offset not in (0x10, 0x11, 0x14, 0x15, 0x18, 0x19):
+            for name in ('attack_delta', 'release_delta', 'decay1_delta', 'decay2_delta', 'decay2_value'):
+                setattr(replacement, name, getattr(self, name))
+        filter_write = (offset in (0x18, 0x19, 0x28) or
+                        offset in (0x2c, 0x2d, 0x30, 0x31, 0x34, 0x35, 0x38, 0x39, 0x3c, 0x3d, 0x40, 0x41, 0x44, 0x45))
+        if not filter_write:
+            for name in ('filter_active', 'filter_deltas', 'filter_targets', 'resonance',
+                         'filter_cached_value', 'filter_coefficients', 'filter_exponent'):
+                if hasattr(self, name):
+                    setattr(replacement, name, getattr(self, name))
         replacement.output_samples = self.output_samples
         self.__dict__.update(replacement.__dict__)
 
@@ -262,7 +296,7 @@ class SampleStream:
         if state['amplitude_state'] != 3:
             return
         state.update(enabled=True, amplitude_state=0, amplitude_value=640 << 16,
-                     filter_state=0, filter_value=self.channel['register_words'][11] << 16,
+                     filter_state=0, filter_value=(self.channel['register_words'][11] & 0x1fff) << 16,
                      filter_previous1=0, filter_previous2=0, filter_fraction=0,
                      position=0, fraction=0, looped=0, s0=0, adpcm_quant=127,
                      adpcm_loop_quant=0, adpcm_loop_previous=0, adpcm_in_loop=False)
@@ -372,21 +406,25 @@ def direct_stereo(channel, sound_ram, count, key_off_samples=(), start=False):
     return output, model.state
 
 
-def direct_stereo_words(words, sound_ram, count, *, lfo_counter, lfo_phase, key_off_samples=()):
-    """Fresh native note from 18 prepared registers and an explicit LFO clock.
-
-    No captured stream, envelope, filter or ADPCM runtime is consumed.
-    DSP returns and command/sample scheduling are outside this function.
-    """
+def sampled_channel(words):
+    """Decode sampled-channel register fields without captured runtime."""
     if len(words) != 18 or any(not isinstance(w, int) or not 0 <= w <= 0xffffffff for w in words):
         raise ValueError('Expected 18 unsigned AICA register words')
     control = words[0]
-    channel = dict(register_words=list(words), pcm_mode=(control >> 7) & 3,
-        sample_address=(control & 127) << 16 | words[1], loop=bool(control & 0x200),
-        loop_start=words[2], loop_end=words[3], fns=words[6] & 1023,
+    address = (control & 127) << 16 | (words[1] & 0xffff)
+    if (control >> 7) & 3 == 0:
+        address &= ~1
+    return dict(register_words=list(words), pcm_mode=(control >> 7) & 3,
+        sample_address=address, loop=bool(control & 0x200),
+        loop_start=words[2] & 0xffff, loop_end=words[3] & 0xffff, fns=words[6] & 1023,
         octave_raw=(words[6] >> 11) & 15, lfo_raw=words[7], pan_raw=words[9] & 31,
-        direct_level=(words[9] >> 8) & 15, total_level=words[10] >> 8,
-        runtime=dict(lfo_counter=lfo_counter, lfo_phase=lfo_phase))
+        direct_level=(words[9] >> 8) & 15, total_level=words[10] >> 8 & 255)
+
+
+def direct_stereo_words(words, sound_ram, count, *, lfo_counter, lfo_phase, key_off_samples=()):
+    """Fresh native note from registers and explicit LFO clock, without DSP."""
+    channel = sampled_channel(words)
+    channel['runtime'] = dict(lfo_counter=lfo_counter, lfo_phase=lfo_phase)
     return direct_stereo(channel, sound_ram, count, key_off_samples, start=True)
 
 
@@ -427,7 +465,7 @@ class SampledVoiceBank:
         if offset not in (0, 1):
             if index not in self.models:
                 raise ValueError('Controller write requires a modeled voice')
-            self.models[index].write_controller(offset, size, value)
+            self.models[index].write_register(offset, size, value)
             at = index * 128 + offset
             self.registers[at:at + size] = value.to_bytes(size, 'little')
             return
@@ -436,8 +474,6 @@ class SampledVoiceBank:
         previous = self.control(index)
         mask = ((1 << (size * 8)) - 1) << (offset * 8)
         control = (previous & ~mask) | value << (offset * 8)
-        if (previous ^ control) & ~0xc000:
-            raise ValueError('Sample/stream control changes are not implemented')
         execute = (offset == 1 or size == 2) and bool(control & 0x8000)
         if execute:
             for other in range(64):
@@ -445,9 +481,11 @@ class SampledVoiceBank:
                 if candidate & 0x4000 and other not in self.models:
                     raise ValueError('Global key-on reaches an unmodeled voice')
             control &= ~0x8000
-        struct.pack_into('<I', self.registers, index * 128, control)
         if index in self.models:
-            self.models[index].channel['register_words'][0] = control
+            self.models[index].write_register(offset, size, (control >> (offset * 8)) & ((1 << (size * 8)) - 1))
+        elif (previous ^ control) & ~0xc000:
+            raise ValueError('Stream changes require a modeled voice')
+        struct.pack_into('<I', self.registers, index * 128, control)
         if execute:
             for other, model in self.models.items():
                 if self.control(other) & 0x4000:

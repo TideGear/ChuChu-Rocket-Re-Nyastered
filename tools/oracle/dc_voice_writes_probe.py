@@ -11,11 +11,13 @@ import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from aica_pcm import SampleStream, SampledVoiceBank
+from aica_pcm import SampleStream, SampledVoiceBank, sampled_channel
 from dc_aica_state import inspect
 
 
-def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False):
+def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False, fresh_registers=False):
+    if fresh_registers and not key_bank:
+        raise ValueError('Fresh register setup requires the key bank')
     report = inspect(state, mlt)
     base, regs = report['sound_ram_offset'], report['register_offset']
     if any(state[regs + 0x2000:regs + 0x2048]):
@@ -36,11 +38,19 @@ def verify(state, mlt, schedule, wav, *, dsp_disabled=False, key_bank=False):
                 struct.pack_into('<I', bank_registers, at, control)
     models = {}
     for index in (8, 9):
-        channel = next(c for c in report['channels'] if c['channel'] == index)
+        if fresh_registers and state[report['runtime_offset'] + index * 72 + 71]:
+            raise ValueError('Fresh setup requires an initially disabled voice')
+        channel = next((c for c in report['channels'] if c['channel'] == index), None)
+        if channel is None:
+            if not fresh_registers or any(bank_registers[index * 128:(index + 1) * 128]):
+                raise ValueError('Expected a configured or explicitly fresh channel')
+            channel = sampled_channel([0] * 18)
+            at = report['runtime_offset'] + index * 72
+            channel['runtime'] = dict(lfo_counter=struct.unpack_from('<I', state, at + 66)[0], lfo_phase=state[at + 70])
         if key_bank:
             channel = dict(channel, register_words=list(struct.unpack_from('<18I', bank_registers, index * 128)))
         models[index] = SampleStream.from_registers(channel, ram,
-            lfo_counter=channel['runtime']['lfo_counter'], lfo_phase=channel['runtime']['lfo_phase'])
+            lfo_counter=channel['runtime']['lfo_counter'], lfo_phase=channel['runtime']['lfo_phase'], start=not fresh_registers)
     bank = SampledVoiceBank(models, bank_registers) if key_bank else None
     with wave.open(str(wav), 'rb') as stream:
         if (stream.getnchannels(), stream.getsampwidth(), stream.getframerate()) != (2, 2, 44100):
@@ -88,5 +98,6 @@ if __name__ == '__main__':
     parser.add_argument('wav', type=Path)
     parser.add_argument('--dsp-disabled', action='store_true', help='reference core has DSP disabled: include its zero-direct-output send fallback')
     parser.add_argument('--key-bank', action='store_true', help='consume control writes with the global 64-channel KYONEX scan')
+    parser.add_argument('--fresh-registers', action='store_true', help='leave voices disabled until the write schedule starts them; do not force core KEY_ON')
     args = parser.parse_args()
-    verify(args.state.read_bytes(), args.mlt.read_bytes(), args.schedule, args.wav, dsp_disabled=args.dsp_disabled, key_bank=args.key_bank)
+    verify(args.state.read_bytes(), args.mlt.read_bytes(), args.schedule, args.wav, dsp_disabled=args.dsp_disabled, key_bank=args.key_bank, fresh_registers=args.fresh_registers)
