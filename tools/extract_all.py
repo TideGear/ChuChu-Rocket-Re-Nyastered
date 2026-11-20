@@ -213,6 +213,17 @@ def do_dreamcast(src, work, assets, entry):
                     w.writeframes(b)
         wavs.append(os.path.basename(out))
     entry['audio_tracks'] = wavs
+    # sound effects: the disc's own driver and sound bank rendered to one WAV per cue (tools/dc_sfx_render.py, docs/audio.md)
+    sfx = os.path.join(assets, 'dreamcast', 'sfx')
+    drv, mlt = os.path.join(files, 'ENGLISH', 'MANATEE.DRV'), os.path.join(files, 'ENGLISH', 'CHU2_SE.MLT')
+    if os.path.exists(drv) and os.path.exists(mlt) and not os.path.exists(os.path.join(sfx, 'cues.json')):
+        try:
+            import dc_sfx_render
+            manifest = dc_sfx_render.export_all(open(drv, 'rb').read(), open(mlt, 'rb').read(), sfx, log=lambda info: None)
+            entry['sfx_cues'] = sum(1 for m in manifest.values() if 'frames' in m)
+            entry['sfx_unsupported'] = [int(k) for k, m in manifest.items() if 'unsupported' in m]
+        except Exception as error:
+            entry['sfx_error'] = str(error)
 
 
 # These are the same two resources in the tested Dreamcast, Android and iOS

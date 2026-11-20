@@ -216,7 +216,7 @@ struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings; ModelPack models3d; bool models3dTried = false, mobileSheetsMissing = false;
     bool useModels3d() { if (!models3dTried) { models3dTried = true; if (settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
     void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
-    void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true;
+    void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true; FILE* audioCapture = nullptr;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
     Sheet dcPuzzleResult, dcPuzzleSelect, dcPuzzleSaved;
@@ -424,6 +424,7 @@ struct App {
         }
         for (auto& v : a->voices) for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (int)((*v.d)[v.pos++] * ((float)a->sfxVol / 255.0f));   // playSFX: +0x58 / 255 (the per-sound base volume of the original is not applied)
              out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
+        if (a->audioCapture) { fwrite(out, 4, n, a->audioCapture); fflush(a->audioCapture); }   // CCR_AUDIO_CAPTURE: headless record of the mix
         a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [](const Voice& v) { return v.pos >= v.d->size(); }), a->voices.end());
     }
     static void toStereo44k(const short* pcm, int frames, int ch, int rate, std::vector<int16_t>& out) {
@@ -437,7 +438,14 @@ struct App {
         if (sfxDir.empty())
             for (auto& e : fs::directory_iterator(root + "/android", ec))
                 if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) { sfxDir = (e.path() / "audio_sfx").string(); break; }
-        sfx.resize(29);
+        sfx.resize(117);   // ids 0..116 are Dreamcast sound-effect cues (CHU2_SE.MLT, rendered by tools/dc_sfx_render.py); 117+ are roulette voices
+        for (int i = 0; i < static_cast<int>(sfx.size()); ++i) {   // the Dreamcast cue is preferred; mobile clips only fill cues the renderer does not support
+            char cue[512]; snprintf(cue, sizeof cue, "%s/dreamcast/sfx/cue%03d.wav", root.c_str(), i);
+            SDL_AudioSpec spec; Uint8* buf; Uint32 len;
+            if (!SDL_LoadWAV(cue, &spec, &buf, &len)) continue;
+            if (spec.format == AUDIO_S16LSB && spec.channels == 2 && spec.freq == 44100) sfx[i].assign((int16_t*)buf, (int16_t*)(buf + len));
+            SDL_FreeWAV(buf);
+        }
         if (!sfxDir.empty()) {
             const auto loadClip = [&](int id, const char* prefix, std::vector<int16_t>& clip) {
                 char name[16];
@@ -447,7 +455,7 @@ struct App {
                 const int frames = stb_vorbis_decode_filename((sfxDir + "/" + name).c_str(), &ch, &rate, &pcm);
                 if (frames > 0) { toStereo44k(pcm, frames, ch, rate, clip); free(pcm); }
             };
-            for (int i = 0; i < static_cast<int>(sfx.size()); ++i) loadClip(i, "", sfx[i]);
+            for (int i = 0; i < 29; ++i) if (sfx[i].empty()) loadClip(i, "", sfx[i]);
             for (int i = 0; i < static_cast<int>(rouletteVoice.size()); ++i) {
                 loadClip(117 + i, "", rouletteVoice[i]);
                 loadClip(117 + i, "J", rouletteVoiceJapanese[i]);
@@ -455,7 +463,13 @@ struct App {
         }
         if (headless && !getenv("CCR_AUDIO_TEST")) return;   // CCR_AUDIO_TEST=1: open the (dummy) audio device in headless runs to exercise the music code
         SDL_AudioSpec want{}; want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024; want.callback = audioCb; want.userdata = this; SDL_AudioSpec have;
+        if (headless && getenv("CCR_AUDIO_CAPTURE")) audioCapture = fopen(getenv("CCR_AUDIO_CAPTURE"), "wb");
         adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0); if (adev) SDL_PauseAudioDevice(adev, 0);
+        if (headless && adev && getenv("CCR_PLAY_SFX")) {   // headless self-test: play these cue ids through the real mixer (dummy device), wait until they finish, exit
+            for (const char* p = getenv("CCR_PLAY_SFX"); *p;) { char* end; long id = strtol(p, &end, 10); if (end == p) break; playSfx((int)id); p = *end ? end + 1 : end; }
+            for (int waited = 0; waited < 60000; waited += 20) { SDL_LockAudioDevice(adev); const bool idle = voices.empty(); SDL_UnlockAudioDevice(adev); if (idle) break; SDL_Delay(20); }
+            SDL_Delay(100); if (audioCapture) fclose(audioCapture); exit(0);
+        }
     }
     void playSfx(int id) {
         if (!adev) return;

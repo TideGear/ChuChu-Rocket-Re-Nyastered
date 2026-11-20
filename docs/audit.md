@@ -91,9 +91,12 @@ Counts items this table lists, not the game's full content (many screens have se
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |
 | KapuKapu, focus ring | animation | open | - |
-| Sound: startup, menu, cues, music | sound | open (driver internals verified, no playback match) | - |
+| Sound: music (CD tracks 04-18) | sound | partial (extracted, played; loops/fades unverified) | - |
+| Sound: SFX cue 27 (Dreamcast) | sound | verified against Flycast WAV (voice render + dispatch, 62,000 samples) | corr 1.00000, mean abs err 5.1/10.3 levels, port mixer equals render |
+| Sound: SFX cues 0-127 except 27 (Dreamcast) | sound | partial (121/128 rendered and playing in the port; 7 need amplitude LFO; none compared with Flycast yet) | - |
+| Sound: startup, menu, voices | sound | open | - |
 
-**Totals: 38 items; 6 verified, 20 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.
+**Totals: 41 items; 7 verified, 22 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.
 
 ## Dreamcast mode inventory (read from the game's mode table, 2026-11-18)
 The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `0x8c019088` rejects values >= 23 and stores the mode at `0x8c1af108`, read from RAM dumps of the captured screens); each entry points to a descriptor whose first word is the mode's init function. Entries 23-39 and up are data, not modes. Status words as above; every row stays open until its screens are matched against Flycast frames.
