@@ -4918,7 +4918,13 @@ int main(int argc, char** argv) {
             if (e.type == SDL_QUIT) app.quit = true;
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F11) { Uint32 f = SDL_GetWindowFlags(app.win); SDL_SetWindowFullscreen(app.win, (f & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP); }
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_v) { app.vsync = !app.vsync; SDL_RenderSetVSync(app.ren, app.vsync); }
-            else { mode->event(app, e); if (const char* nx = mode->next()) { enter(nx); acc = 0; } }
+            else {
+                if (e.type == SDL_MOUSEBUTTONDOWN && getenv("CCR_MOUSEDBG")) {   // diagnostic: where the game thinks this click is (docs/roadmap.md, mouse mapping)
+                    int ww = 0, wh = 0, ow = 0, oh = 0, lw = 0, lh = 0; SDL_GetWindowSize(app.win, &ww, &wh); SDL_GetRendererOutputSize(app.ren, &ow, &oh); SDL_RenderGetLogicalSize(app.ren, &lw, &lh);
+                    float sx = 0, sy = 0, cx = 0, cy = 0; SDL_RenderWindowToLogical(app.ren, e.button.x, e.button.y, &sx, &sy); ccrWindowToLogical(app.ren, e.button.x, e.button.y, &cx, &cy);
+                    if (FILE* df = fopen("mousedebug.log", "ab")) { fprintf(df, "click window(%d,%d) windowSize %dx%d outputSize %dx%d logicalSize %dx%d sdlLogical(%.1f,%.1f) ours(%.1f,%.1f)\n", e.button.x, e.button.y, ww, wh, ow, oh, lw, lh, sx, sy, cx, cy); fclose(df); }
+                }
+                mode->event(app, e); if (const char* nx = mode->next()) { enter(nx); acc = 0; } }
         }
         Uint64 now = SDL_GetPerformanceCounter(); acc += (double)(now - last) / (double)SDL_GetPerformanceFrequency(); last = now; if (acc > 0.25) acc = 0.25;
         while (acc >= dt) { bool a1 = false, a2 = false;   // controller-only quit: hold the two quit buttons on any pad
