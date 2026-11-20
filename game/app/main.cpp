@@ -357,14 +357,6 @@ struct App {
         loadSheet(ret + "dc_help", dcHelp);
         loadSheet(ret + "dc_help_pages", dcHelpPages);
         loadSheet(ret + "dc_options", dcOptions);
-        if (dcPuzzleStart.tex || dcHelp.tex) {   // Dreamcast art present: warn when it predates the current atlas layout (the picture and the click areas would not match)
-            int have = 0; if (FILE* vf = fopen((ret + "dc_assets_version.txt").c_str(), "rb")) { if (fscanf(vf, "%d", &have) != 1) have = 0; fclose(vf); }
-            if (have < kDcAssetsVersion) {
-                dcAssetsStale = true;
-                printf("Dreamcast art in %s is out of date (version %d, need %d): rerun setup (ccr --prepare or Easy Setup)\n", ret.c_str(), have, kDcAssetsVersion);
-                if (!headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Game art out of date", "The extracted Dreamcast art predates this version, so some screens (the rocket launch, panels, click areas) will look or behave wrong." "\n\n" "Run Easy Setup again in RecompLauncher (or ccr --prepare) to refresh it.", win);
-            }
-        }
         loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
         loadSheet(ret + "dc_bios_ansi", dcBiosAnsi);   // optional: BIOS ANSI glyphs for the hint text
         loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
@@ -389,6 +381,14 @@ struct App {
         loadSheet(ret + "dc_cursors", dcCursors);
         loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
         loadSheet(ret + "dc_battle_hud", dcBattleHud);
+        if (dcPuzzleStart.tex || dcHelp.tex) {   // Dreamcast art present: warn when it predates the current atlas layout (the picture and the click areas would not match)
+            int have = 0; if (FILE* vf = fopen((ret + "dc_assets_version.txt").c_str(), "rb")) { if (fscanf(vf, "%d", &have) != 1) have = 0; fclose(vf); }
+            if (have < kDcAssetsVersion) {
+                dcAssetsStale = true;
+                printf("Dreamcast art in %s is out of date (version %d, need %d): rerun setup (ccr --prepare or Easy Setup)\n", ret.c_str(), have, kDcAssetsVersion);
+                if (!headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Game art out of date", "The extracted Dreamcast art predates this version, so some screens (the rocket launch, panels, click areas) will look or behave wrong." "\n\n" "Run Easy Setup again in RecompLauncher (or ccr --prepare) to refresh it.", win);
+            }
+        }
         padOk = (dlogoOk || imgSheet(7)) && loadSheet(ret + "bg0877", pbg) &&
                 loadSheet(ret + "pprompt", pprompt) && loadSheet(ret + "procket", procket) &&
                 loadSheet(ret + "pdeco", pdeco) && loadSheet(ret + "pbtn", pbtn) && loadSheet(ret + "bg0879", pmbg);
@@ -2959,7 +2959,7 @@ struct PuzzleMode : Screen {
     }
     // Fit the 480 × 320 handset UI at integer scale on the shared gameplay canvas.
     static constexpr int phoneX = (GW - 960) / 2, phoneY = (GH - 640) / 2;
-    // Real draw list (Flycast frame 2390, 640 x 480): the R panel is a 128 x 128 quad at (5, 32), the L panel one at (5, 160); the exported sheets are cropped to 126 x 128 and 126 x 73, drawn here at 1.6 times that screen.
+    // Real draw list (Flycast frame 2390, 640 x 480): R/L panels use 128 x 128 quads at (5, 32) and (5, 160); Cancel art occupies only the top 73 texture rows.
     static constexpr SDL_Rect dcStartRect{8, 51, 202, 206};   // one extra row overlaps the L panel: the sheet's last row is half transparent and the bilinear edge left a navy hairline between the panels
     static constexpr SDL_Rect dcCancelRect{8, 256, 202, 117};
     bool dreamcastPuzzleControls(const App& a) const {
@@ -3175,7 +3175,9 @@ struct PuzzleMode : Screen {
                   { const int h = 47; const std::string t = std::to_string(left); SDL_SetTextureColorMod(a.font.tex, 0, 0, 0); a.text(t, (int)(phoneX + 2 * 48.0f) - a.textWidth(t, h) / 2, (int)(phoneY + 2 * y) - h / 2, h); SDL_SetTextureColorMod(a.font.tex, 255, 255, 255); } y += 36.0f; } }
         } else if (dreamcastPuzzleControls(a)) {
             // Flycast frame 2390 draws both panels as full 128 x 128 quads at (5, 32) and (5, 160) of 640 x 480; this view is 1.6 times that.
-            const SDL_FRect startQuad{8.0f, 51.2f, 204.8f, 204.8f}, cancelQuad{8.0f, 256.0f, 204.8f, 204.8f};
+            const SDL_FRect startQuad{8.0f, 51.2f, 204.8f, 204.8f};
+            // Older exports alpha-cropped Cancel to 126 x 73; keep the original 1.6x texel scale instead of stretching it square.
+            const SDL_FRect cancelQuad{8.0f, 256.0f, a.dcPuzzleCancel.w * 1.6f, a.dcPuzzleCancel.h * 1.6f};
             SDL_RenderCopyF(a.ren, a.dcPuzzleStart.tex, nullptr, &startQuad);
             SDL_RenderCopyF(a.ren, a.dcPuzzleCancel.tex, nullptr, &cancelQuad);
             // The real Puzzle screen (Flycast frame 2390, docs/dreamcast_models.md) draws the bottom panel as two 256 x 96 quads of one texture at x 130 and 386, y 372 on a 640 x 480 screen; this view is 1.6 times that.
