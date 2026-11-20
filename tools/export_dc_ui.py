@@ -386,6 +386,8 @@ def uv_span(tile, sx=255 / 256, sy=255 / 256):
 
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
+    # Version of the Dreamcast UI art layout the app expects (game/app/main.cpp kDcAssetsVersion): bump both when atlases change shape (uncropped panels, UV span, new Options frames).
+    with open(os.path.join(out, 'dc_assets_version.txt'), 'w') as f: f.write('2')
     export_puzzle_result(prs_png, out)
     export_puzzle_select(prs_png, out)
     export_mode_select(prs_png, png, out)

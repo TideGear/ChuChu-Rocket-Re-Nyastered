@@ -292,6 +292,8 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
+    static constexpr int kDcAssetsVersion = 2;   // tools/export_dc_ui.py writes dc_assets_version.txt
+    bool dcAssetsStale = false;
     bool loadSheet(const std::string& base, Sheet& s) {
         FILE* f = fopen((base + ".tex.bin").c_str(), "rb"); if (!f) return false;
         uint32_t wh[2]; if (fread(wh, 4, 2, f) != 2) { fclose(f); return false; }
@@ -345,6 +347,14 @@ struct App {
         loadSheet(ret + "dc_help", dcHelp);
         loadSheet(ret + "dc_help_pages", dcHelpPages);
         loadSheet(ret + "dc_options", dcOptions);
+        if (dcPuzzleStart.tex || dcHelp.tex) {   // Dreamcast art present: warn when it predates the current atlas layout (the picture and the click areas would not match)
+            int have = 0; if (FILE* vf = fopen((ret + "dc_assets_version.txt").c_str(), "rb")) { if (fscanf(vf, "%d", &have) != 1) have = 0; fclose(vf); }
+            if (have < kDcAssetsVersion) {
+                dcAssetsStale = true;
+                printf("Dreamcast art in %s is out of date (version %d, need %d): rerun setup (ccr --prepare or Easy Setup)\n", ret.c_str(), have, kDcAssetsVersion);
+                if (!headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Game art out of date", "The extracted Dreamcast art predates this version, so some screens (the rocket launch, panels, click areas) will look or behave wrong." "\n\n" "Run Easy Setup again in RecompLauncher (or ccr --prepare) to refresh it.", win);
+            }
+        }
         loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
         loadSheet(ret + "dc_bios_ansi", dcBiosAnsi);   // optional: BIOS ANSI glyphs for the hint text
         loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
