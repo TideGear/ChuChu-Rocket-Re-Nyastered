@@ -153,7 +153,7 @@ def verify_live(driver, mlt, states):
         for group in range(8):
             for channel in range(16):
                 for value in (0, 1, 63, 64, 127):
-                    commands = [0x03000000 | control << 8 | value for control in (1, 7, 10, 11, 32, 121)]
+                    commands = [0x03000000 | control << 8 | value for control in (1, 7, 10, 11, 32, 121, 123)]
                     commands += [0x04000000 | value << 8, 0x05000000 | value << 8, 0x06000000 | value]
                     for command in commands:
                         command |= group << 20 | channel << 16

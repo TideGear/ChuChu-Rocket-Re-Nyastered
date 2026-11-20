@@ -113,6 +113,22 @@ class ChannelCommands:
         banks = {address: bytes(self.ram[address:address + self.read32(address + 8)])}
         self.ram[at:at + 128] = program_change(record, value, melodic, drums, banks, self.fallbacks)
 
+    def all_notes_off(self, group, channel):
+        # ARM 0x33a4 scans all 48 records, clears the held bit, and only
+        # triggers KEY_OFF for held notes not protected by sustain.
+        for index in range(48):
+            voice, reg = 0x10000 + index * 64, index * 128
+            flags = self.ram[voice]
+            if (not self.read32(voice) or self.ram[voice + 4] != group or
+                    self.ram[voice + 5] != channel or not flags & 0x80):
+                continue
+            self.ram[voice] = flags & 0x7f
+            if flags & 0x40:
+                continue
+            self.ram[voice + 0x3f] = 0
+            control = struct.unpack_from('<I', self.registers, reg)[0]
+            self.write_register(reg, (control & 0x0000bfff) | 0x8000)
+
     def note_off(self, group, channel, note):
         # 0xdd8..0xe80: held-key bit gates release. Flags 0x40/0x20
         # suppress hardware stop while still clearing the held-key bit.
@@ -198,6 +214,8 @@ class ChannelCommands:
                 self.ram[self.voice_map_at + voice_index] = group | 128
                 old_control = struct.unpack_from('<I', self.registers, reg)[0]
                 self.write_register(reg, (old_control & self.prestop_mask) | 0x8000)
+                if split[45]:
+                    self.write_register(self.monitor_register, voice_index, 1)
                 for word in range(1, 6):
                     self.write_register(reg + word * 4, words[word])
                 lfo = modulation_word(struct.unpack_from('<H', split, 14)[0], controller[2])
@@ -254,7 +272,9 @@ class ChannelCommands:
         control = command >> 8 & 127
         if control in self.ignored_controls:
             return
-        if control == 121:
+        if control == 123:
+            self.all_notes_off(group, channel)
+        elif control == 121:
             self.ram[at:at + 128] = reset_controllers(self.ram[at:at + 128])
             count = self.count()
             voices = [bytes(self.ram[0x10000 + i * 64:0x10040 + i * 64]) for i in range(count)]

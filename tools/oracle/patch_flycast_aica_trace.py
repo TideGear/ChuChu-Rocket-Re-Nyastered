@@ -27,6 +27,8 @@ from pathlib import Path
 
 ORIGINAL_SHA256 = '5b78b05dbd29d8c41d1e610bd4d6035625627cb48722275da84f2c8322ebc5e2'
 MARKER = '// CCR development key-state trace'
+ARM_BUS_MARKER = '// CCR original ARM AICA bus trace'
+ARM_MEM_SHA256 = 'f7f6a6b9487c9db68f58d02887cf8507816b0efd80ad4a8c0fa20fc527e87f2c'
 TRACE = r'''
 // CCR development key-state trace
 namespace {
@@ -161,6 +163,89 @@ void ccr_reset_writes()
 }
 '''
 
+ARM_BUS = r'''
+// CCR original ARM AICA bus trace. Samples advance once per AICA_Sample call;
+// accesses are recorded after the original ARM bus operation completes.
+namespace {
+std::FILE* ccr_bus_trace = nullptr;
+bool ccr_bus_trace_checked = false;
+unsigned long long ccr_bus_sample = 0;
+unsigned ccr_bus_order = 0;
+struct CcrBusSampleAdvance {
+    ~CcrBusSampleAdvance() {
+        ++ccr_bus_sample;
+        ccr_bus_order = 0;
+        if (ccr_bus_trace) std::fflush(ccr_bus_trace);
+    }
+};
+}
+void TraceARMAccess(bool write, u32 address, u32 width, u32 value)
+{
+    address &= 0x7fff;
+    if (!(address < 0x2000 || address == 0x280d ||
+          (address >= 0x2810 && address <= 0x2815))) return;
+    if (!ccr_bus_trace_checked) {
+        ccr_bus_trace_checked = true;
+        if (const char* path = std::getenv("FLYCAST_AICA_BUS_TRACE")) {
+            ccr_bus_trace = std::fopen(path, "w");
+            if (!ccr_bus_trace) std::abort();
+            std::fprintf(ccr_bus_trace, "sample,order,op,address,width,value\n");
+        }
+    }
+    if (!ccr_bus_trace) return;
+    std::fprintf(ccr_bus_trace, "%llu,%u,%c,%x,%u,%x\n", ccr_bus_sample,
+                 ccr_bus_order++, write ? 'W' : 'R', address, width, value);
+}
+void ResetARMTrace()
+{
+    if (ccr_bus_trace) std::fclose(ccr_bus_trace);
+    ccr_bus_trace = nullptr;
+    ccr_bus_trace_checked = false;
+    ccr_bus_sample = 0;
+    ccr_bus_order = 0;
+}
+'''
+
+ARM_MEM_MARKER = '// CCR original ARM AICA bus trace'
+ARM_READ_WRITE = r'''
+// CCR original ARM AICA bus trace
+//Reg reads from arm side ..
+template <typename T>
+T readReg(u32 addr)
+{
+    addr &= 0x7FFF;
+    T value;
+    if (addr == REG_L)
+        value = (T)e68k_reg_L;
+    else if (addr == REG_M)
+        value = (T)e68k_reg_M;
+    else if (sizeof(T) == 4)
+        value = (T)readRegInternal<u16>(addr);
+    else
+        value = readRegInternal<T>(addr);
+    aica::sgc::TraceARMAccess(false, addr, sizeof(T), (u32)value);
+    return value;
+}
+
+template <typename T>
+void writeReg(u32 addr, T data)
+{
+    addr &= 0x7FFF;
+    if (addr == REG_L)
+        return;
+    else if (addr == REG_M)
+    {
+        if (data & 1)
+            e68k_AcceptInterrupt();
+    }
+    else if (sizeof(T) == 4)
+        writeRegInternal(addr, (u16)data);
+    else
+        writeRegInternal(addr, data);
+    aica::sgc::TraceARMAccess(true, addr, sizeof(T), (u32)data);
+}
+'''
+
 READS = r'''
 // Synthetic monitor reads. Each read changes the selected/latch state.
 namespace {
@@ -231,13 +316,27 @@ def patch(root, msvc=False, glext=None):
         raise ValueError('MSVC needs --glext pointing to a Khronos GL extension header (SDL_opengl_glext.h also works)')
     text = raw.decode('utf-8')
     text = text.replace('namespace aica::sgc\n{',
-                        '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n#include "hw/arm7/arm_mem.h"\n\nnamespace aica::sgc\n{\n' + TRACE + TICKS, 1)
-    text = text.replace('void AICA_Sample()\n{', KEYON + WRITES + READS + '\nvoid AICA_Sample()\n{\n\tccr_keyon_controls();\n\tccr_timed_writes();\n\tccr_timed_reads();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
+                        '#include <cstdio>\n#include <cstdlib>\n#include "hw/arm7/arm7.h"\n#include "hw/arm7/arm_mem.h"\n\nnamespace aica::sgc\n{\n' + TRACE + TICKS + ARM_BUS, 1)
+    text = text.replace('void AICA_Sample()\n{', KEYON + WRITES + READS + '\nvoid AICA_Sample()\n{\n\tCcrBusSampleAdvance ccr_bus_sample_advance;\n\tccr_keyon_controls();\n\tccr_timed_writes();\n\tccr_timed_reads();\n\tccr_trace_ticks();\n\tccr_trace_keys();', 1)
     text = text.replace('void deserialize(Deserializer& deser)\n{',
-                        'void deserialize(Deserializer& deser)\n{\n\tccr_reset_reads();\n\tccr_reset_writes();\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)
-    if text.count('ccr_trace_keys();') != 1 or text.count('ccr_trace_ticks();') != 1 or text.count('ccr_trace_sample = 0;') != 2:
+                        'void deserialize(Deserializer& deser)\n{\n\tResetARMTrace();\n\tccr_reset_reads();\n\tccr_reset_writes();\n\tccr_trace_sample = 0;\n\tccr_trace_baseline = false;\n\tccr_tick_sample = 0;\n\tccr_tick_baseline = false;\n\tccr_keyon_done = false;', 1)
+    if (text.count('ccr_trace_keys();') != 1 or text.count('ccr_trace_ticks();') != 1 or
+            text.count('ccr_timed_writes();') != 1 or text.count('ccr_timed_reads();') != 1 or
+            text.count('CcrBusSampleAdvance ccr_bus_sample_advance;') != 1):
         raise ValueError('Trace anchors did not resolve uniquely')
     path.write_bytes(text.encode('utf-8'))
+
+    arm_path = root / 'core/hw/arm7/arm_mem.cpp'
+    arm_raw = arm_path.read_bytes()
+    if ARM_MEM_MARKER.encode() in arm_raw or hashlib.sha256(arm_raw).hexdigest() != ARM_MEM_SHA256:
+        raise ValueError('Unexpected ARM bus source; expected pristine pinned 3a5267a')
+    arm_text = arm_raw.decode('utf-8')
+    arm_text = arm_text.replace('#include "hw/aica/aica_mem.h"',
+                                '#include "hw/aica/aica_mem.h"\nnamespace aica::sgc { void TraceARMAccess(bool write, u32 address, u32 width, u32 value); }', 1)
+    start = arm_text.index('//Reg reads from arm side ..')
+    end = arm_text.index('//00000000~007FFFFF', start)
+    arm_text = arm_text[:start] + ARM_READ_WRITE.replace('aica::sgc::TraceARMAccess', '::aica::sgc::TraceARMAccess') + '\n' + arm_text[end:]
+    arm_path.write_bytes(arm_text.encode('utf-8'))
     if msvc:
         # Build-only compatibility for this upstream libretro target. None of
         # these changes touch emulated CPU, sound, timing or rendering behavior.

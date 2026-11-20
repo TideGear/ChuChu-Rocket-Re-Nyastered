@@ -188,22 +188,28 @@ if __name__ == '__main__':
     parser.add_argument('--dispatch-state', type=Path, help='also compare native dispatch using captured loaded sound RAM; no voice worker or hardware synthesis')
     parser.add_argument('--voice-worker', action='store_true', help='also call voice worker after each manual tick; no hardware status reads or real main-loop timing')
     args = parser.parse_args()
-    if args.all and (args.short_tail_control or args.dispatch_state):
-        parser.error('--all cannot be combined with --short-tail-control or --dispatch-state')
+    if args.all and args.short_tail_control:
+        parser.error('--all cannot be combined with --short-tail-control')
     if args.loop_passes < 1:
         parser.error('--loop-passes must be positive')
     if args.voice_worker and not args.dispatch_state:
         parser.error('--voice-worker requires --dispatch-state')
     driver, mlt = args.driver.read_bytes(), args.mlt.read_bytes()
     if args.all:
-        results = [verify(driver, mlt, bank['bank'], sequence['index'], loop_passes=args.loop_passes)
+        state = args.dispatch_state.read_bytes() if args.dispatch_state else None
+        results = [verify(driver, mlt, bank['bank'], sequence['index'], loop_passes=args.loop_passes,
+                          state=state, voice_worker=args.voice_worker)
                    for bank in inventory(mlt) for sequence in bank['sequences']
                    if not sequence.get('empty')]
-        print(dict(sequences=len(results), events=sum(r['events'] for r in results),
-                   updates=sum(r['updates'] for r in results), commands=sum(r['commands'] for r in results),
-                   looped_sequences=sum(r['sequence_end'] is None for r in results),
-                   post_end_updates=sum(r['updates'] - r['sequence_end'] for r in results if r['sequence_end'] is not None),
-                   sequences_with_pending_tails=sum(bool(r['pending_at_end']) for r in results)))
+        summary = dict(sequences=len(results), events=sum(r['events'] for r in results),
+                       updates=sum(r['updates'] for r in results), commands=sum(r['commands'] for r in results),
+                       looped_sequences=sum(r['sequence_end'] is None for r in results),
+                       post_end_updates=sum(r['updates'] - r['sequence_end'] for r in results if r['sequence_end'] is not None),
+                       sequences_with_pending_tails=sum(bool(r['pending_at_end']) for r in results))
+        if state is not None:
+            summary['dispatch_writes'] = sum(r['dispatch_writes'] for r in results)
+            summary['voice_worker'] = args.voice_worker
+        print(summary)
     else:
         print(verify(driver, mlt, args.bank, args.sequence, args.short_tail_control, args.loop_passes,
                      args.dispatch_state.read_bytes() if args.dispatch_state else None, args.voice_worker))
