@@ -139,6 +139,12 @@ static void makeFbo() {
     glGenFramebuffersP(1, &gFbo); glBindFramebufferP(GL_FRAMEBUFFER_, gFbo); glFramebufferTexture2DP(GL_FRAMEBUFFER_, GL_COLOR_ATTACHMENT0_, GL_TEXTURE_2D, gTex, 0);
     glGenRenderbuffersP(1, &gDepth); glBindRenderbufferP(GL_RENDERBUFFER_, gDepth); glRenderbufferStorageP(GL_RENDERBUFFER_, GL_DEPTH24_STENCIL8_, gMaxW, gMaxH); glFramebufferRenderbufferP(GL_FRAMEBUFFER_, GL_DEPTH_STENCIL_ATTACHMENT_, GL_RENDERBUFFER_, gDepth);
 }
+// GET_RUMBLE_INTERFACE (23): the core reports Jump Pack (Purupuru) vibration here; each call is appended to rumble.log in the save directory as frame port effect strength.
+struct RumbleInterface { bool (*set_rumble_state)(unsigned port, unsigned effect, uint16_t strength); };
+static bool rumbleSet(unsigned port, unsigned effect, uint16_t strength) {
+    FILE* f = fopen((gSave + "/rumble.log").c_str(), "ab"); if (f) { fprintf(f, "%d %u %u %u" "\n", gFrame, port, effect, (unsigned)strength); fclose(f); }
+    return true;
+}
 static bool env(unsigned cmd, void* data) {
     cmd &= 0xffff;
     switch (cmd) {
@@ -157,6 +163,11 @@ static bool env(unsigned cmd, void* data) {
             gSyncOptionSet = true;
             return true;
         }
+        if (const char* vars = getenv("FLYHOST_VARS")) {   // FLYHOST_VARS="key=value;key=value": core option overrides, e.g. reicast_device_port1_slot2=Purupuru plugs in the Jump Pack
+            static std::vector<std::pair<std::string, std::string>> parsed;
+            if (parsed.empty()) { std::string all = vars; size_t a = 0; while (a < all.size()) { size_t b = all.find(';', a); if (b == std::string::npos) b = all.size(); std::string kv = all.substr(a, b - a); size_t e = kv.find('='); if (e != std::string::npos) parsed.push_back({kv.substr(0, e), kv.substr(e + 1)}); a = b + 1; } }
+            for (auto& kv : parsed) if (kv.first == variable->key) { variable->value = kv.second.c_str(); return true; }
+        }
         if (getenv("FLYHOST_PER_PIXEL") && strcmp(variable->key, "reicast_alpha_sorting") == 0) {
             variable->value = "per-pixel (accurate)";
             return true;
@@ -167,6 +178,7 @@ static bool env(unsigned cmd, void* data) {
         }
         return false;
     }
+    case 23: ((RumbleInterface*)data)->set_rumble_state = rumbleSet; return true;   // GET_RUMBLE_INTERFACE
     case 17: *(bool*)data = false; return true;                                    // GET_VARIABLE_UPDATE
     case 51 | 0x10000: return true;                                                // GET_INPUT_BITMASKS
     case 56: *(unsigned*)data = 3; return true;                                    // SET_PREFERRED_HW_RENDER: OpenGL core
