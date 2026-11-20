@@ -4914,7 +4914,18 @@ int main(int argc, char** argv) {
     Uint64 last = SDL_GetPerformanceCounter();
     std::function<void()> frame = [&]() {
         SDL_Event e;
+        // SDL rewrites mouse event positions into the renderer's logical coordinates (using the logical size set when the events were pumped, i.e. after the last draw), so the
+        // handlers' own window-to-logical conversion ran twice: Puzzle Stage Select at 640x480 in a 1024x768 window picked the cell at 0.625 of the click (user log 2026-11-19).
+        // Undo that rewrite once here so every handler receives true window coordinates (headless injected clicks are never rewritten).
+        int pumpLw = 0, pumpLh = 0; SDL_RenderGetLogicalSize(app.ren, &pumpLw, &pumpLh);
         while (SDL_PollEvent(&e)) {
+            if (!app.headless && pumpLw > 0 && pumpLh > 0 && (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP)) {
+                int sw = 0, sh = 0; SDL_RenderGetLogicalSize(app.ren, &sw, &sh); SDL_RenderSetLogicalSize(app.ren, pumpLw, pumpLh);
+                int wx = 0, wy = 0; const bool motion = e.type == SDL_MOUSEMOTION;
+                SDL_RenderLogicalToWindow(app.ren, (float)(motion ? e.motion.x : e.button.x), (float)(motion ? e.motion.y : e.button.y), &wx, &wy);
+                if (motion) { e.motion.x = wx; e.motion.y = wy; } else { e.button.x = wx; e.button.y = wy; }
+                if (sw > 0 && sh > 0) SDL_RenderSetLogicalSize(app.ren, sw, sh);
+            }
             if (e.type == SDL_QUIT) app.quit = true;
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F11) { Uint32 f = SDL_GetWindowFlags(app.win); SDL_SetWindowFullscreen(app.win, (f & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP); }
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_v) { app.vsync = !app.vsync; SDL_RenderSetVSync(app.ren, app.vsync); }
