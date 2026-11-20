@@ -86,7 +86,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Unlock/password messages (mode 17) | screen | open | - |
 | Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual) | moving px 11.4 vs 5.4 static baseline |
 | Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
-| Rocket lid / lift-off / smoke | animation | partial (per-frame sweep of ages -9..80, one replay) | prior sweep was 1.17-1.77 on ages 1-80 and 1.28-2.24 on -9..-2 (CCR_GPU=1, disc-only); age 0 lacked the original gate (3.92). The port now gates age 0 and enlarges age -1 at 1.25x, but this change has not completed a Flycast frame-diff |
+| Rocket lid / lift-off / smoke | animation | partial (90/90 replay ages measured) | PuzzleLoop references 0x8c01cbc0 (sets 0x8c1af1e4); launch task 0x8c01c26e checks that flag before creating 0x8c01b8a0/0x8c01b9a0. Live RAM confirms flag 0 at age -1 and 1 at age 0, with six task instances added. Port prelaunch prediction lowers age -1 full-frame mean to 8.990 and dome-band mean to 8.837 (was 16.32); age 0 dome-band remains 0.744. All full-frame means still exceed 3; per-element closure remains open |
 | Mouse caught, hole fall, rocket entry | animation | open | - |
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |

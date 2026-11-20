@@ -2834,6 +2834,16 @@ struct PuzzleMode : Screen {
     std::array<DcRocketLid, kCols * kRows> launchLids{};
     // Original Puzzle phase 4 (0x8c02bf00): 210 ticks, or 105 with Dash.
     bool resultReady() const { return state == 2 && clearFrames > (dash ? 105 : 210); }
+    bool willClearNextFrame() const {
+        if (!running || sim.saved != totalMice - 1 || sim.killed || sim.catsInRocket) return false;
+        Sim preview = sim;
+        preview.trace = false;
+        for (int pass = 0; pass < (dash ? 2 : 1); ++pass) preview.tick();
+        int alive = 0;
+        for (const auto& e : preview.ents) if (e.mouse && e.alive && !e.done) ++alive;
+        return preview.killed == 0 && preview.catsInRocket == 0 &&
+               alive == 0 && preview.saved == totalMice;
+    }
     void nextPuzzle() {
         if ((cur + 1) % 25 == 0 || cur + 1 >= (int)stages.list.size()) { back = true; return; }
         ++cur; reset();
@@ -3128,8 +3138,10 @@ struct PuzzleMode : Screen {
             a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
             for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, pf(a));
         }
+        const bool prelaunch = state == 1 && dreamcastPuzzleControls(a) && willClearNextFrame();
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a), 0,
-                                            state == 2 ? &launchLids : nullptr, state == 2 ? clearFrames * (dash ? 2 : 1) : -1);
+                                            state == 2 || prelaunch ? &launchLids : nullptr,
+                                            state == 2 ? clearFrames * (dash ? 2 : 1) : -1);
         if (launchDepth) a.models3d.endDepthScene();
         if (showCursor) {
             cursorTrail.draw(a, 0);
