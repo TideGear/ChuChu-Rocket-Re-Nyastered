@@ -1,12 +1,18 @@
-# Handoff — 2026-11-19
+# Handoff — Dreamcast-only fidelity continuation
 
-The user requested: after release, find a stopping place, wrap up for a new conversation, commit, push, and stop. This is that stopping point. Do not resume implementation in this conversation. No gameplay changes were made during this wrap-up.
+The continuing goal is a Dreamcast-only ChuChu Rocket! build from a user-owned Dreamcast image, matching Flycast's models, interface, and animation. This is a checkpoint, not completion; the user asked to stop here and continue in a new conversation.
 
 ## Start here in the next conversation
 
-Read [goal.md](goal.md), [audit.md](audit.md), and the latest entries in [roadmap.md](roadmap.md). This file supersedes the stale opening guidance and priority list in [NEXT_SESSION.md](NEXT_SESSION.md) and the preview-1 status in [PREVIEW_HANDOFF.md](PREVIEW_HANDOFF.md); retain those files for historical evidence and capture recipes. Use [audio.md](audio.md), especially its final scoping entry, for audio work. Coverage belongs to the audit; a harness case passing does not close a whole feature.
+Read [goal.md](goal.md), [audit.md](audit.md), and the latest entries in [roadmap.md](roadmap.md). Coverage belongs to the audit; a harness case passing does not close a whole feature. The published release notes and prior handoff sections below remain useful history, not the current stopping point.
 
-Before this handoff commit, main was at `29a23ad` (Puzzle pause research), following `dfdc341` (preview-3 release notes) and `51065e6` (mouse conversion fix). User-owned `game/tests/determinism_test.cpp` and `.vscode/` are intentionally left untouched and unstaged. Do not commit them.
+Current branch is `main`, pushed to `origin/main` at `2e8918d` (`Fix Dreamcast Puzzle Cancel panel scaling`), following `e987eb1` (`Fix Puzzle prelaunch dome scale`). User-owned changes to `game/tests/determinism_test.cpp` and untracked `.vscode/` remain untouched and unstaged; do not commit them.
+
+## Latest verified changes
+
+- Puzzle prelaunch: `PuzzleMode::willClearNextFrame()` predicts the next simulation frame so the age -1 dome scale is applied before the clear; age 0 still hides the launch scene. Original Flycast frames 9/10 match their references pixel-for-pixel, and RAM shows launch flag `0x8c1af1e4` changing 0->1 with six body/lid task instances created at age 0. The full 90-age sweep remains partial: age -1 full-frame mean 8.9896 and dome-band mean 8.8372; age 0 full-frame mean 8.0300 and dome-band mean 0.7438; no full-frame age meets the <=3 goal. Details are in the latest rocket entry in [roadmap.md](roadmap.md).
+- Puzzle Cancel panel: old exported art was alpha-cropped to 126x73 but stretched into the original 128x128 quad. It now renders at the loaded texture dimensions times the original 1.6 scale (201.6x116.8 for old art; current 128x128 art remains 204.8 square). The stale-art check now runs after Puzzle art is loaded. A headless capture with the old unstamped cache logged version 0/need 2; the current version-2 cache did not warn. Both 640x480 captures showed the Cancel art at the Flycast frame-2390 height. The overall HUD still does not meet parity thresholds.
+- Validation: `tools/build-windows.ps1 --target ccr` passed; `build/game/puzzle_pause_test.exe` passed all checks. The Cancel panel was visually checked in `CCR_GPU=1 CCR_SIZE=640x480 CCR_MODELS=1 CCR_TICKS=200` captures using both old and current disc-only caches. The direct MSVC CMake build lacks its include environment; use the pinned Zig build script above.
 
 ## Published release
 
@@ -25,11 +31,11 @@ Release notes: [preview 3](releases/v2026.11.22-preview.3.md). It fixes double c
 
 Prior-session validation (not rerun during this documentation-only wrap-up): Windows clean package build and unit tests passed; packaged extraction from the disc alone completed with Puzzle, Battle and Stage Challenge playable, art version stamp present and no warning; rocket render checked; downloaded Windows archive byte-identical to local. Linux/macOS were built/tested by CI, not run manually. Local package/download evidence: `local/release-check/dist3`, `local/release-check/dl3`, `local/release-check/tagci3.log`. Never ship original game data, BIOS, states or captures.
 
-## Next concrete task: Puzzle pause
+## Next concrete task: close the rocket prelaunch discrepancy
 
-The controller path to the Puzzle pause menu is still missing. The latest research is committed in `29a23ad` and the last roadmap entry. Pause artwork names are resource descriptors, not logic: strings `pauseboard0/1`, `yameru`, `tudukeru`, `fukidasi10..12` at 0x8c07ec20..0x8c07ec70 point into four 12-byte descriptor groups at 0x8c0b547c, 0x8c0b5520, 0x8c0b5594 and 0x8c0b5650. Text search did not locate the pause task. FUN_8c02d09e is a two-argument confirm/transition helper, not yet tied to Puzzle play; FUN_8c01a174 draws a PAUSE text overlay.
+Continue the code-first trace of the active mouse/rocket draw state at age -1, using [age_00009.ram](../local/rocket-age-packets/age_00009.ram), [age_00010.ram](../local/rocket-age-packets/age_00010.ram), the paired Flycast screenshots, and [ta_parse.py](../tools/oracle/ta_parse.py). The known TA packet offset `0x253e10` yields no polygons in these newer saved states; do not assume those dumps contain the render list. Identify the original active mouse task/frame and its draw ordering before changing model or scale. The diagnostic crop `[396,8,453,72]` remains 22.6865; per-element closure is open.
 
-Next: find writers of the Start-press RAM-watch candidates with `tools/oracle/dc_ram_trace.py` on a state at the press: 0x30ef54 (0->5), 0x30ef74 (0->1), 0x30e914 (0->4); pad edge 0x1aee98 / 0x2d09b0. Read the original code first, then confirm the path headlessly. Earlier trace saw the board continue about three ticks, with the whole overlay visible at +5 frames.
+Puzzle pause input/controller logic is implemented. Its timing helper tests pass, but a port-vs-Flycast paused-frame pixel comparison is not retained yet; do not treat the whole pause screen as verified.
 
 ## Other retained work and corrections
 
@@ -37,6 +43,7 @@ Next: find writers of the Start-press RAM-watch candidates with `tools/oracle/dc
 - Jump Pack: Options toggle is inert. Flycast rumble logging and Purupuru core instrumentation observed only stop commands (VIBSET 0x10), including with Jump Pack On, no vibration start. Find the pdVib state structure/API writers; no rumble event is verified. Patched core/pristine backups and logs are described in the roadmap (`local/star-trace/rm`).
 - Options General and 4P/Team pages now exist, alongside Language/Records. Most General/4P values are session-only and not wired to game behavior; music test must actually play. Keyboard F-key page is analysed but unbuilt; it serves chat shortcuts, and the earlier question about a local-only picker versus deferral with online remains unresolved. See manual findings and roadmap; do not silently drop scope.
 - Last recorded parity harness result: 121/122 full-frame cases <=3, launch age 0 about 3.78. Element crops and complete animation coverage still need their own checks. Retain Help strip-edge residue, tick-aligned dome/pause/failure cases and star twinkles. Look-alike fonts for disc-only installs were accepted by the user.
+- The launch-age packet parser found 69 polygons in the older baseline state at `0x253e10`, but none in the newer age -1/0 states. The current RAM dumps confirm launch timing; the captured screenshots match the original references, but the active dome discrepancy is unresolved.
 - Audio is not connected to gameplay. The old handoff's named component commits were reported missing from this clone; check actual source/history before relying on those commit IDs. Latest `docs/audio.md` scopes an offline disc-derived SFX renderer: boot MANATEE.DRV ARM7 with vectors/timer interrupts, reproduce the SH-4 mailbox/FIFO and SMLT load, route ARM reads/writes through SampledVoiceBank, sample at 44.1 kHz, compare cue WAVs against Flycast (start English 21/27/28). Existing single-routine harnesses do not boot the driver. Preserve the four discarded monitor-latch reads at 0x159c..0x15a8 and post-store Unicorn bus semantics. No renderer implementation has started; synthetic component checks are not whole-cue verification.
 
 ## Working commands and constraints
@@ -45,4 +52,4 @@ Use headless captures and `tools/quiet.ps1`; do not use the user's screen/audio 
 
 Build with `tools/build-windows.ps1` through cmd with output redirected when PowerShell native-stderr handling aborts on CMake warnings. Run test binaries from `game/` for their default `../local/testdata`; argument-driven tools require arguments. Previously reported no-argument `cpu_gba_test` crash remains uninvestigated. Pass assets first: `ccr <assets> <MODE>`. Flycast libretro B means Dreamcast A. The pinned core has no software renderer.
 
-`build`, `dist` and `analysis` are junctions to D:; use `local/` for new outputs. Do not bundle local fixtures. This wrap-up changes documentation only, so no app rebuild or gameplay test was needed. Commit and push the handoff, verify the remote branch matches, and stop.
+`build`, `dist` and `analysis` are junctions to D:; use `local/` for new outputs. Do not bundle local fixtures. For this handoff update, commit only `docs/HANDOFF.md`, push `main`, verify the remote branch matches, and stop.
