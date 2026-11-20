@@ -2929,7 +2929,7 @@ struct PuzzleMode : Screen {
                 return;
             }
             mouseCursor = false;
-            { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) putAt(curX, curY, d);
+            { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) { if (state == 0) putAt(curX, curY, d); }
             else if (b == pm.pause) {
                 if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
                 pauseState.press();
@@ -2996,7 +2996,7 @@ struct PuzzleMode : Screen {
                     a.playSfx(2); paused = false; back = true; }
                 return true;
             }
-            if (phone ? handset(33, 148, 204, 215) : in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; } }
+            if (phone ? handset(33, 148, 204, 215) : in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; pconf = false; pauseState.resume(); } }
             if (phone ? handset(265, 148, 440, 215) : in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }
             return true; }
         if (state == 3) return true;   // PuzzleLoop disables pause and ignores HUD input during the failure phase.
@@ -4053,13 +4053,12 @@ struct BattleMode : Screen {
             winPoint = rules->pointIndex;
         } else {
             game.baseScale = 1.0f;
-            int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3;
+            int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : (gApp ? gApp->settings.battleTime : 3);
             game.roundFrames = minutes * 60 * 60;
             winPoint = getenv("CCR_WINPOINT") ? atoi(getenv("CCR_WINPOINT")) : 2;
             if (gApp) {
                 constexpr float speeds[] = {0.25f, 0.75f, 1.0f, 1.25f, 2.0f};
                 game.baseScale = speeds[std::clamp(gApp->settings.battleSpeed - 1, 0, 4)];
-                game.roundFrames = gApp->settings.battleTime * 60 * 60;
                 game.generatorParams.pSpecial2 *= gApp->settings.battleMice ? 5.0f : 1.0f;
                 game.rotateOwn = gApp->settings.battleArrow != 0;
             }
