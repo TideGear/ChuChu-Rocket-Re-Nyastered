@@ -59,6 +59,15 @@ using namespace ccr;
 static const int CELL = 64, W = 12 * CELL, H = 9 * CELL + 64;
 // iPad-class layout (Core::settingsInit iOS 0x135cc + the static layout struct at 0x131028, read 2026-11-14): screen 1024 x 768, cell pitch 64 (= 4.2667 px per world unit), field origin (184, 32); other layouts: Android 800x480 (pitch 50, origin 160,18), 480x320 (pitch 35, origin 61,4).
 static const int GW = 1024, GH = 768, OX = 184, OY = 32;
+// Mouse events and SDL_GetWindowSize share window coordinates, so map them to the renderer's current logical size ourselves (centred, uniform scale, as SDL_RenderSetLogicalSize
+// presents it) instead of SDL_RenderWindowToLogical, whose cached display-scale state gave wrong cells on some Windows setups (Puzzle Stage Select, 2026-11-19).
+static void ccrWindowToLogical(SDL_Renderer* ren, int wx, int wy, float* lx, float* ly) {
+    int lw = 0, lh = 0; SDL_RenderGetLogicalSize(ren, &lw, &lh);
+    SDL_Window* win = SDL_RenderGetWindow(ren); int ww = 0, wh = 0; if (win) SDL_GetWindowSize(win, &ww, &wh);
+    if (lw <= 0 || lh <= 0 || ww <= 0 || wh <= 0) { SDL_RenderWindowToLogical(ren, wx, wy, lx, ly); return; }
+    const float scale = std::min(ww / (float)lw, wh / (float)lh), ox = (ww - lw * scale) * 0.5f, oy = (wh - lh * scale) * 0.5f;
+    *lx = (wx - ox) / scale; *ly = (wy - oy) / scale;
+}
 struct FieldLayout {
     float left = OX, top = OY, cell = CELL;
     float wallMagnification = 1.0f;
@@ -1519,7 +1528,7 @@ struct HelpMode : Screen {
     int hit(App& a, float lx, float ly) { for (int i = 0; i < N; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (px[i] <= lx && lx <= px[i] + w && py[i] <= ly && ly <= py[i] + h) return i; } int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 6; return -1; }
     void event(App& a, const SDL_Event& e) override {
         if (phase != 0x15 || e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT) return;
-        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int x = (int)lx, y = (int)ly;
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int x = (int)lx, y = (int)ly;
         if (a34 < 0) {   // topic list
             int h = hit(a, lx, ly); if (h < 0) return; int before = sel; if (h < 6) sel = h;
             if (before == h || h == 6) { a.playSfx(2); if (h == 6) { phase = 0x16; a20 = 0; leaveTo = 1; return; } topic = h; a20 = 0; a31 = true; a32 = false; a34 = 2; page = 0; }
@@ -2069,7 +2078,7 @@ struct BattleSetupMode : Screen {
             event.button.button != SDL_BUTTON_LEFT) return;
         SDL_RenderSetLogicalSize(app.ren, GW, GH);
         float x, y;
-        SDL_RenderWindowToLogical(app.ren, event.button.x, event.button.y, &x, &y);
+        ccrWindowToLogical(app.ren, event.button.x, event.button.y, &x, &y);
         if (x < 0 || x > GW || y < 0 || y > GH) return;
         if (frame.pane == 0) {
             players.touch(static_cast<int>(x), static_cast<int>(y), 0);
@@ -2226,16 +2235,16 @@ struct OptionsMode : Screen {
             if (capture >= 0 && e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) { capture = -1; return; }
             if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_ESCAPE) { a.playSfx(2); sub = 0; sel = 3; } else if (k == SDLK_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (k == SDLK_RETURN && capture < 0) { a.playSfx(2); portAct(a, sel); } return; }
             if (e.type == SDL_CONTROLLERBUTTONDOWN && capture < 0) { int b = e.cbutton.button; if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_A) { a.playSfx(2); portAct(a, sel); } else if (b == SDL_CONTROLLER_BUTTON_B) { a.playSfx(2); sub = 0; sel = 3; } return; }
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && capture < 0) { float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int h = portHit(lx, ly, a); if (h == 99) { a.playSfx(2); sub = 0; sel = 3; } else if (h >= 0) { if (sel != h) { sel = h; a.playSfx(0); } else { a.playSfx(2); portAct(a, h); } } }
+            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && capture < 0) { float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int h = portHit(lx, ly, a); if (h == 99) { a.playSfx(2); sub = 0; sel = 3; } else if (h >= 0) { if (sel != h) { sel = h; a.playSfx(0); } else { a.playSfx(2); portAct(a, h); } } }
             return; }
         if (phase == 0x12 && sub == 1 && (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONUP) && drag >= 0) {   // handleInput param_3 == 1 (move) and 2 (release)
-            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, &lx, &ly);
+            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, &lx, &ly);
             if (e.type == SDL_MOUSEMOTION) setVol(a, drag, lx); else { if (drag == 1 && hitTest(a, lx, ly) == 1) a.playSfx(1); a.saveOptions(); drag = -1; } return; }
         if (phase != 0x12 || e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT) return;
         if (sub == 1) {   // handleInput, state 1 (sounds)
-            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly);
+            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly);
             if (hit == 0 || hit == 1) { drag = hit; setVol(a, hit, lx); a.saveOptions(); } else if (hit == 2) { a.playSfx(2); sub = 0; sel = 0; } return; }
-        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly); if (hit < 0) return;
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int hit = hitTest(a, lx, ly); if (hit < 0) return;
         int before = sel; if (hit != back()) sel = hit;
         if (before != hit && hit != back()) { a.playSfx(0); return; }
         if (sub == 2) {   // HelpOptionsScreen::handleLanguageMenuItemSelection 0x2437c: items 0..5 -> AppData::setLocale + reload the language textures, 6 = back to the main list
@@ -2299,7 +2308,7 @@ struct HdMenuMode : Screen {
     void event(App& a, const SDL_Event& e) override {
         if (phase != 0xf) return; int hit = -1;
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
+            float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
             for (int i = 0; i < N && hit < 0; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (px[i] <= lx && lx <= px[i] + w && py[i] <= ly && ly <= py[i] + h) hit = i; }   // inclusive rects, first match
             if (hit < 0) return; int before = sel; sel = hit;
             if (before == hit) act(a, hit); else a.playSfx(0); }
@@ -2594,7 +2603,7 @@ struct DcModeSelect : Screen {
             SDL_RenderSetLogicalSize(a.ren, 640, 480);
             SDL_RenderSetViewport(a.ren, nullptr);
             float px, py;
-            SDL_RenderWindowToLogical(a.ren, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
+            ccrWindowToLogical(a.ren, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
                                       e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, &px, &py);
             for (int i = 0; i < kCount; ++i) {
                 if (px >= x[i] && px < x[i] + 197 && py >= y[i] && py < y[i] + 36) {
@@ -2653,7 +2662,7 @@ struct MenuMode : Screen {
             } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_RenderSetLogicalSize(a.ren, GW, GH);
                 float x, y;
-                SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+                ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
                 if (x >= 340 && x < 684 && y >= 290 && y < 450) {
                     sel = y < 370 ? 1 : 3;
                     choose(a);
@@ -2665,7 +2674,7 @@ struct MenuMode : Screen {
             if (k == SDLK_DOWN) sel = (sel + 1) % N; else if (k == SDLK_UP) sel = (sel + N - 1) % N; else if (k == SDLK_RETURN || k == SDLK_SPACE) choose(a); else if (k == SDLK_ESCAPE) back = true; }
         else if (e.type == SDL_MOUSEMOTION || (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT)) {
             int mx = e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, my = e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y;
-            SDL_RenderSetLogicalSize(a.ren, a.padOk ? 1024 : 480, a.padOk ? 768 : 320); float lx, ly; SDL_RenderWindowToLogical(a.ren, mx, my, &lx, &ly); SDL_RenderSetLogicalSize(a.ren, W, H);
+            SDL_RenderSetLogicalSize(a.ren, a.padOk ? 1024 : 480, a.padOk ? 768 : 320); float lx, ly; ccrWindowToLogical(a.ren, mx, my, &lx, &ly); SDL_RenderSetLogicalSize(a.ren, W, H);
             for (int i = 0; i < N; i++) { int x, y, w, h; geom(a, i, x, y, w, h); if (lx >= x && lx < x + w && ly >= y && ly < y + h) { sel = i; if (e.type == SDL_MOUSEBUTTONDOWN) choose(a); } } }
     }
     void choose(App& a) { if (sel == 1) chosen = "STAGES"; else if (sel == 2 && challengeBoardsAvailable(a.root)) chosen = "CHALLENGE"; else if (sel == 3) chosen = "BATTLE"; else a.playSfx(0x13); }
@@ -2701,7 +2710,7 @@ struct DragGesture {
     bool on = false; int cx = -1, cy = -1; float x0 = 0, y0 = 0; int wx0 = 0, wy0 = 0;
     bool begin(App& a, const SDL_Event& e, FieldLayout field = {}) {
         SDL_RenderSetLogicalSize(a.ren, GW, GH);
-        SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x0, &y0);
+        ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x0, &y0);
         cx = static_cast<int>(std::floor((x0 - field.left) / field.cell));
         cy = static_cast<int>(std::floor((y0 - field.top) / field.cell));
         on = cx >= 0 && cx < kCols && cy >= 0 && cy < kRows;
@@ -2709,7 +2718,7 @@ struct DragGesture {
         return on;
     }
     // returns the direction (0 south, 1 west, 2 north, 3 east) or -1 for a tap
-    int end(App& a, const SDL_Event& e) { on = false; float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); float dx = lx - x0, dy = ly - y0; float wdx = (float)(e.button.x - wx0), wdy = (float)(e.button.y - wy0); if (wdx * wdx + wdy * wdy <= 0.25f) return -1; if (std::fabs(dy) < std::fabs(dx)) return dx > 0 ? 3 : 1; return dy > 0 ? 0 : 2; }
+    int end(App& a, const SDL_Event& e) { on = false; float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); float dx = lx - x0, dy = ly - y0; float wdx = (float)(e.button.x - wx0), wdy = (float)(e.button.y - wy0); if (wdx * wdx + wdy * wdy <= 0.25f) return -1; if (std::fabs(dy) < std::fabs(dx)) return dx > 0 ? 3 : 1; return dy > 0 ? 0 : 2; }
 };
 
 static int arrowKey(SDL_Keycode key) {
@@ -2730,7 +2739,7 @@ struct MouseAim {
         field = layout;
         if (!app.headless) SDL_GetMouseState(&windowX, &windowY);
         SDL_RenderSetLogicalSize(app.ren, GW, GH);
-        SDL_RenderWindowToLogical(app.ren, windowX, windowY, &x, &y);
+        ccrWindowToLogical(app.ren, windowX, windowY, &x, &y);
         inside = x >= field.left && y >= field.top && x < field.x(kCols) && y < field.y(kRows);
     }
     int cellX() const { return static_cast<int>((x - field.left) / field.cell); }
@@ -2855,7 +2864,7 @@ struct PuzzleMode : Screen {
                 else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B) back = true;
             } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 float x, y; SDL_RenderSetLogicalSize(a.ren, 640, 480);
-                SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+                ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
                 SDL_RenderSetLogicalSize(a.ren, GW, GH);
                 if (x >= 32 && x < 288 && y >= 382 && y < 414) nextPuzzle();
                 else if (x >= 32 && x < 288 && y >= 414 && y < 446) back = true;
@@ -2929,7 +2938,7 @@ struct PuzzleMode : Screen {
         }
     }
     bool hudButton(App& a, const SDL_Event& e) {
-        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
         auto in = [&](float x0, float y0, float x1, float y1) { return lx >= x0 && lx < x1 && ly >= y0 && ly < y1; };
         const bool phone = phonePauseAvailable(a);
         auto handset = [&](int x0, int y0, int x1, int y1) {
@@ -3252,7 +3261,7 @@ struct ChallengeMode : Screen {
             } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_RenderSetLogicalSize(a.ren, 640, 480);
                 float x, y;
-                SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+                ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
                 if (x >= 32 && x < 200 && y >= 382 && y < 446) {
                     if (y < 414) nextStageRequested = true;
                     else { a.nextStage = cur; fromStageSelect = true; back = true; }
@@ -3274,7 +3283,7 @@ struct ChallengeMode : Screen {
             } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_RenderSetLogicalSize(a.ren, 640, 480);
                 float x, y;
-                SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+                ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
                 if (x >= 256 && x < 453 && y >= 256 && y < 336) {
                     failureChoice = y >= 300 ? 1 : 0;
                     finishFailure(a);
@@ -3544,7 +3553,7 @@ struct ChallengeSelectMode : Screen {
             SDL_RenderSetLogicalSize(a.ren, 640, 480);
             SDL_RenderSetViewport(a.ren, nullptr);
             float x, y;
-            SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+            ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
             if (x >= 240 && x < 344 && y >= 406 && y < 448) destination = "MENU_CHALLENGE";
             for (int i = 0; i < kStages; ++i) {
                 if (x < capsuleX(i) || x >= capsuleX(i) + 44 || y < capsuleY(i) || y >= capsuleY(i) + 28) continue;
@@ -3687,7 +3696,7 @@ struct DcBattleSetupMode : Screen {
             case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: act(a, 3); return; case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: act(a, 4); return;
             default: return; }
         } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-            float lx, ly; SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
+            float lx, ly; SDL_RenderSetLogicalSize(a.ren, 640, 480); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
             if (phase == 0) {
                 static const int x0[4] = {42, 194, 346, 495};
                 for (int c = 0; c < 4; ++c) {
@@ -3778,7 +3787,7 @@ struct StageSelectMode : Screen {
             }
         } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             SDL_RenderSetLogicalSize(a.ren, 640, 480); float x, y;
-            SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
+            ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
             if (y >= 300 && y < 340) { if (x >= 16 && x < 60) dcGroup(a, -1); else if (x >= 272 && x < 316) dcGroup(a, 1); }
             for (int i = 0; i < 25; ++i) {
                 const int cx = 36 + 54 * (i % 5), cy = 115 + 34 * (i / 5);
@@ -3842,7 +3851,7 @@ struct StageSelectMode : Screen {
     }
     void origEvent(App& a, const SDL_Event& e) {
         if (e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT || phase != 0x21) return;   // handleInput works only in state 0x21
-        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int px = (int)lx, py = (int)ly;
+        float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int px = (int)lx, py = (int)ly;
         int hit = -1; for (int i = 0; i < 28 && hit < 0; i++) { Item t = item(a, i); if (t.x <= px && px <= t.x + t.w && t.y <= py && py <= t.y + t.h) hit = i; }   // AppScreen::updateMenuItemFromTouchEvent: inclusive rects, first match
         int before = lastItem; if (hit >= 0) lastItem = hit;
         auto startStage = [&](int it) { a.playSfx(2); chosen = it; timer = 0; phase = 0x22; leaveBack = false; };
