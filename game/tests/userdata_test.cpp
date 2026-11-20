@@ -19,6 +19,9 @@ int main() {
     CHECK(parseSettings("filter = blurry\n").filter == "linear");
     CHECK(parseSettings("cpu_style = gba").cpuStyle == "gba" && parseSettings("cpu_style = x").cpuStyle == "dreamcast" && r.cpuStyle == "dreamcast");
     CHECK(!r.unlockAll && parseSettings("unlock_all = yes").unlockAll && parseSettings(settingsText(parseSettings("unlock_all = true"))).unlockAll);
+    Settings battle = parseSettings("battle_time=2\nbattle_speed=5\nbattle_mice=1\nbattle_arrow=1\n");
+    CHECK(battle.battleTime == 2 && battle.battleSpeed == 5 && battle.battleMice == 1 && battle.battleArrow == 1);
+    CHECK(parseSettings(settingsText(battle)).battleTime == 2 && parseSettings(settingsText(battle)).battleArrow == 1);
     // data folder
     CHECK(resolveDataDir((tmp / "prog").string(), (tmp / "assets").string(), false) == (tmp / "assets").string());
     CHECK(resolveDataDir((tmp / "prog").string(), (tmp / "assets").string(), true) == (tmp / "prog" / "data").generic_string() && fs::is_directory(tmp / "prog" / "data"));

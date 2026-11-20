@@ -47,7 +47,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 - Portable mode, commented settings, rotating logs: **done** (userdata_test; headless app check).
 - Version matrix, asset provenance, README, unofficial-project statement: **partial** (README and distribution notes exist; matrix not regenerated for this audit).
 
-- Disc-only run (2026-11-18, USA CUE/BIN only, no mobile files, no BIOS): `tools/extract_all.py --game-files local/dc_ref/disc --cache <empty dir>` completed in 87 s (128 models, 50 battle stages, 54 `dc_*` UI sheets, `dreamcast_puzzles.bin`); `ccr` then ran STARTUP, MENU, HELP, OPTIONS, BATTLE, TEAM_BATTLE, CHALLENGE_SELECT, puzzle, challenge and battle play headlessly with no errors. This covers the extraction core only: `setup.cmd`, `--prepare` and the RecompLauncher path were not run (they write to the user's config folder), and the screens were not diffed beyond the earlier per-screen comparisons.
+- Disc-only run (2026-11-19, USA CUE/BIN only, no mobile files, no BIOS): a fresh throwaway cache extracted 128 models, 50 battle stages, 54 `dc_*` UI sheets, and `dreamcast_puzzles.bin`. Headless GPU startup, Mode/Menu, Puzzle, 4P Battle setup, and Challenge A1 introduction captures completed with no errors. The earlier 2026-11-18 run also covered HELP, OPTIONS, Challenge and Battle paths headlessly. These are smoke/screen checks, not full setup/launcher or per-element Flycast parity acceptance; `setup.cmd`, throwaway config, `--prepare`, RecompLauncher, and final release packaging remain separate checks.
 
 ## Dreamcast coverage table (2026-11-18)
 Counts items this table lists, not the game's full content (many screens have several states). Status: verified = within the goal's error bar (full frame <= 3; each element mean <= 1, no shift, no pixel off by more than 8 levels outside a 1 px edge band; measured with tools/parity.py); partial = implemented and compared once; open = not built or not compared.
@@ -69,7 +69,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Challenge clear (C1) | screen | partial | 0.7 banner |
 | Challenge pause | screen | partial | - |
 | Puzzle play Normal 01/02/08 | screen | partial | Normal 01 1.31 (CCR_GPU=1, disc-only; star twinkles not drawn, look-alike hint font without a BIOS); 02/08 not measured |
-| Puzzle pause | screen | partial | not measured; the port has no pad path to the overlay (original: overlay whole at +5 frames after Start) |
+| Puzzle pause | screen | partial | not measured; the port now has a Start/R2 controller path and the original transition is measured (overlay whole at +5 frames after Start), but no port-vs-Flycast frame comparison or dedicated controller test |
 | Puzzle result, Save Completed (clear age 218) | screen | partial | 1.37 full frame; Save Completed notice element passes the per-element rule (mean 0.145, shift 0,0, 0 off-edge px > 8; the 1,377 one-level pixels are host-GPU rounding); banner, HUD and rocket elements not yet checked per element |
 | Puzzle hint text (BIOS font) | screen | verified | 0 px |
 | Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |
@@ -79,14 +79,14 @@ Counts items this table lists, not the game's full content (many screens have se
 | Help Menu | screen | partial | 0.34 (CCR_GPU=1, disc-only) |
 | Help pages (21) | screen | partial | all 21 pages captured from Flycast and measured (CCR_GPU=1, disc-only): full-frame 0.29-0.62; title and footer crops pass on all 21, body crops mean 0.20-0.80 but each has 66-256 off-edge px above 8 levels at the frame's top corners (not closed) |
 | Options menu | screen | partial | 4.48 |
-| Options sub-pages (General, 4P Settings, Records, Language, F-key) | screen | open | - |
+| Options sub-pages (General, 4P Settings, Records, Language, F-key) | screen | partial | Records/Language exist; General and 4P/Team persist settings and 4P values feed direct Battle loads; General Jump Pack and music/SE playback, F-key chat, and original-interpretation parity remain open |
 | Mode 4, 16 (tutorial), 18-22 | screen | open | - |
 | Puzzle Edit screens | screen | open | - |
 | Network / Homepage | screen | not testable offline | - |
 | Unlock/password messages (mode 17) | screen | open | - |
 | Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual) | moving px 11.4 vs 5.4 static baseline |
 | Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
-| Rocket lid / lift-off / smoke | animation | partial (per-frame sweep of ages -9..80, one replay) | full-frame mean 1.17-1.77 on ages 1-80 and 1.28-2.24 on -9..-2 (CCR_GPU=1, disc-only); only age 0 fails (3.92): the original draws no domes there (and enlarges them about 1.25x at age -1), untraced |
+| Rocket lid / lift-off / smoke | animation | partial (per-frame sweep of ages -9..80, one replay) | prior sweep was 1.17-1.77 on ages 1-80 and 1.28-2.24 on -9..-2 (CCR_GPU=1, disc-only); age 0 lacked the original gate (3.92). The port now gates age 0 and enlarges age -1 at 1.25x, but this change has not completed a Flycast frame-diff |
 | Mouse caught, hole fall, rocket entry | animation | open | - |
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |

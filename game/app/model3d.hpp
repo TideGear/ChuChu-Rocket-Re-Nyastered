@@ -97,8 +97,8 @@ public:
                           float cameraDistance = 218.0f, const Model3D* oppositeLid = nullptr,
                           float opening = 0.0f, const Model3D* launchedBody = nullptr, int launchAge = -1,
                           const Model3D* launchBase = nullptr, const Model3D* flame = nullptr,
-                          const std::vector<int>* smokeBirths = nullptr) const {
-        const float scale = pixelsPerUnit * pulse;
+                          const std::vector<int>* smokeBirths = nullptr, float launchScale = 1.0f) const {
+        const float scale = pixelsPerUnit * pulse * launchScale;
         // Original 0x8c01b628: TranslateZ(+/-opening), RotateY(+/-90),
         // RotateZ(-int(opening * 12743.111328125)). Keep one shared depth
         // buffer for both lid halves and the body as in the original scene.

@@ -17,6 +17,7 @@
 #include "../core/challenge_battle.hpp"
 #include "../core/userdata.hpp"
 #include "../core/padmap.hpp"
+#include "../core/puzzle_pause.hpp"
 #include "../core/vms.hpp"
 #include "model3d.hpp"
 #include <filesystem>
@@ -1253,10 +1254,13 @@ struct App {
                     if (const auto* lid = models3d.find(lids[i])) {
                         const int cell = (int)(object.z / kCell) * kCols + (int)(object.x / kCell);
                         const float opening = launchLids ? (*launchLids)[cell].opening : 0.0f;
+                        const int lidLaunchAge = launchLids ? (*launchLids)[cell].age : launchAge;
+                        if (launchLids && !DcRocketLid::visibleAtLaunchAge(launchAge)) continue;
                         models3d.drawDcRocketDome(ren, *lid, {x, z}, {GW / 2.0f, GH / 2.0f},
                                                  field.cell / kCell, puku ? puku[i] : 1.0f, 218.0f, partnerLid && partnerLid[i] >= 0 ? models3d.find(lids[partnerLid[i]]) : nullptr,
-                                                 opening, launchAge >= 0 ? models3d.find("launch_blue") : nullptr, launchLids ? (*launchLids)[cell].age : launchAge,
-                                                 launchAge >= 0 ? models3d.find("launch_base") : nullptr, models3d.find("fire"), launchLids ? &(*launchLids)[cell].smokeBirths : nullptr);
+                                                 opening, launchAge >= 0 ? models3d.find("launch_blue") : nullptr, lidLaunchAge,
+                                                 launchAge >= 0 ? models3d.find("launch_base") : nullptr, models3d.find("fire"), launchLids ? &(*launchLids)[cell].smokeBirths : nullptr,
+                                                 launchLids ? DcRocketLid::launchScaleAtAge(launchAge) : 1.0f);
                         continue;
                     }
                 }
@@ -2411,8 +2415,8 @@ struct DcOptionsMode : Screen {
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
-        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; a.playSfx(1); }
-        else if (sel == 1 && hasLanguagePage(a)) { page = 1; bRow = 0; a.playSfx(1); }
+        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = a.settings.musicTest; genSe = a.settings.seTest; a.playSfx(1); }
+        else if (sel == 1 && hasLanguagePage(a)) { page = 1; bRow = 0; bTime = a.settings.battleTime; bSpeed = a.settings.battleSpeed; bMice = a.settings.battleMice; bArrow = a.settings.battleArrow; a.playSfx(1); }
         else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {
             page = 3; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) langRow = i; a.playSfx(1);
@@ -2428,6 +2432,7 @@ struct DcOptionsMode : Screen {
             case 2: bMice = !bMice; break;
             case 3: bArrow = !bArrow; break;
             default: return; }
+            a.settings.battleTime = bTime; a.settings.battleSpeed = bSpeed; a.settings.battleMice = bMice; a.settings.battleArrow = bArrow; a.saveSettings();
             a.playSfx(0); return;
         }
         if (page != 0) return;
@@ -2437,12 +2442,13 @@ struct DcOptionsMode : Screen {
         case 3: genMusic = (genMusic + 100 + d) % 100; break;
         case 4: genSe = (genSe + 1000 + d) % 1000; break;
         default: return; }
+        a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings();
         a.playSfx(0);
     }
     void accept(App& a) {
         if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
-        else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.playSfx(1); } else adjust(a, 1); }
-        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 1 || genRow == 2) adjust(a, 1); }
+        else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.settings.battleTime = bTime; a.settings.battleSpeed = bSpeed; a.settings.battleMice = bMice; a.settings.battleArrow = bArrow; a.saveSettings(); a.playSfx(1); } else adjust(a, 1); }
+        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings(); a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 1 || genRow == 2) adjust(a, 1); }
         else openRow(a);
     }
     void back(App& a) { if (page >= 0) { page = -1; a.playSfx(0); } else leave = true; }
@@ -2840,11 +2846,13 @@ struct PuzzleMode : Screen {
     bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
     bool dcPanelDrawn = false;   // the Dreamcast bottom panel replaces the iPad arrow strip
     bool dash = false; bool paused = false, pconf = false;   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
+    ccr::PuzzlePauseState pauseState;
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
         cursorTrail = {};
         launchLids = {}; clearSaved = false;
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
+        paused = false; pconf = false; pauseState.resume();
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
@@ -2877,9 +2885,17 @@ struct PuzzleMode : Screen {
             mouseCursor = true;
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
-            if (paused && k != SDLK_ESCAPE) return;
+            if (paused) {
+                if (k == SDLK_p || k == SDLK_RETURN || k == SDLK_SPACE) { paused = false; pconf = false; pauseState.resume(); }
+                else if (k == SDLK_ESCAPE || k == SDLK_b) back = true;
+                return;
+            }
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0, pf(a));
             if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
+            else if (k == SDLK_p) {
+                if (state == 0) { state = 1; running = true; dash = false; }
+                pauseState.press();
+            }
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); }
             else if (state == 0 && !paused && !e.key.repeat && aim.inside && arrowKey(k) >= 0) {
@@ -2895,11 +2911,28 @@ struct PuzzleMode : Screen {
             SDL_GameControllerClose(pad);
             pad = nullptr;
         }
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad && state == 0 && !paused &&
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad &&
                  SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cbutton.which) { int b = e.cbutton.button;
+            if (paused) {
+                if (b == (gApp ? gApp->padMap.pause : 6) || b == SDL_CONTROLLER_BUTTON_A) { paused = false; pconf = false; pauseState.resume(); }
+                else if (b == SDL_CONTROLLER_BUTTON_B) back = true;
+                return;
+            }
             mouseCursor = false;
             { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) putAt(curX, curY, d);
-            else if (b == pm.pause) { state = 1; running = true; } } }
+            else if (b == pm.pause) {
+                if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
+                pauseState.press();
+            } else if (b == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
+                if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
+                else if (running && !dash) { dash = true; a.playSfx(0xc); }
+            } }
+        }
+        else if (e.type == SDL_CONTROLLERAXISMOTION && pad && e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT &&
+                 SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.caxis.which && e.caxis.value > 16000 && !paused) {
+            if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
+            else if (running && !dash) { dash = true; a.playSfx(0xc); }
+        }
     }
     // Touch rects of the puzzle screen (HD 1.0 PuzzleGameScreen::process 0x12994 -> Input::addRect(i, x0, y0, x1, y1) from layout +0x4d0 + 16 i): rect 3 (18, 88)-(160, 190) Start/Dash, rect 4 (21, 229)-(159, 275) Cancel.
     // In the placing mode, rect 3 sets input flag 1 (start) and rect 4 flag 2 (Cancel). Effects read from Android PuzzleLoop (0x33bbc): placing: flag 1 = start, flag 2 = delete all arrows; running: flag 1 = Dash, flag 2 = restart with the arrows kept.
@@ -2946,6 +2979,13 @@ struct PuzzleMode : Screen {
             return x >= x0 && x <= x1 && y >= y0 && y <= y1;
         };
         if (paused) {
+            if (dreamcastPuzzleControls(a)) {
+                if (lx >= 230.0f && lx < 435.0f && ly >= 328.0f && ly < 379.0f) {
+                    paused = false; pconf = false; pauseState.resume(); a.playSfx(2); }
+                else if (lx >= 640.0f && lx < 845.0f && ly >= 328.0f && ly < 379.0f) {
+                    a.playSfx(2); paused = false; back = true; }
+                return true;
+            }
             if (phone ? handset(33, 148, 204, 215) : in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; } }
             if (phone ? handset(265, 148, 440, 215) : in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }
             return true; }
@@ -2968,7 +3008,15 @@ struct PuzzleMode : Screen {
     int cticks = 0;
     void tick(App& a) override {
         a.stars.tick(false);
-        if (paused) return; cticks++;
+        if (paused) return;
+        cticks++;
+        if (pauseState.ticks >= 0) {
+            const bool held = pad && gApp && SDL_GameControllerGetButton(pad, static_cast<SDL_GameControllerButton>(gApp->padMap.pause));
+            pauseState.tick(held);
+            if (pauseState.overlay) paused = true;
+            if (paused) return;
+        }
+        if (pauseState.freeze) return;
         if (pad && state == 0) {
             padAim.tick(pad);
             if (padAim.x != padAim.previousX || padAim.y != padAim.previousY) mouseCursor = false;
@@ -3994,6 +4042,13 @@ struct BattleMode : Screen {
             int minutes = getenv("CCR_MINUTES") ? atoi(getenv("CCR_MINUTES")) : 3;
             game.roundFrames = minutes * 60 * 60;
             winPoint = getenv("CCR_WINPOINT") ? atoi(getenv("CCR_WINPOINT")) : 2;
+            if (gApp) {
+                constexpr float speeds[] = {0.25f, 0.75f, 1.0f, 1.25f, 2.0f};
+                game.baseScale = speeds[std::clamp(gApp->settings.battleSpeed - 1, 0, 4)];
+                game.roundFrames = gApp->settings.battleTime * 60 * 60;
+                game.generatorParams.pSpecial2 *= gApp->settings.battleMice ? 5.0f : 1.0f;
+                game.rotateOwn = gApp->settings.battleArrow != 0;
+            }
         }
         if (localTeam < 0) if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);

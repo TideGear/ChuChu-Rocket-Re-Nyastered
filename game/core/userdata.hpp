@@ -18,6 +18,8 @@ struct Settings {
     std::string cpuStyle = "dreamcast";   // computer opponents in Battle: "dreamcast" (the Dreamcast/iOS/Android placement rules) or "gba"
     bool models3d = true;        // prefer Dreamcast visuals when setup provides dreamcast/models.bin
     bool unlockAll = false;      // open every puzzle group and costume without clearing the stages (the original opens group n after all 25 stages of group n-1 are cleared)
+    int battleTime = 3, battleSpeed = 3, battleMice = 0, battleArrow = 0;
+    int soundOutput = 1, jumpPack = 0, musicTest = 0, seTest = 0;
     int logLevel = 1;            // 0 = no log, 1 = sessions and results, 2 = also every screen change
     int logKeepFiles = 5;        // rotated log files kept
     int logMaxKb = 256;          // size at which the log rotates
@@ -37,6 +39,14 @@ inline Settings parseSettings(const std::string& text) {
         else if (k == "filter") { if (v == "linear" || v == "nearest") s.filter = v; }
         else if (k == "models_3d") s.models3d = parseBool(v, s.models3d);
         else if (k == "unlock_all") s.unlockAll = parseBool(v, s.unlockAll);
+        else if (k == "battle_time") s.battleTime = std::max(1, std::min(3, atoi(v.c_str())));
+        else if (k == "battle_speed") s.battleSpeed = std::max(1, std::min(5, atoi(v.c_str())));
+        else if (k == "battle_mice") s.battleMice = std::max(0, std::min(1, atoi(v.c_str())));
+        else if (k == "battle_arrow") s.battleArrow = std::max(0, std::min(1, atoi(v.c_str())));
+        else if (k == "sound_output") s.soundOutput = std::max(0, std::min(1, atoi(v.c_str())));
+        else if (k == "jump_pack") s.jumpPack = std::max(0, std::min(1, atoi(v.c_str())));
+        else if (k == "music_test") s.musicTest = std::max(0, std::min(99, atoi(v.c_str())));
+        else if (k == "se_test") s.seTest = std::max(0, std::min(999, atoi(v.c_str())));
         else if (k == "cpu_style") { if (v == "dreamcast" || v == "gba") s.cpuStyle = v; }
         else if (k == "window_width") s.width = std::max(0, atoi(v.c_str()));
         else if (k == "window_height") s.height = std::max(0, atoi(v.c_str()));
@@ -47,7 +57,7 @@ inline Settings parseSettings(const std::string& text) {
     return s;
 }
 inline std::string settingsText(const Settings& s) {
-    char b[1800];
+    char b[2300];
     snprintf(b, sizeof b,
         "# ChuChu Rocket! Re-Nyastered settings (an unofficial fan project, not affiliated with SEGA).\n"
         "# Edit with any text editor; the game reads this file at start. Lines starting with # are comments.\n"
@@ -59,9 +69,15 @@ inline std::string settingsText(const Settings& s) {
         "# Battle computer players: dreamcast or gba (the GBA game's placement rules).\ncpu_style = %s\n\n"
         "# Use Dreamcast 3D characters and board art when setup provides the model pack.\nmodels_3d = %s\n\n"
         "# Open every puzzle group and costume without playing for them: true or false (the original unlocks them by clearing stages).\nunlock_all = %s\n\n"
+        "# Dreamcast Options 4P/Team values: play time 1-3, speed 1-5, High mice, and arrow reset.\n"
+        "battle_time = %d\nbattle_speed = %d\nbattle_mice = %d\nbattle_arrow = %d\n\n"
+        "# Dreamcast Options General values: output, Jump Pack, music test, and SE test.\n"
+        "sound_output = %d\njump_pack = %d\nmusic_test = %d\nse_test = %d\n\n"
         "# Log detail: 0 = off, 1 = sessions and match results, 2 = also every screen change.\nlog_level = %d\n\n"
         "# The log file (logs/ccr.log) rotates when it reaches this many kilobytes; this many old files are kept.\nlog_max_kb = %d\nlog_keep_files = %d\n",
-        s.fullscreen ? "true" : "false", s.vsync ? "true" : "false", s.filter.c_str(), s.width, s.height, s.cpuStyle.c_str(), s.models3d ? "true" : "false", s.unlockAll ? "true" : "false", s.logLevel, s.logMaxKb, s.logKeepFiles);
+        s.fullscreen ? "true" : "false", s.vsync ? "true" : "false", s.filter.c_str(), s.width, s.height, s.cpuStyle.c_str(), s.models3d ? "true" : "false", s.unlockAll ? "true" : "false",
+        s.battleTime, s.battleSpeed, s.battleMice, s.battleArrow, s.soundOutput, s.jumpPack, s.musicTest, s.seTest,
+        s.logLevel, s.logMaxKb, s.logKeepFiles);
     return b;
 }
 inline bool readFile(const std::string& path, std::string& out) { FILE* f = fopen(path.c_str(), "rb"); if (!f) return false; char buf[4096]; size_t n; out.clear(); while ((n = fread(buf, 1, sizeof buf, f)) > 0) out.append(buf, n); fclose(f); return true; }
