@@ -6,7 +6,7 @@ The continuing goal is a Dreamcast-only ChuChu Rocket! build from a user-owned D
 
 Read [goal.md](goal.md), [audit.md](audit.md), and the latest entries in [roadmap.md](roadmap.md). Coverage belongs to the audit; a harness case passing does not close a whole feature. The published release notes and prior handoff sections below remain useful history, not the current stopping point.
 
-Current branch is `main`, pushed to `origin/main` at `2e8918d` (`Fix Dreamcast Puzzle Cancel panel scaling`), following `e987eb1` (`Fix Puzzle prelaunch dome scale`). User-owned changes to `game/tests/determinism_test.cpp` and untracked `.vscode/` remain untouched and unstaged; do not commit them.
+Current branch is `main`, pushed to `origin/main` (release commit `1a2c148`, tag `v2026.11.23`; check `git log` for anything newer). User-owned changes to `game/tests/determinism_test.cpp` (line-ending noise only) and untracked `.vscode/` remain untouched and unstaged; do not commit them. Start with the **Audio (2026-11-20)** bullet under "Other retained work" for the sound next steps.
 
 ## Latest verified changes
 
@@ -16,20 +16,16 @@ Current branch is `main`, pushed to `origin/main` at `2e8918d` (`Fix Dreamcast P
 
 ## Published release
 
-[Preview 3](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/releases/tag/v2026.11.22-preview.3) is published, draft=false, prerelease=true. Tag/source: `v2026.11.22-preview.3`, `dfdc3416097751506cde9e37b54d57f6aa6c2666`. The tag [build](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/actions/runs/44652273805) succeeded. This wrap-up rechecked the release API, all five uploaded assets and tag-build success.
-
-The release contains Windows x64, Linux x64, macOS arm64 and macOS x64 archives plus SHA256SUMS.txt. GitHub's archive SHA256 digests match the interrupted session's recorded download hashes:
+[v2026.11.23](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/releases/tag/v2026.11.23) is the **first full (non-preview) release** since v2026.11.20 (user decision, 2026-11-20: no more previews; the label says "full" even though much is unbuilt, the notes list the gaps). Tag `v2026.11.23` at `1a2c148`; tag build [44847369563](https://github.com/TideGear/ChuChu-Rocket-Re-Nyastered/actions/runs/44847369563) succeeded on all three runners; draft=false, prerelease=false, Latest. Assets: Windows x64 zip (built locally with `tools/package-release.ps1 -Version v2026.11.23 -SkipBuild`, uploaded with `gh release create`), Linux x64, macOS arm64, macOS x64 (attached by CI) and `SHA256SUMS.txt` (made from the published assets with `sha256sum`):
 
 | Platform | SHA256 |
 | --- | --- |
-| Windows x64 | dc3246bfd677157d8d48c66ca0bd60723187b4f2ad0ecdbe0771f5a3bd411622 |
-| Linux x64 | ce3be156e69873bc4aed8d32c9f54a532911079ee16e30877c1f1a37ce2da842 |
-| macOS arm64 | b49553e2253cbfcbda04b26e57db4d7d518d596b6251a6cc2a7250a9cbef265d |
-| macOS x64 | 80c6ce0cbbef4cfa57f6217841882e2c95ecc21a01c459e9c09ab202891821ef |
+| Windows x64 | d39ac99a15f3b3f5ff4ac35279da09893dbc032f3dbb1631129f47fb20157d30 |
+| Linux x64 | 9cbd7ec6bc50b8ac632ac0ee131f10527d1cda7050af8889abab98355f87e22a |
+| macOS arm64 | 668575e644db0f7fe696b66d880dab6b472513c925cb08d651111bd62ad7a6df |
+| macOS x64 | 63f016c87f8a96ddcb6721315a0b0e705c6cc5b3a29b79c3c2e35907fbbde0f6 |
 
-Release notes: [preview 3](releases/v2026.11.22-preview.3.md). It fixes double conversion of real mouse events on Dreamcast screens and warns about stale exported art (the invisible-rocket report). Users should rerun Easy Setup / `ccr --prepare` after updating. The user verified stage-25 clicks after the fix. SDL rewrites event coordinates to logical space; the main loop restores window coordinates before screen handlers convert once. Headless injected clicks bypass that SDL rewrite and previously concealed the bug.
-
-Prior-session validation (not rerun during this documentation-only wrap-up): Windows clean package build and unit tests passed; packaged extraction from the disc alone completed with Puzzle, Battle and Stage Challenge playable, art version stamp present and no warning; rocket render checked; downloaded Windows archive byte-identical to local. Linux/macOS were built/tested by CI, not run manually. Local package/download evidence: `local/release-check/dist3`, `local/release-check/dl3`, `local/release-check/tagci3.log`. Never ship original game data, BIOS, states or captures.
+Release gates run this time: clean setup from the disc image alone with the **packaged** tools (2.9 minutes, 128 cue WAVs), `kDcAssetsVersion` bumped to 3 (existing installs are told to rerun setup), unit tests (puzzle_pause, determinism, battle, challenge_sim, cpu, dc_rng) pass, all four archives contain the 13 sound tools. Lesson: `tools/package-release.ps1` and `.github/workflows/build.yml` hold explicit tool lists; any new import used by `extract_all.py` must be added to both or packaged setups silently skip it. Release notes: [v2026.11.23](releases/v2026.11.23.md). Earlier: previews 1-3 (`v2026.11.21-preview.1` ... `v2026.11.22-preview.3`) and `v2026.11.20`.
 
 ## Next concrete task: close the rocket prelaunch discrepancy
 
