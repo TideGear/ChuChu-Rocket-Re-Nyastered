@@ -40,7 +40,9 @@ try {
         'export_hd_images', 'export_hd_locale', 'export_pad_ui', 'export_sprites',
         'export_strings', 'export_testdata', 'export_tilemaps', 'extract_all',
         'extract_android', 'extract_ios_locale', 'extract_packs', 'gba_stages', 'gdi_extract',
-        'macho', 'prs', 'pvr2png', 'stage_registry', 'textures', 'thin'
+        'macho', 'prs', 'pvr2png', 'stage_registry', 'textures', 'thin',
+        # sound effects rendered at setup from the disc's own driver and bank (dc_sfx_render and everything it imports)
+        'aica_pcm', 'arm7_interp', 'dc_sfx_render', 'dc_sound_channels', 'dc_sound_clock', 'dc_sound_controls', 'dc_sound_gate', 'dc_sound_pitch', 'dc_sound_sequence', 'dc_sound_timing', 'dc_sound_voices', 'mlt_extract', 'mlt_sequences'
     )
     $tools = @('prepare.ps1', 'setup-python.ps1', 'windows-download.ps1', 'hd_image_ids.txt')
     $tools += $extractors | ForEach-Object { "$_.py" }
