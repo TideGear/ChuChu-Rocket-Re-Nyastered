@@ -3148,8 +3148,9 @@ struct PuzzleMode : Screen {
         a.stars.draw(a);
         // The real opaque TA list shares depth across floor, walls and
         // rockets. Keep it across their separate software draw calls.
-        const bool launchDepth = state == 2 && dreamcastPuzzleControls(a) && a.useModels3d();
-        if (launchDepth) a.models3d.beginDepthScene(a.ren);
+        const bool prelaunch = state == 1 && dreamcastPuzzleControls(a) && willClearNextFrame();
+        const bool fieldDepth = dreamcastPuzzleControls(a) && a.useModels3d();
+        if (fieldDepth) a.models3d.beginDepthScene(a.ren);
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
         const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
         if (hasBoardTasks) {
@@ -3158,11 +3159,10 @@ struct PuzzleMode : Screen {
             a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
             for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, pf(a));
         }
-        const bool prelaunch = state == 1 && dreamcastPuzzleControls(a) && willClearNextFrame();
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a), 0,
                                             state == 2 || prelaunch ? &launchLids : nullptr,
                                             state == 2 ? clearFrames * (dash ? 2 : 1) : -1);
-        if (launchDepth) a.models3d.endDepthScene();
+        if (fieldDepth) a.models3d.endDepthScene();
         if (showCursor) {
             cursorTrail.draw(a, 0);
             if (mouseCursor) a.mouseCursorAt(aim.x, aim.y, 0, cticks, pf(a).scale());
