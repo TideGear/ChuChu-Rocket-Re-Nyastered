@@ -70,6 +70,7 @@ class VoiceEngine:
         self.words = [list(struct.unpack_from('<18I', registers, i * 128)) for i in range(64)]
         self.streams = {}
         self.lfo_phase = lfo_phase
+        self.lfo_reset = set()           # voices whose LFORE bit (register 0x1c bit 15) was written before they had a stream
 
     def write(self, at, size, value):
         if at >= 0x2000:
@@ -84,29 +85,44 @@ class VoiceEngine:
         packed[offset:offset + size] = value.to_bytes(size, 'little')
         words[:] = struct.unpack('<18I', packed)
         execute = offset in (0, 1) and (size == 2 or offset == 1) and words[0] & 0x8000
+        stream = self.streams.get(index)
+        if offset in (0x1c, 0x1d) and words[7] & 0x8000 and stream is None:
+            self.lfo_reset.add(index)    # sgc_if.cpp UpdateLFO: LFORE restarts the LFO (state 0) when the register is written
         if execute:
             words[0] &= ~0x8000
+        if stream is not None:
+            if offset in (0, 1):     # sgc_if.cpp RegWrite 0x00/0x01: UpdateStreamStep/UpdateSA apply to a voice that is still sounding
+                stream.write_register(offset, size, (words[0] >> (8 * offset)) & ((1 << (8 * size)) - 1))
+            else:
+                stream.write_register(offset, size, value)
+        if execute:
             self.key_scan()
-            return
-        stream = self.streams.get(index)
-        if stream is not None and offset not in (0, 1):
-            stream.write_register(offset, size, value)
-        elif stream is not None:
-            stream.channel['register_words'][0] = words[0]
+
+    def initial_phase(self, index):
+        return self.lfo_phase
 
     def key_scan(self):
         for index, words in enumerate(self.words):
             stream = self.streams.get(index)
             if words[0] & 0x4000:
                 if stream is None or stream.state['amplitude_state'] == 3:
-                    if (words[0] >> 7 & 3) == 3 or words[0] & 0x400:
-                        raise NotImplementedError('Unsupported voice format at key-on')
-                    channel = sampled_channel(list(words))
-                    self.streams[index] = SampleStream.from_registers(
-                        channel, self.ram, lfo_counter=1, lfo_phase=self.lfo_phase)
-                    self.streams[index].state['lfo_counter'] = self.streams[index].period
+                    self.start_voice(index, stream)
             elif stream is not None and stream.state['amplitude_state'] != 3:
                 stream.key_off()
+
+    def start_voice(self, index, previous):
+        """KEY_ON resets playback but not the LFO: a voice that played before continues from its LFO counter and phase."""
+        words = self.words[index]
+        if (words[0] >> 7 & 3) == 3 or words[0] & 0x400:
+            raise NotImplementedError('Unsupported voice format at key-on')
+        channel = sampled_channel(list(words))
+        phase = previous.state['lfo_phase'] if previous is not None else self.initial_phase(index)
+        if index in self.lfo_reset:
+            self.lfo_reset.discard(index)
+            phase = 0
+        stream = SampleStream.from_registers(channel, self.ram, lfo_counter=1, lfo_phase=phase)
+        stream.state['lfo_counter'] = previous.state['lfo_counter'] if previous is not None else stream.period
+        self.streams[index] = stream
 
     def audible(self):
         for stream in self.streams.values():
@@ -121,7 +137,7 @@ class VoiceEngine:
             state = stream.state
             if not state['enabled'] or (state['amplitude_state'] == 3 and state['amplitude_value'] >> 16 > SILENT_ATTENUATION):
                 continue
-            for i, pair in enumerate(stream.render_stereo(count)):
+            for i, pair in enumerate(stream.render_stereo(count, dsp_disabled_fallback=True)):   # ChannelEx::Step: with the DSP program off, a voice whose direct outputs round to zero is heard through its send level
                 mix[i][0] += pair[0]
                 mix[i][1] += pair[1]
         for index, stream in self.streams.items():     # sgc_if.cpp SetAegState: entering release clears KYONB

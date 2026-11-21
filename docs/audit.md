@@ -91,7 +91,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |
 | KapuKapu, focus ring | animation | open | - |
-| Sound: music (CD tracks 04-18) | sound | partial (extracted, played; loops/fades unverified) | - |
+| Sound: music (CD tracks 04-18) | sound | partial: loop/repeat rule from the original queue entry and Flycast (track 6), song 14 jingle = track 18, Music test plays; fades, per-mode start/stop and the other tracks' loops unverified | track 6 loop restart exact (corr 1.0, lag 0); port mixer vs track exact |
 | Sound: SFX cues 0-3, 6, 7, 9, 11, 12, 14-21, 24, 26, 27, 94, 116-127 (33 cues, Dreamcast) | sound | verified: voice renderer driven by the ARM bus trace equals the isolated Flycast cue at every sample (max error 0) | cue 27 also: 43/43 native register writes equal, key-on/off within 78/82 samples |
 | Sound: other 95 SFX cues (Dreamcast) | sound | partial: 128/128 render and play in the port; waveform differs from Flycast (below) | cues 29-50 mean 127 / max 255 (looping voice tail), 52-59 mean 349 / max 723, 4, 5, 8, 10, 13, 22, 23, 25, 28, 51 larger; dispatch writes equal for 110/128 |
 | Sound: startup, menu, voices | sound | open | - |

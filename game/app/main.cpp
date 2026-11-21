@@ -465,6 +465,10 @@ struct App {
         SDL_AudioSpec want{}; want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024; want.callback = audioCb; want.userdata = this; SDL_AudioSpec have;
         if (headless && getenv("CCR_AUDIO_CAPTURE")) audioCapture = fopen(getenv("CCR_AUDIO_CAPTURE"), "wb");
         adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0); if (adev) SDL_PauseAudioDevice(adev, 0);
+        if (headless && adev && getenv("CCR_PLAY_SONG")) {   // headless self-test: play one song through the real mixer for CCR_SONG_SECONDS (default 10), then exit
+            playSong(atoi(getenv("CCR_PLAY_SONG"))); const int ms = (getenv("CCR_SONG_SECONDS") ? atoi(getenv("CCR_SONG_SECONDS")) : 10) * 1000;
+            SDL_Delay(ms); if (audioCapture) fclose(audioCapture); exit(0);
+        }
         if (headless && adev && getenv("CCR_PLAY_SFX")) {   // headless self-test: play these cue ids through the real mixer (dummy device), wait until they finish, exit
             for (const char* p = getenv("CCR_PLAY_SFX"); *p;) { char* end; long id = strtol(p, &end, 10); if (end == p) break; playSfx((int)id); p = *end ? end + 1 : end; }
             for (int waited = 0; waited < 60000; waited += 20) { SDL_LockAudioDevice(adev); const bool idle = voices.empty(); SDL_UnlockAudioDevice(adev); if (idle) break; SDL_Delay(20); }
@@ -513,16 +517,19 @@ struct App {
             if (mobileFrames > 0) break;
         }
         char wp[512]; snprintf(wp, sizeof wp, "%s/dreamcast/audio/track%02d.wav", root.c_str(), n + 4); SDL_AudioSpec sp; Uint8* buf; Uint32 len;
-        if (n != 14 && SDL_LoadWAV(wp, &sp, &buf, &len)) {                       // best source: the lossless Dreamcast CD track
+        if (SDL_LoadWAV(wp, &sp, &buf, &len)) {                                  // best source: the lossless Dreamcast CD track
+            // The track WAV begins with its 2.0 s silent pre-gap. The original plays from the track start (index 1, after the pre-gap) and repeats the whole
+            // track from there (measured in Flycast: two exact matches of track 6 content 36.01 s apart = 38.01 s - 2.00 s). The command queue entry built by
+            // 1ST_READ FUN_8c012350 carries repeat 0 (play once) for tracks 0x10, 0x11, 0x12 and 0xb, i.e. songs 12, 13, 14 and 7, and 0xf (forever) otherwise.
             if (sp.format == AUDIO_S16LSB && sp.channels == 2 && sp.freq == 44100) { sg.pcm.assign((int16_t*)buf, (int16_t*)(buf + len)); sg.loopStart = (size_t)(2.0 * 44100) * 2;
-                sg.loopEnd = mobileFrames > 0 ? std::min(sg.pcm.size(), sg.loopStart + (size_t)mobileFrames * 2) : sg.pcm.size(); }
+                sg.loopEnd = sg.pcm.size(); sg.loop = !(n == 7 || n == 12 || n == 13 || n == 14); }
             SDL_FreeWAV(buf); }
         if (sg.pcm.empty() && !mobile.empty()) { sg.pcm = mobile; sg.loopStart = 0; sg.loopEnd = sg.pcm.size(); }   // fallback: the mobile Ogg
-        if (n == 14 && !mobile.empty()) { sg.pcm = mobile; sg.loopStart = 0; sg.loopEnd = sg.pcm.size(); sg.loop = false; }   // song 14 is a 5 s jingle
+        if (n == 14 && sg.loopStart == 0) sg.loop = false;   // song 14 is a 5 s jingle (the mobile fallback)
     }
     // AppData::playSong(song): switch to a song (restarts only when it is a different one)
     void playSong(int n) { if (!adev || n < 0 || n > 14) return; if (n == curTrack && musOn) return; loadSong(n); if (songs[n].pcm.empty()) return;
-        SDL_LockAudioDevice(adev); curTrack = n; musPos = songs[n].loop ? songs[n].loopStart : 0; musOn = true; SDL_UnlockAudioDevice(adev); }
+        SDL_LockAudioDevice(adev); curTrack = n; musPos = songs[n].loopStart; musOn = true; SDL_UnlockAudioDevice(adev); }
     void pumpMusic(int song) { playSong(song); }
     // --- drawing helpers ---
     void number(int v, int x, int y, int hgt) {
@@ -2435,7 +2442,7 @@ struct DcOptionsMode : Screen {
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
-        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = a.settings.musicTest; genSe = a.settings.seTest; a.playSfx(1); }
+        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = a.settings.musicTest % 15; genSe = a.settings.seTest; a.playSfx(1); }
         else if (sel == 1 && hasLanguagePage(a)) { page = 1; bRow = 0; bTime = a.settings.battleTime; bSpeed = a.settings.battleSpeed; bMice = a.settings.battleMice; bArrow = a.settings.battleArrow; a.playSfx(1); }
         else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {
@@ -2459,7 +2466,7 @@ struct DcOptionsMode : Screen {
         switch (genRow) {
         case 1: genSound = !genSound; break;
         case 2: genJump = !genJump; break;
-        case 3: genMusic = (genMusic + 100 + d) % 100; break;
+        case 3: genMusic = (genMusic + 15 + d) % 15; break;   // Options > Music test wraps 0 <-> 14 on the real screen (15 songs = CD tracks 4..18)
         case 4: genSe = (genSe + 1000 + d) % 1000; break;
         default: return; }
         a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings();
@@ -2468,7 +2475,7 @@ struct DcOptionsMode : Screen {
     void accept(App& a) {
         if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
         else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.settings.battleTime = bTime; a.settings.battleSpeed = bSpeed; a.settings.battleMice = bMice; a.settings.battleArrow = bArrow; a.saveSettings(); a.playSfx(1); } else adjust(a, 1); }
-        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings(); a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 1 || genRow == 2) adjust(a, 1); }
+        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings(); a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 3) a.playSong(genMusic); /* FUN_8c05368a: A/Start plays the selected value + 4 as a CD track */ else if (genRow == 1 || genRow == 2) adjust(a, 1); }
         else openRow(a);
     }
     void back(App& a) { if (page >= 0) { page = -1; a.playSfx(0); } else leave = true; }

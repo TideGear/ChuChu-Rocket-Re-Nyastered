@@ -56,27 +56,16 @@ class PhasedEngine(R.VoiceEngine):
         self.created = []                   # (voice, key-on count, sample position)
         self.position = 0
 
-    def key_scan(self):
-        before = set(i for i, s in self.streams.items() if s.state['amplitude_state'] != 3)
-        for index, words in enumerate(self.words):
-            stream = self.streams.get(index)
-            if words[0] & 0x4000 and (stream is None or stream.state['amplitude_state'] == 3):
-                self.lfo_phase = self.phases.table.get((index, self.phases.counts.get(index, 0)), 0)
-                self.created.append((index, self.phases.counts.get(index, 0), self.position))
-                self.phases.counts[index] = self.phases.counts.get(index, 0) + 1
-                self.single_key_on(index)
-            elif not words[0] & 0x4000 and stream is not None and stream.state['amplitude_state'] != 3:
-                stream.key_off()
+    def initial_phase(self, index):
+        count = self.phases.counts.get(index, 0)
+        self.created.append((index, count, self.position))
+        self.phases.counts[index] = count + 1
+        return self.phases.table.get((index, count), 0)
 
-    def single_key_on(self, index):
-        words = self.words[index]
-        from aica_pcm import SampleStream, sampled_channel
-        if (words[0] >> 7 & 3) == 3 or words[0] & 0x400:
-            raise NotImplementedError('Unsupported voice format at key-on')
-        channel = sampled_channel(list(words))
-        stream = SampleStream.from_registers(channel, self.ram, lfo_counter=1, lfo_phase=self.lfo_phase)
-        stream.state['lfo_counter'] = stream.period
-        self.streams[index] = stream
+    def start_voice(self, index, previous):
+        if previous is not None:
+            self.created.append((index, self.phases.counts.get(index, 0), self.position))
+        super().start_voice(index, previous)
 
 
 def drive(ram, registers, writes, phases, start, end, stop_after=None):
@@ -124,7 +113,9 @@ def verify_cue(capture, cue, driver, mlt, cold):
     keyed = {at // 128 for _, at, size, value in window if at % 128 == 0 and value & 0x4000}   # only voices that key on in the window
     result['voices_keyed'] = sorted(keyed)
     record = []
-    frames, info = R.render_cue(driver, mlt, cue, cold, record=record)
+    saved_regs = capture / f'c{cue:03d}_chan.bin'
+    native_cold = (cold[0], saved_regs.read_bytes()[:0x8000]) if saved_regs.exists() else cold
+    frames, info = R.render_cue(driver, mlt, cue, native_cold, record=record)
     native = [(at, size, value) for _, at, size, value in record]
     seen, expected = set(), []
     for at, size, value in native:
@@ -158,13 +149,40 @@ def verify_cue(capture, cue, driver, mlt, cold):
             diffs = [n - o for n, o in zip(offsets_n, offsets_o)]
             entry.update(max_abs_relative_error=max(abs(d) for d in diffs), mean_relative_error=sum(diffs) / len(diffs))
         result.setdefault('timing', {})[label] = entry
-    a, e = normalize(actual), normalize(expected)
-    result['dispatch_writes'] = dict(original=len(a), native=len(e), equal=a == e)
-    if a != e:
-        for i, (x, y) in enumerate(zip(a, e)):
-            if x != y:
-                result['dispatch_writes']['first_difference'] = dict(index=i, original=[hex(v) for v in x], native=[hex(v) for v in y])
-                break
+    def per_voice(rows):
+        voices = {}
+        for item in rows:
+            voice = item[0] // 128
+            if voice not in voices and item[0] % 128 != 0:
+                continue                       # writes before the voice's first control write are history, not the cue
+            voices.setdefault(voice, []).append(item)
+        return {v: normalize(items) for v, items in voices.items()}
+    def notes(voices):
+        """Split each voice's writes into per-note segments (a pre-stop control write followed by the sample-address write starts one;
+        the later key-off write ends it) so the comparison does not depend on which voice index the driver picked."""
+        out = []
+        for items in voices.values():
+            segment = []
+            for i, item in enumerate(items):
+                starts = item[0] % 128 == 0 and not item[2] & 0x4000 and i + 1 < len(items) and items[i + 1][0] % 128 == 4
+                if starts and segment:
+                    out.append(tuple((at % 128, size, value) for at, size, value in segment))
+                    segment = []
+                segment.append(item)
+            if segment:
+                out.append(tuple((at % 128, size, value) for at, size, value in segment))
+        return sorted(out)
+    a_voices, e_voices = per_voice(actual), per_voice(expected)
+    a_notes, e_notes = notes(a_voices), notes(e_voices)
+    result['dispatch_writes'] = dict(original_notes=len(a_notes), native_notes=len(e_notes),
+                                     original=sum(len(n) for n in a_notes), native=sum(len(n) for n in e_notes), equal=a_notes == e_notes)
+    if a_notes != e_notes:
+        only_a = [n for n in a_notes if n not in e_notes]
+        only_e = [n for n in e_notes if n not in a_notes]
+        result['dispatch_writes']['unmatched'] = dict(original=len(only_a), native=len(only_e))
+        if only_a and only_e:
+            index = next((i for i, (p, q) in enumerate(zip(only_a[0], only_e[0])) if p != q), 0)
+            result['dispatch_writes']['first_difference'] = dict(original=[hex(t) for t in only_a[0][index]], native=[hex(t) for t in only_e[0][index]])
     # ---- waveform
     ram, registers = cold
     saved = capture / f'c{cue:03d}_chan.bin'
