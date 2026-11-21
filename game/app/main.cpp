@@ -471,7 +471,13 @@ struct App {
             SDL_Delay(100); if (audioCapture) fclose(audioCapture); exit(0);
         }
     }
+    int lastCue7Frame = -1000;
     void playSfx(int id) {
+        if (id == 7) {   // 1ST_READ FUN_8c01203a @ 8c01203a: cue 7 is dropped when fewer than 3 frames have passed since the previous cue-7 call, and that call still becomes the new reference
+            const int frame = (int)((unsigned long long)SDL_GetTicks() * 60ull / 1000ull), previous = lastCue7Frame;
+            lastCue7Frame = frame;
+            if (frame - previous < 3) return;
+        }
         if (!adev) return;
         const std::vector<int16_t>* clip = nullptr;
         if (id >= 0 && id < static_cast<int>(sfx.size())) clip = &sfx[id];

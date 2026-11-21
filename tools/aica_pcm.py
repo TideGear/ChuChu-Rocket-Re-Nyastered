@@ -63,8 +63,8 @@ class SampleStream:
         self.state = dict(channel['runtime'])
         self.output_samples = 0
         self.lfo = channel['lfo_raw']
-        if ((self.lfo >> 8) & 3) == 3:
-            raise ValueError('Random pitch LFO is not yet validated')
+        if ((self.lfo >> 8) & 3) == 3 or ((self.lfo >> 3) & 3) == 3 and self.lfo & 7:
+            raise ValueError('Random pitch/amplitude LFO is not yet validated')
         octave = channel['octave_raw']
         rate = 1024 + channel['fns']
         self.rate = rate >> (16 - octave) if octave & 8 else rate << octave
@@ -159,8 +159,6 @@ class SampleStream:
             fns=updated[6] & 1023, octave_raw=updated[6] >> 11 & 15,
             lfo_raw=updated[7], pan_raw=updated[9] & 31,
             direct_level=updated[9] >> 8 & 15, total_level=updated[10] >> 8 & 255)
-        if updated[7] & 7:
-            raise ValueError('Amplitude LFO is not yet validated')
         state = dict(self.state)
         if offset in (0, 4, 5):
             address = (updated[0] & 127) << 16 | (updated[1] & 0xffff)
@@ -197,8 +195,6 @@ class SampleStream:
         ChannelEx::Step substitutes the send when both direct outputs round
         to zero and DSP is disabled. This is not a DSP return calculation.
         """
-        if self.channel['register_words'][10] & 64 or self.lfo & 7:
-            raise ValueError('Attenuation bypass/amplitude LFO is not validated')
         signal = self.render(count, filtered=True)
         levels = [255] + [(15 - i) * 8 for i in range(1, 16)]
         attenuation = [self.channel['total_level'] + levels[self.channel['direct_level']]] * 2
@@ -238,6 +234,19 @@ class SampleStream:
         state['filter_previous2'] = state['filter_previous1']
         state['filter_previous1'] = min(524287, max(-524288, value))
         return state['filter_previous1']
+
+    def attenuation_offset(self, state):
+        """sgc_if.cpp ChannelEx::Step: ofsatt = alfo + (AEG >> 2) capped at 255, or 0 when VOFF (register 0x28 bit 6) is set.
+        register 0x1c: ALFOS bits 0-2, ALFOWS bits 3-4. CalcAlfo: sawtooth = state, square = state & 0x80 ? 255 : 0, triangle = 2 * (state & 0x7f, inverted in the upper half); alfo = value >> (8 - ALFOS)."""
+        if self.channel['register_words'][10] & 64:
+            return 0
+        alfo = 0
+        depth = self.lfo & 7
+        if depth:
+            phase, wave = state['lfo_phase'], (self.lfo >> 3) & 3
+            value = phase if wave == 0 else (255 if phase & 128 else 0) if wave == 1 else 2 * ((phase & 127) ^ (127 if phase & 128 else 0))
+            alfo = value >> (8 - depth)
+        return min(255, alfo + (state['amplitude_value'] >> 18))
 
     def end(self):
         value = self.channel['loop_end']
@@ -323,7 +332,7 @@ class SampleStream:
             sample = ((state['s0'] * (1024 - fraction)) >> 10) + ((state['s1'] * fraction) >> 10)
             signal = self.filter(sample << 4)
             out.append(signal if filtered else sample)
-            self.attenuation.append(min(255, state['amplitude_value'] >> 18))
+            self.attenuation.append(self.attenuation_offset(state))
             if state['amplitude_state'] == 0 and self.attack_delta:
                 state['amplitude_value'] -= ((state['amplitude_value'] << 16) // self.attack_delta) + 1
                 if state['amplitude_value'] >> 16 <= 0:
@@ -389,10 +398,6 @@ def direct_stereo(channel, sound_ram, count, key_off_samples=(), start=False):
     """Render captured state or start from registers, without DSP returns."""
     state = channel['runtime']
     words = channel['register_words']
-    if words[10] & 64:
-        raise ValueError('Attenuation bypass is not yet validated')
-    if channel['lfo_raw'] & 7:
-        raise ValueError('Amplitude LFO is not yet validated')
     model = (SampleStream.from_registers(channel, sound_ram, lfo_counter=state['lfo_counter'],
                                          lfo_phase=state['lfo_phase']) if start else SampleStream(channel, sound_ram))
     signal = model.render(count, filtered=True, key_off_samples=key_off_samples)

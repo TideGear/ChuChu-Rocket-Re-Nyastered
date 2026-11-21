@@ -92,8 +92,8 @@ Counts items this table lists, not the game's full content (many screens have se
 | Roulette | animation | open (Dreamcast) | - |
 | KapuKapu, focus ring | animation | open | - |
 | Sound: music (CD tracks 04-18) | sound | partial (extracted, played; loops/fades unverified) | - |
-| Sound: SFX cue 27 (Dreamcast) | sound | verified against Flycast WAV (voice render + dispatch, 62,000 samples) | corr 1.00000, mean abs err 5.1/10.3 levels, port mixer equals render |
-| Sound: SFX cues 0-127 except 27 (Dreamcast) | sound | partial (121/128 rendered and playing in the port; 7 need amplitude LFO; none compared with Flycast yet) | - |
+| Sound: SFX cues 0-3, 6, 7, 9, 11, 12, 14-21, 24, 26, 27, 94, 116-127 (33 cues, Dreamcast) | sound | verified: voice renderer driven by the ARM bus trace equals the isolated Flycast cue at every sample (max error 0) | cue 27 also: 43/43 native register writes equal, key-on/off within 78/82 samples |
+| Sound: other 95 SFX cues (Dreamcast) | sound | partial: 128/128 render and play in the port; waveform differs from Flycast (below) | cues 29-50 mean 127 / max 255 (looping voice tail), 52-59 mean 349 / max 723, 4, 5, 8, 10, 13, 22, 23, 25, 28, 51 larger; dispatch writes equal for 110/128 |
 | Sound: startup, menu, voices | sound | open | - |
 
 **Totals: 41 items; 7 verified, 22 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.

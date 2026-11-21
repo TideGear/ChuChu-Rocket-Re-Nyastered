@@ -131,8 +131,8 @@ class VoiceEngine:
         return mix
 
 
-def render_cue(driver, mlt, cue, cold=None, max_seconds=LOOP_CAP_SECONDS, lfo_phase=0):
-    """Return (stereo frames as [L, R] pairs, info dict) for one cue id."""
+def render_cue(driver, mlt, cue, cold=None, max_seconds=LOOP_CAP_SECONDS, lfo_phase=0, record=None):
+    """Return (stereo frames as [L, R] pairs, info dict) for one cue id. record, if a list, receives (sample, register offset, width, value) per write."""
     ram, registers = cold if cold is not None else cold_state(driver, mlt)
     ram, registers = bytearray(ram), bytearray(registers)
     install_banks(ram, mlt)
@@ -153,12 +153,15 @@ def render_cue(driver, mlt, cue, cold=None, max_seconds=LOOP_CAP_SECONDS, lfo_ph
         if sample > position:
             frames.extend(engine.render(sample - position)); position = sample
         ticks += 1
+        batch = []
         for command in commands.update():
             channels.apply(command)
-            for at, size, value in channels.writes:
-                engine.write(at, size, value); writes += 1
+            batch.extend(channels.writes)
         channels.update_voices()
-        for at, size, value in channels.writes:
+        batch.extend(channels.writes)
+        for at, size, value in batch:
+            if record is not None:
+                record.append((position, at, size, value))
             engine.write(at, size, value); writes += 1
         if commands.clock.ended and ended_at is None:
             ended_at = ticks
