@@ -118,8 +118,9 @@ def verify_cue(capture, cue, driver, mlt, cold):
     frames, info = R.render_cue(driver, mlt, cue, native_cold, record=record)
     native = [(at, size, value) for _, at, size, value in record]
     seen, expected = set(), []
+    native_keyed = {at // 128 for at, size, value in native if at % 128 == 0 and value & 0x4000}
     for at, size, value in native:
-        if at // 128 in keyed:
+        if at // 128 in native_keyed:    # the driver may pick other voice numbers than the original did (allocation depends on earlier sounds)
             expected.append((at, size, value))
     actual = [(at, size, value) for _, at, size, value in window if at // 128 in keyed]
     def mask(item, first_control):
@@ -168,6 +169,8 @@ def verify_cue(capture, cue, driver, mlt, cold):
                 if starts and segment:
                     out.append(tuple((at % 128, size, value) for at, size, value in segment))
                     segment = []
+                if starts:       # the pre-stop write keeps whatever the voice held before (format, loop, address bits): only KYONEX/KYONB are the driver's
+                    item = (item[0], item[1], item[2] & 0xc000)
                 segment.append(item)
             if segment:
                 out.append(tuple((at % 128, size, value) for at, size, value in segment))

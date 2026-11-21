@@ -302,7 +302,7 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
-    static constexpr int kDcAssetsVersion = 2;   // tools/export_dc_ui.py writes dc_assets_version.txt
+    static constexpr int kDcAssetsVersion = 3;   // tools/export_dc_ui.py writes dc_assets_version.txt
     bool dcAssetsStale = false;
     bool loadSheet(const std::string& base, Sheet& s) {
         FILE* f = fopen((base + ".tex.bin").c_str(), "rb"); if (!f) return false;
@@ -386,7 +386,7 @@ struct App {
             if (have < kDcAssetsVersion) {
                 dcAssetsStale = true;
                 printf("Dreamcast art in %s is out of date (version %d, need %d): rerun setup (ccr --prepare or Easy Setup)\n", ret.c_str(), have, kDcAssetsVersion);
-                if (!headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Game art out of date", "The extracted Dreamcast art predates this version, so some screens (the rocket launch, panels, click areas) will look or behave wrong." "\n\n" "Run Easy Setup again in RecompLauncher (or ccr --prepare) to refresh it.", win);
+                if (!headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Game art out of date", "The extracted Dreamcast art and sounds predate this version, so some screens (the rocket launch, panels, click areas) will look or behave wrong and the Dreamcast sound effects will be missing." "\n\n" "Run Easy Setup again in RecompLauncher (or ccr --prepare) to refresh it.", win);
             }
         }
         padOk = (dlogoOk || imgSheet(7)) && loadSheet(ret + "bg0877", pbg) &&

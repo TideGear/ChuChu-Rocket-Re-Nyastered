@@ -92,8 +92,8 @@ Counts items this table lists, not the game's full content (many screens have se
 | Roulette | animation | open (Dreamcast) | - |
 | KapuKapu, focus ring | animation | open | - |
 | Sound: music (CD tracks 04-18) | sound | partial: loop/repeat rule from the original queue entry and Flycast (track 6), song 14 jingle = track 18, Music test plays; fades, per-mode start/stop and the other tracks' loops unverified | track 6 loop restart exact (corr 1.0, lag 0); port mixer vs track exact |
-| Sound: SFX cues 0-3, 6, 7, 9, 11, 12, 14-21, 24, 26, 27, 94, 116-127 (33 cues, Dreamcast) | sound | verified: voice renderer driven by the ARM bus trace equals the isolated Flycast cue at every sample (max error 0) | cue 27 also: 43/43 native register writes equal, key-on/off within 78/82 samples |
-| Sound: other 95 SFX cues (Dreamcast) | sound | partial: 128/128 render and play in the port; waveform differs from Flycast (below) | cues 29-50 mean 127 / max 255 (looping voice tail), 52-59 mean 349 / max 723, 4, 5, 8, 10, 13, 22, 23, 25, 28, 51 larger; dispatch writes equal for 110/128 |
+| Sound: SFX voice rendering, all 128 cues (Dreamcast) | sound | verified: the voice renderer driven by the ARM's own register writes equals the isolated Flycast cue at every sample for 128/128 cues (max error 0) | `dc_se_capture.py` + `dc_se_verify.py`; trace-driven, so ARM latency is not part of it |
+| Sound: SFX cue dispatch and playback in the port (Dreamcast) | sound | partial: my sequencer produces identical per-note register writes for 120/128 cues (8 differ in a few notes: 5, 8, 13, 21, 22, 23, 26, 28); key-on timing median worst case 10 samples, max 135 (3 ms); not modeled: ARM latency, the five-slot cut, channel-history LFO phase | cues are pre-rendered at setup; port mixer equals the render exactly |
 | Sound: startup, menu, voices | sound | open | - |
 
 **Totals: 41 items; 7 verified, 22 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.
