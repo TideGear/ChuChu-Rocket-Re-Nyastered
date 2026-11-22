@@ -32,8 +32,8 @@ def main():
     gf = Path(a.game_files) if a.game_files else None
     if gf is not None and gf.is_file() and gf.suffix.lower() not in ('.gdi', '.cue', '.chd'):
         gf = gf.parent   # selected packages/ROMs use their containing folder; preserve selected disc descriptors
-    if gf is None or not gf.is_dir():
-        say('Your game folder was not found: %s' % a.game_files); return 1
+    if gf is None or not gf.exists() or (not gf.is_dir() and gf.suffix.lower() not in ('.gdi', '.cue', '.chd')):
+        say('Your game folder or supported disc descriptor was not found: %s' % a.game_files); return 1
     game = gf.resolve()
     cache = Path(a.cache).resolve() if a.cache else default_cache()
     old = cache.parent / 'ReNyastered'   # the folder name used before the rename: move it once if the new one does not exist
