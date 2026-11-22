@@ -327,7 +327,27 @@ def export_playable_stages(assets):
 
 def discover(root, work, prefix='', exclude=None):
     """Yield (kind, local path, original label) for packages and loose input."""
+    root = Path(root)
     if root.resolve() == exclude:
+        return
+    if root.is_file():
+        suffix = root.suffix.lower()
+        if suffix in ('.gdi', '.cue'):
+            yield 'dreamcast', root, prefix + root.name
+        elif suffix == '.chd':
+            yield 'unsupported', root, prefix + root.name
+        elif suffix == '.zip':
+            expanded = Path(work, 'zip', sha256(root))
+            try:
+                unzip(root, expanded)
+            except (OSError, ValueError, zipfile.BadZipFile, RuntimeError) as error:
+                yield 'error', root, (prefix + root.name, str(error))
+                return
+            yield from discover(expanded, work, prefix + root.name + '!', exclude)
+        elif suffix in ('.ipa', '.apk', '.gba', '.vmi', '.vms'):
+            kind = {'.ipa': 'ios', '.apk': 'android', '.gba': 'gba',
+                    '.vmi': 'dlc', '.vms': 'dlc'}[suffix]
+            yield kind, root, prefix + root.name
         return
     for base, dirs, files in os.walk(root):
         dirs[:] = sorted(name for name in dirs if (Path(base) / name).resolve() != exclude)
@@ -344,14 +364,14 @@ def discover(root, work, prefix='', exclude=None):
             continue
         gdis = [name for name in files if Path(name).suffix.lower() == '.gdi']
         cues = [name for name in files if Path(name).suffix.lower() == '.cue']
-        if gdis:
-            for name in gdis:
-                path = folder / name
-                yield 'dreamcast', path, prefix + path.relative_to(root).as_posix()
-        elif cues:
-            for name in cues:
-                path = folder / name
-                yield 'dreamcast', path, prefix + path.relative_to(root).as_posix()
+        descriptors = gdis + cues
+        if len(descriptors) > 1:
+            path = folder / descriptors[0]
+            message = 'multiple Dreamcast descriptors in one folder; select one descriptor file or separate the dumps'
+            yield 'error', path, (prefix + path.relative_to(root).as_posix(), message)
+        elif descriptors:
+            path = folder / descriptors[0]
+            yield 'dreamcast', path, prefix + path.relative_to(root).as_posix()
         elif any(re.search(r'track\s*0?3\)?\.bin$', name, re.I) for name in files):
             yield 'dreamcast', folder, label
         for name in files:

@@ -189,8 +189,7 @@ def parse_cue(path):
     track_re = re.compile(r'TRACK\s+(\d+)\s+([A-Z0-9/]+)\s*$', re.I)
     index_re = re.compile(r'INDEX\s+(\d+)\s+(\d+:\d{2}:\d{2})\s*$', re.I)
     modes = {'AUDIO': (0, 2352, None), 'MODE1/2048': (4, 2048, 0),
-             'MODE1/2352': (4, 2352, 16), 'MODE2/2336': (4, 2336, 8),
-             'MODE2/2352': (4, 2352, 24)}
+             'MODE1/2352': (4, 2352, 16)}
     entries = []
     current_file = None
     current_track = None

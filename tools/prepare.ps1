@@ -11,8 +11,10 @@ $published = $false
 try {
     if (-not $GameFiles -or -not (Test-Path -LiteralPath $GameFiles)) { Write-Output "Your game folder or image was not found: $GameFiles"; exit 1 }
     $resolvedGameFiles = (Resolve-Path -LiteralPath $GameFiles).ProviderPath
-    if (Test-Path -LiteralPath $resolvedGameFiles -PathType Leaf) { $GameFiles = Split-Path -Parent $resolvedGameFiles }
-    else { $GameFiles = $resolvedGameFiles }
+    if (Test-Path -LiteralPath $resolvedGameFiles -PathType Leaf) {
+        if ([IO.Path]::GetExtension($resolvedGameFiles).ToLowerInvariant() -notin @('.gdi', '.cue', '.chd')) { $GameFiles = Split-Path -Parent $resolvedGameFiles }
+        else { $GameFiles = $resolvedGameFiles }
+    } else { $GameFiles = $resolvedGameFiles }
     if (-not $Cache) {
         $Cache = Join-Path $env:APPDATA "ChuChuRocketReNyastered"
     $old = Join-Path $env:APPDATA "ReNyastered"   # the folder name used before the rename: move it once if the new one does not exist

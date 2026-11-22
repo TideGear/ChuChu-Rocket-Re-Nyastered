@@ -30,7 +30,8 @@ def main():
     ap.add_argument('--download-python', action='store_true')
     a = ap.parse_args()
     gf = Path(a.game_files) if a.game_files else None
-    if gf is not None and gf.is_file(): gf = gf.parent   # one file chosen (an .ipa, .gba, .cue ...): use the folder it is in
+    if gf is not None and gf.is_file() and gf.suffix.lower() not in ('.gdi', '.cue', '.chd'):
+        gf = gf.parent   # selected packages/ROMs use their containing folder; preserve selected disc descriptors
     if gf is None or not gf.is_dir():
         say('Your game folder was not found: %s' % a.game_files); return 1
     game = gf.resolve()

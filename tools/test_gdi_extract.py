@@ -124,6 +124,13 @@ class GdiExtractTest(unittest.TestCase):
             found = list(extract_all.discover(archive_dir, root / 'work'))
             self.assertEqual([(kind, pathlib.Path(path).suffix.lower()) for kind, path, _ in found],
                              [('dreamcast', '.cue')])
+            (root / 'disc.gdi').write_text('0\\n', encoding='utf-8')
+            selected = list(extract_all.discover(cue, root / 'work'))
+            self.assertEqual([(kind, pathlib.Path(path).name) for kind, path, _ in selected],
+                             [('dreamcast', 'disc.cue')])
+            ambiguous = list(extract_all.discover(root, root / 'outside-work'))
+            self.assertIn(('error', pathlib.Path(root / 'disc.gdi')), [(kind, pathlib.Path(path))
+                                                                        for kind, path, _ in ambiguous])
 
     def test_cue_supports_several_tracks_in_one_file(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -152,6 +159,10 @@ class GdiExtractTest(unittest.TestCase):
             cue.write_text('FILE disc.bin BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\n'
                            'PREGAP 00:02:00\n', encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'pregap/postgap'):
+                gdi_extract.parse_cue(cue)
+            cue.write_text('FILE disc.bin BINARY\n TRACK 01 MODE2/2352\n INDEX 01 00:00:00\n',
+                           encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'unsupported CUE track mode'):
                 gdi_extract.parse_cue(cue)
 
     def test_rejects_missing_or_malformed_tracks(self):
