@@ -88,7 +88,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Unlock/password messages (mode 17) | screen | open | - |
 | Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual) | moving px 11.4 vs 5.4 static baseline |
 | Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
-| Rocket lid / lift-off / smoke | animation | partial (90/90 replay ages measured) | PuzzleLoop references 0x8c01cbc0 (sets 0x8c1af1e4); launch task 0x8c01c26e checks that flag before creating 0x8c01b8a0/0x8c01b9a0. Live RAM confirms flag 0 at age -1 and 1 at age 0, with six task instances added. Port prelaunch prediction lowers age -1 full-frame mean to 8.990 and dome-band mean to 8.837 (was 16.32); age 0 dome-band remains 0.744. All full-frame means still exceed 3; per-element closure remains open |
+| Rocket lid / lift-off / smoke | animation | partial (90/90 replay ages measured) | PuzzleLoop references 0x8c01cbc0 (sets 0x8c1af1e4); launch task 0x8c01c26e checks that flag before creating 0x8c01b8a0/0x8c01b9a0. Live RAM confirms flag 0 at age -1 and 1 at age 0, with six task instances added. Correctly aligned `CCR_TICKS=1520+age` replay: all 90 ages -9..80 meet full-frame mean <=3 (range 1.012..2.091); ages -1/0 are 1.572/1.012. This corrects the prior one-tick-offset measurements, not a new geometry fix. Age -1's six top-row dome crops remain partial (means 4.79..6.12 in diagnostic crops); silhouettes align at zero shift, but exact color/lighting and draw-path parity remain open |
 | Mouse caught, hole fall, rocket entry | animation | open | - |
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |
