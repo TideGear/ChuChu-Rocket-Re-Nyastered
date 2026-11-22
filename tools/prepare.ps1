@@ -35,6 +35,9 @@ try {
     Write-Output "progress 0.95 Checking what can be played"
     $newManifest = Join-Path $staging 'manifest.json'
     $manifest = Get-Content -LiteralPath $newManifest -Raw | ConvertFrom-Json
+    foreach ($gameInput in $manifest.inputs) {
+        if ($gameInput.error) { Write-Output ("Input could not be used: " + $gameInput.file + " - " + $gameInput.error) }
+    }
     if (-not $manifest.playable_modes) {
         if (-not $manifest.base_graphics_available) { Write-Output "No playable graphics were found. Add an iPad, iPhone or Android release of ChuChu Rocket! to the folder." }
         else { Write-Output "No playable stage data was found. See $log" }

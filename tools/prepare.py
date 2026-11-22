@@ -74,6 +74,9 @@ def main():
         say('progress 0.95 Checking what can be played')
         new_manifest = staging / 'manifest.json'
         manifest = json.loads(new_manifest.read_text())
+        for entry in manifest.get('inputs', []):
+            if entry.get('error'):
+                say('Input could not be used: %s — %s' % (entry.get('file', '(unknown)'), entry['error']))
         if not manifest.get('playable_modes'):
             if not manifest.get('base_graphics_available'): say('No playable graphics were found. Add an iPad, iPhone or Android release of ChuChu Rocket! to the folder.')
             else: say('No playable stage data was found. See %s' % log)

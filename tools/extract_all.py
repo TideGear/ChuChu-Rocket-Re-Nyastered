@@ -160,11 +160,19 @@ def do_gba(src, work, assets, entry):
 
 
 def do_dreamcast(src, work, assets, entry):
-    d = src
+    d = Path(src)
     files = os.path.join(assets, 'dreamcast', 'files')
     if not os.path.isdir(files):
-        run_tool('gdi_extract.py', d, files, 0)
-    entry['files'] = sum(len(f) for _, _, f in os.walk(files))
+        import gdi_extract
+        tracks = gdi_extract.extract(d, files, 0)
+    elif d.is_file() and d.suffix.lower() == '.gdi':
+        import gdi_extract
+        tracks = gdi_extract.parse_gdi(d)
+    else:
+        import gdi_extract
+        descriptors = sorted(d.glob('*.gdi')) if d.is_dir() else []
+        tracks = gdi_extract.parse_gdi(descriptors[0]) if descriptors else []
+    entry['extracted_file_count'] = sum(len(f) for _, _, f in os.walk(files))
     png = os.path.join(assets, 'dreamcast', 'png')
     if not os.path.isdir(png):
         run_tool('pvr2png.py', files, png)
@@ -196,22 +204,42 @@ def do_dreamcast(src, work, assets, entry):
     # CD audio tracks 04..18 (raw 16-bit stereo 44.1 kHz) -> WAV
     audio = os.path.join(assets, 'dreamcast', 'audio'); os.makedirs(audio, exist_ok=True)
     wavs = []
-    for p in sorted(Path(d).glob('*')):
-        match = re.search(r'track\s*(\d+)\)?\.bin$', p.name, re.I)
-        if not match:
-            continue
-        n = int(match[1])
-        if n == 1 or n == 3 or n == 19:
-            continue                                              # data tracks
-        out = os.path.join(audio, 'track%02d.wav' % n)
-        if not os.path.exists(out):
-            with open(p, 'rb') as f, wave.open(out, 'wb') as w:
-                w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100)
-                while True:
-                    b = f.read(1 << 20)
-                    if not b: break
-                    w.writeframes(b)
-        wavs.append(os.path.basename(out))
+    if tracks:
+        for track in tracks:
+            n = track.number
+            if track.kind != 0 or n in (1, 2, 3, 19):
+                continue
+            if track.sector_size not in (2352, 2448):
+                entry.setdefault('warnings', []).append('audio track %d has unsupported %d-byte sectors' % (n, track.sector_size))
+                continue
+            out = os.path.join(audio, 'track%02d.wav' % n)
+            if not os.path.exists(out):
+                with track.path.open('rb') as f, wave.open(out, 'wb') as w:
+                    w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100)
+                    f.seek(track.offset * track.sector_size)
+                    for _ in range(track.sectors):
+                        sector = f.read(track.sector_size)
+                        if len(sector) != track.sector_size:
+                            raise IOError('short read in GDI audio track %d' % n)
+                        w.writeframesraw(sector[:2352])
+            wavs.append(os.path.basename(out))
+    else:
+        for p in sorted(d.glob('*')) if d.is_dir() else []:
+            match = re.search(r'track\s*(\d+)\)?\.bin$', p.name, re.I)
+            if not match:
+                continue
+            n = int(match[1])
+            if n == 1 or n == 3 or n == 19:
+                continue                                              # data tracks
+            out = os.path.join(audio, 'track%02d.wav' % n)
+            if not os.path.exists(out):
+                with p.open('rb') as f, wave.open(out, 'wb') as w:
+                    w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100)
+                    while True:
+                        b = f.read(1 << 20)
+                        if not b: break
+                        w.writeframes(b)
+            wavs.append(os.path.basename(out))
     entry['audio_tracks'] = wavs
     # sound effects: the disc's own driver and sound bank rendered to one WAV per cue (tools/dc_sfx_render.py, docs/audio.md)
     sfx = os.path.join(assets, 'dreamcast', 'sfx')
@@ -312,8 +340,17 @@ def discover(root, work, prefix='', exclude=None):
             dirs.clear()
             yield 'android', folder, label
             continue
-        if any(re.search(r'track\s*0?3\)?\.bin$', name, re.I) for name in files):
+        gdis = [name for name in files if Path(name).suffix.lower() == '.gdi']
+        if gdis:
+            for name in gdis:
+                path = folder / name
+                yield 'dreamcast', path, prefix + path.relative_to(root).as_posix()
+        elif any(re.search(r'track\s*0?3\)?\.bin$', name, re.I) for name in files):
             yield 'dreamcast', folder, label
+        for name in files:
+            if Path(name).suffix.lower() == '.chd':
+                path = folder / name
+                yield 'unsupported', path, prefix + path.relative_to(root).as_posix()
         for name in files:
             path = folder / name
             suffix = path.suffix.lower()
@@ -335,10 +372,19 @@ def input_entry(kind, path, label):
     entry = {'kind': kind, 'file': label}
     if path.is_file():
         entry.update(bytes=path.stat().st_size, sha256=sha256(path))
+        if kind == 'dreamcast' and path.suffix.lower() == '.gdi':
+            import gdi_extract
+            tracks = gdi_extract.parse_gdi(path)
+            entry['tracks'] = [{'number': track.number, 'lba': track.lba, 'type': track.kind,
+                                'sector_size': track.sector_size, 'offset': track.offset,
+                                'file': track.path.name, 'bytes': track.path.stat().st_size,
+                                'sha256': sha256(track.path)} for track in tracks]
+            if any(track.path.suffix.lower() == '.chd' for track in tracks):
+                raise ValueError('CHD-compressed GDI tracks are not supported; convert the image to raw GDI tracks.')
     else:
         def included(candidate):
             if kind == 'dreamcast':
-                return candidate.suffix.lower() in ('.bin', '.cue', '.gdi')
+                return candidate.suffix.lower() in ('.bin', '.cue', '.gdi', '.raw')
             return True
         entry['files'] = [{'name': p.relative_to(path).as_posix(), 'bytes': p.stat().st_size, 'sha256': sha256(p)}
                           for p in sorted(path.rglob('*')) if p.is_file() and included(p)]
@@ -360,7 +406,19 @@ def main():
         if kind == 'error':
             manifest['inputs'].append({'kind': 'zip', 'file': label[0], 'error': label[1]})
             continue
-        entry = input_entry(kind, path, label)
+        if kind == 'unsupported':
+            entry = input_entry('dreamcast', path, label)
+            entry['error'] = 'CHD images are not supported yet; convert this image to a GDI or numbered BIN/CUE set.'
+            manifest['inputs'].append(entry)
+            print('   UNSUPPORTED: CHD images require conversion to GDI or numbered BIN/CUE tracks', flush=True)
+            continue
+        try:
+            entry = input_entry(kind, path, label)
+        except Exception as error:
+            entry = {'kind': kind, 'file': label, 'error': str(error)}
+            manifest['inputs'].append(entry)
+            print('   ERROR:', error, flush=True)
+            continue
         print('[%s] %s' % (kind, entry['file']), flush=True)
         try:
             if kind == 'dlc':

@@ -33,6 +33,9 @@ Write-Host "Extracting assets from your files (this can take several minutes). L
 if ($LASTEXITCODE -ne 0) { Get-Content $log -Tail 20; throw "Extraction failed" }
 Write-Host "Extraction finished. Manifest: $Cache\manifest.json"
 $manifest = Get-Content (Join-Path $Cache 'manifest.json') -Raw | ConvertFrom-Json
+foreach ($gameInput in $manifest.inputs) {
+    if ($gameInput.error) { Write-Host ("Input could not be used: " + $gameInput.file + " - " + $gameInput.error) }
+}
 if ($manifest.playable_modes) {
     Write-Host "Playable modes in this cache: $($manifest.playable_modes -join ', ')"
 } elseif (!$manifest.base_graphics_available) {
