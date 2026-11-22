@@ -11,7 +11,8 @@ struct DcRocketLid {
     int age = 0;
     std::vector<int> smokeBirths;
     static bool visibleAtLaunchAge(int launchAge) { return launchAge != 0; }
-    static float launchScaleAtAge(int launchAge) { return launchAge == -1 ? 1.25f : 1.0f; }
+    // The original Puzzle snapshots show shared rocket scale 1.20 with the launch flag clear (age 9), then 1.15 after the flag sets and launch tasks replace the parked domes (age 10). The writer that produces the pre-launch value is not yet established.
+    static float launchScaleAtAge(int launchAge) { return launchAge == -1 ? 1.2f : 1.0f; }
     void tick(unsigned globalTime, int cellIndex) {
         ++age;
         // 0x8c01b8a0 spawns before the body rises; 0x8c01cbfa retires

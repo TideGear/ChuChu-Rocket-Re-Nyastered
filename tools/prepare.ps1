@@ -39,7 +39,7 @@ try {
         if ($gameInput.error) { Write-Output ("Input could not be used: " + $gameInput.file + " - " + $gameInput.error) }
     }
     if (-not $manifest.playable_modes) {
-        if (-not $manifest.base_graphics_available) { Write-Output "No playable graphics were found. Add an iPad, iPhone or Android release of ChuChu Rocket! to the folder." }
+        if (-not $manifest.base_graphics_available) { Write-Output "No playable graphics were found. Check for a supported Dreamcast GDI/numbered BIN-CUE image or add a supported iOS/Android release." }
         else { Write-Output "No playable stage data was found. See $log" }
         exit 1
     }

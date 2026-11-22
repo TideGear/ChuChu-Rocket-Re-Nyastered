@@ -4641,7 +4641,13 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ) { if (!strcmp(argv[i], "--portable")) { portableFlag = true; for (int j = i; j < argc; j++) argv[j] = argv[j + 1]; --argc; } else ++i; }
     // Asset folder: first argument, else CCR_ASSETS, else the usual places (next to the exe, the repo's local cache, %APPDATA%/ChuChuRocketReNyastered/assets, then the older %APPDATA%/ReNyastered/assets).
     std::string root; int shift = 0;
-    auto hasAssets = [](const std::string& d) { FILE* f = fopen((d + "/ret_all/r0930.tex.bin").c_str(), "rb"); if (f) { fclose(f); return true; } return false; };
+    auto hasAssets = [](const std::string& d) {
+        for (const std::string& path : {d + "/ret_all/r0930.tex.bin", d + "/dreamcast/models.bin"}) {
+            FILE* f = fopen(path.c_str(), "rb");
+            if (f) { fclose(f); return true; }
+        }
+        return false;
+    };
     if (argc >= 2 && std::string(argv[1]) != "menu" && std::string(argv[1]) != "models" && std::string(argv[1]) != "puzzle" && std::string(argv[1]) != "battle" && std::string(argv[1]) != "title") { root = argv[1]; shift = 1; }
     else {
         std::vector<std::string> cand; if (const char* e = getenv("CCR_ASSETS")) cand.push_back(e);

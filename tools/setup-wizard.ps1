@@ -39,9 +39,11 @@ foreach ($gameInput in $manifest.inputs) {
 if ($manifest.playable_modes) {
     Write-Host "Playable modes in this cache: $($manifest.playable_modes -join ', ')"
 } elseif (!$manifest.base_graphics_available) {
-    Write-Host "For playable graphics, provide one of the supported iOS or Android releases listed in the README."
+    Write-Host "No playable graphics were found. Check for a supported Dreamcast GDI/numbered BIN-CUE image or add a supported iOS/Android release."
+    throw "Setup cannot finish without playable modes."
 } else {
-    Write-Host "No playable stage data was found. See the extraction log for any errors."
+    Write-Host "No playable stage data was found. Add a supported Dreamcast GDI/numbered BIN-CUE image or compatible mobile graphics and stage data. See the extraction log for input errors."
+    throw "Setup cannot finish without playable modes."
 }
 
 Write-Host "Preparing the portable Zig toolchain and building the game..."

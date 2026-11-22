@@ -15,7 +15,7 @@ int main() {
     check(DcRocketLid::visibleAtLaunchAge(-1), "launch age minus one keeps domes");
     check(!DcRocketLid::visibleAtLaunchAge(0), "launch age zero hides domes");
     check(DcRocketLid::visibleAtLaunchAge(1), "launch age one restores domes");
-    check(DcRocketLid::launchScaleAtAge(-1) == 1.25f, "launch age minus one enlarges domes");
+    check(DcRocketLid::launchScaleAtAge(-1) == 1.2f, "launch age minus one uses the observed Dreamcast dome scale");
     check(DcRocketLid::launchScaleAtAge(0) == 1.0f, "launch age zero has no dome scale");
     ccr::PuzzlePauseState tap;
     tap.press();

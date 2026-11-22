@@ -78,7 +78,7 @@ def main():
             if entry.get('error'):
                 say('Input could not be used: %s — %s' % (entry.get('file', '(unknown)'), entry['error']))
         if not manifest.get('playable_modes'):
-            if not manifest.get('base_graphics_available'): say('No playable graphics were found. Add an iPad, iPhone or Android release of ChuChu Rocket! to the folder.')
+            if not manifest.get('base_graphics_available'): say('No playable graphics were found. Check for a supported Dreamcast GDI/numbered BIN-CUE image or add a supported iOS/Android release.')
             else: say('No playable stage data was found. See %s' % log)
             return 1
         assets, new_assets, old_assets = cache / 'assets', staging / 'assets', staging / 'previous-assets'
