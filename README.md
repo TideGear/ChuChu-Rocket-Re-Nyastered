@@ -85,7 +85,7 @@ Put whichever originals you have under `Original Game Files` beside `setup.cmd`,
 | **Dreamcast** | `.gdi` plus every referenced raw track, or numbered `.bin` tracks and their `.cue`, loose or in a ZIP | Provides the original 100 main puzzles, 25 Battle boards, stereo CD music and original Dreamcast art. A direct setup/launcher selection can be the `.gdi` or `.cue` file itself; keep its referenced tracks beside it. |
 | **Dreamcast VMU DLC** | `.VMS` with its optional paired `.VMI`, loose or in a ZIP | `DEPuzzle` adds 25 playable Express puzzles. Setup also collects the `PuzzleP`, `Cartoony`, `DEChar` and `UFOCow` saves for future support. |
 
-For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu Rocket!** entry in [Redump.org](https://redump.org/) and contains **19 raw tracks and one descriptor** is the tested layout. GDI descriptors must keep every referenced raw track beside the descriptor (or in its declared relative path); selecting the `.gdi` or `.cue` directly in Windows setup is supported.
+For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu Rocket!** entry in [Redump.org](https://redump.org/) and contains **19 raw tracks and one descriptor** is the tested layout. GDI and separate-file CUE descriptors use the referenced raw files and must keep them beside the descriptor (or under a safe relative path). The tested CUE uses BINARY tracks; unsupported CUE directives/layouts are reported rather than guessed. Selecting the `.gdi` or `.cue` directly in Windows setup is supported.
 
 ### What if I have fewer releases?
 

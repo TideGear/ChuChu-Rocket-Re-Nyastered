@@ -165,13 +165,15 @@ def do_dreamcast(src, work, assets, entry):
     if not os.path.isdir(files):
         import gdi_extract
         tracks = gdi_extract.extract(d, files, 0)
-    elif d.is_file() and d.suffix.lower() == '.gdi':
+    elif d.is_file() and d.suffix.lower() in ('.gdi', '.cue'):
         import gdi_extract
-        tracks = gdi_extract.parse_gdi(d)
+        tracks = gdi_extract.parse_gdi(d) if d.suffix.lower() == '.gdi' else gdi_extract.parse_cue(d)
     else:
         import gdi_extract
         descriptors = sorted(d.glob('*.gdi')) if d.is_dir() else []
-        tracks = gdi_extract.parse_gdi(descriptors[0]) if descriptors else []
+        cues = sorted(d.glob('*.cue')) if d.is_dir() and not descriptors else []
+        tracks = (gdi_extract.parse_gdi(descriptors[0]) if descriptors else
+                  gdi_extract.parse_cue(cues[0]) if cues else [])
     entry['extracted_file_count'] = sum(len(f) for _, _, f in os.walk(files))
     png = os.path.join(assets, 'dreamcast', 'png')
     if not os.path.isdir(png):
@@ -341,8 +343,13 @@ def discover(root, work, prefix='', exclude=None):
             yield 'android', folder, label
             continue
         gdis = [name for name in files if Path(name).suffix.lower() == '.gdi']
+        cues = [name for name in files if Path(name).suffix.lower() == '.cue']
         if gdis:
             for name in gdis:
+                path = folder / name
+                yield 'dreamcast', path, prefix + path.relative_to(root).as_posix()
+        elif cues:
+            for name in cues:
                 path = folder / name
                 yield 'dreamcast', path, prefix + path.relative_to(root).as_posix()
         elif any(re.search(r'track\s*0?3\)?\.bin$', name, re.I) for name in files):
@@ -372,9 +379,9 @@ def input_entry(kind, path, label):
     entry = {'kind': kind, 'file': label}
     if path.is_file():
         entry.update(bytes=path.stat().st_size, sha256=sha256(path))
-        if kind == 'dreamcast' and path.suffix.lower() == '.gdi':
+        if kind == 'dreamcast' and path.suffix.lower() in ('.gdi', '.cue'):
             import gdi_extract
-            tracks = gdi_extract.parse_gdi(path)
+            tracks = gdi_extract.parse_gdi(path) if path.suffix.lower() == '.gdi' else gdi_extract.parse_cue(path)
             entry['tracks'] = [{'number': track.number, 'lba': track.lba, 'type': track.kind,
                                 'sector_size': track.sector_size, 'offset': track.offset,
                                 'file': track.path.name, 'bytes': track.path.stat().st_size,

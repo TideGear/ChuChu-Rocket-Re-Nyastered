@@ -1,7 +1,7 @@
-"""Extract the ISO9660 high-density area from a Dreamcast GDI or numbered BIN set.
+"""Extract the ISO9660 high-density area from Dreamcast GDI or separate-file BIN/CUE.
 
 A GDI track row is: number, start LBA, type, sector size, filename, file offset.
-Usage: gdi_extract.py <disc.gdi | directory with Track NN.bin> <outdir> [legacy gap sectors]
+Usage: gdi_extract.py <disc.gdi | disc.cue | directory with Track NN.bin> <outdir> [legacy gap sectors]
 """
 import os
 import re
@@ -19,9 +19,13 @@ class Track:
     sector_size: int
     path: Path
     offset: int
+    sector_count: int = None
+    data_offset: int = None
 
     @property
     def sectors(self):
+        if self.sector_count is not None:
+            return self.sector_count
         size = self.path.stat().st_size - self.offset * self.sector_size
         if size < 0 or size % self.sector_size:
             raise ValueError('invalid GDI track size or offset: %s' % self.path)
@@ -99,6 +103,8 @@ class DiscReader:
                 raw = handle.read(track.sector_size)
                 if track.sector_size == 2048:
                     data = raw
+                elif track.data_offset is not None:
+                    data = raw[track.data_offset:track.data_offset + 2048]
                 elif track.sector_size == 2336:
                     data = raw[8:2056]
                 else:
@@ -165,10 +171,148 @@ def extract_records(tracks, outdir):
         reader.close()
 
 
+def _cue_time(value):
+    match = re.fullmatch(r'(\d+):(\d{2}):(\d{2})', value)
+    if not match:
+        raise ValueError('invalid CUE index time: %s' % value)
+    minutes, seconds, frames = map(int, match.groups())
+    if seconds >= 60 or frames >= 75:
+        raise ValueError('invalid CUE index time: %s' % value)
+    return (minutes * 60 + seconds) * 75 + frames
+
+
+def parse_cue(path):
+    """Parse a separate-file raw BIN/CUE set using its declared track modes."""
+    path = Path(path)
+    lines = path.read_text(encoding='utf-8-sig').splitlines()
+    file_re = re.compile(r'FILE\s+(?:"([^"]+)"|(\S+))\s+(BINARY|MOTOROLA)\s*$', re.I)
+    track_re = re.compile(r'TRACK\s+(\d+)\s+([A-Z0-9/]+)\s*$', re.I)
+    index_re = re.compile(r'INDEX\s+(\d+)\s+(\d+:\d{2}:\d{2})\s*$', re.I)
+    modes = {'AUDIO': (0, 2352, None), 'MODE1/2048': (4, 2048, 0),
+             'MODE1/2352': (4, 2352, 16), 'MODE2/2336': (4, 2336, 8),
+             'MODE2/2352': (4, 2352, 24)}
+    entries = []
+    current_file = None
+    current_track = None
+    ignored = ('REM ', 'TITLE ', 'PERFORMER ', 'SONGWRITER ', 'FLAGS ', 'ISRC ',
+               'CATALOG ', 'CDTEXTFILE ')
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.upper().startswith(ignored):
+            continue
+        match = file_re.fullmatch(line)
+        if match:
+            name = match.group(1) or match.group(2)
+            name = name.replace('\\', os.sep).replace('/', os.sep)
+            relative_path = Path(name)
+            if relative_path.is_absolute() or '..' in relative_path.parts:
+                raise ValueError('CUE track path must stay beside the descriptor: %s' % name)
+            track_path = (path.parent.resolve() / relative_path).resolve()
+            if not track_path.is_relative_to(path.parent.resolve()):
+                raise ValueError('CUE track path escapes its descriptor folder: %s' % name)
+            if not track_path.is_file():
+                raise FileNotFoundError('CUE track file is missing: %s' % track_path)
+            current_file = (track_path, match.group(3).upper())
+            current_track = None
+            continue
+        match = track_re.fullmatch(line)
+        if match:
+            if current_file is None:
+                raise ValueError('CUE TRACK appears before FILE')
+            number, mode = int(match.group(1)), match.group(2).upper()
+            if mode not in modes:
+                raise ValueError('unsupported CUE track mode: %s' % mode)
+            current_track = {'number': number, 'mode': mode, 'file': current_file[0],
+                             'file_type': current_file[1], 'indexes': {}}
+            entries.append(current_track)
+            continue
+        match = index_re.fullmatch(line)
+        if match:
+            if current_track is None:
+                raise ValueError('CUE INDEX appears before TRACK')
+            index = int(match.group(1))
+            if index in current_track['indexes']:
+                raise ValueError('duplicate CUE INDEX %02d on track %02d' % (index, current_track['number']))
+            if index == 0 and 1 in current_track['indexes']:
+                raise ValueError('CUE INDEX 00 must precede INDEX 01 on track %02d' % current_track['number'])
+            current_track['indexes'][index] = _cue_time(match.group(2))
+            continue
+        if re.match(r'(?:PREGAP|POSTGAP)\b', line, re.I):
+            raise ValueError('external CUE pregap/postgap directives are unsupported; use a raw GDI or separate-file CUE with indexed pregaps')
+        if re.match(r'^(?:FILE|TRACK|INDEX)\b', line, re.I):
+            raise ValueError('invalid CUE directive: %s' % line)
+        raise ValueError('unsupported CUE directive: %s' % line)
+
+    if not entries:
+        raise ValueError('CUE descriptor contains no tracks: %s' % path)
+    numbers = [entry['number'] for entry in entries]
+    if numbers != list(range(1, len(numbers) + 1)):
+        raise ValueError('CUE tracks must be numbered consecutively from 1: %s' % path)
+    if any(entry['file_type'] != 'BINARY' for entry in entries):
+        raise ValueError('CUE tracks must use raw BINARY files: %s' % path)
+
+    tracks = []
+    for index, entry in enumerate(entries):
+        indexes = entry['indexes']
+        if 1 not in indexes or set(indexes) - {0, 1}:
+            raise ValueError('CUE track %02d needs INDEX 01 and optional INDEX 00' % entry['number'])
+        if 0 in indexes and indexes[0] > indexes[1]:
+            raise ValueError('CUE INDEX 00 must precede INDEX 01 on track %02d' % entry['number'])
+        kind, sector_size, data_offset = modes[entry['mode']]
+        entry['sector_size'] = sector_size
+        entry['data_offset'] = data_offset
+        entry['start'] = indexes.get(0, indexes[1])
+        entry['program_start'] = indexes[1]
+        previous = next((prior for prior in reversed(entries[:index])
+                         if prior['file'] == entry['file']), None)
+        if previous:
+            if sector_size != previous['sector_size']:
+                raise ValueError('CUE tracks sharing a raw file must use the same sector size')
+            if entry['start'] < previous['start']:
+                raise ValueError('CUE indexes must advance within a shared track file')
+        file_sectors = entry['file'].stat().st_size // sector_size
+        if entry['file'].stat().st_size % sector_size:
+            raise ValueError('CUE file size is not a whole number of sectors: %s' % entry['file'])
+        if entry['start'] >= file_sectors or any(position >= file_sectors for position in indexes.values()):
+            raise ValueError('CUE index lies outside track %02d file: %s' % (entry['number'], entry['file']))
+
+    tracks = []
+    for index, entry in enumerate(entries):
+        file_sectors = entry['file'].stat().st_size // entry['sector_size']
+        end = file_sectors
+        next_track = next((later for later in entries[index + 1:]
+                           if later['file'] == entry['file']), None)
+        if next_track:
+            end = next_track['start']
+        if end <= entry['start']:
+            raise ValueError('CUE track %02d has no sectors before the next track' % entry['number'])
+        if any(position >= end for position in entry['indexes'].values()):
+            raise ValueError('CUE index lies outside track %02d boundary' % entry['number'])
+        if entry['program_start'] >= end:
+            raise ValueError('CUE INDEX 01 lies outside track %02d boundary' % entry['number'])
+        kind, sector_size, data_offset = modes[entry['mode']]
+        tracks.append(Track(entry['number'], 0, kind, sector_size, entry['file'], entry['start'],
+                            end - entry['start'], data_offset))
+    if not any(track.number == 3 and track.kind == 4 for track in tracks):
+        raise ValueError('CUE has no Dreamcast high-density data track 03')
+    lba = 45000
+    if tracks[2].number != 3 or tracks[2].kind != 4 or tracks[2].sector_size not in (2048, 2336, 2352):
+        raise ValueError('CUE track 03 must be the Dreamcast high-density data track: %s' % path)
+    for index, track in enumerate(tracks):
+        if track.number < 3:
+            continue
+        if track.number != index + 1:
+            raise ValueError('CUE high-density tracks must be consecutive from track 03')
+        tracks[index] = Track(track.number, lba, track.kind, track.sector_size, track.path,
+                              track.offset, track.sectors, track.data_offset)
+        lba += track.sectors
+    return tracks
+
+
 def extract(source, outdir, gap=0):
     source = Path(source)
-    if source.is_file() and source.suffix.lower() == '.gdi':
-        tracks = parse_gdi(source)
+    if source.is_file() and source.suffix.lower() in ('.gdi', '.cue'):
+        tracks = parse_gdi(source) if source.suffix.lower() == '.gdi' else parse_cue(source)
         extract_records(tracks, outdir)
         return tracks
     descriptors = sorted(source.glob('*.gdi'))
@@ -176,6 +320,13 @@ def extract(source, outdir, gap=0):
         if len(descriptors) != 1:
             raise ValueError('put each Dreamcast GDI in its own folder')
         tracks = parse_gdi(descriptors[0])
+        extract_records(tracks, outdir)
+        return tracks
+    cues = sorted(source.glob('*.cue'))
+    if cues:
+        if len(cues) != 1:
+            raise ValueError('put each Dreamcast CUE in its own folder')
+        tracks = parse_cue(cues[0])
         extract_records(tracks, outdir)
         return tracks
 

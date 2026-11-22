@@ -67,6 +67,93 @@ class GdiExtractTest(unittest.TestCase):
             self.assertEqual([track.lba for track in tracks if track.kind == 4][-2:],
                              [45017, 45018])
 
+    def test_cue_uses_referenced_filenames_modes_and_indexes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / 'track one.bin').write_bytes(bytes(2352))
+            (root / 'track two.bin').write_bytes(bytes(2352))
+            boot = bytearray(19 * 2048)
+            pvd = memoryview(boot)[16 * 2048:17 * 2048]
+            pvd[0], pvd[1:6], pvd[6] = 1, b'CD001', 1
+            pvd[80:88] = both32(45019)
+            pvd[128:132] = both16(2048)
+            pvd[156:190] = directory_record(45017, 2048, 0, 2)
+            directory = bytearray(2048)
+            records = [directory_record(45017, 2048, 0, 2),
+                       directory_record(45017, 2048, 1, 2),
+                       directory_record(45018, 6, 'CUE OK;1')]
+            directory[:sum(map(len, records))] = b''.join(records)
+            boot[17 * 2048:18 * 2048] = directory
+            boot[18 * 2048:18 * 2048 + 6] = b'CUE OK'
+            (root / 'opaque data.bin').write_bytes(boot)
+            (root / 'middle audio.bin').write_bytes(bytes(3 * 2352))
+            (root / 'last data.bin').write_bytes(bytes(2048))
+            cue = root / 'disc.cue'
+            cue.write_text(
+                'FILE "track one.bin" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\n'
+                'FILE "track two.bin" BINARY\n TRACK 02 AUDIO\n INDEX 01 00:00:00\n'
+                'FILE "opaque data.bin" BINARY\n TRACK 03 MODE1/2048\n INDEX 01 00:00:00\n'
+                'FILE "middle audio.bin" BINARY\n TRACK 04 AUDIO\n INDEX 00 00:00:00\n INDEX 01 00:00:02\n'
+                'FILE "last data.bin" BINARY\n TRACK 05 MODE1/2048\n INDEX 01 00:00:00\n',
+                encoding='utf-8')
+            output = root / 'out'
+            tracks = gdi_extract.extract(cue, output)
+            self.assertEqual((output / 'CUE OK').read_bytes(), b'CUE OK')
+            self.assertEqual([(t.number, t.kind, t.lba) for t in tracks],
+                             [(1, 4, 0), (2, 0, 0), (3, 4, 45000),
+                              (4, 0, 45019), (5, 4, 45022)])
+            self.assertEqual((tracks[3].offset, tracks[3].sectors), (0, 3))
+
+    def test_cue_auto_discovery_finds_nonstandard_referenced_names(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / 'payload.bin').write_bytes(bytes(2048))
+            cue = root / 'disc.cue'
+            cue.write_text('FILE payload.bin BINARY\n TRACK 01 MODE1/2048\n INDEX 01 00:00:00\n',
+                            encoding='utf-8')
+            import extract_all
+            found = list(extract_all.discover(root, root / 'work'))
+            self.assertEqual([(kind, pathlib.Path(path).name) for kind, path, _ in found],
+                             [('dreamcast', 'disc.cue')])
+            archive_dir = root / 'archive-input'
+            archive_dir.mkdir()
+            archive = archive_dir / 'disc.zip'
+            with __import__('zipfile').ZipFile(archive, 'w') as zipped:
+                zipped.write(cue, cue.name)
+                zipped.write(root / 'payload.bin', 'payload.bin')
+            found = list(extract_all.discover(archive_dir, root / 'work'))
+            self.assertEqual([(kind, pathlib.Path(path).suffix.lower()) for kind, path, _ in found],
+                             [('dreamcast', '.cue')])
+
+    def test_cue_supports_several_tracks_in_one_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / 'shared.bin').write_bytes(bytes(4 * 2352))
+            cue = root / 'shared.cue'
+            cue.write_text(
+                'FILE shared.bin BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\n'
+                ' TRACK 02 MODE1/2352\n INDEX 01 00:00:01\n'
+                ' TRACK 03 MODE1/2352\n INDEX 01 00:00:02\n'
+                ' TRACK 04 MODE1/2352\n INDEX 01 00:00:03\n', encoding='utf-8')
+            tracks = gdi_extract.parse_cue(cue)
+            self.assertEqual([(t.number, t.lba, t.offset, t.sectors) for t in tracks],
+                             [(1, 0, 0, 1), (2, 0, 1, 1),
+                              (3, 45000, 2, 1), (4, 45001, 3, 1)])
+
+    def test_rejects_cue_paths_and_unsupported_layouts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            cue = root / 'disc.cue'
+            cue.write_text('FILE ../outside.bin BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\n',
+                            encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'must stay beside'):
+                gdi_extract.parse_cue(cue)
+            (root / 'disc.bin').write_bytes(bytes(2352))
+            cue.write_text('FILE disc.bin BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\n'
+                           'PREGAP 00:02:00\n', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'pregap/postgap'):
+                gdi_extract.parse_cue(cue)
+
     def test_rejects_missing_or_malformed_tracks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
