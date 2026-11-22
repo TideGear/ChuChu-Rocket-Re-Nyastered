@@ -12,6 +12,7 @@ Per cue, two independent checks against the original:
 Reports correlation, mean absolute error per channel (levels of 16-bit PCM) and the maximum error.
 """
 import argparse
+import collections
 import csv
 import json
 import struct
@@ -177,11 +178,13 @@ def verify_cue(capture, cue, driver, mlt, cold):
         return sorted(out)
     a_voices, e_voices = per_voice(actual), per_voice(expected)
     a_notes, e_notes = notes(a_voices), notes(e_voices)
+    original_notes, native_notes = collections.Counter(a_notes), collections.Counter(e_notes)
     result['dispatch_writes'] = dict(original_notes=len(a_notes), native_notes=len(e_notes),
-                                     original=sum(len(n) for n in a_notes), native=sum(len(n) for n in e_notes), equal=a_notes == e_notes)
-    if a_notes != e_notes:
-        only_a = [n for n in a_notes if n not in e_notes]
-        only_e = [n for n in e_notes if n not in a_notes]
+                                     original=sum(len(n) for n in a_notes), native=sum(len(n) for n in e_notes),
+                                     equal=original_notes == native_notes)
+    if original_notes != native_notes:
+        only_a = list((original_notes - native_notes).elements())
+        only_e = list((native_notes - original_notes).elements())
         result['dispatch_writes']['unmatched'] = dict(original=len(only_a), native=len(only_e))
         if only_a and only_e:
             index = next((i for i, (p, q) in enumerate(zip(only_a[0], only_e[0])) if p != q), 0)

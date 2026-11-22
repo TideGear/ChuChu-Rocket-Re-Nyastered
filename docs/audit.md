@@ -30,7 +30,7 @@ Status words: **done** (implemented and checked, evidence named), **partial** (w
 ## E. Sound, animation, assets
 - Full inventory with version/address/asset ID/gates: **open** (pieces in roadmap and docs/*.md).
 - Challenge intro cards use disc art, with A1 and B2 compared against Flycast. Failure Retry/Stage Select and C1 clear Next/Stage Select now use disc art and have headless checks. Alternate clear types, End, runtime clocks, countdown/in-play art and remaining text presentation still need coverage (HANDOFF.md).
-- Dreamcast sound is **partial**. Trace the original call sites and MANATEE.DRV for cue, pitch, volume, channel, priority, looping, fade and cancellation. The headless Flycast host records WAV and frame sample offsets. Start cue comparisons with Challenge selection, countdown, goal, clear and fail.
+- Dreamcast sound is **partial**. Startup music is source-traced and wired: Sonic Team submits track 18 at task tick 13 via type-5 record; Title requests track 4 on entry via type 1. Puzzle task initializer `0x8c02b97e` (mode 15) requests track 13 at `0x8c02b9d8`, matching the port's song 9 selection; `FUN_8c02b940` is a helper it calls. The queue task has separate type-1 through type-5 paths; the priority word does not establish loop behavior, and CD repeat/fade/stop transitions remain open. Other queue callers still need screen/reachability tracing. MANATEE.DRV's numeric cue map and all-cue rendering are verified, but gameplay semantics are mostly unmapped and eight cues have dispatch-write differences. The headless Flycast host records WAV and frame sample offsets. Continue with Challenge selection, countdown, goal, clear, fail, and menus.
 - Dreamcast model inventory is **partial**. The [mesh inventory](dreamcast_meshes.md) and [captured poses](dreamcast_mesh_poses.md) track the observed families. Character clock rules, costumes, KapuKapu, the focus ring and unseen meshes remain open.
 ## F. Platforms, controls, play
 - 60 Hz fixed simulation: **done**; interpolated rendering **done**; mouse aim, WASD/arrows: **done**; four-player hotseat: **done**.
@@ -91,10 +91,10 @@ Counts items this table lists, not the game's full content (many screens have se
 | Cursor trail | animation | partial | - |
 | Roulette | animation | open (Dreamcast) | - |
 | KapuKapu, focus ring | animation | open | - |
-| Sound: music (CD tracks 04-18) | sound | partial: loop/repeat rule from the original queue entry and Flycast (track 6), song 14 jingle = track 18, Music test plays; fades, per-mode start/stop and the other tracks' loops unverified | track 6 loop restart exact (corr 1.0, lag 0); port mixer vs track exact |
+| Sound: music (CD tracks 04-18) | sound | partial: queue types 1-5 and priority fields traced; startup requests track 18 at Sonic Team tick 13 (type 5), Title and Mode Select request track 4 (type 1), Puzzle task initializer `0x8c02b97e` requests track 13 (port song 9), Music Test explicitly requests track 5 for selection 1. Original CD repeat/fade/stop behavior remains open; priority is not repeat evidence. | `dc_startup.py`; source at `FUN_8c022f24`, `FUN_8c0264d2`, `0x8c02b97e`, `FUN_8c05368a`; Music Test 120-tick headless test; pinned Zig/Ninja build |
 | Sound: SFX voice rendering, all 128 cues (Dreamcast) | sound | verified: the voice renderer driven by the ARM's own register writes equals the isolated Flycast cue at every sample for 128/128 cues (max error 0) | `dc_se_capture.py` + `dc_se_verify.py`; trace-driven, so ARM latency is not part of it |
-| Sound: SFX cue dispatch and playback in the port (Dreamcast) | sound | partial: my sequencer produces identical per-note register writes for 120/128 cues (8 differ in a few notes: 5, 8, 13, 21, 22, 23, 26, 28); key-on timing median worst case 10 samples, max 135 (3 ms); not modeled: ARM latency, the five-slot cut, channel-history LFO phase | cues are pre-rendered at setup; port mixer equals the render exactly |
-| Sound: startup, menu, voices | sound | open | - |
+| Sound: SFX cue dispatch and playback in the port (Dreamcast) | sound | partial: ID 0..28 -> bank 0 same sequence, ID 29..127 -> bank 1 sequence ID-29; per-note writes match 120/128 cues (5, 8, 13, 21, 22, 23, 26, 28 differ); Puzzle arrival provisionally requests cue 6 (Battle mouse-in-rocket uses 6; normal/Dash event tests pass), while original Puzzle request count/frame remains unverified; two conditional cue-8 sites are not proven to be general arrival; 224/226 call sites have constant IDs; two computed calls have formulas and local flag/threshold gates traced but their runtime values and meanings are unknown; ARM latency, five-slot cut and channel-history LFO phase unmodeled | cues pre-rendered at setup; mixer equals render, but trigger parity remains open |
+| Sound: startup, menu, voices | sound | partial: startup CD requests 18 then 4 are mapped and wired; menu effects, voice cues and remaining screen triggers are open | `tools/oracle/dc_startup.py`; headless track trace |
 
 **Totals: 41 items; 7 verified, 22 partial, 12 open or not testable.** Update this table in the same commit as any Dreamcast change.
 
@@ -102,9 +102,9 @@ Counts items this table lists, not the game's full content (many screens have se
 The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `0x8c019088` rejects values >= 23 and stores the mode at `0x8c1af108`, read from RAM dumps of the captured screens); each entry points to a descriptor whose first word is the mode's init function. Entries 23-39 and up are data, not modes. Status words as above; every row stays open until its screens are matched against Flycast frames.
 | Mode | Init function | What it is | Status |
 |---|---|---|---|
-| 0 | 0x8c0235ea | SEGA logo | **partial**: layout and fades match Flycast (mean error 0.97); music request not played |
-| 1 | 0x8c023776 | Sonic Team logo | **partial**: 0.66 mean error; fades timed from one-frame captures |
-| 2 | 0x8c0264d2 | Title (idle timeout 588/600 ticks) | **partial**: background, logo, prompt blink and flying rocket done (1.6-2.5 mean error); drop-shadow pieces and music open; attract replay integrated, full rendering checks still partial |
+| 0 | 0x8c0235ea | SEGA logo | **partial**: layout and fades match Flycast (mean error 0.97); no music request observed in the traced path |
+| 1 | 0x8c023776 | Sonic Team logo | **partial**: 0.66 mean error; fades timed from one-frame captures; track 18 requested at task tick 13 |
+| 2 | 0x8c0264d2 | Title (idle timeout 588/600 ticks) | **partial**: background, logo, prompt blink and flying rocket done (1.6-2.5 mean error); track 4 requested on entry; drop-shadow pieces and full rendering checks remain partial; attract replay integrated |
 | 3 | 0x8c0265da | after the first Start on the title (frames 1352-1513): save/VMU check, before Mode Select (screen not compared) | open |
 | 4 | 0x8c022432 | unidentified (not reached by the Start, Help, Options, Battle or Challenge paths) | open |
 | 5 | 0x8c022f24 | Mode Select (mode variable 5 from frame 1519 until a mode is chosen; mode 20 appears for 5 frames just before) | partial: 4P Battle and Challenge selections compared at 640x480 |
@@ -116,7 +116,7 @@ The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `
 | 11 | 0x8c051b9a | Options (General Settings, Settings for 4P Battle and Team Battle, Records, Language, Keyboard F-key Settings, Return to Initial Settings) | partial: Options menu drawn from disc art (`DcOptionsMode`, strip = `OPTION_newsousa2`, text in the BIOS font or its fallback; mean error vs Flycast about 5-7, glyph shapes differ without a BIOS); the settings pages behind each entry are open |
 | 12, 13 | 0x8c0278cc | shared init with `yuka01` floor: 12 = Battle play, Team Battle and the attract demo (mode variable 12 in the battle, HUD and demo captures); 13 unseen | partial: Battle and Team Battle captures compared; demo and mode 13 open |
 | 14 | 0x8c02a33e | Challenge play, pause, failure and clear screens (mode variable 14 in those captures) | partial: A1 play, failure (4.3), clear banner and select compared; other stage types and results open |
-| 15 | 0x8c02b97e | Puzzle play (mode variable 15 in the Normal 01 capture) | partial: Normal 01, 02, 08 compared; Hard, Special, Mania and results open |
+| 15 | 0x8c02b97e | Puzzle play (mode variable 15 in the Normal 01 capture; queue request at 0x8c02b9d8) | partial: Normal 01, 02, 08 compared; Hard, Special, Mania and results open |
 | 16 | 0x8c058292 | tutorial per the style variable (`FUN_8c016bd4`) | open |
 | 17 | 0x8c0507e0 | unlock and password messages ("You can now select Chao / Pians / Mania / Special / Hard", "The password is:") | open |
 | 18-22 | 0x8c05cfba, 0x8c05d39a, 0x8c05d55a, 0x8c05dc80, 0x8c05df12 | unidentified | open |

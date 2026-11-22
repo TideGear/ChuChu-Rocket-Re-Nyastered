@@ -57,9 +57,15 @@ struct Entity {
 };
 
 // Events produced in battle mode (consumed by BattleGame).
-struct Event { enum Kind { MouseRocket, CatRocket, MouseEaten, MouseHole, MouseGone } kind; int player; int type; int slot = -1; };   // slot: pool slot of the task that raised it
+struct Event { enum Kind { MouseRocket, PuzzleRocket, CatRocket, MouseEaten, MouseHole, MouseGone } kind; int player; int type; int slot = -1; };   // slot: pool slot of the task that raised it
 
 struct Result { int mice = 0, saved = 0, killed = 0, cats = 0; bool stuck = false; int ticks = 0; int byCat = 0, byHole = 0, catRocket = 0, broken = 0; };
+
+struct PuzzleAudioRequests {
+    template<class Play> void afterSimulationPass(const std::vector<Event>& events, Play play) const {
+        for (const Event& event : events) if (event.kind == Event::PuzzleRocket) play(6);
+    }
+};
 
 class Sim {
 public:
@@ -280,7 +286,7 @@ private:
         else {
             tx = (rocketPos[monopoly][0] + 0.5f) * kCell; tz = (rocketPos[monopoly][1] + 0.5f) * kCell;
             float dx = e.x - tx, dz = e.z - tz; float d = std::sqrt(dx * dx + dz * dz);
-            if (d < 2.5f) { events.push_back({Event::MouseRocket, monopoly, e.type, e.slot}); e.done = true; e.reg = false; scheduleFree(&e - ents.data(), now + 1, false); return; }   // arrives: same as entering the rocket (score, puku, sound 8 for gold)
+            if (d < 2.5f) { events.push_back({Event::MouseRocket, monopoly, e.type, e.slot}); e.done = true; e.reg = false; scheduleFree(&e - ents.data(), now + 1, false); return; }   // arrives: score and puku; original sound trigger is unverified
             float f = std::atan2(e.x - tx, tz - e.z); int tgt = (int)(long long)(((double)f * 65536.0) / 6.283184);
             e.angle = (int)adjustAngle(e.angle, tgt, 0x400);
         }
@@ -308,7 +314,7 @@ private:
                 if (e.mouse) scheduleFree(&e - ents.data(), now + 1, false);       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
                 return;
             }
-            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; lastCatInRocket = static_cast<int>(&e - ents.data()); e.rocketIn = true; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
+            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); events.push_back({Event::PuzzleRocket, 0, e.type}); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; lastCatInRocket = static_cast<int>(&e - ents.data()); e.rocketIn = true; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
             if (battle && (f & kHole)) { events.push_back(e.mouse ? Event{Event::MouseHole, 0, e.type} : Event{Event::CatRocket, -1, 0});
                 if (e.mouse || !rnd) e.alive = false;
                 else {

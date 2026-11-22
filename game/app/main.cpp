@@ -292,8 +292,10 @@ struct App {
     // Audio: one callback-driven mixer (looped music stream + one-shot SFX voices), device format 44.1 kHz stereo s16.
     SDL_AudioDeviceID adev = 0; // Music: the 15 songs of the original (song n = mobile file Mnn = Dreamcast CD track n+4). Loaded on demand; loops from the end of the disc's 2 s lead-in over the length of the mobile file (the disc stores four repetitions of some songs).
     struct Song { std::vector<int16_t> pcm; size_t loopStart = 0, loopEnd = 0; bool loop = true, tried = false; }; Song songs[15]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
-    std::vector<std::vector<int16_t>> sfx; struct Voice { const std::vector<int16_t>* d; size_t pos; }; std::vector<Voice> voices;
+    std::vector<std::vector<int16_t>> sfx; struct Voice { const std::vector<int16_t>* d; size_t pos; int slot = -1; uint64_t generation = 0; }; std::vector<Voice> voices;
+    std::array<uint64_t, 8> sfxSlotGeneration{}; int nextSfxSlot = 0, nextRouletteSlot = 0; uint32_t lastCue7Time = 0; bool hasCue7Time = false;
     std::array<std::vector<int16_t>, 8> rouletteVoice, rouletteVoiceJapanese;
+    std::vector<std::vector<int16_t>> sfxJapanese;
 
     // HD 1.0 frame table (int16 w at record offset 16): draw size of each frame on the original iPad
     void loadFit(const std::string& path, Sheet& s) {
@@ -422,10 +424,13 @@ struct App {
             Song& sg = a->songs[a->curTrack]; const auto& m = sg.pcm;
             for (int i = 0; i < n * 2; i++) { if (a->musPos >= sg.loopEnd) { if (!sg.loop) { a->musOn = false; break; } a->musPos = sg.loopStart; } out[i] = (int16_t)(m[a->musPos++] * ((float)a->musicVol / 255.0f)); }   // AppData::playSong: volume = +0x54 / 255
         }
-        for (auto& v : a->voices) for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (int)((*v.d)[v.pos++] * ((float)a->sfxVol / 255.0f));   // playSFX: +0x58 / 255 (the per-sound base volume of the original is not applied)
-             out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
+        for (auto& v : a->voices) {
+            if (v.slot >= 0 && v.generation != a->sfxSlotGeneration[v.slot]) continue;
+            for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (int)((*v.d)[v.pos++] * ((float)a->sfxVol / 255.0f));   // playSFX: +0x58 / 255 (the per-sound base volume of the original is not applied)
+                out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
+        }
         if (a->audioCapture) { fwrite(out, 4, n, a->audioCapture); fflush(a->audioCapture); }   // CCR_AUDIO_CAPTURE: headless record of the mix
-        a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [](const Voice& v) { return v.pos >= v.d->size(); }), a->voices.end());
+        a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [a](const Voice& v) { return (v.slot >= 0 && v.generation != a->sfxSlotGeneration[v.slot]) || v.pos >= v.d->size(); }), a->voices.end());
     }
     static void toStereo44k(const short* pcm, int frames, int ch, int rate, std::vector<int16_t>& out) {
         double step = (double)rate / 44100.0; int outFrames = (int)(frames / step); out.resize((size_t)outFrames * 2);
@@ -438,12 +443,20 @@ struct App {
         if (sfxDir.empty())
             for (auto& e : fs::directory_iterator(root + "/android", ec))
                 if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) { sfxDir = (e.path() / "audio_sfx").string(); break; }
-        sfx.resize(117);   // ids 0..116 are Dreamcast sound-effect cues (CHU2_SE.MLT, rendered by tools/dc_sfx_render.py); 117+ are roulette voices
+        sfx.resize(128);   // Dreamcast CHU2_SE cue ids 0..127; ids 117..124 dispatch mobile roulette voices
+        sfxJapanese.resize(128);
         for (int i = 0; i < static_cast<int>(sfx.size()); ++i) {   // the Dreamcast cue is preferred; mobile clips only fill cues the renderer does not support
             char cue[512]; snprintf(cue, sizeof cue, "%s/dreamcast/sfx/cue%03d.wav", root.c_str(), i);
             SDL_AudioSpec spec; Uint8* buf; Uint32 len;
             if (!SDL_LoadWAV(cue, &spec, &buf, &len)) continue;
             if (spec.format == AUDIO_S16LSB && spec.channels == 2 && spec.freq == 44100) sfx[i].assign((int16_t*)buf, (int16_t*)(buf + len));
+            SDL_FreeWAV(buf);
+        }
+        for (int i = 0; i < static_cast<int>(sfxJapanese.size()); ++i) {
+            char cue[512]; snprintf(cue, sizeof cue, "%s/dreamcast/sfx/ja/cue%03d.wav", root.c_str(), i);
+            SDL_AudioSpec spec; Uint8* buf; Uint32 len;
+            if (!SDL_LoadWAV(cue, &spec, &buf, &len)) continue;
+            if (spec.format == AUDIO_S16LSB && spec.channels == 2 && spec.freq == 44100) sfxJapanese[i].assign((int16_t*)buf, (int16_t*)(buf + len));
             SDL_FreeWAV(buf);
         }
         if (!sfxDir.empty()) {
@@ -456,6 +469,7 @@ struct App {
                 if (frames > 0) { toStereo44k(pcm, frames, ch, rate, clip); free(pcm); }
             };
             for (int i = 0; i < 29; ++i) if (sfx[i].empty()) loadClip(i, "", sfx[i]);
+            // Dispatcher cues 117..124 select the correspondingly numbered localized AudioItem file.
             for (int i = 0; i < static_cast<int>(rouletteVoice.size()); ++i) {
                 loadClip(117 + i, "", rouletteVoice[i]);
                 loadClip(117 + i, "J", rouletteVoiceJapanese[i]);
@@ -475,28 +489,39 @@ struct App {
             SDL_Delay(100); if (audioCapture) fclose(audioCapture); exit(0);
         }
     }
-    int lastCue7Frame = -1000;
-    void playSfx(int id) {
-        if (id == 7) {   // 1ST_READ FUN_8c01203a @ 8c01203a: cue 7 is dropped when fewer than 3 frames have passed since the previous cue-7 call, and that call still becomes the new reference
-            const int frame = (int)((unsigned long long)SDL_GetTicks() * 60ull / 1000ull), previous = lastCue7Frame;
-            lastCue7Frame = frame;
-            if (frame - previous < 3) return;
-        }
-        if (!adev) return;
-        const std::vector<int16_t>* clip = nullptr;
-        if (id >= 0 && id < static_cast<int>(sfx.size())) clip = &sfx[id];
-        if (id >= 117 && id < 117 + static_cast<int>(rouletteVoice.size()))
-            clip = lang == 5 ? &rouletteVoiceJapanese[id - 117] : &rouletteVoice[id - 117];
-        if (!clip || clip->empty()) return;
-        if (headless && id == 7 && getenv("CCR_CAT_AUDIO_TRACE"))
-            printf("cat rocket clip 007.ogg %zu samples\n", clip->size());
-        if (headless && id == 27 && getenv("CCR_CAT_AUDIO_TRACE"))
-            printf("cat cue clip 027.ogg %zu samples\n", clip->size());
-        if (headless && id >= 117 && getenv("CCR_ROULETTE_AUDIO_TRACE"))
-            printf("roulette clip %s%03d.ogg %zu samples\n", lang == 5 ? "J" : "", id, clip->size());
+    void queueSfxClip(const std::vector<int16_t>* clip, int firstSlot = 0, int slotCount = 5) {
+        if (!adev || !clip || clip->empty() || slotCount <= 0 || firstSlot < 0 || firstSlot + slotCount > (int)sfxSlotGeneration.size()) return;
         SDL_LockAudioDevice(adev);
-        voices.push_back({clip, 0});
+        int& nextSlot = firstSlot == 0 ? nextSfxSlot : nextRouletteSlot;
+        const int slot = firstSlot + nextSlot;
+        nextSlot = (nextSlot + 1) % slotCount;
+        const uint64_t generation = ++sfxSlotGeneration[slot];
+        voices.push_back({clip, 0, slot, generation});
         SDL_UnlockAudioDevice(adev);
+    }
+    void playSfx(int id) {
+        if (id == 7) {   // 1ST_READ FUN_8c01203a @ 8c01203a: every request refreshes the global-frame reference, even when suppressed
+            const uint32_t previous = lastCue7Time;
+            lastCue7Time = globalTime;
+            const bool suppress = hasCue7Time && (uint32_t)(globalTime - previous) < 3;
+            hasCue7Time = true;
+            if (suppress) return;
+        }
+        const std::vector<int16_t>* clip = id >= 0 && id < static_cast<int>(sfx.size()) ? &sfx[id] : nullptr;
+        if (lang == 5 && id >= 0 && id < static_cast<int>(sfxJapanese.size()) && !sfxJapanese[id].empty()) clip = &sfxJapanese[id];
+        if (headless && id == 7 && clip && getenv("CCR_CAT_AUDIO_TRACE"))
+            printf("cat rocket clip 007.ogg %zu samples\n", clip->size());
+        if (headless && id == 27 && clip && getenv("CCR_CAT_AUDIO_TRACE"))
+            printf("cat cue clip 027.ogg %zu samples\n", clip->size());
+        queueSfxClip(clip);
+    }
+    void playRouletteVoice(int id) {
+        if (id < 117 || id > 124) return;
+        const int i = id - 117;
+        const auto* clip = lang == 5 ? &rouletteVoiceJapanese[i] : &rouletteVoice[i];
+        if (headless && getenv("CCR_ROULETTE_AUDIO_TRACE"))
+            printf("roulette clip %s%03d.ogg %zu samples\n", lang == 5 ? "J" : "", id, clip->size());
+        queueSfxClip(clip, 5, 3);   // the original roulette dispatcher owns slots 5..7, separate from the five ordinary SFX slots
     }
     void loadSong(int n) {
         Song& sg = songs[n]; if (sg.tried) return; sg.tried = true; namespace fs = std::filesystem; std::error_code ec;
@@ -528,9 +553,10 @@ struct App {
         if (n == 14 && sg.loopStart == 0) sg.loop = false;   // song 14 is a 5 s jingle (the mobile fallback)
     }
     // AppData::playSong(song): switch to a song (restarts only when it is a different one)
-    void playSong(int n) { if (!adev || n < 0 || n > 14) return; if (n == curTrack && musOn) return; loadSong(n); if (songs[n].pcm.empty()) return;
+    void playSong(int n) { if (!adev || n < 0 || n > 14) return; if (n == curTrack) return; loadSong(n); if (songs[n].pcm.empty()) return;
         SDL_LockAudioDevice(adev); curTrack = n; musPos = songs[n].loopStart; musOn = true; SDL_UnlockAudioDevice(adev); }
-    void pumpMusic(int song) { playSong(song); }
+    void stopSong() { if (!adev) return; SDL_LockAudioDevice(adev); musOn = false; curTrack = -1; musPos = 0; SDL_UnlockAudioDevice(adev); }
+    void pumpMusic(int song) { if (song == -2) return; if (song >= 0) playSong(song); else stopSong(); }
     // --- drawing helpers ---
     void number(int v, int x, int y, int hgt) {
         if (!digits.tex || digits.fr.size() < 10) { text(std::to_string(v), x, y, hgt); return; }
@@ -1381,6 +1407,7 @@ struct ModelViewerMode : Screen {
 // the prompt appears at u = 89 and is hidden for 8 of every 30 ticks from u = 145. Not traced yet: the flying rocket, `newtitle1/2` and music 18.
 struct DcStartupMode : Screen {
     int phase = 0, t = 0, request = -1; bool leave = false, attract = false;
+    int music() override { return -2; }   // Dreamcast CD queue requests are issued explicitly at their traced task ticks.
     static bool available(App& a) { return a.dcStartup.tex && a.dcStartup.fr.size() >= 7; }
     void event(App&, const SDL_Event& e) override {
         const bool press = (e.type == SDL_KEYDOWN && !e.key.repeat) || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN || e.type == SDL_CONTROLLERBUTTONDOWN;
@@ -1388,13 +1415,14 @@ struct DcStartupMode : Screen {
         if (phase == 1 && request < 0) request = t;
         else if (phase == 2 && t >= 20) leave = true;
     }
-    void tick(App&) override {
+    void tick(App& app) override {
         ++t;
         if (phase == 2 && t >= 600) attract = true;
         if (phase == 0 && t >= 144) { phase = 1; t = 0; }
         else if (phase == 1) {
+            if (t == 13) app.playSong(14);   // 1ST_READ FUN_8c0236c0 / tools/oracle/dc_startup.py: CD track 18
             if (request < 0 && t >= 365) request = t;
-            if (request >= 0 && t >= request + 13) { phase = 2; t = 0; }
+            if (request >= 0 && t >= request + 13) { phase = 2; t = 0; app.playSong(0); }   // title init FUN_8c0264d2 queues CD track 4
         }
     }
     const char* next() override { if (std::exchange(leave, false)) return "MENU"; return std::exchange(attract, false) ? "DC_DEMO" : nullptr; }
@@ -2432,17 +2460,17 @@ struct DcHelpMode : Screen {
 struct DcOptionsMode : Screen {
     int sel = 0; bool leave = false;
     int page = -1, langRow = 1;   // page: -1 = the menu, 0 = General Settings, 2 = Records, 3 = Language (Flycast Options frames 2250, 2450, 3050); 1 and 4 are not built yet
-    // General Settings state (Flycast frame 2450): Character, Sound output, Jump Pack, Music test, SE test, Return to Initial Settings. What each value does in the original is not traced
-    // yet; Sound output, Jump Pack and the test numbers are kept for the session only and the SE test plays the port's sound effect of that number.
+    // General Settings state (Flycast frame 2450): Character, Sound output, Jump Pack, Music test, SE test, Return to Initial Settings. The SE test selects one of the original dispatcher cues 0..127.
     int genRow = 0, genSound = 1, genJump = 0, genMusic = 0, genSe = 0;
     // Settings for 4P Battle and Team Battle (Flycast frame 2750): play time 1-3 minutes, game speed 1-5, '% of ? mice' Normal/High, arrow reset Off/On. Untraced and unwired like General Settings.
     int bRow = 0, bTime = 3, bSpeed = 3, bMice = 0, bArrow = 0;
     // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
     static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
+    int music() override { return -2; }   // Dreamcast CD requests from Music Test are explicit; don't stop them on the next screen pump.
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
-        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = a.settings.musicTest % 15; genSe = a.settings.seTest; a.playSfx(1); }
+        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = a.settings.musicTest % 15; genSe = a.settings.seTest & 127; a.playSfx(1); }
         else if (sel == 1 && hasLanguagePage(a)) { page = 1; bRow = 0; bTime = a.settings.battleTime; bSpeed = a.settings.battleSpeed; bMice = a.settings.battleMice; bArrow = a.settings.battleArrow; a.playSfx(1); }
         else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {
@@ -2467,7 +2495,7 @@ struct DcOptionsMode : Screen {
         case 1: genSound = !genSound; break;
         case 2: genJump = !genJump; break;
         case 3: genMusic = (genMusic + 15 + d) % 15; break;   // Options > Music test wraps 0 <-> 14 on the real screen (15 songs = CD tracks 4..18)
-        case 4: genSe = (genSe + 1000 + d) % 1000; break;
+        case 4: genSe = (genSe + 128 + d) % 128; break;
         default: return; }
         a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings();
         a.playSfx(0);
@@ -2858,6 +2886,8 @@ struct PuzzleMode : Screen {
     int failureFrames = 0;
     int clearFrames = 0;
     bool clearSaved = false;
+    bool launchSoundStarted = false;
+    ccr::PuzzleAudioRequests puzzleAudioRequests;
     std::array<DcRocketLid, kCols * kRows> launchLids{};
     // Original Puzzle phase 4 (0x8c02bf00): 210 ticks, or 105 with Dash.
     bool resultReady() const { return state == 2 && clearFrames > (dash ? 105 : 210); }
@@ -2878,7 +2908,7 @@ struct PuzzleMode : Screen {
     PadAim padAim{97.5f, 67.5f};   // Flycast Normal Puzzle 01 and 02: the pad cursor starts on cell (6, 4), its pointer at the cell centre
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 6, curY = 4; SDL_GameController* pad = nullptr;
-    void putAt(int cx, int cy, int d) { sim.removeArrow(cx, cy); if (d >= 0 && used(d) < stock[d]) sim.placeArrow(cx, cy, d); }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
+    bool putAt(int cx, int cy, int d) { sim.removeArrow(cx, cy); if (d >= 0 && used(d) < stock[d]) return sim.placeArrow(cx, cy, d); return false; }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
     bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
     bool dcPanelDrawn = false;   // the Dreamcast bottom panel replaces the iPad arrow strip
@@ -2887,7 +2917,7 @@ struct PuzzleMode : Screen {
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
         cursorTrail = {};
-        launchLids = {}; clearSaved = false;
+        launchLids = {}; clearSaved = false; launchSoundStarted = false;
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         paused = false; pconf = false; pauseState.resume();
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
@@ -2896,7 +2926,7 @@ struct PuzzleMode : Screen {
     // Dreamcast Puzzle uses the same measured floor plane as Battle (Flycast Normal Puzzle 01/02: floor quad x 136.929-594.606, y 22.604-365.861 of 640 x 480).
     FieldLayout pf(const App& a) const { return dreamcastPuzzleControls(a) ? dcBattleField : FieldLayout{}; }
     int used(int d) const { int n = 0; for (auto& a : sim.arrows) if (a.live && a.dir == d) n++; return n; }
-    ~PuzzleMode() override { if (pad) SDL_GameControllerClose(pad); }
+    ~PuzzleMode() override { if (pad) SDL_GameControllerClose(pad); if (gApp) gApp->stopSong(); }
     void event(App& a, const SDL_Event& e) override {
         if (state == 2) {
             if (!resultReady()) return;
@@ -2937,11 +2967,11 @@ struct PuzzleMode : Screen {
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); }
             else if (state == 0 && !paused && !e.key.repeat && aim.inside && arrowKey(k) >= 0) {
                 mouseCursor = true;
-                putAt(aim.cellX(), aim.cellY(), arrowKey(k));
+                if (putAt(aim.cellX(), aim.cellY(), arrowKey(k))) a.playSfx(1);
             } }
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && hudButton(a, e)) {}   // HD 1.0 PuzzleGameScreen::handleInput: rect 3 Start (flag 1), rect 4 Cancel (flag 2)
         else if (e.type == SDL_MOUSEBUTTONDOWN && state == 0 && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e, pf(a));
-        else if (e.type == SDL_MOUSEBUTTONUP && state == 0 && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); putAt(cx, cy, d); }   // a tap (d = -1) deletes the arrow on the cell
+        else if (e.type == SDL_MOUSEBUTTONUP && state == 0 && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (putAt(cx, cy, d)) a.playSfx(1); }   // a tap (d = -1) deletes the arrow on the cell
         else if (e.type == SDL_CONTROLLERDEVICEADDED && !pad) pad = SDL_GameControllerOpen(e.cdevice.which);
         else if (e.type == SDL_CONTROLLERDEVICEREMOVED && pad &&
                  SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cdevice.which) {
@@ -2956,7 +2986,7 @@ struct PuzzleMode : Screen {
                 return;
             }
             mouseCursor = false;
-            { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) { if (state == 0) putAt(curX, curY, d); }
+            { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) { if (state == 0 && putAt(curX, curY, d)) a.playSfx(1); }
             else if (b == pm.pause) {
                 if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
                 pauseState.press();
@@ -3074,6 +3104,11 @@ struct PuzzleMode : Screen {
         if (state == 2 || state == 3) {
             if (state == 2) {
                 ++clearFrames;
+                if (!launchSoundStarted) {
+                    launchSoundStarted = true;
+                    for (int cell = 0; cell < kCols * kRows; ++cell)
+                        if (stages.list[cur].st.tiles[cell] == T_Rocket) a.playSfx(21);
+                }
                 for (int pass = 0; pass < (dash ? 2 : 1); ++pass)
                     for (int cell = 0; cell < kCols * kRows; ++cell)
                         if (stages.list[cur].st.tiles[cell] == T_Rocket) launchLids[cell].tick(a.globalTime, cell);
@@ -3088,10 +3123,15 @@ struct PuzzleMode : Screen {
             return;
         }
         if (!running) return;
-        sim.tick(); a.stepAngles(sim);
-        if (dash) { sim.tick(); a.stepAngles(sim); }   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
+        auto tickPuzzleSimulation = [&] {
+            sim.events.clear();
+            sim.tick(); a.stepAngles(sim);
+            puzzleAudioRequests.afterSimulationPass(sim.events, [&](int cue) { a.playSfx(cue); });
+        };
+        tickPuzzleSimulation();
+        if (dash) tickPuzzleSimulation();   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
-        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; clearFrames = 0; if (gApp && gApp->stageSet == 0) clearSaved = gApp->setCleared(cur);
+        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; clearFrames = 0; a.playSfx(21); a.playSfx(28); if (gApp && gApp->stageSet == 0) clearSaved = gApp->setCleared(cur);
             if (a.headless && getenv("CCR_PUZZLE_CLEAR_TRACE")) printf("puzzle clear stage %d tick %d saved %d\n", cur, cticks, sim.saved);
         }
     }
@@ -3291,13 +3331,14 @@ struct PuzzleMode : Screen {
 
 // ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
 struct ChallengeMode : Screen {
-    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0; bool saved_ = false, newBest = false; int bestSeconds = 0;
+    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0, musicTicks_ = 0; bool challengeMusicStarted_ = false, saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
     SDL_GameController* controller = nullptr;
     PadAim padAim{5.5f * kCell, 3.5f * kCell};
 
     ~ChallengeMode() override {
         if (controller) SDL_GameControllerClose(controller);
+        if (gApp) gApp->stopSong();
     }
     void openController(int device) {
         if (!controller && SDL_IsGameController(device)) controller = SDL_GameControllerOpen(device);
@@ -3329,7 +3370,7 @@ struct ChallengeMode : Screen {
     bool supportedNow() const { return battle || game.supported(); }
     Sim& simRef() { return battle ? bgame.game.sim : game.sim; }
     void skipIntro() { if (battle) bgame.skipIntro(); else game.skipIntro(); }
-    int music() override { return 9; }
+    int music() override { return challengeMusicStarted_ ? 8 : -2; }   // ChallengeLoop calls BGM_Play(0xc) after 0x78 (120) loop ticks
     void place(App& a, int dir) { if (paused || phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_CONTROLLERDEVICEADDED) { openController(e.cdevice.which); return; }
@@ -3423,6 +3464,7 @@ struct ChallengeMode : Screen {
         static const int pauseAt = getenv("CCR_PAUSE_TICK") ? atoi(getenv("CCR_PAUSE_TICK")) : -1;
         if (pauseAt >= 0 && cticks == pauseAt) paused = true;
         if (paused) return;
+        if (!challengeMusicStarted_ && ++musicTicks_ >= 120) challengeMusicStarted_ = true;
         ++cticks;
         if (controller && phase() == ChallengeGame::Play) padAim.tick(controller);
         Sim& sm = simRef();
@@ -3431,7 +3473,14 @@ struct ChallengeMode : Screen {
         const int before = phase();
         if (battle) bgame.tick(); else game.tick();
         if (phase() == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
-        if (phase() != before) { if (phase() == ChallengeGame::Success || phase() == ChallengeGame::Result) a.playSfx(0x15); else if (phase() == ChallengeGame::Failure) { a.playSfx(0x1b); char lb[200]; snprintf(lb, sizeof lb, "challenge stage %d: failed (%s)", cur + 1, (battle ? bgame.failReason : game.failReason) ? (battle ? bgame.failReason : game.failReason) : ""); a.log.write(1, lb); } }
+        if (phase() != before) {
+            if (phase() == ChallengeGame::Success) { a.playSfx(21); a.playSfx(28); }
+            else if (phase() == ChallengeGame::Result) { a.playSfx(27); a.playSfx(28); }
+            else if (phase() == ChallengeGame::Failure) {
+                a.playSfx(27);
+                char lb[200]; snprintf(lb, sizeof lb, "challenge stage %d: failed (%s)", cur + 1, (battle ? bgame.failReason : game.failReason) ? (battle ? bgame.failReason : game.failReason) : ""); a.log.write(1, lb);
+            }
+        }
     }
     const char* next() override { if (!back) return nullptr; back = false; return fromStageSelect ? "CHALLENGE_SELECT" : "MENU"; }
     void finishFailure(App& a) {
@@ -4032,9 +4081,10 @@ struct BattleMode : Screen {
     // ResultRocket tasks (0x1fe24 Cons, 0x1ff58 Exec, 0x1fcf8 Draw; smoke 0x1fe10 / flash 0x1fdc8): the win icon rises from y = 620 (2 per tick) to 361, pulses (scale 1 -> 4 -> 1) and settles
     struct Rocket { int player, state; float x, y, tx, scale, dscale; }; std::vector<Rocket> rockets_; struct Smoke { float x, y; int n; }; std::vector<Smoke> smokes_; struct Flash { float x, y, scale, delta; }; std::vector<Flash> flashes_;
     int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners;
-    DragGesture drag; int lastCatSfx = -100; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
+    DragGesture drag; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
     std::vector<SDL_GameController*> unassignedPads;
     ~BattleMode() override {
+        if (gApp) gApp->stopSong();
         for (auto* pad : pads) if (pad) SDL_GameControllerClose(pad);
         for (auto* pad : unassignedPads) SDL_GameControllerClose(pad);
     }
@@ -4093,16 +4143,12 @@ struct BattleMode : Screen {
         if (localTeam < 0) if (const char* h = getenv("CCR_HUMANS")) { int n = std::max(1, std::min(4, atoi(h))); for (int p = 0; p < 4; p++) lv[p] = p < n ? -1 : (lv[p] < 0 ? 3 : lv[p]); }   // CCR_HUMANS=1..4 human players, the rest CPU
         for (int p = 0; p < 4; p++) game.setCpu(p, lv[p]);
         game.sfx = [this](int id) {
-            if (id == 7) {
-                const int elapsed = gTime - lastCatSfx;
-                lastCatSfx = gTime;  // ChuSECall updates the timer even for a suppressed request.
-                if (elapsed < 3) return;
-            }
             if (!gApp) return;
-            if (gApp->headless && (id == 10 || id == 11 || id == 13 || id >= 117) &&
+            if (gApp->headless && (id == 10 || id == 11 || id == 13 || (id >= 117 && id <= 124)) &&
                 getenv("CCR_ROULETTE_AUDIO_TRACE"))
                 printf("roulette cue %d %d\n", game.frame, id);
-            gApp->playSfx(id);
+            if (id >= 117 && id <= 124) gApp->playRouletteVoice(id);
+            else gApp->playSfx(id);
         };
         game.localPlayer = 0;
         restart(); return true;
@@ -4668,7 +4714,7 @@ int main(int argc, char** argv) {
             if (!demo->loadDemo(app)) { puts("cannot load Dreamcast demo recording"); return false; }
             mode = std::move(demo);
         }
-        else if (name == "DC_TITLE") { auto title = std::make_unique<DcStartupMode>(); title->phase = 2; mode = std::move(title); }
+        else if (name == "DC_TITLE") { app.playSong(0); auto title = std::make_unique<DcStartupMode>(); title->phase = 2; mode = std::move(title); }
         else if (name == "STARTUP" && !app.titleOk && DcStartupMode::available(app)) mode = std::make_unique<DcStartupMode>();
         else if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
         else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
@@ -4988,7 +5034,7 @@ int main(int argc, char** argv) {
         if (const char* clock = getenv("CCR_GLOBAL_TIME")) app.globalTime = (uint32_t)strtoul(clock, nullptr, 0);
         int lastSong = -2; for (int i = 0; i < ticks; i++) {
             if (i == keyTick) sendKeys();
-            for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); ++app.globalTime; if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST") && mode->music() >= 0) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); } } }
+            for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); ++app.globalTime; if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST")) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; if (lastSong >= 0) printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); else printf("tick %d: music stopped\n", i); } } }
         mode->draw(app, 1.0f);
         const int result = saveFrame(app.ren, shot);
         mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); app.models3d.clear(); SDL_Quit();
@@ -5037,7 +5083,7 @@ int main(int argc, char** argv) {
             for (int i = 0; i < SDL_NumJoysticks(); i++) if (SDL_IsGameController(i)) if (SDL_GameController* c = SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(i))) { if (SDL_GameControllerGetButton(c, (SDL_GameControllerButton)app.padMap.quitA) && SDL_GameControllerGetButton(c, (SDL_GameControllerButton)app.padMap.quitB)) a1 = a2 = true; }
             if (app.quitHold.tick(a1, a2, app.padMap.quitHoldTicks)) { app.log.write(1, "quit: controller quit combo held"); app.quit = true; break; }
             mode->tick(app); ++app.globalTime; if (const char* nx = mode->next()) { enter(nx); acc = 0; break; } acc -= dt; }   // screens that finish by themselves (fade-outs) are polled after every tick
-        if (mode->music() >= 0) app.pumpMusic(mode->music());
+        app.pumpMusic(mode->music());
         mode->draw(app, (float)(acc / dt)); SDL_RenderPresent(app.ren);
     };
 #ifdef __EMSCRIPTEN__

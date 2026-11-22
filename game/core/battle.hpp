@@ -206,6 +206,7 @@ private:
             score.add(e.player, value[e.type]); updateRanks(); if (sfx) sfx(6); if (!decFromFree) decMice(e.type, 1);
             if (e.type == 2) { if (rouletteEnabled) { pendingRoll_ = e.player; pendingRollSlot_ = e.slot; } }     // RL_RollRoulette4 runs when the mouse task is destroyed: one frame later
             break; }
+        case Event::PuzzleRocket: break;   // puzzle-only arrival; PuzzleAudioRequests owns its cue 6 request
         case Event::MouseGone:   // MO_MouseJimeExe deletes the task directly (0x3db0c) when it is more than 180 from the field centre: the counter drops in the same frame
             if (e.type == 0) gen->mice--; if (e.type == 1) gen->cnt1--; if (e.type == 2) gen->cnt2--; break;
         case Event::MouseEaten: case Event::MouseHole:
