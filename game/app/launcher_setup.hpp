@@ -24,8 +24,15 @@ static int prepareLauncherAssets() {
     std::unique_ptr<char, decltype(&SDL_free)> base(SDL_GetBasePath(), SDL_free);
     if (!base) return 1;
     auto directory = std::filesystem::u8path(base.get());
+    auto script = directory / L"tools" / L"prepare.ps1";
+    if (!std::filesystem::is_regular_file(script))
+        script = (directory / L".." / L".." / L"tools" / L"prepare.ps1").lexically_normal();
+    if (!std::filesystem::is_regular_file(script)) {
+        printf("Setup script not found beside the game or in the source checkout: %ls\n", script.c_str());
+        return 1;
+    }
     std::wstring command = L"\"" + powershell + L"\" -NoProfile -NonInteractive "
-                           L"-ExecutionPolicy Bypass -File tools\\prepare.ps1";
+                           L"-ExecutionPolicy Bypass -File \"" + script.wstring() + L"\"";
     if (count == 4) command += L" -DownloadPython";
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);

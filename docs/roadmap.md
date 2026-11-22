@@ -2,6 +2,11 @@
 
 See the [requirement audit](audit.md) for current coverage. This log retains dated implementation decisions, original-code traces and test evidence.
 
+## Dreamcast image setup (2026-11-22)
+
+- Windows setup and launcher preparation accept a folder or one selected image/descriptor file; direct files normalize to their parent folder so GDI/CUE-relative raw tracks remain discoverable. The Windows launcher `--prepare` script lookup prefers a packaged sibling `tools/prepare.ps1` and falls back to the source checkout two levels above `build/game/ccr.exe`.
+- Fresh Windows setup from a directly selected USA GDI, without BIOS or mobile inputs, completed the pinned Zig 0.14.1/CMake/Ninja build: 128 Dreamcast models, 15 CD WAVs, 128 rendered SFX cue WAVs, 19 referenced-track hashes and Puzzle/Battle/Stage Challenge. The direct CUE and GDI each passed fresh-cache preparation. All twelve Dreamcast routes (STARTUP, DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, Puzzle, Challenge, Battle setup, Team Battle setup, DC_DEMO) rendered from that image-only cache. A fresh GDI+iOS 1.1.2 cache retained the Dreamcast model/audio assets, preferred mobile graphics, and rendered representative title/gameplay routes. These are setup/build/reachability checks, not Flycast parity or RecompLauncher UI verification.
+
 ## Playfield rendering (2026-11-14)
 
 - Fixed headless screenshot readback after the title resets the gameplay viewport. The old 1024 × 768 capture had only 921 drawn columns. Readback now covers all 1024 columns at 4:3 and retains equal 160-pixel side bars at 1280 × 720. Replaced the README capture and set its display width to 50%.
