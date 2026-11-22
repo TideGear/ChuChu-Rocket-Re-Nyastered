@@ -21,6 +21,17 @@ def sha256(path, chunk=1 << 22):
     return h.hexdigest()
 
 
+def bios_candidates(game_files):
+    """Find optional BIOS files beside a selected descriptor or in a game-files folder."""
+    source = Path(game_files)
+    roots = [source.parent] if source.is_file() else [source]
+    candidates = set()
+    for root in roots:
+        candidates.update(root.glob('*.bin'))
+        candidates.update(root.glob('*/*.bin'))
+    return sorted(candidates)
+
+
 def unzip(src, dst):
     if os.path.isdir(dst) and os.listdir(dst):
         return dst
@@ -486,7 +497,7 @@ def main():
     manifest['stage_sources'] = export_playable_stages(assets)
     # Optional: a Dreamcast BIOS image the user placed with the game files supplies the ROM font the original draws its clocks and hints with (never shipped).
     import export_dc_bios_font
-    for candidate in sorted(Path(gf).glob('*.bin')) + sorted(Path(gf).glob('*/*.bin')):
+    for candidate in bios_candidates(gf):
         try:
             if candidate.stat().st_size == 2097152 and export_dc_bios_font.is_bios(candidate.read_bytes()):
                 export_dc_bios_font.main(str(candidate), str(Path(assets, 'ret_all')))

@@ -132,6 +132,29 @@ class GdiExtractTest(unittest.TestCase):
             self.assertIn(('error', pathlib.Path(root / 'disc.gdi')), [(kind, pathlib.Path(path))
                                                                         for kind, path, _ in ambiguous])
 
+    def test_selected_descriptor_searches_for_optional_bios_beside_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            image = root / 'disc'
+            image.mkdir()
+            cue = image / 'game.cue'
+            cue.write_text('FILE track.bin BINARY\n TRACK 01 AUDIO\n INDEX 01 00:00:00\n',
+                            encoding='utf-8')
+            (image / 'track.bin').write_bytes(bytes(2352))
+            (image / 'dc_boot.bin').write_bytes(bytes(2 * 1024 * 1024))
+            outside = root / 'unrelated.bin'
+            outside.write_bytes(bytes(32))
+            import extract_all
+            selected_candidates = extract_all.bios_candidates(cue)
+            self.assertIn(image / 'dc_boot.bin', selected_candidates)
+            self.assertIn(image / 'track.bin', selected_candidates)
+            self.assertNotIn(outside, selected_candidates)
+            gdi = image / 'game.gdi'
+            gdi.write_text('1\n1 0 4 2048 track.bin 0\n', encoding='utf-8')
+            self.assertIn(image / 'dc_boot.bin', extract_all.bios_candidates(gdi))
+            folder_candidates = extract_all.bios_candidates(image)
+            self.assertIn(image / 'dc_boot.bin', folder_candidates)
+
     def test_cue_supports_several_tracks_in_one_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
