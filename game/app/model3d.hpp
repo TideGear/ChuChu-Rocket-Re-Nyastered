@@ -120,7 +120,10 @@ public:
                     const float perspective = cameraDistance / depth;
                     const float dx = floorPosition.x - cameraCenter.x + side * v.z * scale;
                     const float dy = floorPosition.y - cameraCenter.y - side * vx * scale + side * opening * pixelsPerUnit;
-                    const float light = 0.3f + std::max(0.0f, 0.5f * ny + 0.25f * side * nx);
+                    // The live age -1 TA vertices confirm that the Dreamcast's uniform rocket scale also scales its diffuse normal term.
+                    const float intensity = std::clamp(0.3f + std::max(0.0f, (0.5f * ny + 0.25f * side * nx) * launchScale), 0.0f, 1.0f);
+                    const auto intensityByte = (unsigned)(intensity * 255.0f);
+                    const float light = (float)(255u * intensityByte / 256u) / 255.0f;
                     out.p[i] = {cameraCenter.x + dx * perspective, cameraCenter.y + dy * perspective};
                     out.iw[i] = 1.0f / depth;
                     out.light[i] = light;
