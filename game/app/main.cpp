@@ -6,6 +6,7 @@
 #include <SDL.h>
 #include "../core/battle.hpp"
 #include "../core/dc_cursor.hpp"
+#include "../core/audio_mix.hpp"
 #include "../core/dc_demo.hpp"
 #include "../core/angle.hpp"
 #include "battle_preview.hpp"
@@ -216,6 +217,11 @@ struct App {
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings; ModelPack models3d; bool models3dTried = false, mobileSheetsMissing = false;
     bool useModels3d() { if (!models3dTried) { models3dTried = true; if (settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
     void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
+    void setSoundOutput(int output) {
+        if (adev) SDL_LockAudioDevice(adev);
+        soundOutput = output;
+        if (adev) SDL_UnlockAudioDevice(adev);
+    }
     void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true; FILE* audioCapture = nullptr;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
@@ -294,6 +300,7 @@ struct App {
     struct Song { std::vector<int16_t> pcm; size_t loopStart = 0, loopEnd = 0; bool loop = true, tried = false; }; Song songs[15]; int curTrack = -1; size_t musPos = 0; bool musOn = false;
     std::vector<std::vector<int16_t>> sfx; struct Voice { const std::vector<int16_t>* d; size_t pos; int slot = -1; uint64_t generation = 0; }; std::vector<Voice> voices;
     std::array<uint64_t, 8> sfxSlotGeneration{}; int nextSfxSlot = 0, nextRouletteSlot = 0; uint32_t lastCue7Time = 0; bool hasCue7Time = false;
+    int soundOutput = 1; // Dreamcast General Settings: 0 Monaural, 1 Stereo.
     std::array<std::vector<int16_t>, 8> rouletteVoice, rouletteVoiceJapanese;
     std::vector<std::vector<int16_t>> sfxJapanese;
 
@@ -415,6 +422,7 @@ struct App {
                     if (views[view].fit.empty()) views[view].fit.assign(views[view].fr.size(), 1.8f);
         }
         loadFontMetrics();
+        soundOutput = settings.soundOutput;
         loadAudio();
         return true;
     }
@@ -429,6 +437,7 @@ struct App {
             for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (int)((*v.d)[v.pos++] * ((float)a->sfxVol / 255.0f));   // playSFX: +0x58 / 255 (the per-sound base volume of the original is not applied)
                 out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
         }
+        ccr::applySoundOutput(out, static_cast<size_t>(n), a->soundOutput == 0);
         if (a->audioCapture) { fwrite(out, 4, n, a->audioCapture); fflush(a->audioCapture); }   // CCR_AUDIO_CAPTURE: headless record of the mix
         a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [a](const Voice& v) { return (v.slot >= 0 && v.generation != a->sfxSlotGeneration[v.slot]) || v.pos >= v.d->size(); }), a->voices.end());
     }
@@ -2497,13 +2506,13 @@ struct DcOptionsMode : Screen {
         case 3: genMusic = (genMusic + 15 + d) % 15; break;   // Options > Music test wraps 0 <-> 14 on the real screen (15 songs = CD tracks 4..18)
         case 4: genSe = (genSe + 128 + d) % 128; break;
         default: return; }
-        a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings();
+        a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.setSoundOutput(genSound); a.saveSettings();
         a.playSfx(0);
     }
     void accept(App& a) {
         if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
         else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.settings.battleTime = bTime; a.settings.battleSpeed = bSpeed; a.settings.battleMice = bMice; a.settings.battleArrow = bArrow; a.saveSettings(); a.playSfx(1); } else adjust(a, 1); }
-        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.saveSettings(); a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 3) a.playSong(genMusic); /* FUN_8c05368a: A/Start plays the selected value + 4 as a CD track */ else if (genRow == 1 || genRow == 2) adjust(a, 1); }
+        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.setSoundOutput(genSound); a.saveSettings(); a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 3) a.playSong(genMusic); /* FUN_8c05368a: A/Start plays the selected value + 4 as a CD track */ else if (genRow == 1 || genRow == 2) adjust(a, 1); }
         else openRow(a);
     }
     void back(App& a) { if (page >= 0) { page = -1; a.playSfx(0); } else leave = true; }
