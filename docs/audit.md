@@ -79,7 +79,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Puzzle hint text (BIOS font) | screen | verified | 0 px |
 | Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |
 | Battle Stage Select | screen | partial | 2.35 (preview 9.6) |
-| Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 2.22 (CCR_GPU=1, stage 0, 30 ticks; tick alignment not established, CPU cursors absent, START sprite not drawn); left panel passes, score panels 2.06, board 3.03 with 325 off-edge px; Team Battle not measured |
+| Battle play HUD, Team Battle HUD | screen | partial | Battle frame 3100 2.22 (CCR_GPU=1, stage 0, 30 ticks; tick alignment not established, CPU cursors absent); left panel passes, score panels 2.06, board 3.03 with 325 off-edge px; Team Battle not measured. The `ENGLISH__START` task asset is loaded in `FUN_8c028ee0`; a resumed 3100 reference state shows its large banner at 3120/3130 but not 3140. Exact task gate/phase and port rendering remain open.
 | Battle pause (4P, Team) | screen | partial | - |
 | Help Menu | screen | partial | 0.34 (CCR_GPU=1, disc-only) |
 | Help pages (21) | screen | partial | all 21 pages captured from Flycast and measured (CCR_GPU=1, disc-only): full-frame 0.29-0.62; title and footer crops pass on all 21, body crops mean 0.20-0.80 but each has 66-256 off-edge px above 8 levels at the frame's top corners (not closed) |
