@@ -27,10 +27,16 @@ int main(int argc, char** argv) {
         ChallengeMode challenge;
         check(challenge.load(app.root, 0), "normal Challenge load");
         check(challenge.controller != nullptr, "existing controller opened on entry");
+        // Prefer the virtual pad attached by this test when the host also has
+        // a physical controller. Challenge intentionally adopts the first pad.
+        SDL_GameControllerClose(challenge.controller);
+        challenge.controller = SDL_GameControllerOpen(device);
+        check(challenge.controller != nullptr, "virtual controller opened for regression");
         auto button = [&](int id) {
             SDL_Event event{};
             event.type = SDL_CONTROLLERBUTTONDOWN;
-            event.cbutton.which = SDL_JoystickInstanceID(stick);
+            event.cbutton.which = SDL_JoystickInstanceID(
+                SDL_GameControllerGetJoystick(challenge.controller));
             event.cbutton.button = static_cast<Uint8>(id);
             challenge.event(app, event);
         };
@@ -66,7 +72,8 @@ int main(int argc, char** argv) {
         challenge.tick(app);
         challenge.tick(app);
         check(!challenge.game.sim.arrows.empty(), "face button places an arrow");
-        const auto instance = SDL_JoystickInstanceID(stick);
+        const auto instance = SDL_JoystickInstanceID(
+            SDL_GameControllerGetJoystick(challenge.controller));
         SDL_JoystickClose(stick);
         SDL_JoystickDetachVirtual(device);
         SDL_Event removed{};
