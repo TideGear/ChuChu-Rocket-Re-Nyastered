@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from sh4 import SENTINEL, SH4
+import export_dc_models as dc_models
 
 BASE = 0x8c010000
 ROOT = Path(__file__).resolve().parents[2]
@@ -152,6 +153,22 @@ def verify_mouse_draw(binary):
     print('Dreamcast mouse draw matched 256 costume, type, frame, and heading cases')
 
 
+def verify_golden_mouse_motion(binary):
+    pack = dc_models.Pack.__new__(dc_models.Pack)
+    pack.d = binary
+    pack.models = {dc_models.BASE + off: (vertices, polygons)
+                   for off, vertices, polygons, _, _ in dc_models.M.find_models(binary, dc_models.BASE)}
+    order = pack.tree(0x860ec)
+    poses = dc_models.golden_mouse_frames(pack, order)
+    assert len(poses) == 8 and all(len(pose) == 92 for pose in poses)
+    assert all(all(value == value and abs(value) < 1e6
+                   for _, tri in pose for vertex in tri for value in vertex)
+               for pose in poses)
+    assert poses[0] == poses[4] and poses[1] == poses[3]
+    assert any(poses[frame] != poses[0] for frame in range(1, 8))
+    print('Dreamcast golden-mouse motion exported as eight finite, varying poses from the six source tracks')
+
+
 def verify_mouse_frame_callers(binary):
     sh = SH4()
     sh.load(BASE, binary)
@@ -277,6 +294,7 @@ if __name__ == '__main__':
     verify_cat(binary)
     verify_mouse_models(binary)
     verify_mouse_draw(binary)
+    verify_golden_mouse_motion(binary)
     verify_mouse_frame_callers(binary)
     verify_gameplay_frame_clock(binary)
     verify_clock_scheduler(binary)

@@ -89,7 +89,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Puzzle Edit screens | screen | open | - |
 | Network / Homepage | screen | not testable offline | - |
 | Unlock/password messages (mode 17) | screen | open | - |
-| Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual) | moving px 11.4 vs 5.4 static baseline |
+| Mouse walk cycle (8 keyframes) | animation | partial (timing exact, sprite residual; optional 3D path now samples source-derived golden-mouse positions/angles) | moving px 11.4 vs 5.4 static baseline; golden-mouse pixel and held-pose parity open |
 | Cat motions (position + morph) | animation | partial (not frame-diffed) | - |
 | Rocket lid / lift-off / smoke | animation | partial (90/90 replay ages measured) | PuzzleLoop references 0x8c01cbc0 (sets 0x8c1af1e4); launch task 0x8c01c26e checks that flag before creating 0x8c01b8a0/0x8c01b9a0. Live RAM confirms flag 0 at age -1 and 1 at age 0, with six task instances added; shared scale changes 1.20 -> 1.15. Correctly aligned `CCR_TICKS=1521+age` replay: all 90 ages -9..80 meet full-frame mean <=3 (range 1.012..2.091); ages -1/0 are 1.561/1.012. Active TA vertices and lid mesh establish that the 1.20 uniform transform scales diffuse lighting; controlled same-tree captures show five of six age -1 dome interior crops improve and all six reduce >8-level pixels, but none meets the per-element <=1 rule. Age 10 and scale-1 scenes are pixel-identical before/after. Rocket launch, smoke, dynamic occlusion, full per-frame/per-element animation coverage remain partial/open. |
 | Mouse caught, hole fall, rocket entry | animation | open | - |

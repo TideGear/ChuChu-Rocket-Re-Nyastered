@@ -192,6 +192,39 @@ def motion_frames(pack, order, md, nframes):
         frames.append(pack.assemble_cached(order, pos, ang))
     return frames
 
+def golden_mouse_frames(pack, order):
+    """0x8c019e26 dispatches kind 1 through motion 0x8c09661c (8 frames, POS|ANG).
+    Its six node tracks are the five-key tables at 0x8c0963dc..0x8c09656c:
+    root position followed by one angle track for each child in tree order.
+    """
+    d = pack.d
+    motion, count, kind = struct.unpack_from('<3I', d, 0x8661c)
+    assert motion == 0x8c0965bc and count == 8 and kind == 0x20003 and len(order) == 6
+    tracks = []
+    for i in range(len(order)):
+        pos_address, angle_address, pos_count, angle_count = struct.unpack_from('<4I', d, motion - BASE + 16 * i)
+        address, key_count = (pos_address, pos_count) if i == 0 else (angle_address, angle_count)
+        assert address and key_count == 5
+        fmt = '<3f' if i == 0 else '<3i'
+        keys = [struct.unpack_from('<I' + fmt[1:], d, address - BASE + 16 * k) for k in range(key_count)]
+        assert [key[0] for key in keys] == [0, 2, 4, 6, 7]
+        tracks.append(keys)
+    def sample(keys, frame):
+        for (f0, *v0), (f1, *v1) in zip(keys, keys[1:]):
+            if frame <= f1:
+                t = (frame - f0) / float(f1 - f0)
+                return [a + (b - a) * t for a, b in zip(v0, v1)]
+        return list(keys[-1][1:])
+    frames = []
+    for frame in range(count):
+        pos = [list(n['pos']) for n in order]
+        ang = [list(n['ang']) for n in order]
+        pos[0] = sample(tracks[0], frame)
+        for node in range(1, len(order)):
+            ang[node] = [int(round(value)) for value in sample(tracks[node], frame)]
+        frames.append(pack.assemble(order, pos, ang))
+    return frames
+
 def flame_frames(pack, order):
     """0x8c01b7e4: morph motion 0x8c0b1e08, type 0x30, 16 frames.
     Its normal track is null; nine (frame, vertex-array) keys at 0x8c0b1db0
@@ -229,7 +262,7 @@ def main(root, exe):
         if name == 'ghost':
             if 'WHITE' not in tex_ids: tex_ids['WHITE'] = len(textures); textures.append(Image.new('RGBA', (4, 4), (255, 255, 255, 255)))
             mats.append(tex_ids['WHITE'])
-        frames = pack.cat_frames(order) if name == 'cat' else motion_frames(pack, order, 0x8c0988a0, 8) if name == 'ghost' else flame_frames(pack, order) if name == 'fire' else []
+        frames = pack.cat_frames(order) if name == 'cat' else golden_mouse_frames(pack, order) if name == 'mouse_b' else motion_frames(pack, order, 0x8c0988a0, 8) if name == 'ghost' else flame_frames(pack, order) if name == 'fire' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
         out_models.append((name, tris, mats, frames))
     # Sprite 0x8c0b4ba8 / frame table 0x8c0b4a68: 32x32, pivot

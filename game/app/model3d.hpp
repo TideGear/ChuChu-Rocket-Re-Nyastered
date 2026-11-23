@@ -308,7 +308,7 @@ public:
     // the cats in Flycast frames with zero residual, docs/dreamcast_models.md): matrix = position * translate(0, 0, translateZ) * RotateX(-45 degrees) * RotateY(yaw) * scale 1, in world
     // units (15 per cell; X right, Y up, Z down the screen) seen from 218 units above the floor with the screen centre at `camera`: sx = camera.x + k * 218 * X / (218 - Y), likewise
     // sy with Z. Lighting per vertex: 0.3 + max(0, light . R n). `blend` > 0 mixes pose frame `frame` with pose frame `frame + 1` (the cat's head morph and walk pose are interpolated by
-    // the fractional part of its phase); mice pass blend 0 and use one of their eight keyframe models.
+    // the fractional part of its phase); basic mice and golden mice select their source-derived frame (the golden mouse's eight poses are sampled from its position/angle motion).
     void drawDcCharacter(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, float translateZ,
                          const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f, float height = 0.0f, float modelScale = 1.0f) const {
         if (m.tris.empty()) return;
