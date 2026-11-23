@@ -7,6 +7,11 @@ int main(int argc, char** argv) {
     FILE* f = fopen(argc > 1 ? argv[1] : "../local/cache/assets/battle_stages.bin", "rb"); if (!f) { printf("cannot open stages\n"); return 2; }
     uint32_t n; if (fread(&n, 4, 1, f) != 1) return 2;
     int bad = 0, total = 0; long spawns = 0, roulettes = 0;
+    if (!battleArrowVisible(-1) || !battleArrowVisible(600) || !battleArrowVisible(61) ||
+        !battleArrowVisible(59) || battleArrowVisible(60) || battleArrowVisible(0) ||
+        battleArrowVisible(58)) {
+        printf("battle arrow fade boundary check failed\n"); bad++;
+    }
     for (uint32_t i = 0; i < n; i++) {
         uint8_t h[4]; Stage st; uint8_t walls[237], title[32];
         if (fread(h, 1, 4, f) != 4 || fread(st.tiles, 1, 108, f) != 108 || fread(walls, 1, 237, f) != 237 || fread(title, 1, 32, f) != 32) break;

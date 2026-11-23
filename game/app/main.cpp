@@ -678,7 +678,7 @@ struct App {
     }
     // Arrow sprite (image 0x5f, frame = owner; the art points up, rotated clockwise by the heading); a struck arrow is drawn at 0.7 (AR_ArrowDrawPriority).
     void arrow(int x, int y, int dir, int owner, int hits = 0, int ttl = -1, FieldLayout field = {}) {
-        if (ttl >= 0 && !(ttl > 60 || (ttl > 0 && (ttl & 1)))) return;   // in the last 60 ticks the arrow flickers (drawn only on odd ticks)
+        if (!battleArrowVisible(ttl)) return;   // FUN_8c0103e2 flickers arrows on odd TTL values in their last 60 ticks
         // DC Battle draw 0x8c0103e2 submits quad 0x8c075aac: x/z +/-6.75
         // inside a 15-unit cell. Hit scaling (0x8c0104b0) is additional.
         const float tileScale = settings.models3d && dcArrows.tex && dcArrows.fr.size() == 4 ? 13.5f / 15.0f : 1.0f;

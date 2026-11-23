@@ -16,6 +16,10 @@
 #include <cstdio>
 namespace ccr {
 
+inline bool battleArrowVisible(int ttl) {
+    return ttl < 0 || ttl > 60 || (ttl > 0 && (ttl & 1));
+}
+
 class BattleGame {
 public:
     void setCharaSpeed(float v);   // test harness (defined below)
