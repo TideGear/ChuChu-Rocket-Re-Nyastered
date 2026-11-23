@@ -74,7 +74,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Challenge clear (C1) | screen | partial | 0.7 banner |
 | Challenge pause | screen | partial | - |
 | Puzzle play Normal 01/02/08 | screen | partial | Normal 01 1.31 (CCR_GPU=1, disc-only; star twinkles not drawn, look-alike hint font without a BIOS); 02/08 not measured |
-| Puzzle pause | screen | partial | not measured; the port now has a Start/R2 controller path and the original transition is measured (overlay whole at +5 frames after Start), but no port-vs-Flycast frame comparison or dedicated controller test |
+| Puzzle pause | screen | partial | not measured; Start tap shows overlay at +5 while board continues, held Start freezes after +3; port regression covers tap/hold pause state, but no port-vs-Flycast frame comparison |
 | Puzzle result, Save Completed (clear age 218) | screen | partial | 1.37 full frame; Save Completed notice element passes the per-element rule (mean 0.145, shift 0,0, 0 off-edge px > 8; the 1,377 one-level pixels are host-GPU rounding); banner, HUD and rocket elements not yet checked per element |
 | Puzzle hint text (BIOS font) | screen | verified | 0 px |
 | Battle Select Players (4P, Team) | screen | verified | 0.55 / 1.45 |

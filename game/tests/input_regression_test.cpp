@@ -68,6 +68,25 @@ int main(int argc, char** argv) {
         int before = puzzle.sim.now;
         puzzle.tick(app);
         check(puzzle.sim.now > before, "simulation advances after mouse resume");
+        puzzle.state = 1;
+        puzzle.running = true;
+        puzzle.pauseState.press();
+        for (int i = 0; i < 5; ++i) puzzle.tick(app);
+        const int tapOverlayFrame = puzzle.sim.now;
+        check(puzzle.paused && !puzzle.pauseState.freeze && tapOverlayFrame > before,
+              "short Start tap shows Puzzle pause overlay without freezing the board");
+        puzzle.tick(app);
+        check(puzzle.sim.now > tapOverlayFrame,
+              "Puzzle board continues moving beneath the tap-triggered pause overlay");
+        puzzle.paused = false;
+        puzzle.pauseState.resume();
+        puzzle.pauseState.press();
+        puzzle.pauseState.freeze = true; // PuzzlePauseState's held-button timing is checked by puzzle_pause_test.
+        puzzle.paused = true;
+        const int beforeHeldPause = puzzle.sim.now;
+        puzzle.tick(app);
+        check(puzzle.pauseState.freeze && puzzle.sim.now == beforeHeldPause,
+              "frozen Puzzle pause state stops the board");
     }
     {
         BattleMode battle;

@@ -3068,6 +3068,7 @@ struct PuzzleMode : Screen {
         if (state == 3) return true;   // PuzzleLoop disables pause and ignores HUD input during the failure phase.
         if (phone ? handset(0, 295, 60, 320) : ipadPauseAvailable(a) && in(10, 669, 173, 711)) {
             paused = true;
+            pauseState.freeze = true;
             drag.on = false;
             if (phone) pconf = false;
             a.playSfx(4);
@@ -3084,13 +3085,13 @@ struct PuzzleMode : Screen {
     int cticks = 0;
     void tick(App& a) override {
         a.stars.tick(false);
-        if (paused) return;
+        if (paused && pauseState.freeze) return;
         cticks++;
         if (pauseState.ticks >= 0) {
             const bool held = pad && gApp && SDL_GameControllerGetButton(pad, static_cast<SDL_GameControllerButton>(gApp->padMap.pause));
             pauseState.tick(held);
             if (pauseState.overlay) paused = true;
-            if (paused) return;
+            if (paused && pauseState.freeze) return;
         }
         if (pauseState.freeze) return;
         if (pad && state == 0) {
