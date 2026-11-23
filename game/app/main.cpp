@@ -4095,6 +4095,16 @@ struct BattleMode : Screen {
         return std::find_if(unassignedPads.begin(), unassignedPads.end(),
                             [id](SDL_GameController* pad) { return padMatches(pad, id); });
     }
+    void adoptConnectedPads() {
+        for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+            if (!SDL_IsGameController(i)) continue;
+            const auto id = SDL_JoystickGetDeviceInstanceID(i);
+            if (id < 0 || findUnassignedPad(id) != unassignedPads.end()) continue;
+            if (std::any_of(std::begin(pads), std::end(pads),
+                            [id](SDL_GameController* pad) { return padMatches(pad, id); })) continue;
+            if (auto* pad = SDL_GameControllerOpen(i)) unassignedPads.push_back(pad);
+        }
+    }
     void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
     bool keyPlayer(const SDL_KeyboardEvent& key) {
         const int direction = arrowKey(key.keysym.sym);
@@ -4151,6 +4161,7 @@ struct BattleMode : Screen {
             else gApp->playSfx(id);
         };
         game.localPlayer = 0;
+        adoptConnectedPads();
         restart(); return true;
     }
     void restart() {

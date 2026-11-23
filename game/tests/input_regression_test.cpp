@@ -74,6 +74,31 @@ int main(int argc, char** argv) {
         app.settings.battleTime = 2;
         ccrSetEnv("CCR_MINUTES", "1", 1);
         check(battle.load(app.root, 0, 1), "Battle load with timer override");
+        check(!battle.unassignedPads.empty(), "Battle adopts an already-connected controller");
+        const auto instance = SDL_JoystickInstanceID(
+            SDL_GameControllerGetJoystick(battle.unassignedPads.front()));
+        SDL_Event join{};
+        join.type = SDL_CONTROLLERBUTTONDOWN;
+        join.cbutton.which = instance;
+        join.cbutton.button = SDL_CONTROLLER_BUTTON_A;
+        battle.event(app, join);
+        check(battle.pads[0] != nullptr,
+              "Battle assigns an adopted controller on press-to-join");
+        battle.intro = 120;
+        bool freeCellFound = false;
+        for (int y = 0; y < kRows && !freeCellFound; ++y) for (int x = 0; x < kCols; ++x) {
+            if (!(battle.game.sim.coll[y][x] & (kRocket | kHole | kArrow | kGenerator))) {
+                battle.curX[0] = x;
+                battle.curY[0] = y;
+                freeCellFound = true;
+                break;
+            }
+        }
+        check(freeCellFound, "Battle stage has a free arrow cell");
+        battle.event(app, join);
+        check(std::any_of(battle.game.sim.arrows.begin(), battle.game.sim.arrows.end(),
+                          [](const auto& arrow) { return arrow.live && arrow.owner == 0; }),
+              "joined Battle controller places an arrow");
         check(battle.game.roundFrames == 3600, "explicit timer overrides saved settings");
         // An absent environment variable uses the saved duration.
 #ifdef _WIN32
