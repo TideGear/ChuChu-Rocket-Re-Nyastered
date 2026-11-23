@@ -214,7 +214,7 @@ struct StarBackground {
 struct App {
     uint32_t globalTime = 0; // 0x8c016cc8: once per outer task pass, including menus
     StarBackground stars;
-    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; Settings settings; ModelPack models3d; bool models3dTried = false, mobileSheetsMissing = false;
+    SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; DreamcastTitleChord titleChord; Settings settings; ModelPack models3d; bool models3dTried = false, mobileSheetsMissing = false;
     bool useModels3d() { if (!models3dTried) { models3dTried = true; if (settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
     void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
     void setSoundOutput(int output) {
@@ -5100,6 +5100,17 @@ int main(int argc, char** argv) {
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F11) { Uint32 f = SDL_GetWindowFlags(app.win); SDL_SetWindowFullscreen(app.win, (f & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP); }
             else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_v) { app.vsync = !app.vsync; SDL_RenderSetVSync(app.ren, app.vsync); }
             else {
+                if (e.type == SDL_CONTROLLERDEVICEREMOVED) app.titleChord.disconnect(e.cdevice.which);
+                if (e.type == SDL_CONTROLLERBUTTONDOWN || e.type == SDL_CONTROLLERBUTTONUP) {
+                    const auto result = app.titleChord.button(e.cbutton.which, e.cbutton.button,
+                                                              e.type == SDL_CONTROLLERBUTTONDOWN);
+                    if (result.activate) {
+                        app.log.write(1, "input: Dreamcast all-face-buttons + Start returned to Title");
+                        enter("DC_TITLE");
+                        acc = 0;
+                    }
+                    if (result.consume) continue;
+                }
                 if (e.type == SDL_MOUSEBUTTONDOWN && getenv("CCR_MOUSEDBG")) {   // diagnostic: where the game thinks this click is (docs/roadmap.md, mouse mapping)
                     int ww = 0, wh = 0, ow = 0, oh = 0, lw = 0, lh = 0; SDL_GetWindowSize(app.win, &ww, &wh); SDL_GetRendererOutputSize(app.ren, &ow, &oh); SDL_RenderGetLogicalSize(app.ren, &lw, &lh);
                     float sx = 0, sy = 0, cx = 0, cy = 0; SDL_RenderWindowToLogical(app.ren, e.button.x, e.button.y, &sx, &sy); ccrWindowToLogical(app.ren, e.button.x, e.button.y, &cx, &cy);

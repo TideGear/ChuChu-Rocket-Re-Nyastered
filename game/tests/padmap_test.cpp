@@ -15,5 +15,14 @@ int main() {
     CHECK(padButtonLabel(0) == "A" && padButtonLabel(6) == "Start" && padButtonLabel(99) == "?");
     QuitHold q; bool done = false; for (int i = 0; i < 119; i++) done |= q.tick(true, true, 120); CHECK(!done); CHECK(q.tick(true, true, 120));
     q.tick(true, false, 120); CHECK(q.held == 0);
+    DreamcastTitleChord chord;
+    for (int button : {0, 1, 2, 3}) CHECK(!chord.button(10, button, true).activate);
+    CHECK(!chord.button(11, 6, true).activate); // Chords cannot combine buttons from different pads.
+    auto title = chord.button(10, 6, true);
+    CHECK(title.consume && title.activate && chord.active);
+    CHECK(chord.button(10, 1, false).consume && !chord.active); // Consume release; a later full hold can trigger again.
+    CHECK(chord.button(10, 1, true).activate && chord.active);
+    chord.disconnect(10);
+    CHECK(!chord.active && !chord.button(10, 6, false).activate);
     printf("padmap test: %s\n", fails ? "FAILED" : "ok"); return fails;
 }

@@ -4,6 +4,7 @@
 #include "userdata.hpp"
 #include <cstdlib>
 #include <cstring>
+#include <map>
 namespace ccr {
 struct PadMap {
     int arrow[4] = {0, 2, 3, 1};      // button that places the arrow pointing dir 0 (down), 1 (left), 2 (up), 3 (right): A, X, Y, B as before
@@ -45,4 +46,41 @@ inline std::string padMapText(const PadMap& m) {
 inline PadMap loadOrCreatePadMap(const std::string& dir) { std::string t; if (readFile(dir + "/controls.ini", t)) return parsePadMap(t); PadMap d; writeFile(dir + "/controls.ini", padMapText(d)); return d; }
 // Counts ticks while both quit buttons are held; returns true once the hold time is reached.
 struct QuitHold { int held = 0; bool tick(bool a, bool b, int need) { held = (a && b) ? held + 1 : 0; return held >= need; } };
+
+// Dreamcast manual p.4: holding all four face buttons plus Start returns to Title.
+// SDL_GameControllerButton values: A=0, B=1, X=2, Y=3, Start=6.
+struct DreamcastTitleChord {
+    struct Result { bool consume = false; bool activate = false; };
+    static constexpr unsigned char kRequired = 0x1f;
+    std::map<int, unsigned char> heldByController;
+    bool active = false;
+
+    Result button(int controller, int button, bool down) {
+        unsigned char mask = 0;
+        switch (button) {
+        case 0: mask = 0x01; break;
+        case 1: mask = 0x02; break;
+        case 2: mask = 0x04; break;
+        case 3: mask = 0x08; break;
+        case 6: mask = 0x10; break;
+        default: return {active, false};
+        }
+        unsigned char& held = heldByController[controller];
+        if (down) held |= mask;
+        else held &= static_cast<unsigned char>(~mask);
+        if (held == 0) heldByController.erase(controller);
+        bool now = false;
+        for (const auto& entry : heldByController) if ((entry.second & kRequired) == kRequired) { now = true; break; }
+        const bool consume = active || now;
+        const bool activate = now && !active;
+        active = now;
+        return {consume, activate};
+    }
+
+    void disconnect(int controller) {
+        heldByController.erase(controller);
+        active = false;
+        for (const auto& entry : heldByController) if ((entry.second & kRequired) == kRequired) { active = true; break; }
+    }
+};
 } // namespace ccr
