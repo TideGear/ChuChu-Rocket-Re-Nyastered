@@ -21,6 +21,10 @@ int main(int argc, char** argv) {
     app.win = SDL_CreateWindow("test", 0, 0, GW, GH, SDL_WINDOW_HIDDEN);
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");
+    check(dcMouseModelName(0, 3) == "mouse3" &&
+          dcMouseModelName(1, 3) == "mouse_b" &&
+          dcMouseModelName(2, 3) == "mouse_a",
+          "Dreamcast 3D mouse type selects normal, golden, and roulette models");
     {
         const Settings savedSettings = app.settings;
         DcOptionsMode options;

@@ -173,6 +173,11 @@ static bool loadStageSet(const std::string& root, int set, Stages& out) {
 }
 
 static bool challengeBoardsAvailable(const std::string& root) { Stages s; return loadStages((root + "/battle_stages.bin").c_str(), s, 3) && s.list.size() >= 25; }
+static std::string dcMouseModelName(int type, int frame) {
+    if (type == 1) return "mouse_b";
+    if (type == 2) return "mouse_a";
+    return "mouse" + std::to_string(frame & 7);
+}
 
 struct App;
 struct StarBackground {
@@ -1213,8 +1218,8 @@ struct App {
                          int mouseFrame, float cell) {
         // Mouse dispatcher 0x8c019e26 kind 2: root 0x8c08e138 drawn with c_mouse02->c_mouse04 and c_mouse03->c_mouse05 (material slots 1->4, 2->3 of MOUSE_TEX). Static node pose only; motion routine not decoded.
         static const int kind2Remap[10] = {0, 4, 3, 3, 4, 5, 6, 7, 8, 9};
-        const Model3D* pink = (en.mouse && en.type == 2) ? models3d.find("mouse_a") : nullptr;
-        const Model3D* m = pink ? pink : en.mouse ? models3d.find("mouse" + std::to_string(mouseFrame)) : models3d.find("cat");
+        const Model3D* m = en.mouse ? models3d.find(dcMouseModelName(en.type, mouseFrame)) : models3d.find("cat");
+        const bool specialMouse = en.mouse && (en.type == 1 || en.type == 2);
         if (!m) return false;
         // Exact transform, light and scale read from the real PowerVR vertices (docs/dreamcast_models.md, 2026-11-17): scale 1.0 model unit per world unit, yaw -angle, tilt -45 about X,
         // translate z 3.0 (mouse) or 2.5 (cat), perspective 218 / (218 - height). The cat's phase rule is still provisional (the original blends two head morph frames by the fractional phase).
@@ -1222,7 +1227,7 @@ struct App {
         static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.5f, -0.25f};
         float phase = 0.0f; int frame = -1;
         if (!en.mouse) { phase = (i < cphase.size() ? std::max(0.0f, cphase[i]) : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
-        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u, pink ? kind2Remap : nullptr, (en.mouse && !pink) ? 178.0f / 255.0f : 1.0f);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
+        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u, en.type == 2 && specialMouse ? kind2Remap : nullptr, (en.mouse && !specialMouse) ? 178.0f / 255.0f : 1.0f);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
 
         // FUN_8c056e1e -> FUN_8c056d00: type 1 (golden) and type 2 (roulette) mice carry a 13.5-unit marker quad (texture 46 + 3 * kind of the CHALLENGECLEAR list: plus50, hatena) at
         // (x, height 9.5, z - 10), RotateY(0x8000); perspective 218 / (218 - 9.5) as for the crown.
