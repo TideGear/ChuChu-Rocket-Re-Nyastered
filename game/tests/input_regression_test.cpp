@@ -94,6 +94,23 @@ int main(int argc, char** argv) {
               "frozen Puzzle pause state stops the board");
     }
     {
+        ChallengeMode challenge;
+        check(challenge.load(app.root, 4), "Team Battle Challenge stage load");
+        check(challenge.battle && challenge.bgame.game.teamMode,
+              "Challenge team stage enables Team Battle lid pairing");
+        const int* soloPartners = ChallengeMode::rocketPartnerLids(false);
+        const int* teamPartners = ChallengeMode::rocketPartnerLids(true);
+        check(soloPartners[0] == 2 && soloPartners[1] == -1 &&
+              soloPartners[2] == -1 && soloPartners[3] == -1,
+              "solo Challenge keeps only its blue/red goal dome");
+        check(teamPartners[0] == 2 && teamPartners[1] == 3 &&
+              teamPartners[2] == 0 && teamPartners[3] == 1,
+              "Team Battle Challenge pairs both team lid colours");
+        challenge.begin(24);
+        check(challenge.battle && challenge.bgame.game.teamMode,
+              "final Challenge battle also enables Team Battle lid pairing");
+    }
+    {
         BattleMode battle;
         app.settings.battleTime = 2;
         ccrSetEnv("CCR_MINUTES", "1", 1);

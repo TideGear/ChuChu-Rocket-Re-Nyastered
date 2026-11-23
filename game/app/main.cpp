@@ -3360,6 +3360,11 @@ struct ChallengeMode : Screen {
     uint64_t previousTotal = 0, resultTotal = 0;
     bool dcLayout(App& a) { return a.useModels3d() && a.useDcBattleHud(); }
     FieldLayout pf(App& a) { return dcLayout(a) ? dcBattleField : FieldLayout{}; }
+    static const int* rocketPartnerLids(bool teamBattle) {
+        static constexpr int solo[4] = {2, -1, -1, -1};
+        static constexpr int team[4] = {2, 3, 0, 1};
+        return teamBattle ? team : solo;
+    }
     // progress file: u32 cleared mask (Data +8), then 25 u32 best times in seconds (0 = none), like Data::clearChallenge
     struct Save { uint32_t mask = 0, best[25] = {}; };
     static Save loadSave(const std::string& root) { Save s; if (FILE* f = fopen((root + "/challenge.bin").c_str(), "rb")) { if (fread(&s, sizeof s, 1, f) != 1) s = Save(); fclose(f); } return s; }
@@ -3580,7 +3585,7 @@ struct ChallengeMode : Screen {
         { const bool fc = supportedNow() && phase() <= ChallengeGame::Play; if (fc && !(mouseCursor && aim.inside) && dc) a.queueBracket(std::clamp(padAim.cellX(), 0, kCols - 1), std::clamp(padAim.cellY(), 0, kRows - 1), 0, cticks); }   // the corner bracket follows the controller tip's cell
         a.board(stages.list[cur].st, 1, 1, field);                                                   // Challenge: floor 1, wall 1 (Render::createPlayfieldPreview)
         for (auto& ar : simRef().arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);
-        { static const int kPartner[4] = {2, -1, -1, -1}; a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 0, nullptr, -1, kPartner); }   // Dreamcast Challenge A1 dome is the blue lid (Flycast frames 2390 and 2500; the earlier red guess did not match); other stages unchecked
+        { const int* partners = dc ? rocketPartnerLids(battle && bgame.game.teamMode) : nullptr; a.drawFieldObjects(simRef(), prev, phase() == ChallengeGame::Play ? alpha : 1.0f, nullptr, field, dc, 0, nullptr, -1, partners); }   // Solo Challenge A1 pairs its blue goal dome with red; Team Battle challenge stages pair both players on each team (docs/layers.md)
         const bool fieldCursor = supportedNow() && phase() <= ChallengeGame::Play;
         if (fieldCursor && mouseCursor && aim.inside)
             a.mouseCursorAt(aim.x, aim.y, 0, cticks, field.scale());
