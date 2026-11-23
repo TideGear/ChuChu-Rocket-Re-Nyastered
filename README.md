@@ -69,9 +69,9 @@ Other platforms: the Android NDK build produces arm64 core test executables. The
 
 ### Which original files do I need?
 
-**Start with one mobile release.** iPad HD 1.0, iPhone 1.0, 1.0.2, 1.1, iOS 1.1.2, and Android 1.14 or 1.15 each supply the base graphics and audio, 100 main puzzles, and all 25 Battle boards. Setup exports these automatically. The iPad release also supplies the original startup screens, title, menus and HUD.
+**Dreamcast image alone is enough to build and play.** The tested USA CUE/BIN image supplies the 100 main puzzles, all 25 Battle boards, Stage Challenge, Dreamcast models, title/menu art, CD music and sound effects. No mobile release, GBA ROM or BIOS is required. Run setup with the folder containing the image tracks or select its `.gdi`/`.cue` descriptor directly; keep every referenced raw track beside it. A fresh cache is recommended when checking an isolated input combination.
 
-**For the richest setup today, use iPad HD 1.0, the Dreamcast disc and the GBA ROM.** The iPad archive supplies the menus and HUD, the disc adds stereo CD music and the Dreamcast title artwork, and the GBA ROM adds extra puzzles. Add `DEPuzzle.VMS` for the 25 Dreamcast Express puzzles. Setup accepts a paired `.VMI` when available. Other VMU saves can be collected for future support. An Android APK or a second iOS release is optional.
+**Mobile files are optional additions.** iPad HD 1.0, iPhone 1.0, 1.0.2, 1.1, iOS 1.1.2, and Android 1.14 or 1.15 supply alternate gameplay art and menus/HUDs, depending on release. With Dreamcast input present, setup retains Dreamcast models and CD audio while preferring supported mobile graphics. A GBA ROM adds puzzles; `DEPuzzle.VMS` adds the 25 Dreamcast Express puzzles. A user-supplied BIOS is optional and only improves a few built-in font glyphs. CHD images are not yet supported; setup reports them and accepts GDI/CUE plus referenced raw tracks.
 
 Put whichever originals you have under `Original Game Files` beside `setup.cmd`, or pass your own folder to setup. Subfolders are optional. Setup searches recursively and accepts loose files or ZIPs, including an enclosing ZIP around a package. Keep the numbered files of each Dreamcast dump together in their own folder or ZIP. Use a fresh cache if you want to test a different file combination in isolation.
 
