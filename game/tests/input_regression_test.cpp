@@ -24,8 +24,7 @@ int main(int argc, char** argv) {
     {
         PuzzleMode puzzle;
         check(puzzle.load(app.root, 0), "Puzzle load");
-        puzzle.pad = SDL_GameControllerOpen(device);
-        check(puzzle.pad != nullptr, "virtual controller open");
+        check(puzzle.pad != nullptr, "Puzzle adopts an already-connected controller");
         puzzle.curX = 4; puzzle.curY = 4;
         puzzle.sim.removeArrow(4, 4);
         puzzle.stock[0] = 100;
@@ -43,6 +42,14 @@ int main(int argc, char** argv) {
             check(puzzle.used(0) == 0 && puzzle.used(1) == 1,
                   "controller preserves arrows during run and failure");
         }
+        puzzle.state = 2;
+        puzzle.clearFrames = 211;
+        SDL_Event accept{};
+        accept.type = SDL_CONTROLLERBUTTONDOWN;
+        accept.cbutton.which = button.cbutton.which;
+        accept.cbutton.button = SDL_CONTROLLER_BUTTON_A;
+        puzzle.event(app, accept);
+        check(puzzle.cur == 1, "already-connected controller advances after Puzzle clear");
         puzzle.state = 1;
         puzzle.running = true;
         puzzle.pauseState.press();

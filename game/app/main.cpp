@@ -2910,7 +2910,7 @@ struct PuzzleMode : Screen {
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 6, curY = 4; SDL_GameController* pad = nullptr;
     bool putAt(int cx, int cy, int d) { sim.removeArrow(cx, cy); if (d >= 0 && used(d) < stock[d]) return sim.placeArrow(cx, cy, d); return false; }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
-    bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = stage % (int)stages.list.size(); reset(); return true; }
+    bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; for (int i = 0; i < SDL_NumJoysticks(); ++i) if (!pad && SDL_IsGameController(i)) pad = SDL_GameControllerOpen(i); cur = stage % (int)stages.list.size(); reset(); return true; }
     bool dcPanelDrawn = false;   // the Dreamcast bottom panel replaces the iPad arrow strip
     bool dash = false; bool paused = false, pconf = false;   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
     ccr::PuzzlePauseState pauseState;
