@@ -10,7 +10,8 @@ static void check(bool passed, const char* name) {
 int main(int argc, char** argv) {
     if (argc != 2) { fprintf(stderr, "usage: input_regression_test <assets>\n"); return 2; }
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
-    check(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) == 0, "headless SDL initialization");
+    SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
+    check(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) == 0, "headless SDL initialization");
     int device = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER,
         SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
     check(device >= 0, "virtual controller attachment");
@@ -56,6 +57,34 @@ int main(int argc, char** argv) {
         dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_LEFT;
         options.event(app, dpad);
         check(options.genMusic == 0, "D-pad left selects the previous Dreamcast music test track");
+        options.genMusic = 1;
+        options.genRow = 3;
+        options.page = 0;
+        App::Song savedSong = app.songs[1];
+        app.songs[1].tried = true;
+        app.songs[1].pcm.assign(8, 123);
+        app.songs[1].loopStart = 0;
+        app.songs[1].loopEnd = app.songs[1].pcm.size();
+        SDL_AudioSpec want{};
+        want.freq = 44100;
+        want.format = AUDIO_S16SYS;
+        want.channels = 2;
+        want.samples = 64;
+        want.callback = App::audioCb;
+        want.userdata = &app;
+        app.adev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
+        check(app.adev != 0, "dummy audio device for Dreamcast Music Test");
+        SDL_PauseAudioDevice(app.adev, 1);
+        SDL_Event confirm{};
+        confirm.type = SDL_CONTROLLERBUTTONDOWN;
+        confirm.cbutton.button = SDL_CONTROLLER_BUTTON_A;
+        options.event(app, confirm);
+        check(app.curTrack == 1 && app.musOn && app.musPos == 0,
+              "confirm plays selected Dreamcast Music Test track 5");
+        app.stopSong();
+        SDL_CloseAudioDevice(app.adev);
+        app.adev = 0;
+        app.songs[1] = std::move(savedSong);
         app.settings = savedSettings;
     }
     {
