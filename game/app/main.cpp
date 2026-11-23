@@ -4123,6 +4123,11 @@ struct BattleMode : Screen {
     }
     void place(int p, int cx, int cy, int d) { if (p < 0 || p >= 4 || paused || lv[p] >= 0 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
     void togglePause() { if (mode == 2 && intro >= 120) paused = !paused; }
+    std::pair<int, int> cursorCell(int p) const {
+        if (lv[p] < 0) return {curX[p], curY[p]};
+        if (game.gbaCpu) return {game.gbaEnv.cellX(p), game.gbaEnv.cellY(p)};
+        return {game.cpu[p].cx, game.cpu[p].cy};
+    }
     bool keyPlayer(const SDL_KeyboardEvent& key) {
         const int direction = arrowKey(key.keysym.sym);
         if (lv[0] >= 0 || direction < 0) return false;
@@ -4290,10 +4295,12 @@ struct BattleMode : Screen {
             for (auto& pointer : padAim) { pointer.previousX = pointer.x; pointer.previousY = pointer.y; }
         }
         for (int p = 0; p < 4; ++p) {
-            const bool mouse = p == 0 && mouseCursor;
-            cursorTrails[p].tick(mouse ? aim.x : padAim[p].logicalX(1.0f, field),
-                                 mouse ? aim.y : padAim[p].logicalY(1.0f, field),
-                                 lv[p] < 0 && (!mouse || aim.inside), mouse);
+            const bool cpuCursor = lv[p] >= 0 && dcProjection;
+            const bool mouse = p == 0 && mouseCursor && !cpuCursor;
+            const auto [cx, cy] = cpuCursor ? cursorCell(p) : std::pair<int, int>{-1, -1};
+            const float x = cpuCursor ? field.x(cx + 0.5f) : mouse ? aim.x : padAim[p].logicalX(1.0f, field);
+            const float y = cpuCursor ? field.y(cy + 0.5f) : mouse ? aim.y : padAim[p].logicalY(1.0f, field);
+            cursorTrails[p].tick(x, y, cpuCursor || (lv[p] < 0 && (!mouse || aim.inside)), mouse);
         }
         for (auto& bn : banners) bn.tick++; banners.erase(std::remove_if(banners.begin(), banners.end(), [](const Banner& bn) { return bn.tick >= bn.life; }), banners.end());   // SmpTskDelete when the counter reaches the lifetime
         if (intro < 120) { intro++; if (intro == 1) banners.push_back({1, roundNo, 0, 75}); if (intro == 90) banners.push_back({0, 6, 0, 45}); for (size_t i = 0; i < game.sim.ents.size() && i < prev.size(); i++) prev[i] = {game.sim.ents[i].x, game.sim.ents[i].z}; return; }
@@ -4345,9 +4352,12 @@ struct BattleMode : Screen {
         const int seconds = (left + 59) / 60;
         if (!dcHud) a.drawBattleHud(game.teamMode, intro > 0 && !game.over, game.score);
         for (int p = 0; p < 4; ++p) {
-            const bool mouse = p == 0 && mouseCursor;
-            if (lv[p] >= 0 || (mouse && !aim.inside)) continue;
-            const int x = mouse ? aim.cellX() : curX[p], y = mouse ? aim.cellY() : curY[p];
+            const bool cpuCursor = lv[p] >= 0 && dcProjection;
+            const bool mouse = p == 0 && mouseCursor && !cpuCursor;
+            if ((lv[p] >= 0 && !cpuCursor) || (mouse && !aim.inside)) continue;
+            const auto [cpuX, cpuY] = cpuCursor ? cursorCell(p) : std::pair<int, int>{-1, -1};
+            const int x = cpuCursor ? cpuX : mouse ? aim.cellX() : curX[p];
+            const int y = cpuCursor ? cpuY : mouse ? aim.cellY() : curY[p];
             if ((dcProjection && !mouse) || (game.sim.coll[y][x] & 0xF00)) a.queueBracket(x, y, p, game.frame);
         }
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0, field); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
@@ -4364,16 +4374,19 @@ struct BattleMode : Screen {
                                     wins, game.sim.rocketPos, dcPlayerOverlays, field);
         if (dcPlayerOverlays) { if (game.teamMode) a.drawDcTeamCrowns(taskAge, game.score); else a.drawDcScoreCrowns(taskAge, game.score, ranks); }
         for (int p = 0; p < 4; ++p)
-            if (lv[p] < 0) cursorTrails[p].draw(a, p, field.cell, dcProjection);
+            if (lv[p] < 0 || dcProjection) cursorTrails[p].draw(a, p, field.cell, dcProjection);
         a.flushMarkers();
         const float cursorAlpha = paused ? 1.0f : alpha;
         for (int p = 0; p < 4; ++p) {
-            if (lv[p] >= 0) continue;
-            if (p == 0 && mouseCursor) {
+            const bool cpuCursor = lv[p] >= 0 && dcProjection;
+            if (lv[p] >= 0 && !cpuCursor) continue;
+            if (!cpuCursor && p == 0 && mouseCursor) {
                 if (aim.inside) a.mouseCursorAt(aim.x, aim.y, p, game.frame, field.scale());
             } else if (dcProjection) {
-                a.drawDcBattlePadCursor(padAim[p].logicalX(cursorAlpha, field),
-                                        padAim[p].logicalY(cursorAlpha, field), p, taskAge);
+                const auto [cx, cy] = cpuCursor ? cursorCell(p) : std::pair<int, int>{-1, -1};
+                const float x = cpuCursor ? field.x(cx + 0.5f) : padAim[p].logicalX(cursorAlpha, field);
+                const float y = cpuCursor ? field.y(cy + 0.5f) : padAim[p].logicalY(cursorAlpha, field);
+                a.drawDcBattlePadCursor(x, y, p, taskAge);
             } else padAim[p].draw(a, p, game.frame, cursorAlpha, field);
         }
         if (dcPlayerOverlays) {

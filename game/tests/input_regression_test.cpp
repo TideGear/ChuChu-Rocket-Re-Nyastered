@@ -144,10 +144,37 @@ int main(int argc, char** argv) {
               "final Challenge battle also enables Team Battle lid pairing");
     }
     {
+        BattleMode cpuBattle;
+        cpuBattle.lv[0] = -1;
+        cpuBattle.lv[1] = cpuBattle.lv[2] = cpuBattle.lv[3] = 0;
+        check(cpuBattle.load(app.root, 0, 1), "CPU cursor Battle load");
+        cpuBattle.dcProjection = true;
+        cpuBattle.field = dcBattleField;
+        const int startX = cpuBattle.game.cpu[1].cx;
+        const int startY = cpuBattle.game.cpu[1].cy;
+        cpuBattle.intro = 120;
+        for (int i = 0; i < 240; ++i) cpuBattle.tickBattle(app);
+        check(cpuBattle.cursorCell(1) != std::pair<int, int>{startX, startY},
+              "Dreamcast CPU cursor tracks AI movement during live Battle");
+    }
+    {
         BattleMode battle;
         app.settings.battleTime = 2;
         ccrSetEnv("CCR_MINUTES", "1", 1);
         check(battle.load(app.root, 0, 1), "Battle load with timer override");
+        battle.dcProjection = true;
+        battle.field = dcBattleField;
+        battle.game.cpu[1].cx = 5;
+        battle.game.cpu[1].cy = 6;
+        check(battle.cursorCell(1) == std::pair<int, int>{5, 6},
+              "Dreamcast Battle CPU cursor follows its AI cell");
+        battle.game.gbaCpu = true;
+        battle.game.gbaEnv.curx[1] = 16;
+        battle.game.gbaEnv.cury[1] = 10;
+        check(battle.cursorCell(1) == std::pair<int, int>{7, 4},
+              "Dreamcast Battle GBA CPU cursor follows its ROM cell");
+        battle.game.gbaCpu = false;
+        battle.dcProjection = false;
         check(!battle.unassignedPads.empty(), "Battle adopts an already-connected controller");
         const auto instance = SDL_JoystickInstanceID(
             SDL_GameControllerGetJoystick(battle.unassignedPads.front()));
