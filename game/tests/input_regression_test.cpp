@@ -125,6 +125,13 @@ int main(int argc, char** argv) {
         check(!battle.paused, "assigned Battle controller resumes the round");
         battle.tick(app);
         check(battle.game.sim.now > frozenFrame, "Battle simulation advances after controller resume");
+        battle.togglePause();
+        SDL_Event restart{};
+        restart.type = SDL_KEYDOWN;
+        restart.key.keysym.sym = SDLK_r;
+        battle.event(app, restart);
+        check(!battle.paused && battle.game.frame == 0,
+              "restarting a paused Battle resumes the new round");
         check(battle.game.roundFrames == 3600, "explicit timer overrides saved settings");
         // An absent environment variable uses the saved duration.
 #ifdef _WIN32

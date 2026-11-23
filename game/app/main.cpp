@@ -4166,6 +4166,7 @@ struct BattleMode : Screen {
         restart(); return true;
     }
     void restart() {
+        paused = false;
         sub5 = 0; cnt5 = 0; congra = false; rockets_.clear(); smokes_.clear(); flashes_.clear();
         mode = 2; modeTick = 0; tapped = false; matchOver = false; intro = 0; banners.clear();
         cursorTrails = {};
