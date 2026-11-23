@@ -2526,6 +2526,7 @@ struct DcOptionsMode : Screen {
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
             switch (e.cbutton.button) {
             case SDL_CONTROLLER_BUTTON_DPAD_UP: move(a, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: move(a, 1); break;
+            case SDL_CONTROLLER_BUTTON_DPAD_LEFT: adjust(a, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: adjust(a, 1); break;
             case SDL_CONTROLLER_BUTTON_A: accept(a); break; case SDL_CONTROLLER_BUTTON_B: back(a); break; default: break; }
         }
     }

@@ -84,7 +84,7 @@ Counts items this table lists, not the game's full content (many screens have se
 | Help Menu | screen | partial | 0.34 (CCR_GPU=1, disc-only) |
 | Help pages (21) | screen | partial | all 21 pages captured from Flycast and measured (CCR_GPU=1, disc-only): full-frame 0.29-0.62; title and footer crops pass on all 21, body crops mean 0.20-0.80 but each has 66-256 off-edge px above 8 levels at the frame's top corners (not closed) |
 | Options menu | screen | partial | 4.48 |
-| Options sub-pages (General, 4P Settings, Records, Language, F-key) | screen | partial | Records/Language exist; General and 4P/Team persist settings and 4P values feed direct Battle loads; the Monaural option now folds each mixed stereo frame to dual mono, but its exact Dreamcast PCM behavior is not compared; Jump Pack, music/SE playback, F-key chat, and remaining original-interpretation parity are open |
+| Options sub-pages (General, 4P Settings, Records, Language, F-key) | screen | partial | Records/Language exist; General and 4P/Team persist settings and 4P values feed direct Battle loads; controller D-pad now selects and adjusts values (virtual-input regression); the Monaural option now folds each mixed stereo frame to dual mono, but its exact Dreamcast PCM behavior is not compared; Jump Pack, music/SE playback, F-key chat, and remaining original-interpretation parity are open |
 | Mode 4, 16 (tutorial), 18-22 | screen | open | - |
 | Puzzle Edit screens | screen | open | - |
 | Network / Homepage | screen | not testable offline | - |

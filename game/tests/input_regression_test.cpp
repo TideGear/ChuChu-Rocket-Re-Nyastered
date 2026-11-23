@@ -22,6 +22,39 @@ int main(int argc, char** argv) {
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");
     {
+        const Settings savedSettings = app.settings;
+        DcOptionsMode options;
+        SDL_Event dpad{};
+        dpad.type = SDL_CONTROLLERBUTTONDOWN;
+        dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
+        options.page = 1;
+        options.bRow = 0;
+        options.bTime = 1;
+        options.event(app, dpad);
+        check(options.bTime == 2, "D-pad right adjusts Dreamcast Battle play time");
+        options.bRow = 1;
+        options.bSpeed = 3;
+        options.event(app, dpad);
+        check(options.bSpeed == 4, "D-pad right adjusts Dreamcast Battle speed");
+        options.bRow = 2;
+        options.bMice = 0;
+        options.event(app, dpad);
+        check(options.bMice == 1, "D-pad right toggles high-mouse setting");
+        options.bRow = 3;
+        options.bArrow = 0;
+        options.event(app, dpad);
+        check(options.bArrow == 1, "D-pad right toggles arrow reset");
+        options.page = 0;
+        options.genRow = 3;
+        options.genMusic = 0;
+        options.event(app, dpad);
+        check(options.genMusic == 1, "D-pad right selects a Dreamcast music test track");
+        dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_LEFT;
+        options.event(app, dpad);
+        check(options.genMusic == 0, "D-pad left selects the previous Dreamcast music test track");
+        app.settings = savedSettings;
+    }
+    {
         PuzzleMode puzzle;
         check(puzzle.load(app.root, 0), "Puzzle load");
         check(puzzle.pad != nullptr, "Puzzle adopts an already-connected controller");
