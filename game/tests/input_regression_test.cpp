@@ -174,14 +174,25 @@ int main(int argc, char** argv) {
         check(!battle.paused && battle.game.frame == 0,
               "restarting a paused Battle resumes the new round");
         check(battle.game.roundFrames == 3600, "explicit timer overrides saved settings");
-        // An absent environment variable uses the saved duration.
+        check(battle.game.baseScale == 1.0f &&
+              battle.game.generatorParams.pSpecial2 == GenParams{}.pSpecial2 &&
+              !battle.game.rotateOwn,
+              "default Dreamcast Battle options apply");
+        // An absent environment variable uses the saved duration and the other 4P/Team settings.
 #ifdef _WIN32
         _putenv_s("CCR_MINUTES", "");
 #else
         unsetenv("CCR_MINUTES");
 #endif
-        check(battle.load(app.root, 0, 1), "Battle load with saved duration");
+        app.settings.battleSpeed = 5;
+        app.settings.battleMice = 1;
+        app.settings.battleArrow = 1;
+        check(battle.load(app.root, 0, 1), "Battle load with saved options");
         check(battle.game.roundFrames == 7200, "saved duration applies without override");
+        check(battle.game.baseScale == 2.0f &&
+              battle.game.generatorParams.pSpecial2 == GenParams{}.pSpecial2 * 5.0f &&
+              battle.game.rotateOwn,
+              "saved speed, high-mouse frequency, and arrow reset apply");
     }
     SDL_JoystickDetachVirtual(device);
     SDL_DestroyRenderer(app.ren); app.ren = nullptr;
