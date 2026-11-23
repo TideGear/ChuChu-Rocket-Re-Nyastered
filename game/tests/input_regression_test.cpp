@@ -99,6 +99,32 @@ int main(int argc, char** argv) {
         check(std::any_of(battle.game.sim.arrows.begin(), battle.game.sim.arrows.end(),
                           [](const auto& arrow) { return arrow.live && arrow.owner == 0; }),
               "joined Battle controller places an arrow");
+        join.cbutton.button = app.padMap.pause;
+        battle.event(app, join);
+        check(battle.paused, "assigned Battle controller pauses the round");
+        const int frozenFrame = battle.game.sim.now;
+        battle.tick(app);
+        check(battle.game.sim.now == frozenFrame, "Battle simulation stays frozen while paused");
+        size_t arrowCount = std::count_if(battle.game.sim.arrows.begin(), battle.game.sim.arrows.end(),
+                                          [](const auto& arrow) { return arrow.live; });
+        bool secondCellFound = false;
+        for (int y = 0; y < kRows && !secondCellFound; ++y) for (int x = 0; x < kCols; ++x) {
+            if ((x != battle.curX[0] || y != battle.curY[0]) &&
+                !(battle.game.sim.coll[y][x] & (kRocket | kHole | kArrow | kGenerator))) {
+                battle.curX[0] = x; battle.curY[0] = y; secondCellFound = true; break;
+            }
+        }
+        check(secondCellFound, "Battle has another free cell while paused");
+        join.cbutton.button = app.padMap.arrow[0];
+        battle.event(app, join);
+        check(std::count_if(battle.game.sim.arrows.begin(), battle.game.sim.arrows.end(),
+                            [](const auto& arrow) { return arrow.live; }) == arrowCount,
+              "paused Battle rejects controller arrow placement");
+        join.cbutton.button = app.padMap.pause;
+        battle.event(app, join);
+        check(!battle.paused, "assigned Battle controller resumes the round");
+        battle.tick(app);
+        check(battle.game.sim.now > frozenFrame, "Battle simulation advances after controller resume");
         check(battle.game.roundFrames == 3600, "explicit timer overrides saved settings");
         // An absent environment variable uses the saved duration.
 #ifdef _WIN32

@@ -4105,7 +4105,8 @@ struct BattleMode : Screen {
             if (auto* pad = SDL_GameControllerOpen(i)) unassignedPads.push_back(pad);
         }
     }
-    void place(int p, int cx, int cy, int d) { if (lv[p] >= 0 || p >= 4 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
+    void place(int p, int cx, int cy, int d) { if (p < 0 || p >= 4 || paused || lv[p] >= 0 || intro < 120) return; if (game.rollPending()) return;   /* Core::isRouletteActive -> Input::invalidateArrow: human arrow input is dropped while the wheel spins (Android 0x2bcc0, 0x4a9a8); the simulation keeps running */ if (d < 0) { d = 0; for (auto& ar : game.sim.arrows) if (ar.live && ar.x == cx && ar.y == cy && ar.owner == p) d = (ar.dir + 1) & 3; } game.placeArrow(p, cx, cy, d); }
+    void togglePause() { if (mode == 2 && intro >= 120) paused = !paused; }
     bool keyPlayer(const SDL_KeyboardEvent& key) {
         const int direction = arrowKey(key.keysym.sym);
         if (lv[0] >= 0 || direction < 0) return false;
@@ -4219,7 +4220,8 @@ struct BattleMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
             for (int p = 0; p < 4; ++p) {
                 if (padMatches(pads[p], e.cbutton.which)) {
-                    padButton(p, e.cbutton.button);
+                    if (lv[p] < 0 && e.cbutton.button == a.padMap.pause) togglePause();
+                    else padButton(p, e.cbutton.button);
                     return;
                 }
             }
@@ -4239,7 +4241,7 @@ struct BattleMode : Screen {
             keyPlayer(e.key);
         }
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
-            if (k == SDLK_SPACE) paused = !paused; else if (k == SDLK_r) restart(); else if (k == SDLK_ESCAPE) back = true;
+            if (k == SDLK_SPACE) togglePause(); else if (k == SDLK_r) restart(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); restart(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); restart(); } }
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) { tapped = true; drag.begin(a, e, field); }
         else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (d >= 0) place(0, cx, cy, d); }   // no drag = no arrow (Input::getArrowType returns 0)
