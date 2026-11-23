@@ -70,11 +70,16 @@ int main(int argc, char** argv) {
         check(puzzle.sim.now > before, "simulation advances after mouse resume");
         puzzle.state = 1;
         puzzle.running = true;
-        puzzle.pauseState.press();
+        SDL_Event start{};
+        start.type = SDL_CONTROLLERBUTTONDOWN;
+        start.cbutton.which = button.cbutton.which;
+        start.cbutton.button = app.padMap.pause;
+        const int tapStartFrame = puzzle.sim.now;
+        puzzle.event(app, start);
         for (int i = 0; i < 5; ++i) puzzle.tick(app);
         const int tapOverlayFrame = puzzle.sim.now;
-        check(puzzle.paused && !puzzle.pauseState.freeze && tapOverlayFrame > before,
-              "short Start tap shows Puzzle pause overlay without freezing the board");
+        check(puzzle.paused && !puzzle.pauseState.freeze && tapOverlayFrame == tapStartFrame + 5,
+              "Start tap shows the overlay after five advancing Puzzle ticks");
         puzzle.tick(app);
         check(puzzle.sim.now > tapOverlayFrame,
               "Puzzle board continues moving beneath the tap-triggered pause overlay");
