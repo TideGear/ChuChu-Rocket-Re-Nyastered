@@ -60,11 +60,14 @@ int main(int argc, char** argv) {
         options.genMusic = 1;
         options.genRow = 3;
         options.page = 0;
-        App::Song savedSong = app.songs[1];
-        app.songs[1].tried = true;
-        app.songs[1].pcm.assign(8, 123);
-        app.songs[1].loopStart = 0;
-        app.songs[1].loopEnd = app.songs[1].pcm.size();
+        App::Song savedSongs[15];
+        for (int i = 0; i < 15; ++i) {
+            savedSongs[i] = app.songs[i];
+            app.songs[i].tried = true;
+            app.songs[i].pcm.assign(8, 123);
+            app.songs[i].loopStart = 0;
+            app.songs[i].loopEnd = app.songs[i].pcm.size();
+        }
         SDL_AudioSpec want{};
         want.freq = 44100;
         want.format = AUDIO_S16SYS;
@@ -78,13 +81,18 @@ int main(int argc, char** argv) {
         SDL_Event confirm{};
         confirm.type = SDL_CONTROLLERBUTTONDOWN;
         confirm.cbutton.button = SDL_CONTROLLER_BUTTON_A;
-        options.event(app, confirm);
-        check(app.curTrack == 1 && app.musOn && app.musPos == 0,
-              "confirm plays selected Dreamcast Music Test track 5");
+        bool allTracksPlay = true;
+        for (int i = 0; i < 15; ++i) {
+            options.genMusic = i;
+            options.event(app, confirm);
+            allTracksPlay = allTracksPlay && app.curTrack == i && app.musOn && app.musPos == 0;
+        }
+        check(allTracksPlay,
+              "confirm plays all Dreamcast Music Test selections (CD tracks 4-18)");
         app.stopSong();
         SDL_CloseAudioDevice(app.adev);
         app.adev = 0;
-        app.songs[1] = std::move(savedSong);
+        for (int i = 0; i < 15; ++i) app.songs[i] = std::move(savedSongs[i]);
         app.settings = savedSettings;
     }
     {
