@@ -2481,7 +2481,20 @@ struct DcOptionsMode : Screen {
     int bRow = 0, bTime = 3, bSpeed = 3, bMice = 0, bArrow = 0;
     // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
     static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
-    static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3 && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95; }
+    static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3; }
+    void drawText(App& a, const std::string& s, int x, int y) const {
+        if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95) {
+            for (unsigned char c : s) { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; }
+            return;
+        }
+        SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255);
+        int pen = x;
+        for (unsigned char c : s) {
+            if (const uint8_t* glyph = font57(c)) for (int row = 0; row < 7; ++row) for (int col = 0; col < 5; ++col)
+                if ((glyph[row] >> (4 - col)) & 1) { const SDL_Rect d{pen + col * 2, y + 5 + row * 2, 2, 2}; SDL_RenderFillRect(a.ren, &d); }
+            pen += 12;
+        }
+    }
     int music() override { return -2; }   // Dreamcast CD requests from Music Test are explicit; don't stop them on the next screen pump.
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
@@ -2545,7 +2558,7 @@ struct DcOptionsMode : Screen {
         auto put = [&](int f, int x, int y) { const SDL_Rect& r = sh.fr[f]; const SDL_Rect d{x, y, r.w, r.h}; SDL_RenderCopy(a.ren, sh.tex, &r, &d); };
         put(page == 3 ? 3 : page == 2 ? 6 : page == 0 ? 4 : page == 1 ? 5 : 1, 16, 88); if (page == 2) put(8, 16, 379); else put(2, 16, 407);
         if (page == 1) {   // Settings for 4P Battle and Team Battle (Flycast frame 2750): labels at x 81, '<' at x 260, boxes behind the chosen values, Return at y 309
-            auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
+            auto text = [&](const char* t, int x, int y) { drawText(a, t, x, y); };
             auto box = [&](int x, int y, int w) { SDL_SetRenderDrawColor(a.ren, 238, 156, 17, 255); const SDL_Rect r{x, y, w, 32}; SDL_RenderFillRect(a.ren, &r); };
             static const char* const labels[4] = {"Play time", "Game speed", "% of ? mice", "Arrow reset"};
             static const int top[4] = {149, 181, 213, 245};
@@ -2562,9 +2575,12 @@ struct DcOptionsMode : Screen {
             return;
         }
         if (page == 0) {   // General Settings (Flycast frame 2450): labels at x 80, values from x 248, the chosen value on an orange box, cell tops 149 + 32 per row, Return at 341
-            auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
+            auto text = [&](const char* t, int x, int y) { drawText(a, t, x, y); };
             auto box = [&](int x, int row, int w) { SDL_SetRenderDrawColor(a.ren, 238, 156, 17, 255); const SDL_Rect r{x, 143 + 32 * row, w, 32}; SDL_RenderFillRect(a.ren, &r); };
-            auto digits = [&](int value, int n, int x, int y) { if (!a.dcSelectClock.tex || a.dcSelectClock.fr.size() != 11) return; for (int i = 0; i < n; ++i) { int p = 1; for (int k = i + 1; k < n; ++k) p *= 10; const SDL_Rect d{x + 20 * i, y, 24, 24}; SDL_RenderCopy(a.ren, a.dcSelectClock.tex, &a.dcSelectClock.fr[(value / p) % 10], &d); } };
+            auto digits = [&](int value, int n, int x, int y) {
+                if (!a.dcSelectClock.tex || a.dcSelectClock.fr.size() != 11) { char fallback[16]; snprintf(fallback, sizeof fallback, "%0*d", n, value); drawText(a, fallback, x, y); return; }
+                for (int i = 0; i < n; ++i) { int p = 1; for (int k = i + 1; k < n; ++k) p *= 10; const SDL_Rect d{x + 20 * i, y, 24, 24}; SDL_RenderCopy(a.ren, a.dcSelectClock.tex, &a.dcSelectClock.fr[(value / p) % 10], &d); }
+            };
             static const char* const labels[5] = {"Character", "Sound output", "Jump Pack", "Music test", "SE test"};
             for (int i = 0; i < 5; ++i) text(labels[i], 80, 149 + 32 * i);
             box(260, 0, 96); box(genSound ? 416 : 0, 1, genSound ? 96 : 0); box(genJump ? 0 : 272, 2, genJump ? 0 : 48); if (genJump) box(374, 2, 36);
@@ -2583,19 +2599,20 @@ struct DcOptionsMode : Screen {
         if (page == 2) {   // Records (Flycast Options sub-page): Stage Challenge total of the best times and the number of cleared stages, from the port's challenge.bin (mask + 25 best times)
             uint32_t mask = 0, best[25] = {}; if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "rb")) { if (fread(&mask, 4, 1, f) != 1 || fread(best, 4, 25, f) != 25) { mask = 0; memset(best, 0, sizeof best); } fclose(f); }
             uint32_t total = 0; int cleared = 0; for (int i = 0; i < 25; ++i) { total += best[i]; if (mask >> i & 1) ++cleared; }
-            auto text = [&](const std::string& t, int x, int y) { for (char c : t) { const unsigned char ch = c; if (ch > 0x20 && ch < 0x7f) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } x += 12; } };
+            auto text = [&](const std::string& t, int x, int y) { drawText(a, t, x, y); };
             text("Stage Challenge", 113, 192);
             SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); const SDL_Rect dot{139, 233, 3, 3}; SDL_RenderFillRect(a.ren, &dot);
             text("Total time", 147, 224);
+            const int m = std::min<uint32_t>(99, total / 60), sec = total % 60;
             if (a.dcSelectClock.tex && a.dcSelectClock.fr.size() == 11) {
-                const int m = std::min<uint32_t>(99, total / 60), sec = total % 60, g[5] = {m / 10, m % 10, 10, sec / 10, sec % 10};
+                const int g[5] = {m / 10, m % 10, 10, sec / 10, sec % 10};
                 for (int i = 0; i < 5; ++i) { const SDL_Rect d{287 + 24 * i, 224, 24, 24}; SDL_RenderCopy(a.ren, a.dcSelectClock.tex, &a.dcSelectClock.fr[g[i]], &d); }
-            }
+            } else { char fallback[16]; snprintf(fallback, sizeof fallback, "%02d:%02d", m, sec); drawText(a, fallback, 287, 224); }
             text(std::to_string(cleared) + " stages cleared", 181, 256);
             return;
         }
         if (page == 3) {   // Language page (Flycast frame 3050): the list of five, the current language on an orange box, the red cursor arrow
-            auto text = [&](const char* t, int x, int y) { for (; *t; ++t, x += 12) { const unsigned char ch = *t; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); } };
+            auto text = [&](const char* t, int x, int y) { drawText(a, t, x, y); };
             static const char* const names[5] = {nullptr, "English", "Deutsch", "Francais", "Espanol"};
             int cur = 1; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) cur = i;
             SDL_SetRenderDrawColor(a.ren, 246, 180, 0, 255); const SDL_Rect box{75, 149 + 32 * cur - 3, 106, 32}; SDL_RenderFillRect(a.ren, &box);
@@ -2611,7 +2628,7 @@ struct DcOptionsMode : Screen {
         static const char* const labels[6] = {"General Settings", "Settings for 4P Battle and Team Battle", "Records", "Language", "Keyboard F-key Settings", "Return to Initial Settings"};
         for (int i = 0; i < 6; ++i) {
             int x = 100; const int y = kRows[i] - 12;
-            for (const char* c = labels[i]; *c; ++c, x += 12) { const unsigned char ch = *c; if (ch <= 0x20) continue; const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[ch - 0x20], &d); }
+            drawText(a, labels[i], x, y);
         }
         SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
         for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, kRows[sel] + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }

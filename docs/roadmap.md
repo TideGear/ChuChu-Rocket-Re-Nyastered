@@ -2,6 +2,10 @@
 
 See the [requirement audit](audit.md) for current coverage. This log retains dated implementation decisions, original-code traces and test evidence.
 
+## Dreamcast Options without BIOS (2026-11-23)
+
+- Removed the BIOS ANSI atlas requirement from `DcOptionsMode::available`. Without the optional BIOS ANSI and clock atlases, labels, Music/SE numbers, and Records totals use the embedded 5×7 bitmap font; BIOS-equipped installs keep the original glyph atlases. Pinned Zig/Ninja built `ccr` and `input_regression_test`; all regression checks passed. A headless run against a temporary symlink view of the retained Dreamcast-only cache with all four BIOS atlas files omitted rendered General Settings after entering `OPTIONS` and pressing Enter. This verifies route availability/readability only, not font or screen parity; the retained source cache was not modified.
+
 ## Dreamcast image setup (2026-11-22)
 
 - Current-checkout rerun (2026-11-22): a fresh direct-USA-CUE cache with no BIOS/mobile/GBA inputs completed Windows setup and the pinned Zig build; an isolated-APPDATA packaged `ccr.exe --prepare <selected .cue>` also completed to Puzzle/Battle/Stage Challenge. The manifest contains only one Dreamcast input, Dreamcast graphics, 128 models, 15 CD WAVs and 128 SFX cues. `CCR_MODELS=1` headless 640x480 captures from that fresh cache were nonempty for all 12 route entry points (STARTUP, DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, PUZZLE, CHALLENGE, BATTLE, TEAM_BATTLE, DC_DEMO). A separate clean GDI+iOS 1.1.2 setup/build succeeded and reported the same modes; DC_TITLE, PUZZLE, CHALLENGE, BATTLE and TEAM_BATTLE rendered nonempty headless captures from the combined cache. This is source setup/build/route smoke, not screen completion or parity; exact manifests/logs/captures are temporary under `local/goal-*-setup-20261122`.
