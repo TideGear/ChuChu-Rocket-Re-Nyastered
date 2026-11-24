@@ -1,5 +1,10 @@
 # Roadmap and work log
 
+## Dreamcast setup cache refresh (2026-11-24)
+- `do_dreamcast()` previously reused `dreamcast/files`, PNG/PRS/model exports and audio/SFX output whenever their directories existed. Re-running setup after replacing or repairing a disc could therefore retain stale game files and assets while appearing to succeed.
+- Dreamcast setup now clears only its generated files, derived exports, and `ret_all/dc_*` art immediately before processing a Dreamcast input. Mobile exports and saves remain untouched. The derived-assets version marker is atomically published only after the Dreamcast model and SFX export paths complete; failed refreshes cannot leave a current-version marker behind.
+- Added cache-preservation and version-publication regressions. Pinned Python passed `test_extract_all.py` (2 tests), `test_gdi_extract.py` (9), and `test_dc_sfx_render.py` (7); Python compilation and `git diff --check` passed. A fresh image-to-cache rerun was unavailable because this checkout has retained extracted files but not the original GDI/CUE descriptor and raw tracks. The tests verify invalidation and existing extraction subcomponents, not the end-to-end refresh from an image.
+
 ## Dreamcast Options Music/SE selection bounds (2026-11-24)
 - Traced the original General Settings caller: Music Test adjustment receives a count of 15 (`0x8c052fe0` -> `FUN_8c05368a`), while SE Test receives 128 (`0x8c0530e0` -> `FUN_8c0535de`). The page wraps these selections across indices 0-14 and 0-127. The port’s interaction already wrapped; persisted settings previously allowed larger values, causing Music Test to fold modulo 15 and SE Test to mask to 7 bits on restore. Settings now clamp to their actual ranges, and the page restores the bounded values directly.
 - Added settings clamp/round-trip checks and virtual-controller regressions for both wrap boundaries and restoring oversized persisted values. Pinned Zig/Ninja built `ccr`, `input_regression_test`, and `userdata_test`; the userdata test and full headless input regression passed. This verifies selection behavior only; original music/SFX playback loops and audio parity remain open.

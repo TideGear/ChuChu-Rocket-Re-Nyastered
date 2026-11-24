@@ -170,7 +170,45 @@ def do_gba(src, work, assets, entry):
     export_testdata.main(os.path.join(out, 'gba_stages.bin'))
 
 
+def clear_dreamcast_cache(assets):
+    """Remove generated Dreamcast outputs before rebuilding, without touching saves or mobile exports."""
+    root = Path(assets)
+    dreamcast = root / 'dreamcast'
+    for name in ('files', 'png', 'prs', 'prs_png', 'models', 'objects', 'audio', 'sfx', 'models.bin'):
+        path = dreamcast / name
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+    ret = root / 'ret_all'
+    if ret.is_dir():
+        for path in ret.glob('dc_*'):
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        for name in ('dlogo.tex.bin', 'dlogo.frames.bin', 'dpress.tex.bin', 'dpress.frames.bin',
+                     'dc_assets_version.txt'):
+            path = ret / name
+            if path.exists():
+                path.unlink()
+
+
+def publish_dc_asset_version(assets, entry):
+    sfx_manifest = Path(assets, 'dreamcast', 'sfx', 'cues.json')
+    if (not entry.get('model_pack') or entry.get('model_pack_error') or entry.get('sfx_error') or
+            not sfx_manifest.is_file()):
+        return False
+    version = Path(assets, 'ret_all', 'dc_assets_version.txt')
+    version.parent.mkdir(parents=True, exist_ok=True)
+    temporary = version.with_suffix('.tmp')
+    temporary.write_text('4', encoding='ascii')
+    os.replace(temporary, version)
+    return True
+
+
 def do_dreamcast(src, work, assets, entry):
+    clear_dreamcast_cache(assets)
     d = Path(src)
     files = os.path.join(assets, 'dreamcast', 'files')
     if not os.path.isdir(files):
@@ -276,6 +314,8 @@ def do_dreamcast(src, work, assets, entry):
                 entry['sfx_ja_cues'] = sum(1 for m in manifest.values() if 'frames' in m)
         except Exception as error:
             entry['sfx_error'] = str(error)
+    # Publish only after all Dreamcast-derived assets, including the model and SFX packs, completed.
+    publish_dc_asset_version(assets, entry)
 
 
 # These are the same two resources in the tested Dreamcast, Android and iOS

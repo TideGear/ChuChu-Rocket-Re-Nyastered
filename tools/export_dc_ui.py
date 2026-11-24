@@ -386,8 +386,6 @@ def uv_span(tile, sx=255 / 256, sy=255 / 256):
 
 def main(prs_png, out, png=None):
     os.makedirs(out, exist_ok=True)
-    # Version of the Dreamcast-derived assets expected by the app (game/app/main.cpp kDcAssetsVersion).
-    with open(os.path.join(out, 'dc_assets_version.txt'), 'w') as f: f.write('4')
     export_puzzle_result(prs_png, out)
     export_puzzle_select(prs_png, out)
     export_mode_select(prs_png, png, out)
