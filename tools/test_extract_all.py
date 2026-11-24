@@ -53,6 +53,19 @@ class DreamcastCacheTest(unittest.TestCase):
             self.assertFalse((assets / 'ret_all' / 'dc_options.tex.bin').exists())
             self.assertEqual((assets / 'ret_all' / 'r0930.tex.bin').read_bytes(), b'mobile')
 
+    def test_clears_generated_stage_packs_before_current_sources_are_exported(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            assets = pathlib.Path(temporary) / 'assets'
+            assets.mkdir()
+            for name in ('battle_stages.bin', 'dreamcast_puzzles.bin', 'mobile_puzzles.bin'):
+                (assets / name).write_bytes(b'stale pack')
+            (assets / 'challenge.bin').write_bytes(b'user save')
+            extract_all.clear_derived_stage_packs(str(assets))
+            self.assertFalse((assets / 'battle_stages.bin').exists())
+            self.assertFalse((assets / 'dreamcast_puzzles.bin').exists())
+            self.assertFalse((assets / 'mobile_puzzles.bin').exists())
+            self.assertEqual((assets / 'challenge.bin').read_bytes(), b'user save')
+
     def test_clears_stale_dreamcast_outputs_and_preserves_other_assets(self):
         with tempfile.TemporaryDirectory() as temporary:
             assets = pathlib.Path(temporary) / 'assets'

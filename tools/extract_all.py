@@ -194,6 +194,14 @@ def clear_dreamcast_cache(assets):
                 path.unlink()
 
 
+def clear_derived_stage_packs(assets):
+    """Discard generated stage packs so the final export reflects the current extracted sources."""
+    for name in ('battle_stages.bin', 'dreamcast_puzzles.bin', 'mobile_puzzles.bin'):
+        path = Path(assets, name)
+        if path.exists():
+            path.unlink()
+
+
 def refresh_dreamcast_files(src, work, assets):
     """Extract first, then replace the cached Dreamcast tree only after disc parsing succeeds."""
     import gdi_extract
@@ -478,6 +486,7 @@ def main():
     gf, cache = a.game_files, a.cache
     work, assets = os.path.join(cache, 'work'), os.path.join(cache, 'assets')
     os.makedirs(work, exist_ok=True); os.makedirs(assets, exist_ok=True)
+    clear_derived_stage_packs(assets)
     manifest = {'created': time.strftime('%Y-%m-%d %H:%M:%S'), 'inputs': []}
     actions = {'ios': do_ios, 'android': do_apk, 'gba': do_gba, 'dreamcast': do_dreamcast}
     for kind, path, label in discover(Path(gf), work, exclude=(a.exclude_cache or Path(cache)).resolve()):
