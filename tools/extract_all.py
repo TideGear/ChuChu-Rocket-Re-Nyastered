@@ -194,6 +194,19 @@ def clear_dreamcast_cache(assets):
                 path.unlink()
 
 
+def refresh_dreamcast_files(src, work, assets):
+    """Extract first, then replace the cached Dreamcast tree only after disc parsing succeeds."""
+    import gdi_extract
+    Path(work).mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='dc-extract-', dir=work) as staged:
+        tracks = gdi_extract.extract(src, staged, 0)
+        clear_dreamcast_cache(assets)
+        files = Path(assets, 'dreamcast', 'files')
+        files.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(staged, files)
+    return tracks, str(files)
+
+
 def publish_dc_asset_version(assets, entry):
     sfx_manifest = Path(assets, 'dreamcast', 'sfx', 'cues.json')
     if (not entry.get('model_pack') or entry.get('model_pack_error') or entry.get('sfx_error') or
@@ -208,21 +221,8 @@ def publish_dc_asset_version(assets, entry):
 
 
 def do_dreamcast(src, work, assets, entry):
-    clear_dreamcast_cache(assets)
     d = Path(src)
-    files = os.path.join(assets, 'dreamcast', 'files')
-    if not os.path.isdir(files):
-        import gdi_extract
-        tracks = gdi_extract.extract(d, files, 0)
-    elif d.is_file() and d.suffix.lower() in ('.gdi', '.cue'):
-        import gdi_extract
-        tracks = gdi_extract.parse_gdi(d) if d.suffix.lower() == '.gdi' else gdi_extract.parse_cue(d)
-    else:
-        import gdi_extract
-        descriptors = sorted(d.glob('*.gdi')) if d.is_dir() else []
-        cues = sorted(d.glob('*.cue')) if d.is_dir() and not descriptors else []
-        tracks = (gdi_extract.parse_gdi(descriptors[0]) if descriptors else
-                  gdi_extract.parse_cue(cues[0]) if cues else [])
+    tracks, files = refresh_dreamcast_files(d, work, assets)
     entry['extracted_file_count'] = sum(len(f) for _, _, f in os.walk(files))
     png = os.path.join(assets, 'dreamcast', 'png')
     if not os.path.isdir(png):

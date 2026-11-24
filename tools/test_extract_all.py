@@ -2,13 +2,57 @@
 import pathlib
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import extract_all
 
 
 class DreamcastCacheTest(unittest.TestCase):
+    def test_failed_disc_extract_preserves_existing_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            assets, work = root / 'assets', root / 'work'
+            files = assets / 'dreamcast' / 'files'
+            files.mkdir(parents=True)
+            work.mkdir()
+            (files / 'old.bin').write_bytes(b'working cache')
+            (assets / 'ret_all' / 'r0930.tex.bin').parent.mkdir(parents=True)
+            (assets / 'ret_all' / 'r0930.tex.bin').write_bytes(b'mobile')
+            def fail(*args):
+                raise ValueError('bad ISO')
+            with mock.patch.dict(sys.modules, {'gdi_extract': types.SimpleNamespace(extract=fail)}):
+                with self.assertRaisesRegex(ValueError, 'bad ISO'):
+                    extract_all.refresh_dreamcast_files(root / 'bad.gdi', str(work), str(assets))
+            self.assertEqual((files / 'old.bin').read_bytes(), b'working cache')
+            self.assertEqual((assets / 'ret_all' / 'r0930.tex.bin').read_bytes(), b'mobile')
+
+    def test_successful_extract_replaces_only_dreamcast_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            assets, work = root / 'assets', root / 'work'
+            files = assets / 'dreamcast' / 'files'
+            files.mkdir(parents=True)
+            work.mkdir()
+            (files / 'old.bin').write_bytes(b'stale')
+            (assets / 'dreamcast' / 'models.bin').write_bytes(b'stale model')
+            (assets / 'ret_all' / 'dc_options.tex.bin').parent.mkdir(parents=True)
+            (assets / 'ret_all' / 'dc_options.tex.bin').write_bytes(b'stale DC')
+            (assets / 'ret_all' / 'r0930.tex.bin').write_bytes(b'mobile')
+            def extract(src, output, gap):
+                pathlib.Path(output, 'NEW.BIN').write_bytes(b'fresh disc')
+                return ['track']
+            with mock.patch.dict(sys.modules, {'gdi_extract': types.SimpleNamespace(extract=extract)}):
+                tracks, refreshed = extract_all.refresh_dreamcast_files(root / 'disc.gdi', str(work), str(assets))
+            self.assertEqual(tracks, ['track'])
+            self.assertEqual(pathlib.Path(refreshed, 'NEW.BIN').read_bytes(), b'fresh disc')
+            self.assertFalse((pathlib.Path(refreshed) / 'old.bin').exists())
+            self.assertFalse((assets / 'dreamcast' / 'models.bin').exists())
+            self.assertFalse((assets / 'ret_all' / 'dc_options.tex.bin').exists())
+            self.assertEqual((assets / 'ret_all' / 'r0930.tex.bin').read_bytes(), b'mobile')
+
     def test_clears_stale_dreamcast_outputs_and_preserves_other_assets(self):
         with tempfile.TemporaryDirectory() as temporary:
             assets = pathlib.Path(temporary) / 'assets'
