@@ -309,15 +309,13 @@ int main(int argc, char** argv) {
         puzzle.tick(app);
         check(puzzle.sim.now > tapOverlayFrame,
               "Puzzle board continues moving beneath the tap-triggered pause overlay");
-        puzzle.paused = false;
-        puzzle.pauseState.resume();
-        puzzle.pauseState.press();
-        puzzle.pauseState.freeze = true; // PuzzlePauseState's held-button timing is checked by puzzle_pause_test.
-        puzzle.paused = true;
-        const int beforeHeldPause = puzzle.sim.now;
+        puzzle.event(app, start);
+        const int afterControllerResume = puzzle.sim.now;
+        check(!puzzle.paused && !puzzle.pauseState.freeze && !puzzle.pauseState.overlay,
+              "controller Start resumes the tap-triggered Puzzle overlay");
         puzzle.tick(app);
-        check(puzzle.pauseState.freeze && puzzle.sim.now == beforeHeldPause,
-              "frozen Puzzle pause state stops the board");
+        check(puzzle.sim.now > afterControllerResume,
+              "Puzzle simulation advances after controller resume");
     }
     {
         ChallengeMode challenge;
