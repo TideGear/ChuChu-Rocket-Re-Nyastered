@@ -382,6 +382,34 @@ int main(int argc, char** argv) {
               battle.game.generatorParams.pSpecial2 == GenParams{}.pSpecial2 * 5.0f &&
               battle.game.rotateOwn,
               "saved speed, high-mouse frequency, and arrow reset apply");
+        auto findFreeArrowCell = [&](int avoidX, int avoidY, int& x, int& y) {
+            for (int row = 0; row < kRows; ++row) for (int col = 0; col < kCols; ++col) {
+                if ((col != avoidX || row != avoidY) &&
+                    !(battle.game.sim.coll[row][col] & (kRocket | kHole | kArrow | kGenerator))) {
+                    x = col; y = row; return true;
+                }
+            }
+            return false;
+        };
+        int ownX = -1, ownY = -1, otherX = -1, otherY = -1;
+        check(findFreeArrowCell(-1, -1, ownX, ownY), "Arrow reset test finds a free cell");
+        check(battle.game.placeArrow(0, ownX, ownY, 0), "Arrow reset test places the player's panel");
+        battle.game.tick(); // Original arrow tasks register collision on the following tick.
+        battle.game.rotateOwn = false;
+        check(!battle.game.placeArrow(0, ownX, ownY, 1),
+              "Arrow reset Off refuses to rewrite the player's existing panel");
+        battle.game.rotateOwn = true;
+        check(battle.game.placeArrow(0, ownX, ownY, 1),
+              "Arrow reset On rewrites the player's existing panel direction");
+        check(std::count_if(battle.game.sim.arrows.begin(), battle.game.sim.arrows.end(),
+                            [&](const auto& arrow) { return arrow.live && arrow.owner == 0; }) == 1 &&
+              battle.game.sim.arrows.back().dir == 1,
+              "Arrow reset reuses the panel rather than adding another slot");
+        check(findFreeArrowCell(ownX, ownY, otherX, otherY), "Arrow reset test finds another free cell");
+        check(battle.game.placeArrow(1, otherX, otherY, 2), "Arrow reset test places another player's panel");
+        battle.game.tick();
+        check(!battle.game.placeArrow(0, otherX, otherY, 3),
+              "Arrow reset cannot rewrite another player's panel");
     }
     SDL_JoystickDetachVirtual(device);
     SDL_DestroyRenderer(app.ren); app.ren = nullptr;
