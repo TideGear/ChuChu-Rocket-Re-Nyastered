@@ -411,6 +411,8 @@ int main(int argc, char** argv) {
         check(!battle.game.placeArrow(0, otherX, otherY, 3),
               "Arrow reset cannot rewrite another player's panel");
     }
+    app.models3d.clear();
+    app.rouletteDraw.reset();
     SDL_JoystickDetachVirtual(device);
     SDL_DestroyRenderer(app.ren); app.ren = nullptr;
     SDL_DestroyWindow(app.win); app.win = nullptr;
