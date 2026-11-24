@@ -2500,7 +2500,7 @@ struct DcOptionsMode : Screen {
     int music() override { return -2; }   // Dreamcast CD requests from Music Test are explicit; don't stop them on the next screen pump.
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
     void openRow(App& a) {
-        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = a.settings.musicTest % 15; genSe = a.settings.seTest & 127; a.playSfx(1); }
+        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = std::clamp(a.settings.musicTest, 0, 14); genSe = std::clamp(a.settings.seTest, 0, 127); a.playSfx(1); }
         else if (sel == 1 && hasLanguagePage(a)) { page = 1; bRow = 0; bTime = a.settings.battleTime; bSpeed = a.settings.battleSpeed; bMice = a.settings.battleMice; bArrow = a.settings.battleArrow; a.playSfx(1); }
         else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {

@@ -19,6 +19,12 @@ int main() {
     CHECK(parseSettings("filter = blurry\n").filter == "linear");
     CHECK(parseSettings("cpu_style = gba").cpuStyle == "gba" && parseSettings("cpu_style = x").cpuStyle == "dreamcast" && r.cpuStyle == "dreamcast");
     CHECK(!r.unlockAll && parseSettings("unlock_all = yes").unlockAll && parseSettings(settingsText(parseSettings("unlock_all = true"))).unlockAll);
+    Settings dreamcastTests = parseSettings("music_test=99\nse_test=999\n");
+    CHECK(dreamcastTests.musicTest == 14 && dreamcastTests.seTest == 127);
+    Settings dreamcastRoundTrip = parseSettings(settingsText(dreamcastTests));
+    CHECK(dreamcastRoundTrip.musicTest == 14 && dreamcastRoundTrip.seTest == 127);
+    CHECK(parseSettings("music_test=-1\nse_test=-1\n").musicTest == 0 &&
+          parseSettings("music_test=-1\nse_test=-1\n").seTest == 0);
     Settings battle = parseSettings("battle_time=2\nbattle_speed=5\nbattle_mice=1\nbattle_arrow=1\n");
     CHECK(battle.battleTime == 2 && battle.battleSpeed == 5 && battle.battleMice == 1 && battle.battleArrow == 1);
     CHECK(parseSettings(settingsText(battle)).battleTime == 2 && parseSettings(settingsText(battle)).battleArrow == 1);

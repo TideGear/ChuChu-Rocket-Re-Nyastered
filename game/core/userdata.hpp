@@ -45,8 +45,8 @@ inline Settings parseSettings(const std::string& text) {
         else if (k == "battle_arrow") s.battleArrow = std::max(0, std::min(1, atoi(v.c_str())));
         else if (k == "sound_output") s.soundOutput = std::max(0, std::min(1, atoi(v.c_str())));
         else if (k == "jump_pack") s.jumpPack = std::max(0, std::min(1, atoi(v.c_str())));
-        else if (k == "music_test") s.musicTest = std::max(0, std::min(99, atoi(v.c_str())));
-        else if (k == "se_test") s.seTest = std::max(0, std::min(999, atoi(v.c_str())));
+        else if (k == "music_test") s.musicTest = std::max(0, std::min(14, atoi(v.c_str())));
+        else if (k == "se_test") s.seTest = std::max(0, std::min(127, atoi(v.c_str())));
         else if (k == "cpu_style") { if (v == "dreamcast" || v == "gba") s.cpuStyle = v; }
         else if (k == "window_width") s.width = std::max(0, atoi(v.c_str()));
         else if (k == "window_height") s.height = std::max(0, atoi(v.c_str()));
@@ -71,7 +71,7 @@ inline std::string settingsText(const Settings& s) {
         "# Open every puzzle group and costume without playing for them: true or false (the original unlocks them by clearing stages).\nunlock_all = %s\n\n"
         "# Dreamcast Options 4P/Team values: play time 1-3, speed 1-5, High mice, and arrow reset.\n"
         "battle_time = %d\nbattle_speed = %d\nbattle_mice = %d\nbattle_arrow = %d\n\n"
-        "# Dreamcast Options General values: output, Jump Pack, music test, and SE test.\n"
+        "# Dreamcast Options General values: output, Jump Pack, Music Test 0-14, and SE Test 0-127.\n"
         "sound_output = %d\njump_pack = %d\nmusic_test = %d\nse_test = %d\n\n"
         "# Log detail: 0 = off, 1 = sessions and match results, 2 = also every screen change.\nlog_level = %d\n\n"
         "# The log file (logs/ccr.log) rotates when it reaches this many kilobytes; this many old files are kept.\nlog_max_kb = %d\nlog_keep_files = %d\n",

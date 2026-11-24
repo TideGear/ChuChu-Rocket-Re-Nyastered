@@ -28,6 +28,12 @@ int main(int argc, char** argv) {
           "Dreamcast 3D mouse type selects normal, golden, and roulette models");
     {
         const Settings savedSettings = app.settings;
+        const std::string oldOptionsSaveDir = app.saveDir;
+        const auto optionsSaveDir = std::filesystem::temp_directory_path() / "ccr_options_settings_test";
+        std::error_code optionsEc;
+        std::filesystem::remove_all(optionsSaveDir, optionsEc);
+        std::filesystem::create_directories(optionsSaveDir, optionsEc);
+        app.saveDir = optionsSaveDir.string();
         DcOptionsMode options;
         SDL_Event dpad{};
         dpad.type = SDL_CONTROLLERBUTTONDOWN;
@@ -57,6 +63,29 @@ int main(int argc, char** argv) {
         dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_LEFT;
         options.event(app, dpad);
         check(options.genMusic == 0, "D-pad left selects the previous Dreamcast music test track");
+        options.genMusic = 14;
+        dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
+        options.event(app, dpad);
+        check(options.genMusic == 0, "Dreamcast Music Test wraps after CD track 18");
+        dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_LEFT;
+        options.event(app, dpad);
+        check(options.genMusic == 14, "Dreamcast Music Test wraps back to CD track 4");
+        options.genSe = 127;
+        options.genRow = 4;
+        dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
+        options.event(app, dpad);
+        check(options.genSe == 0 && app.settings.seTest == 0,
+              "Dreamcast SE Test wraps after cue 127");
+        dpad.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_LEFT;
+        options.event(app, dpad);
+        check(options.genSe == 127 && app.settings.seTest == 127,
+              "Dreamcast SE Test wraps back to cue 0");
+        app.settings.musicTest = 99;
+        app.settings.seTest = 999;
+        options.sel = 0;
+        options.openRow(app);
+        check(options.genMusic == 14 && options.genSe == 127,
+              "General Settings restores bounded persisted test selections");
         options.genMusic = 1;
         options.genRow = 3;
         options.page = 0;
@@ -94,6 +123,8 @@ int main(int argc, char** argv) {
         app.adev = 0;
         for (int i = 0; i < 15; ++i) app.songs[i] = std::move(savedSongs[i]);
         app.settings = savedSettings;
+        app.saveDir = oldOptionsSaveDir;
+        std::filesystem::remove_all(optionsSaveDir, optionsEc);
     }
     {
         namespace fs = std::filesystem;
