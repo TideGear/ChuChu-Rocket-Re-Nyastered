@@ -354,6 +354,59 @@
       }
     },
     {
+      "name": "launch_domes_age_minus1",
+      "ref": "local/star-trace/lau/o_00009.bmp",
+      "args": [
+        "puzzle",
+        "0"
+      ],
+      "env": {
+        "CCR_MODELS": "1",
+        "CCR_AIM": "385,117",
+        "CCR_KEYS": "U ",
+        "CCR_GLOBAL_TIME": "1887",
+        "CCR_TICKS": "1520"
+      },
+      "elements": {
+        "dome_1": [
+          171,
+          14,
+          215,
+          66
+        ],
+        "dome_2": [
+          248,
+          14,
+          292,
+          66
+        ],
+        "dome_3": [
+          326,
+          14,
+          370,
+          66
+        ],
+        "dome_4": [
+          403,
+          14,
+          447,
+          66
+        ],
+        "dome_5": [
+          480,
+          14,
+          524,
+          66
+        ],
+        "dome_6": [
+          557,
+          14,
+          601,
+          66
+        ]
+      }
+    },
+    {
       "name": "help_0_1",
       "ref": "local/star-trace/hp/e0/p_02450.bmp",
       "args": [

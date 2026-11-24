@@ -116,7 +116,7 @@ public:
                     const auto& v = tri.v[i];
                     const float vx = v.x * ca - v.y * sa, vy = v.x * sa + v.y * ca;
                     const float nx = v.nx * ca - v.ny * sa, ny = v.nx * sa + v.ny * ca;
-                    const float depth = cameraDistance - vy * pulse;
+                    const float depth = cameraDistance - vy * pulse * launchScale;
                     const float perspective = cameraDistance / depth;
                     const float dx = floorPosition.x - cameraCenter.x + side * v.z * scale;
                     const float dy = floorPosition.y - cameraCenter.y - side * vx * scale + side * opening * pixelsPerUnit;
