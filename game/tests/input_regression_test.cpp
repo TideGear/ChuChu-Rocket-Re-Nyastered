@@ -96,6 +96,63 @@ int main(int argc, char** argv) {
         app.settings = savedSettings;
     }
     {
+        namespace fs = std::filesystem;
+        const std::string oldSaveDir = app.saveDir;
+        const fs::path saveDir = fs::temp_directory_path() / "ccr_records_chord_test";
+        std::error_code ec;
+        fs::remove_all(saveDir, ec);
+        fs::create_directories(saveDir, ec);
+        app.saveDir = saveDir.string();
+        ChallengeMode::Save seed{};
+        seed.mask = 0x15;
+        seed.best[0] = 91;
+        seed.best[24] = 123;
+        { FILE* f = fopen((app.saveDir + "/challenge.bin").c_str(), "wb"); check(f != nullptr, "create Challenge save"); if (f) { check(fwrite(&seed, sizeof seed, 1, f) == 1, "seed Challenge records"); fclose(f); } }
+        const char unrelated[] = "keep progress";
+        { FILE* f = fopen((app.saveDir + "/progress.bin").c_str(), "wb"); check(f != nullptr, "create unrelated progress save"); if (f) { check(fwrite(unrelated, 1, sizeof unrelated, f) == sizeof unrelated, "seed unrelated progress save"); fclose(f); } }
+        DcOptionsMode options;
+        options.page = 2;
+        const SDL_JoystickID instance = SDL_JoystickGetDeviceInstanceID(device);
+        SDL_Event trigger{};
+        trigger.type = SDL_CONTROLLERAXISMOTION;
+        trigger.caxis.which = instance;
+        trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+        trigger.caxis.value = SDL_JOYSTICK_AXIS_MAX;
+        options.event(app, trigger);
+        trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+        options.event(app, trigger);
+        SDL_Event button{};
+        button.type = SDL_CONTROLLERBUTTONDOWN;
+        button.cbutton.which = instance;
+        button.cbutton.button = SDL_CONTROLLER_BUTTON_A;
+        options.event(app, button);
+        button.type = SDL_CONTROLLERBUTTONUP;
+        options.event(app, button);
+        const ChallengeMode::Save cleared = ChallengeMode::loadSave(app.saveDir);
+        check(cleared.mask == 0 && std::all_of(std::begin(cleared.best), std::end(cleared.best), [](uint32_t t) { return t == 0; }),
+              "Dreamcast L+R+A clears only Stage Challenge records");
+        std::string preserved;
+        check(readFile((app.saveDir + "/progress.bin").c_str(), preserved) && preserved == std::string(unrelated, sizeof unrelated),
+              "Records delete preserves unrelated progress save");
+        trigger.caxis.value = 0;
+        trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+        options.event(app, trigger);
+        trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+        options.event(app, trigger);
+        button.type = SDL_CONTROLLERBUTTONDOWN;
+        options.event(app, button);
+        button.type = SDL_CONTROLLERBUTTONUP;
+        options.event(app, button);
+        check(options.page == -1, "A/B exits Dreamcast Records page");
+        options.page = 2;
+        button.type = SDL_CONTROLLERBUTTONDOWN;
+        button.cbutton.button = SDL_CONTROLLER_BUTTON_B;
+        options.event(app, button);
+        check(options.page == -1, "B returns from Dreamcast Records page");
+        app.saveDir = oldSaveDir;
+        fs::remove_all(saveDir, ec);
+    }
+    {
         PuzzleMode puzzle;
         check(puzzle.load(app.root, 0), "Puzzle load");
         check(puzzle.pad != nullptr, "Puzzle adopts an already-connected controller");

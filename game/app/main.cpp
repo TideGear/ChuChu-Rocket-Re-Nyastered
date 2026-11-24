@@ -2479,6 +2479,8 @@ struct DcOptionsMode : Screen {
     int genRow = 0, genSound = 1, genJump = 0, genMusic = 0, genSe = 0;
     // Settings for 4P Battle and Team Battle (Flycast frame 2750): play time 1-3 minutes, game speed 1-5, '% of ? mice' Normal/High, arrow reset Off/On. Untraced and unwired like General Settings.
     int bRow = 0, bTime = 3, bSpeed = 3, bMice = 0, bArrow = 0;
+    bool recordLeft = false, recordRight = false, recordConfirm = false, recordsDeleted = false;
+    SDL_JoystickID recordPad = -1;
     // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
     static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3; }
@@ -2532,9 +2534,38 @@ struct DcOptionsMode : Screen {
         if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
         else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.settings.battleTime = bTime; a.settings.battleSpeed = bSpeed; a.settings.battleMice = bMice; a.settings.battleArrow = bArrow; a.saveSettings(); a.playSfx(1); } else adjust(a, 1); }
         else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.setSoundOutput(genSound); a.saveSettings(); a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 3) a.playSong(genMusic); /* FUN_8c05368a: A/Start plays the selected value + 4 as a CD track */ else if (genRow == 1 || genRow == 2) adjust(a, 1); }
+        else if (page == 2) back(a); // The Dreamcast Records footer says A/B Previous.
         else openRow(a);
     }
-    void back(App& a) { if (page >= 0) { page = -1; a.playSfx(0); } else leave = true; }
+    bool deleteChallengeRecords(App& a) {
+        const uint32_t empty[26] = {}; // challenge.bin: cleared-stage mask and 25 best times
+        FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb");
+        if (!f) return false;
+        const bool wrote = fwrite(empty, sizeof empty, 1, f) == 1;
+        const bool closed = fclose(f) == 0;
+        return wrote && closed;
+    }
+    bool recordChord(App& a, SDL_JoystickID pad, int control, bool down) {
+        if (recordPad != -1 && recordPad != pad) return false;
+        if (down && recordPad == -1) recordPad = pad;
+        if (recordPad != pad) return false;
+        if (control == 0) recordLeft = down;
+        else if (control == 1) recordRight = down;
+        else recordConfirm = down;
+        if (recordLeft && recordRight && recordConfirm && !recordsDeleted) {
+            recordsDeleted = true;
+            if (!deleteChallengeRecords(a)) a.log.write(1, "could not delete Stage Challenge records");
+            else a.playSfx(1);
+            return true;
+        }
+        if (!recordLeft && !recordRight && !recordConfirm) { recordsDeleted = false; recordPad = -1; }
+        return false;
+    }
+    void back(App& a) {
+        if (page >= 0) {
+            page = -1; recordPad = -1; recordLeft = recordRight = recordConfirm = recordsDeleted = false; a.playSfx(0);
+        } else leave = true;
+    }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             switch (e.key.keysym.sym) {
@@ -2542,6 +2573,22 @@ struct DcOptionsMode : Screen {
             case SDLK_LEFT: case SDLK_a: adjust(a, -1); break; case SDLK_RIGHT: case SDLK_d: adjust(a, 1); break;
             case SDLK_RETURN: case SDLK_SPACE: accept(a); break;
             case SDLK_ESCAPE: back(a); break; default: break; }
+        } else if (page == 2 && (e.type == SDL_CONTROLLERBUTTONDOWN || e.type == SDL_CONTROLLERBUTTONUP)) {
+            const bool down = e.type == SDL_CONTROLLERBUTTONDOWN;
+            int control = -1;
+            if (e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) control = 0;
+            else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) control = 1;
+            else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A) control = 2;
+            if (control >= 0 && (recordPad == -1 || recordPad == e.cbutton.which)) {
+                const bool wasConfirm = control == 2 && recordConfirm;
+                const bool wasDeleted = recordsDeleted;
+                const bool deleted = recordChord(a, e.cbutton.which, control, down);
+                if (control == 2 && !down && wasConfirm && !wasDeleted && !deleted) back(a);
+            } else if (down && e.cbutton.button == SDL_CONTROLLER_BUTTON_B) back(a);
+        } else if (page == 2 && e.type == SDL_CONTROLLERAXISMOTION &&
+                   (e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)) {
+            const int control = e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT ? 0 : 1;
+            recordChord(a, e.caxis.which, control, e.caxis.value > SDL_JOYSTICK_AXIS_MAX / 2);
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
             switch (e.cbutton.button) {
             case SDL_CONTROLLER_BUTTON_DPAD_UP: move(a, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: move(a, 1); break;
