@@ -24,8 +24,72 @@ int main(int argc, char** argv) {
     check(app.ren != nullptr, "software renderer creation");
     check(dcMouseModelName(0, 3) == "mouse3" &&
           dcMouseModelName(1, 3) == "mouse_b" &&
-          dcMouseModelName(2, 3) == "mouse_a",
-          "Dreamcast 3D mouse type selects normal, golden, and roulette models");
+          dcMouseModelName(2, 3) == "mouse_a" &&
+          dcMouseModelName(0, 3, 1) == "chao3" &&
+          dcMouseModelName(0, 3, 2) == "pian3",
+          "Dreamcast 3D mouse type and costume select the expected model");
+    check(dcCharacterChoices(false, false) == std::vector<int>{0} &&
+          dcCharacterChoices(true, false) == (std::vector<int>{0, 1}) &&
+          dcCharacterChoices(false, true) == (std::vector<int>{0, 2}) &&
+          dcCharacterChoices(true, true) == (std::vector<int>{0, 1, 2}),
+          "Dreamcast costume selector follows Challenge and Mania unlock availability");
+    {
+        namespace fs = std::filesystem;
+        const Settings oldSettings = app.settings;
+        const std::string oldSaveDir = app.saveDir;
+        const uint32_t oldChallengeMask = app.challengeMask;
+        const bool oldChallengeMaskLoaded = app.challengeMaskLoaded;
+        uint32_t oldProgress[4]; std::memcpy(oldProgress, app.clr, sizeof oldProgress);
+        const bool oldProgressLoaded = app.clrLoaded;
+        const fs::path dir = fs::temp_directory_path() / "ccr_costume_selector_test";
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir, ec);
+        app.saveDir = dir.string();
+        app.settings.unlockAll = false;
+        app.settings.characterStyle = 2;
+        app.challengeMask = 0; app.challengeMaskLoaded = false;
+        std::memset(app.clr, 0, sizeof app.clr); app.clrLoaded = false;
+        check(app.dcCharacterStyle() == 0 && app.dcAvailableCharacterStyles() == std::vector<int>{0},
+              "locked Dreamcast costumes remain unavailable and fall back to Normal");
+        ChallengeMode::Save challenge{}; challenge.mask = 0x1ffffff;
+        { FILE* f = fopen((app.saveDir + "/challenge.bin").c_str(), "wb"); if (f) { fwrite(&challenge, sizeof challenge, 1, f); fclose(f); } }
+        uint32_t progress[4] = {0, 0, 0, 0x1ffffff};
+        { FILE* f = fopen((app.saveDir + "/progress.bin").c_str(), "wb"); if (f) { fwrite(progress, sizeof progress, 1, f); fclose(f); } }
+        app.challengeMaskLoaded = false; app.clrLoaded = false;
+        check(app.dcCostumeUnlocked(1) && app.dcCostumeUnlocked(2) &&
+              app.dcAvailableCharacterStyles() == (std::vector<int>{0, 1, 2}) && app.dcCharacterStyle() == 2,
+              "Dreamcast costume availability reads the original Challenge and Mania save masks");
+        DcOptionsMode options; options.page = 0; options.genRow = 0; options.genCharacter = 0;
+        options.adjust(app, 1);
+        check(app.settings.characterStyle == 1 && options.genCharacter == 1,
+              "General Settings selects and persists the Chao style");
+        options.adjust(app, 1);
+        check(app.settings.characterStyle == 2 && options.genCharacter == 2,
+              "General Settings advances to the Pian style");
+        options.genRow = 5;
+        options.accept(app);
+        check(app.settings.characterStyle == 0,
+              "Return to Initial Settings resets the Dreamcast character style");
+        app.settings = oldSettings; app.saveDir = oldSaveDir;
+        app.challengeMask = oldChallengeMask; app.challengeMaskLoaded = oldChallengeMaskLoaded;
+        std::memcpy(app.clr, oldProgress, sizeof oldProgress); app.clrLoaded = oldProgressLoaded;
+        fs::remove_all(dir, ec);
+    }
+    {
+        const std::string packPath = app.root + "/dreamcast/models.bin";
+        if (std::filesystem::exists(packPath)) {
+            ModelPack costumeModels;
+            check(costumeModels.load(app.ren, packPath), "load exported Dreamcast costume models");
+            bool allPoses = true;
+            for (int i = 0; i < 8; ++i) {
+                const Model3D* chao = costumeModels.find("chao" + std::to_string(i));
+                const Model3D* pian = costumeModels.find("pian" + std::to_string(i));
+                allPoses = allPoses && chao && pian && chao->tris.size() == 100 && pian->tris.size() == 90;
+            }
+            check(allPoses, "Dreamcast model pack contains all eight Chao/Pian poses with the disc mesh sizes");
+        }
+    }
     {
         const Settings savedSettings = app.settings;
         const std::string oldOptionsSaveDir = app.saveDir;

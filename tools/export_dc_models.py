@@ -12,6 +12,8 @@ import dc_models as M
 BASE = 0x8C010000
 CAT_TEX = ['CAT_c_cat01', 'CAT_c_cat02', 'CAT_c_cat03', 'CAT_c_cat04']
 MOUSE_TEX = ['MOUSE_c_mouse%02d' % n for n in (1, 2, 3, 5, 4, 6, 7, 8, 9, 10)]
+CHAO_TEX = ['CHAO_c_mouse06', 'CHAO_c_mouse08', 'CHAO_c_chao01', 'CHAO_c_chao02', 'CHAO_c_chao03', 'CHAO_c_chao08', 'CHAO_c_chao09', 'CHAO_c_chao10', 'CHAO_c_chao11']
+PIAN_TEX = ['PIAN_chu_p%02d' % n for n in range(1, 9)]
 # BATTLEMODELS texture list in the executable's order (NJS_TEXNAME array at 0x75a8c; index = material number; checked by the rocket lids using 12..15 = rokefuta01..04 and the four rocket colours)
 BATTLE_TEX = ['BATTLEMODELS_' + n for n in ['sphere_tx', 'ins', 'bluemado', 'itablue', 'itaorange', 'orangemado', 'itared', 'redmado', 'greenmado', 'itagreen', 'outs', 'rue729',
               'rokefuta01', 'rokefuta02', 'rokefuta03', 'rokefuta04', 'newk1', 'newk1s', 'newk2', 'newk2s', 'newk3', 'newk3s', 'newk4', 'newk4s', 's01', 'rfire01', 'rfire04', 'rfire03',
@@ -37,6 +39,8 @@ MODELS += [(name, off, BATTLE_TEX) for name, off in (
 
 # Mouse draw dispatcher 0x8c019e26 part trees (roots 0x8c08e138 kind 2, 0x8c0960ec kind 1, 0x8c096be8 chain); texture slots as MOUSE_TEX
 MODELS += [('mouse_a', 0x7e138, MOUSE_TEX), ('mouse_b', 0x860ec, MOUSE_TEX), ('mouse_c', 0x86be8, MOUSE_TEX), ('ghost', 0x87e44, MOUSE_TEX)]   # ghost: object 0x8c097e44 + motion 0x8c0988a0 (8 frames), drawn by 0x8c0192e0 with texture list 0x8c085d18
+MODELS += [('chao%d' % i, 0x8c818 + 0xb98 * i, CHAO_TEX) for i in range(8)]
+MODELS += [('pian%d' % i, 0x93230 + 0xb8c * i, PIAN_TEX) for i in range(8)]
 MODELS += [('h_%x' % o, o, HUD_TEX) for o in HUD_OFFS]
 
 def rot(v, a, flags):

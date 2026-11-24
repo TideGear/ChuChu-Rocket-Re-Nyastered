@@ -173,9 +173,18 @@ static bool loadStageSet(const std::string& root, int set, Stages& out) {
 }
 
 static bool challengeBoardsAvailable(const std::string& root) { Stages s; return loadStages((root + "/battle_stages.bin").c_str(), s, 3) && s.list.size() >= 25; }
-static std::string dcMouseModelName(int type, int frame) {
+static std::vector<int> dcCharacterChoices(bool challengeCleared, bool maniaCleared) {
+    std::vector<int> styles{0};
+    if (challengeCleared) styles.push_back(1);   // Chao is style 1
+    else if (maniaCleared) styles.push_back(2);  // Pians occupy the first unlocked slot if Challenge is still incomplete
+    if (challengeCleared && maniaCleared) styles.push_back(2);
+    return styles;
+}
+static std::string dcMouseModelName(int type, int frame, int style = 0) {
     if (type == 1) return "mouse_b";
     if (type == 2) return "mouse_a";
+    if (style == 1) return "chao" + std::to_string(frame & 7);
+    if (style == 2) return "pian" + std::to_string(frame & 7);
     return "mouse" + std::to_string(frame & 7);
 }
 
@@ -230,9 +239,24 @@ struct App {
     void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true; FILE* audioCapture = nullptr;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
+    uint32_t challengeMask = 0; bool challengeMaskLoaded = false;
     Sheet dcPuzzleResult, dcPuzzleSelect, dcPuzzleSaved;
     void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
     bool isCleared(int s) { loadProgress(); return s >= 0 && s < 100 && ((clr[s / 25] >> (s % 25)) & 1); }
+    uint32_t challengeClearedMask() {
+        if (!challengeMaskLoaded) { challengeMaskLoaded = true; challengeMask = 0; if (FILE* f = fopen((saveDir + "/challenge.bin").c_str(), "rb")) { (void)fread(&challengeMask, sizeof challengeMask, 1, f); fclose(f); } }
+        return challengeMask;
+    }
+    bool dcCostumeUnlocked(int style) {
+        if (style == 0 || settings.unlockAll) return true;
+        if (style == 1) return (challengeClearedMask() & 0x1ffffff) == 0x1ffffff;
+        if (style == 2) { loadProgress(); return (clr[3] & 0x1ffffff) == 0x1ffffff; }
+        return false;
+    }
+    int dcCharacterStyle() { return dcCostumeUnlocked(settings.characterStyle) ? settings.characterStyle : 0; }
+    std::vector<int> dcAvailableCharacterStyles() {
+        return dcCharacterChoices(dcCostumeUnlocked(1), dcCostumeUnlocked(2));
+    }
     int maxStage() { if (settings.unlockAll) return 3; loadProgress(); for (int i = 0; i < 3; i++) if ((clr[i] & 0x1ffffff) != 0x1ffffff) return i; return 3; }   // VMU::getPuzzleMaxStage 0x372b4
     bool setCleared(int s) {
         loadProgress(); if (s < 0 || s >= 100) return false;
@@ -316,7 +340,7 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
-    static constexpr int kDcAssetsVersion = 3;   // tools/export_dc_ui.py writes dc_assets_version.txt
+    static constexpr int kDcAssetsVersion = 4;   // tools/export_dc_ui.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets
     bool dcAssetsStale = false;
     bool loadSheet(const std::string& base, Sheet& s) {
         FILE* f = fopen((base + ".tex.bin").c_str(), "rb"); if (!f) return false;
@@ -1218,7 +1242,9 @@ struct App {
                          int mouseFrame, float cell) {
         // Mouse dispatcher 0x8c019e26 kind 2: root 0x8c08e138 drawn with c_mouse02->c_mouse04 and c_mouse03->c_mouse05 (material slots 1->4, 2->3 of MOUSE_TEX). Static node pose only; motion routine not decoded.
         static const int kind2Remap[10] = {0, 4, 3, 3, 4, 5, 6, 7, 8, 9};
-        const Model3D* m = en.mouse ? models3d.find(dcMouseModelName(en.type, mouseFrame)) : models3d.find("cat");
+        const int costume = en.mouse && en.type == 0 ? dcCharacterStyle() : 0;
+        const Model3D* m = en.mouse ? models3d.find(dcMouseModelName(en.type, mouseFrame, costume)) : models3d.find("cat");
+        if (en.mouse && costume && !m) m = models3d.find(dcMouseModelName(en.type, mouseFrame));
         const bool specialMouse = en.mouse && (en.type == 1 || en.type == 2);
         if (!m) return false;
         // Exact transform, light and scale read from the real PowerVR vertices (docs/dreamcast_models.md, 2026-11-17): scale 1.0 model unit per world unit, yaw -angle, tilt -45 about X,
@@ -2499,8 +2525,9 @@ struct DcOptionsMode : Screen {
     }
     int music() override { return -2; }   // Dreamcast CD requests from Music Test are explicit; don't stop them on the next screen pump.
     bool hasLanguagePage(App& a) const { return a.dcOptions.fr.size() >= 10; }
+    int genCharacter = 0;
     void openRow(App& a) {
-        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = std::clamp(a.settings.musicTest, 0, 14); genSe = std::clamp(a.settings.seTest, 0, 127); a.playSfx(1); }
+        if (sel == 0 && hasLanguagePage(a)) { page = 0; genRow = 0; genCharacter = a.dcCharacterStyle(); genSound = a.settings.soundOutput; genJump = a.settings.jumpPack; genMusic = std::clamp(a.settings.musicTest, 0, 14); genSe = std::clamp(a.settings.seTest, 0, 127); a.playSfx(1); }
         else if (sel == 1 && hasLanguagePage(a)) { page = 1; bRow = 0; bTime = a.settings.battleTime; bSpeed = a.settings.battleSpeed; bMice = a.settings.battleMice; bArrow = a.settings.battleArrow; a.playSfx(1); }
         else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {
@@ -2522,6 +2549,13 @@ struct DcOptionsMode : Screen {
         }
         if (page != 0) return;
         switch (genRow) {
+        case 0: {
+            const std::vector<int> styles = a.dcAvailableCharacterStyles();
+            auto it = std::find(styles.begin(), styles.end(), genCharacter);
+            int at = it == styles.end() ? 0 : static_cast<int>(it - styles.begin());
+            at = (at + (d > 0 ? 1 : static_cast<int>(styles.size()) - 1)) % static_cast<int>(styles.size());
+            genCharacter = styles[at]; a.settings.characterStyle = genCharacter; a.saveSettings(); a.playSfx(0); return;
+        }
         case 1: genSound = !genSound; break;
         case 2: genJump = !genJump; break;
         case 3: genMusic = (genMusic + 15 + d) % 15; break;   // Options > Music test wraps 0 <-> 14 on the real screen (15 songs = CD tracks 4..18)
@@ -2533,7 +2567,7 @@ struct DcOptionsMode : Screen {
     void accept(App& a) {
         if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
         else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.settings.battleTime = bTime; a.settings.battleSpeed = bSpeed; a.settings.battleMice = bMice; a.settings.battleArrow = bArrow; a.saveSettings(); a.playSfx(1); } else adjust(a, 1); }
-        else if (page == 0) { if (genRow == 5) { genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.setSoundOutput(genSound); a.saveSettings(); a.playSfx(1); } else if (genRow == 4) a.playSfx(genSe); else if (genRow == 3) a.playSong(genMusic); /* FUN_8c05368a: A/Start plays the selected value + 4 as a CD track */ else if (genRow == 1 || genRow == 2) adjust(a, 1); }
+        else if (page == 0) { if (genRow == 5) { genCharacter = 0; genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.characterStyle = genCharacter; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.setSoundOutput(genSound); a.saveSettings(); a.playSfx(1); } else if (genRow == 0 || genRow == 1 || genRow == 2) adjust(a, 1); else if (genRow == 4) a.playSfx(genSe); else if (genRow == 3) a.playSong(genMusic); /* FUN_8c05368a: A/Start plays the selected value + 4 as a CD track */ }
         else if (page == 2) back(a); // The Dreamcast Records footer says A/B Previous.
         else openRow(a);
     }
@@ -2543,6 +2577,7 @@ struct DcOptionsMode : Screen {
         if (!f) return false;
         const bool wrote = fwrite(empty, sizeof empty, 1, f) == 1;
         const bool closed = fclose(f) == 0;
+        if (wrote && closed) { a.challengeMask = 0; a.challengeMaskLoaded = true; }
         return wrote && closed;
     }
     bool recordChord(App& a, SDL_JoystickID pad, int control, bool down) {
@@ -2630,9 +2665,15 @@ struct DcOptionsMode : Screen {
             };
             static const char* const labels[5] = {"Character", "Sound output", "Jump Pack", "Music test", "SE test"};
             for (int i = 0; i < 5; ++i) text(labels[i], 80, 149 + 32 * i);
-            box(260, 0, 96); box(genSound ? 416 : 0, 1, genSound ? 96 : 0); box(genJump ? 0 : 272, 2, genJump ? 0 : 48); if (genJump) box(374, 2, 36);
+            const std::vector<int> styles = a.dcAvailableCharacterStyles();
+            const auto selectedStyle = std::find(styles.begin(), styles.end(), genCharacter);
+            const int styleSlot = selectedStyle == styles.end() ? 0 : static_cast<int>(selectedStyle - styles.begin());
+            if (styleSlot == 0) box(260, 0, 96); else box(362 + (styleSlot - 1) * 24, 0, 24);
+            box(genSound ? 416 : 0, 1, genSound ? 96 : 0); box(genJump ? 0 : 272, 2, genJump ? 0 : 48); if (genJump) box(374, 2, 36);
             for (int i = 0; i < 5; ++i) text("<", 248, 149 + 32 * i);
-            text("Normal", 272, 149); text(".?.?.", 362, 149); text("Download", 465, 149); text(">", 584, 149);
+            text("Normal", 272, 149);
+            text(".?.?.", 362, 149);
+            text("Download", 465, 149); text(">", 584, 149);
             text("Monaural", 272, 181); text("/", 384, 181); text("Stereo", 428, 181); text(">", 524, 181);
             text("Off", 278, 213); text("/", 337, 213); text("On", 380, 213); text(">", 428, 213);
             digits(genMusic, 2, 274, 245); text(">", 332, 245);
@@ -3443,7 +3484,7 @@ struct ChallengeMode : Screen {
     void saveResult(App& a) { logResult(a);   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
         Save s = loadSave(a.saveDir); previousTotal = 0; for (uint32_t seconds : s.best) previousTotal += seconds; const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur]; resultTotal = 0; for (uint32_t seconds : s.best) resultTotal += seconds;
-        if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); }
+        if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
