@@ -3212,7 +3212,8 @@ struct PuzzleMode : Screen {
     bool clearSaved = false;
     ccr::Tutorial tut; int tutTicks = 0, tutPrevState = 0; bool basics = false;   // The Basics (HD 1.0 PuzzleGameScreen tutorial; core/tutorial.hpp)
     void tutGo() { if (tut.enabled && tut.mode == 2) tut.trigger(true, false); }   // handleInput 0x13050-0x1316a: the Go press sets flag 1 and, in a wait-for-Go step (mode 2), starts the next step
-    bool goBlocked() const { return tut.enabled && (tut.mask & 1) != 0; }   // handleInput: the Go button is ignored while step flag 1 is set
+    bool tutIntro() const { return tut.enabled && tutTicks <= 0x77; }   // `puzzlestage_endflag` (0x105154) is 0 until the stage intro ends: handleInput (0x1305a) ignores input and render (0x13590) skips the dialog until then; PuzzleStageControll ends it at counter > 0x77 (the tap shortcut, flag 4, is not wired)
+    bool goBlocked() const { return tut.enabled && ((tut.mask & 1) != 0 || tutIntro()); }   // handleInput: the Go button is ignored while step flag 1 is set
     bool launchSoundStarted = false;
     ccr::PuzzleAudioRequests puzzleAudioRequests;
     std::array<DcRocketLid, kCols * kRows> launchLids{};
@@ -3237,7 +3238,7 @@ struct PuzzleMode : Screen {
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 6, curY = 4; SDL_GameController* pad = nullptr;
     bool putAt(int cx, int cy, int d) {
-        if (tut.enabled && (tut.mask & 4)) return false;   // handleInput: no arrow input while step flag 4 is set
+        if (tut.enabled && ((tut.mask & 4) || tutIntro())) return false;   // handleInput: no arrow input while step flag 4 is set
         sim.removeArrow(cx, cy); bool ok = false; if (d >= 0 && used(d) < stock[d]) ok = sim.placeArrow(cx, cy, d);
         if (tut.enabled) { tut.f74 = true; if (ok && tut.mode == 1) { tut.t4c = -1; tut.trigger(true, false); } }   // AR_PutArrowPzSp (line 15717): a placed arrow in a wait-for-arrow step starts the next step
         return ok; }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
@@ -3678,7 +3679,7 @@ struct PuzzleMode : Screen {
             a.drawDcPause(0.0f);
             return;
         }
-        if (tut.enabled && tut.text >= 0) drawTutorialDialog(a);
+        if (tut.enabled && tut.text >= 0 && !tutIntro()) drawTutorialDialog(a);
         if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
             SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0xc0); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all);
             if (phonePause) {
