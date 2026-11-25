@@ -128,6 +128,27 @@ The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `
 | 18-22 | 0x8c05cfba, 0x8c05d39a, 0x8c05d55a, 0x8c05dc80, 0x8c05df12 | unidentified | open |
 Modes 4, 16 (tutorial per the style variable) and 18-22 are still unidentified (no strings in their init code, none reached by the captures yet). Next: trigger them in Flycast (tutorial, options, help, credits, roulette, results, VMU screens), read `0x8c1af108` for each, then give every screen of every mode its own row. Method: `flyhost` with `FLY_WATCH=1af108:4:<frame>` logs the mode variable every frame while a key script walks the menus; screenshots beside the log name the screen.
 
+## Dreamcast Puzzle task inventory (from the code, 2026-11-25)
+
+Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c01f0a0` / `0x8c01f012` and the update swap `0x8c01f220` in 1ST_READ) crossed with the tasks live in the task pool (`0x8c1d9b30`, 88-byte slots, update at +64, draw at +68) of every Puzzle-mode RAM dump on hand (placing, running, pause, failure, clear, launch). The static scan is a lower bound: it misses callbacks passed through tables or registers (live update `0x8c01958e` is not found by it yet). Sound and music calls are not inventoried yet.
+
+| Update / draw | What it is | Port |
+| --- | --- | --- |
+| `0x8c010494` / `0x8c0104e0` | always live; draws object `0x8c0b2b04` | unidentified |
+| `0x8c0113f0` / `0x8c011198` (state `0x8c011340`) | cat | ported (walk, pose, light open: cat shading) |
+| `0x8c014054` / `0x8c01406a` | short task spawned by the cursor update (`0x8c014100`); seen at the clear | unidentified |
+| `0x8c0145ee` / `0x8c0146e6` | cursor (pointer and bracket) | ported |
+| `0x8c0191d4` / `0x8c0192e0` | seen in failure runs only | unidentified |
+| `0x8c019880` / `0x8c01944c` (states `0x8c0195d4`, `0x8c01952e`, `0x8c019688`, `0x8c01958e`) | mouse: run, entering a rocket, others | run ported; the other states unchecked |
+| `0x8c01b8a0`, `0x8c01b976`, `0x8c01b9a0` | rocket launch body, lid, flame/smoke | ported |
+| `0x8c01c26e` / `0x8c01c31a` | parked dome | ported |
+| `0x8c01c380` | dome pulse decay (with add `0x8c01cbc8`) | ported 2026-11-25 |
+| `0x8c01cbfa` / `0x8c01cc10` | 15-pass effect at the clear; draws `0x8c0b4ba8` / `0x8c0b2dac` | unidentified |
+| `0x8c01f272` / `0x8c01f2a0` | always live; draws `0x8c085c60` / `0x8c0b36f0` | unidentified |
+| `0x8c02b73a` / `0x8c02b73e` | always live; Puzzle screen task (texture lists `0x8c0bda90`..) | HUD ported; contents unchecked |
+| `0x8c02c4e0` / `0x8c02c4f8` | failure focus ring | ported 2026-11-25 |
+| `0x8c02ccc0` / `0x8c02ccd8` | seen at the clear; draws `0x8c0be388` | unidentified |
+
 ## Next work
 
 - Finish the Dreamcast presentation gaps above, beginning with exact Challenge clocks, alternate clear states and sound. Keep capture and Ghidra details in the [handoff](HANDOFF.md).
