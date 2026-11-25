@@ -3211,6 +3211,7 @@ struct PuzzleMode : Screen {
     int clearFrames = 0;
     bool clearSaved = false;
     ccr::Tutorial tut; int tutTicks = 0, tutPrevState = 0; bool basics = false;   // The Basics (HD 1.0 PuzzleGameScreen tutorial; core/tutorial.hpp)
+    void tutGo() { if (tut.enabled && tut.mode == 2) tut.trigger(true, false); }   // handleInput 0x13050-0x1316a: the Go press sets flag 1 and, in a wait-for-Go step (mode 2), starts the next step
     bool goBlocked() const { return tut.enabled && (tut.mask & 1) != 0; }   // handleInput: the Go button is ignored while step flag 1 is set
     bool launchSoundStarted = false;
     ccr::PuzzleAudioRequests puzzleAudioRequests;
@@ -3289,11 +3290,11 @@ struct PuzzleMode : Screen {
                 return;
             }
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0, pf(a));
-            if (k == SDLK_SPACE) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; } } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
+            if (k == SDLK_SPACE) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; tutGo(); } } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
             else if (k == SDLK_p) {
                 // Dreamcast: Start only pauses (pause controller 0x8c01a174; Flycast pa1 frame 2500 shows the placing board idle under the overlay). The mobile
                 // look keeps the port's Start-runs-the-puzzle convenience for setups without a Start/Dash button.
-                if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; } dash = false; }
+                if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; }
                 pauseState.press();
             }
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
@@ -3322,16 +3323,16 @@ struct PuzzleMode : Screen {
             mouseCursor = false;
             { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) { if (state == 0 && putAt(curX, curY, d)) a.playSfx(1); }
             else if (b == pm.pause) {
-                if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); }   // Dreamcast: Start only pauses (see the key path)
+                if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; a.playSfx(2); }   // Dreamcast: Start only pauses (see the key path)
                 pauseState.press();
             } else if (b == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-                if (state == 0) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); }
+                if (state == 0) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; a.playSfx(2); }
                 else if (running && !dash) { dash = true; a.playSfx(0xc); }
             } }
         }
         else if (e.type == SDL_CONTROLLERAXISMOTION && pad && e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT &&
                  SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.caxis.which && e.caxis.value > 16000 && !paused) {
-            if (state == 0) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); }
+            if (state == 0) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; a.playSfx(2); }
             else if (running && !dash) { dash = true; a.playSfx(0xc); }
         }
     }
@@ -3402,7 +3403,7 @@ struct PuzzleMode : Screen {
         const bool phoneHud = phonePuzzleHudAvailable(a);
         const bool dcControls = dreamcastPuzzleControls(a);
         auto inRect = [&](const SDL_Rect& r) { return in(r.x, r.y, r.x + r.w, r.y + r.h); };
-        if (dcControls ? inRect(dcStartRect) : phoneHud ? handset(0, 0, 56, 40) : in(18, 88, 160, 190)) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
+        if (dcControls ? inRect(dcStartRect) : phoneHud ? handset(0, 0, 56, 40) : in(18, 88, 160, 190)) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
         if (dcControls ? inRect(dcCancelRect) : phoneHud ? handset(0, 39, 56, 84) : in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
         return false;
@@ -5444,11 +5445,11 @@ int main(int argc, char** argv) {
         const char* keyTickOption = getenv("CCR_KEY_TICK");
         const int keyTick = keyTickOption ? atoi(keyTickOption) : -1;
         if (keyTick < 0) sendKeys();
-        std::vector<std::array<int, 3>> clicks; if (const char* c = getenv("CCR_CLICKS")) { int t, x, y, n; const char* p = c; while (sscanf(p, "%d:%d,%d%n", &t, &x, &y, &n) == 3) { clicks.push_back({t, x, y}); p += n; if (*p == ';') p++; else break; } }   // headless test input: tick:x,y;... (window pixels)
+        std::vector<std::array<int, 5>> clicks; if (const char* c = getenv("CCR_CLICKS")) { int t, x, y, n; const char* p = c; while (sscanf(p, "%d:%d,%d%n", &t, &x, &y, &n) == 3) { p += n; int x2 = x, y2 = y; if (*p == '>' && sscanf(p + 1, "%d,%d%n", &x2, &y2, &n) == 2) p += 1 + n; clicks.push_back({t, x, y, x2, y2}); if (*p == ';') p++; else break; } }   // headless test input: tick:x,y[>x2,y2];... (window pixels; ">" releases elsewhere = a swipe)
         if (const char* clock = getenv("CCR_GLOBAL_TIME")) app.globalTime = (uint32_t)strtoul(clock, nullptr, 0);
         int lastSong = -2; for (int i = 0; i < ticks; i++) {
             if (i == keyTick) sendKeys();
-            for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ck[1]; e.button.y = ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); ++app.globalTime; if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST")) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; if (lastSong >= 0) printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); else printf("tick %d: music stopped\n", i); } } }
+            for (auto& ck : clicks) if (ck[0] == i) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ty == SDL_MOUSEBUTTONUP ? ck[3] : ck[1]; e.button.y = ty == SDL_MOUSEBUTTONUP ? ck[4] : ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); ++app.globalTime; if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST")) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; if (lastSong >= 0) printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); else printf("tick %d: music stopped\n", i); } } }
         mode->draw(app, 1.0f);
         const int result = saveFrame(app.ren, shot);
         mode.reset(); app.battlePreviewTexture.reset(); app.rouletteDraw.reset(); app.models3d.clear(); SDL_Quit();
