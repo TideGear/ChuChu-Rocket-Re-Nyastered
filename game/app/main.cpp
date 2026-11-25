@@ -3510,7 +3510,7 @@ struct PuzzleMode : Screen {
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
         const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
         if (hasBoardTasks) {
-            if (showCursor && ((dreamcastPuzzleControls(a) && !mouseCursor) || (sim.coll[aimY][aimX] & 0xF00))) a.queueBracket(aimX, aimY, 0, cticks);   // Flycast Puzzle 01 and 02: the pad cursor's corner bracket
+            if (showCursor && ((dreamcastPuzzleControls(a) && !mouseCursor) || (sim.coll[aimY][aimX] & 0xF00))) a.queueBracket(aimX, aimY, 0, cticks, dreamcastPuzzleControls(a) && (sim.coll[aimY][aimX] & 0xF00));   // Flycast Puzzle 01 and 02: the pad cursor's corner bracket; on a rocket it is dimmed like Battle's (flyhost frame 2485 on the column-5 rocket: vertex colour c0717171)
             const int set = gApp ? gApp->stageSet : 0;
             a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
             for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, pf(a));
