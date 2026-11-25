@@ -389,6 +389,14 @@ def main(prs_png, out, png=None):
     export_puzzle_result(prs_png, out)
     export_puzzle_select(prs_png, out)
     export_mode_select(prs_png, png, out)
+    # Battle countdown banners (texture list loaded by 0x8c028ee0 in this order: count1-3, ato30, ato1, ato2, start; drawn by task 0x8c028d90 as NJS_SPRITE 0x8c0bc514).
+    # The count digits decode transposed like the other twiddled sheets; the rest are upright.
+    if png:
+        names = ['COUNT1', 'COUNT2', 'COUNT3', 'ATO30', 'ATO1', 'ATO2', 'START']
+        paths = [os.path.join(png, f'ENGLISH__{n}.png') for n in names]
+        if all(os.path.exists(q) for q in paths):
+            tiles = [Image.open(q).convert('RGBA') for q in paths]
+            export_atlas(out, 'dc_battle_count', [t.transpose(Image.Transpose.TRANSPOSE) if i < 3 else t for i, t in enumerate(tiles)])
     for src, name, src_dir in (
         ('TITLE_newtitle0.png', 'dlogo', prs_png),
         ('ENGLISH__PRESSSTART.png', 'dpress', png),

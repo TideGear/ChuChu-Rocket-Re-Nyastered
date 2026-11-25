@@ -175,9 +175,9 @@
       ],
       "env": {
         "CCR_MODELS": "1",
-        "CCR_TICKS": "30"
+        "CCR_TICKS": "94"
       },
-      "note": "tick 30 is the best of a 10-80 sweep (2.13; 35 gives 2.17, 31 2.79); left: the START text, cursor pulse size, stars",
+      "note": "tick 94: the START banner (Dreamcast task 0x8c028d90, scale age * 0.09) matches its size here; 30 was a local minimum of the cursor pulse",
       "elements": {
         "board": [
           136,
@@ -196,6 +196,12 @@
           0,
           135,
           456
+        ],
+        "start_banner": [
+          320,
+          195,
+          400,
+          222
         ]
       }
     },

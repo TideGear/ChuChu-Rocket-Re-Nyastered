@@ -361,7 +361,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud;
+    Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -464,6 +464,7 @@ struct App {
         loadSheet(ret + "dc_puzzle_plate", dcPuzzlePlate);
         loadSheet(ret + "dc_puzzle_labels", dcPuzzleLabels);
         loadSheet(ret + "dc_pause", dcPause);
+        loadSheet(ret + "dc_battle_count", dcBattleCount);
         loadSheet(ret + "dc_pause_boxes", dcPauseBoxes);
         loadSheet(ret + "dc_pause_team", dcPauseTeam);
         loadSheet(ret + "dc_pause_marks", dcPauseMarks);
@@ -1173,6 +1174,18 @@ struct App {
         static const int tab[7][2] = {{107, 0}, {107, 1}, {107, 2}, {108, 2}, {108, 0}, {108, 1}, {109, 0}};   // table at 0xe76a4 (image id, frame); modes 0..2 = the big 3-2-1 digits, 3..5 = 30 seconds / 1 minute / 2 minutes left, 6 = Round START
         float base = m > 5 ? (float)t * 0.09f : (m <= 2 ? 8.0f + (float)t * -0.13f : 4.0f + (float)t * -0.033f);
         drawImage(tab[m][0], tab[m][1], 600.0f, 350.0f, 0, base * 2.0f, 255); }
+    // Dreamcast countdown banner task (update 0x8c028d40, draw 0x8c028d90): NJS_SPRITE 0x8c0bc514 at (360, 208) on the 640 x 480 screen, scale age * 0.09 for START (6),
+    // 4 - age * 0.033 for the time-left lines (3-5), 8 - age * 0.13 for the 3-2-1 digits (0-2); texanim 0x8c0bc488 sizes 64x64 / 128x64 / 128x32 with pivots (31,31) / (63,31) / (63,15).
+    bool drawDcBattleCount(int m, int t) {
+        if (!dcBattleCount.tex || m < 0 || m >= (int)dcBattleCount.fr.size()) return false;
+        const float s = m > 5 ? t * 0.09f : m <= 2 ? 8.0f - t * 0.13f : 4.0f - t * 0.033f;
+        if (s <= 0.0f) return true;
+        const SDL_Rect& src = dcBattleCount.fr[m];
+        const float cx = m <= 2 ? 31.0f : 63.0f, cy = m <= 2 ? 31.0f : m == 6 ? 15.0f : 31.0f;
+        const SDL_FRect dst{(360.0f - cx * s) * 1.6f, (208.0f - cy * s) * 1.6f, src.w * s * 1.6f, src.h * s * 1.6f};
+        SDL_RenderCopyF(ren, dcBattleCount.tex, &src, &dst);
+        return true;
+    }
     void roundPanel(int n, int t) {   // RoundCountDrawPriority: the "Round" label and the two digits of the round number, moving and growing for 75 ticks
         float ft = (float)t; float y = 350.0f + ft * -0.21f;
         drawImage(109, 1, 570.0f + ft * -3.67f, y, 0, ft * 0.04f, 255);
@@ -4630,7 +4643,8 @@ struct BattleMode : Screen {
               const int frames[] = {mm % 10, 10, ss / 10, ss % 10};
               for (int i = 0; i < 4; ++i) a.blit(a.timefont, frames[i], 65.0f + i * 19.0f, y, scale);
           } }
-        SDL_RenderSetViewport(a.ren, nullptr); if (!a.dcLook) for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // iPad banner tasks drawn over the HUD (mobile art: not in the Dreamcast look)
+        SDL_RenderSetViewport(a.ren, nullptr); if (!a.dcLook) for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }
+        else for (auto& bn : banners) if (bn.kind == 0) a.drawDcBattleCount(bn.mode, bn.tick);   // the Dreamcast Round panel (task 0x8c029102) is not traced yet   // iPad banner tasks drawn over the HUD (mobile art: not in the Dreamcast look)
         int rollTick, roller, outcome;
         if (game.rouletteDrawState(rollTick, roller, outcome)) {
             const auto& cell = game.sim.rocketPos[roller];
