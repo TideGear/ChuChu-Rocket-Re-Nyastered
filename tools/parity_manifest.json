@@ -1682,6 +1682,36 @@
           140
         ]
       }
+    },
+    {
+      "name": "challenge_play_a1_dim_bracket",
+      "ref": "local/chbr/c__02584.bmp",
+      "args": [
+        "challenge",
+        "0"
+      ],
+      "env": {
+        "CCR_MODELS": "1",
+        "CCR_KEYS": "E",
+        "CCR_PAD_CELL": "3,3",
+        "CCR_KEY_TICK": "5",
+        "CCR_TICKS": "286"
+      },
+      "elements": {
+        "board": [
+          136,
+          16,
+          604,
+          368
+        ],
+        "bracket_cell": [
+          245,
+          130,
+          300,
+          180
+        ]
+      },
+      "note": "flyhost Challenge A1, cursor on the rocket cell (LEFT@2520, LEFT@2540), shot 2584 = tick 286; the dimmed bracket (grey 127, no size pulse, 0x8c01480c)"
     }
   ]
 }

@@ -3739,7 +3739,7 @@ struct ChallengeMode : Screen {
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
         for (int i = 0; i < SDL_NumJoysticks(); ++i) openController(i);
         begin(stage); return true; }
-    void begin(int stage) { paused = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
+    void begin(int stage) { paused = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; { int hx, hy; if (const char* pc = getenv("CCR_PAD_CELL"); pc && sscanf(pc, "%d,%d", &hx, &hy) == 2) padAim = PadAim{(hx + 0.5f) * kCell, (hy + 0.5f) * kCell}; }   /* headless test hook (port-only): start the pad cursor on a cell, e.g. to match a Flycast frame taken after pad moves */ mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
         if (battle) bgame.start(stages.list[cur].st, cur, (uint32_t)SDL_GetTicks() * 2654435761u + (uint32_t)cur); else game.start(stages.list[cur].st, cur);   // types 3 and 4 run on the battle engine (core/challenge_battle.hpp)
         prev.clear(); }
     int phase() const { return battle ? bgame.phase : game.phase; }
