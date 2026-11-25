@@ -37,13 +37,13 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 
 ## Next tasks (milestone: Dreamcast Puzzle end to end)
 
-1. **Stream tool:** one `tools/oracle/ta_dump.py` that finds the first polygon header (lists start at e.g. 0x253e10; vertices can sit 16 bytes off the 32-byte grid), the VRAM base per state (method in `local/findbase.py`: re-encode models.bin textures and vote; base differs per run), and renders a chosen polygon set with its texture. Every residue task below needs it.
+1. **Stream tool: done** (`tools/oracle/ta_dump.py info|list|tex|render`). Open in it: how characters are ordered (all their vertices have z = 0.005; Flycast draws the rocket dome over the mouse, the tool's depth test does not).
 2. **Puzzle visible-gap sweep:** one Flycast shot per Puzzle state (select, placing, run, pause, clear, fail, launch, result/save) against the port; list gross differences (missing animation, pose, effect) before any residue work. Star twinkles are known missing.
 3. **Re-measure under "pass (rounding)":** Pian right mice (1.036; signed +1.6 R / +0.2 G / +1.5 B, 0 off-edge px) and other elements near 1; update audit.md.
 4. **Hard 05 cat shading:** body strips at 0x269cd0 / 0x269f30 in `local/hd5/p_02390.state` (intensity 0.30-0.85); a single light vector does not fit, so trace the cat normal transform (draw `0x8c0119fe`, morph `0x8c0e673e`).
 5. **Puzzle pad tip:** about 4% too large on Normal 03, pulse counter not the game clock (series in local/pz3s).
 
-Other open (outside the milestone): Challenge dim-bracket crop 7.46 (pointer edges, rocket pose); golden mouse (only polygons with face colour 2.0 per channel, textures 080e5700/080e5b00, base 0x271594 in local/gold5; rasterise the strips and diff before changing the port); START banner 2.39 (alpha-0 colour, texel precision and vertex colour ruled out; left: 4444 filter order).
+Other open (outside the milestone): Challenge dim-bracket crop 7.46 (pointer edges, rocket pose); golden mouse (face colour 2.0 acts as 1.0, so the port's intensity is right; the crop's 31.5 is draw ordering); START banner 2.39 (alpha-0 colour, texel precision and vertex colour ruled out; left: 4444 filter order).
 
 ## Blocked (needs an input first)
 
