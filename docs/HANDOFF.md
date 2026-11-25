@@ -16,7 +16,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: the full-frame sweep (ages -9..80) passes; only the age -1 dome crops pass per element.
 
-## Done this session (2026-11-24; evidence in roadmap.md "2026-11-24 session notes")
+## Done 2026-11-24 (evidence in archive/roadmap_2026-11-12_to_11-25.md, "2026-11-24 session notes")
 
 - Mouse pose follows the global clock ((clock - 1) & 7 on unpaused passes; Flycast RAM shows no reset at stage start).
 - Puzzle pause overlay: every element passes (exact float placement). Japanese pause case passes too.
@@ -62,7 +62,7 @@ Look separation: `py tools/look_leak.py <exe> <one-platform cache> local/e2e-202
 - Pad records are Shinobi `PDS_PERIPHERAL` (52 bytes at `0x8c1aee88`): +8 held, +0x10 pressed; bits C 1, B 2, A 4, Start 8, Up 0x10, Down 0x20, Left 0x40, Right 0x80, Z 0x100, Y 0x200, X 0x400, R 0x10000, L 0x20000.
 - Fresh caches: `local/e2e-20261124/cfg-{dc,mobile,both}/assets`; older `local/goal-dc-fresh-setup/assets`; full dev cache `local/cache/assets`.
 - Launch saved states: `local/session-resume/puzzle-clear/s00070.state`, `s00085.state`, `s00100.state`. Aligned captures: `local/star-trace/lau`.
-- Status docs: `docs/goal.md`, `docs/audit.md` (coverage), `docs/roadmap.md` (evidence), `docs/verification.md`, `docs/audio.md`. Do not claim parity from harness coverage alone.
+- Status docs: `docs/goal.md`, `docs/audit.md` (coverage), `docs/roadmap.md` (current evidence; older log in `docs/archive/`), `docs/verification.md`, `docs/audio.md`. Do not claim parity from harness coverage alone.
 - Build: `build.cmd --target <targets>` (pinned Zig/CMake/Ninja into `build/game`). Python with Pillow: `local/tools/windows/python-3.12.10-pillow-12.2.0/python.exe`; tools needing numpy (`pair_assets.py`) run with the system `py`.
 
 ## Constraints
