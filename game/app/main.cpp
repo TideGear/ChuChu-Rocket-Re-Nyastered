@@ -1242,10 +1242,24 @@ struct App {
         else blit(cur, bracket ? 4 : player & 3, x, y, scale);
     }
     // Corner brackets are drawn by board() between the floor and the walls: in Flycast (Challenge frame 2500) the walls hide parts of the bracket.
-    struct QueuedBracket { int cx, cy, player, ticks; };
+    struct QueuedBracket { int cx, cy, player, ticks; bool dim; };
     std::vector<QueuedBracket> queuedBrackets;
-    void queueBracket(int cx, int cy, int player, int ticks) { queuedBrackets.push_back({cx, cy, player, ticks}); }
-    void flushBrackets(FieldLayout field) { auto q = std::move(queuedBrackets); queuedBrackets.clear(); for (const auto& b : q) cursor(b.cx, b.cy, b.player, b.ticks, true, field); }
+    void queueBracket(int cx, int cy, int player, int ticks, bool dim = false) { queuedBrackets.push_back({cx, cy, player, ticks, dim}); }
+    // Battle cursor draw 0x8c0146e6: on a cell whose word has any of 0xF00 (rocket, generator, hole, arrow) the bracket's vertex colour is alpha 0xc0 and grey
+    // 0x80 + trunc(16 * sin((task+32) >> 2)), task+32 = (player << 14) + 0x1000 per pass (update 0x8c0145ee); otherwise opaque white. Flycast 3100: 0x80/0x86/0x8b/0x8e for players 0-3.
+    void flushBrackets(FieldLayout field) {
+        auto q = std::move(queuedBrackets); queuedBrackets.clear();
+        for (const auto& b : q) {
+            SDL_Texture* t = useDcCursors() && dcCursorBracket.tex ? dcCursorBracket.tex : nullptr;
+            if (b.dim && t) {
+                const int ang = (b.player << 14) + 0x1000 * b.ticks;
+                const int grey = 0x80 + (int)(16.0f * std::sin(((ang >> 2) & 0xffff) * (6.283185307f / 65536.0f)));
+                SDL_SetTextureColorMod(t, (Uint8)grey, (Uint8)grey, (Uint8)grey); SDL_SetTextureAlphaMod(t, 0xc0);
+            }
+            cursor(b.cx, b.cy, b.player, b.ticks, true, field);
+            if (b.dim && t) { SDL_SetTextureColorMod(t, 255, 255, 255); SDL_SetTextureAlphaMod(t, 255); }
+        }
+    }
     void cursor(int cx, int cy, int player, int ticks, bool bracket = false, FieldLayout field = {}) {
         cursorAt(field.x(cx + 0.5f), field.y(cy + 0.5f), player, ticks, bracket, field.scale());
     }
@@ -4566,7 +4580,7 @@ struct BattleMode : Screen {
             const auto [cpuX, cpuY] = cpuCursor ? cursorCell(p) : std::pair<int, int>{-1, -1};
             const int x = cpuCursor ? cpuX : mouse ? aim.cellX() : curX[p];
             const int y = cpuCursor ? cpuY : mouse ? aim.cellY() : curY[p];
-            if ((dcProjection && !mouse) || (game.sim.coll[y][x] & 0xF00)) a.queueBracket(x, y, p, game.frame);
+            if ((dcProjection && !mouse) || (game.sim.coll[y][x] & 0xF00)) a.queueBracket(x, y, p, game.frame, dcProjection && (game.sim.coll[y][x] & 0xF00));
         }
         { static const int fc[4] = {1, 3, 4, 5}; a.board(stages.list[cur].st, fc[cur & 3], 0, field); }   // battle floor colour {1,3,4,5}[stage & 3], wall colour 0 (createPlayfieldPreview)
         for (auto& ar : game.sim.arrows) if (ar.live) {

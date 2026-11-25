@@ -13,7 +13,7 @@ Frames used (all local, never committed): Puzzle `local/star-trace/star02390.sta
 | Holes, arrow icons | opaque | 0.0046-0.0051 | opaque | Puzzle arrow-stock icon `080b0bf8` sits at z 0.0051 |
 | Rocket domes | opaque, after walls | 0.0046 | opaque | see below: two stacked pieces per dome in Challenge and Team Battle |
 | Mice, cats | opaque, after domes | 0.0045-0.0048 | opaque | per-mouse pieces (`0804a900`, `0804aa00` in Puzzle; `08073530`/`08073630` in Challenge) |
-| Cell corner bracket | 2D list, translucent poly `000adcf8` | 0.0046 | srcA -> 1-srcA | depth-tested at floor depth, so walls (nearer) hide parts of it: fixed in the port 2026-11-19 (App::queueBracket, drawn between floor and walls) |
+| Cell corner bracket | 2D list, translucent poly `000adcf8` | 0.0046 | srcA -> 1-srcA | depth-tested at floor depth, so walls (nearer) hide parts of it: fixed in the port 2026-11-19 (App::queueBracket, drawn between floor and walls). On a cell with any of 0xF00 set the Battle bracket is vertex colour 0xc0 alpha and a grey that pulses 0x80 +/- 16 (draw 0x8c0146e6), ported 2026-11-24 |
 | Arrow cursor | 2D list, `100ad4f8` | 0.0055 | srcA -> 1-srcA | nearer than everything on the board: always on top |
 | HUD sprites | 2D list | 0.005 (panels) to 0.2 (overlays) | mostly srcA -> 1-srcA | the START word is 0.1 |
 
