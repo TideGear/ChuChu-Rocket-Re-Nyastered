@@ -290,10 +290,11 @@ struct App {
     }
     void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true; FILE* audioCapture = nullptr;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
-    uint32_t clr[4] = {0, 0, 0, 0}; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
+    uint32_t clr[4] = {0, 0, 0, 0}, tutDone = 0; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
     uint32_t challengeMask = 0; bool challengeMaskLoaded = false;
     Sheet dcPuzzleResult, dcPuzzleSelect, dcPuzzleSaved;
-    void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); fclose(f); } if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
+    void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); else { uint32_t t = 0; if (fread(&t, 4, 1, f) == 1) tutDone = t; } fclose(f); }   // fifth word: VMU::isTutorialCleared (0x37008, VMU +4); older 16-byte files read as not cleared
+        if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff; }
     bool isCleared(int s) { loadProgress(); return s >= 0 && s < 100 && ((clr[s / 25] >> (s % 25)) & 1); }
     uint32_t challengeClearedMask() {
         if (!challengeMaskLoaded) { challengeMaskLoaded = true; challengeMask = 0; if (FILE* f = fopen((saveDir + "/challenge.bin").c_str(), "rb")) { (void)fread(&challengeMask, sizeof challengeMask, 1, f); fclose(f); } }
@@ -315,10 +316,16 @@ struct App {
         clr[s / 25] |= 1u << (s % 25);
         FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb");
         if (!f) return false;
-        const bool wrote = fwrite(clr, 4, 4, f) == 4;
+        const bool wrote = fwrite(clr, 4, 4, f) == 4 && fwrite(&tutDone, 4, 1, f) == 1;
         const bool closed = fclose(f) == 0;
         return wrote && closed;
     }
+    bool isTutorialCleared() { loadProgress(); return tutDone != 0 || settings.unlockAll || getenv("CCR_CLEAR_ALL"); }   // The gate on Puzzle / Challenge / Battle (MenuScreen::handleInput 0xf584); Options > unlock-all bypasses it
+    bool setTutorialCleared() {   // VMU::setTutorialCleared 0x3701c
+        loadProgress(); tutDone = 1;
+        FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb"); if (!f) return false;
+        const bool wrote = fwrite(clr, 4, 4, f) == 4 && fwrite(&tutDone, 4, 1, f) == 1;
+        return fclose(f) == 0 && wrote; }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     BattlePreviewAtlas battlePreviewAtlas;
@@ -2538,7 +2545,7 @@ struct HdMenuMode : Screen {
     static constexpr int px[N] = {184, 264, 344, 424, 504}, py[N] = {173, 263, 353, 433, 523};                                                       // table at 0xe6cb4
     static bool ok(App& a) { return a.mnBg.tex && a.mnBars.tex && a.mnMasc.tex && a.mnDeco.tex && a.hdBub9.tex && a.hdFont1.tex && a.hdFont.tex; }
     int music() override { return phase == 0xe ? -1 : 0; }
-    bool tutorialCleared() { return true; }   // VMU::isTutorialCleared: The Basics (the tutorial) is not ported, so the gate on Puzzle / Challenge / Battle is open (unlock-all)
+    bool tutorialCleared(App& a) { return a.isTutorialCleared(); }   // VMU::isTutorialCleared (0x37008)
     void event(App& a, const SDL_Event& e) override {
         if (phase != 0xf) return; int hit = -1;
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -2548,7 +2555,7 @@ struct HdMenuMode : Screen {
             if (before == hit) act(a, hit); else a.playSfx(0); }
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_DOWN) { sel = (sel + 1) % N; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + N - 1) % N; a.playSfx(0); } else if (k == SDLK_RETURN || k == SDLK_SPACE) act(a, sel); } }
     void act(App& a, int i) {
-        if (!tutorialCleared() && i >= 1 && i <= 3) { a.playSfx(3); return; }
+        if (!tutorialCleared(a) && i >= 1 && i <= 3) { a.playSfx(3); return; }
         if ((i == 0 && !(a.hdFrame73.tex && !a.hdFontW.empty() && a.hdString(0x1be))) || (i == 2 && !challengeBoardsAvailable(a.root)) || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics is not ported yet; Stage Challenge needs the Challenge boards (docs/roadmap.md)
         a.playSfx(2); chosen = i; fade = 0; phase = 0x10; }
     void tick(App& a) override {
@@ -2564,7 +2571,7 @@ struct HdMenuMode : Screen {
         a.rtex(a.mnDeco, 0, 208, 50, a.mnDeco.fr[0].w, a.mnDeco.fr[0].h);
         if (descKey >= 0) if (const std::string* d = a.hdString(descKey)) a.drawBubble(792, 367, 350, *d, 1, bubbleFrame, 255);
         if (const std::string* d = a.hdString(0x15b)) a.drawBubble(156, 714, 240, *d, 4, 0, 255);   // "Enjoy ChuChu Rocket!"
-        for (int i = 0; i < N; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; int alpha = (!tutorialCleared() && i >= 1 && i <= 3) ? 0x80 : 0xff;
+        for (int i = 0; i < N; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; int alpha = (!tutorialCleared(a) && i >= 1 && i <= 3) ? 0x80 : 0xff;
             SDL_SetTextureAlphaMod(a.mnBars.tex, (Uint8)alpha); a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h); SDL_SetTextureAlphaMod(a.mnBars.tex, 255);
             if (const std::string* t = a.hdString(lab[i])) { const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(*t, (float)(px[i] + a.mnBars.box[0].x / 2), (float)py[i] + ((float)a.mnBars.box[0].y - lh) * 0.5f, 255, 255, 255, alpha, sc, 0, false, 1); }
             if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(px[i] + 36 - m.w), (float)(py[i] + (a.mnBars.box[0].y - m.h) / 2), m.w, m.h); descKey = desc[i]; } }
@@ -3221,7 +3228,7 @@ struct PuzzleMode : Screen {
                alive == 0 && preview.saved == totalMice;
     }
     void nextPuzzle() {
-        if (basics && cur % 25 == 2) { back = true; return; }   // PuzzleLoop 0x1854c: the tutorial ends on stage index 2 (setTutorialCleared)
+        if (basics && cur % 25 == 2) { if (gApp) gApp->setTutorialCleared(); back = true; return; }   // PuzzleLoop 0x1854c: the tutorial ends on stage index 2 (setTutorialCleared)
         if ((cur + 1) % 25 == 0 || cur + 1 >= (int)stages.list.size()) { back = true; return; }
         ++cur; reset(); if (basics) { tut.reset(-1); tutTicks = 0; tutPrevState = 0; }   // next lesson = step (lesson << 8); the lesson source on stage change is inferred, see roadmap
     }
