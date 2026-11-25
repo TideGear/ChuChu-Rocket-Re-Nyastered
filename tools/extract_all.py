@@ -202,12 +202,23 @@ def clear_derived_stage_packs(assets):
             path.unlink()
 
 
+def chd_scratch(work):
+    """Folder for the decoded tracks of a CHD; removed once its CD audio is exported."""
+    return Path(work, 'chd-tracks')
+
+
 def refresh_dreamcast_files(src, work, assets):
     """Extract first, then replace the cached Dreamcast tree only after disc parsing succeeds."""
     import gdi_extract
     Path(work).mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='dc-extract-', dir=work) as staged:
-        tracks = gdi_extract.extract(src, staged, 0)
+        if Path(src).suffix.lower() == '.chd':
+            scratch = chd_scratch(work)
+            if scratch.exists():
+                shutil.rmtree(scratch)
+            tracks = gdi_extract.extract(src, staged, 0, scratch)
+        else:
+            tracks = gdi_extract.extract(src, staged, 0)
         clear_dreamcast_cache(assets)
         files = Path(assets, 'dreamcast', 'files')
         files.parent.mkdir(parents=True, exist_ok=True)
@@ -229,6 +240,14 @@ def publish_dc_asset_version(assets, entry):
 
 
 def do_dreamcast(src, work, assets, entry):
+    try:
+        _do_dreamcast(src, work, assets, entry)
+    finally:
+        if Path(src).suffix.lower() == '.chd' and chd_scratch(work).exists():
+            shutil.rmtree(chd_scratch(work), ignore_errors=True)
+
+
+def _do_dreamcast(src, work, assets, entry):
     d = Path(src)
     tracks, files = refresh_dreamcast_files(d, work, assets)
     entry['extracted_file_count'] = sum(len(f) for _, _, f in os.walk(files))
@@ -391,10 +410,8 @@ def discover(root, work, prefix='', exclude=None):
         return
     if root.is_file():
         suffix = root.suffix.lower()
-        if suffix in ('.gdi', '.cue'):
+        if suffix in ('.gdi', '.cue', '.chd'):
             yield 'dreamcast', root, prefix + root.name
-        elif suffix == '.chd':
-            yield 'unsupported', root, prefix + root.name
         elif suffix == '.zip':
             expanded = Path(work, 'zip', sha256(root))
             try:
@@ -423,20 +440,18 @@ def discover(root, work, prefix='', exclude=None):
             continue
         gdis = [name for name in files if Path(name).suffix.lower() == '.gdi']
         cues = [name for name in files if Path(name).suffix.lower() == '.cue']
-        descriptors = gdis + cues
-        if len(descriptors) > 1:
+        chds = [name for name in files if Path(name).suffix.lower() == '.chd']
+        numbered = any(re.search(r'track\s*0?3\)?\.bin$', name, re.I) for name in files)
+        descriptors = gdis + cues + chds
+        if len(descriptors) > 1 or (chds and numbered):
             path = folder / descriptors[0]
-            message = 'multiple Dreamcast descriptors in one folder; select one descriptor file or separate the dumps'
+            message = 'multiple Dreamcast images in one folder; select one .gdi/.cue/.chd file or separate the dumps'
             yield 'error', path, (prefix + path.relative_to(root).as_posix(), message)
         elif descriptors:
             path = folder / descriptors[0]
             yield 'dreamcast', path, prefix + path.relative_to(root).as_posix()
-        elif any(re.search(r'track\s*0?3\)?\.bin$', name, re.I) for name in files):
+        elif numbered:
             yield 'dreamcast', folder, label
-        for name in files:
-            if Path(name).suffix.lower() == '.chd':
-                path = folder / name
-                yield 'unsupported', path, prefix + path.relative_to(root).as_posix()
         for name in files:
             path = folder / name
             suffix = path.suffix.lower()
@@ -466,7 +481,13 @@ def input_entry(kind, path, label):
                                 'file': track.path.name, 'bytes': track.path.stat().st_size,
                                 'sha256': sha256(track.path)} for track in tracks]
             if any(track.path.suffix.lower() == '.chd' for track in tracks):
-                raise ValueError('CHD-compressed GDI tracks are not supported; convert the image to raw GDI tracks.')
+                raise ValueError('CHD-compressed GDI tracks are not supported; select the .chd image itself or raw GDI tracks.')
+        elif kind == 'dreamcast' and path.suffix.lower() == '.chd':
+            import chd_reader
+            entry['chd'] = chd_reader.describe(path)
+            if entry['chd'].get('unsupported_codecs'):
+                raise ValueError('CHD uses codec %s, which setup cannot decode; recompress with chdman createcd '
+                                 'default codecs (cdlz,cdzl,cdfl)' % ', '.join(entry['chd']['unsupported_codecs']))
     else:
         def included(candidate):
             if kind == 'dreamcast':
@@ -492,12 +513,6 @@ def main():
     for kind, path, label in discover(Path(gf), work, exclude=(a.exclude_cache or Path(cache)).resolve()):
         if kind == 'error':
             manifest['inputs'].append({'kind': 'zip', 'file': label[0], 'error': label[1]})
-            continue
-        if kind == 'unsupported':
-            entry = input_entry('dreamcast', path, label)
-            entry['error'] = 'CHD images are not supported yet; convert this image to a GDI or numbered BIN/CUE set.'
-            manifest['inputs'].append(entry)
-            print('   UNSUPPORTED: CHD images require conversion to GDI or numbered BIN/CUE tracks', flush=True)
             continue
         try:
             entry = input_entry(kind, path, label)

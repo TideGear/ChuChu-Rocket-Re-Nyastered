@@ -6,6 +6,8 @@ Branch `main`; check `git log` for latest. Preserve and do not stage/commit the 
 
 Latest setup fix (2026-11-24): Dreamcast extraction previously reused cached files/exports, allowing stale assets after changing discs. It now extracts into a temporary tree first, replaces Dreamcast-derived outputs only after extraction succeeds, and clears generated Battle/Puzzle stage packs before rebuilding them from current sources. Mobile assets and saves remain intact. The version-4 marker is atomically published only when model and SFX exports succeed. Tests cover invalidation, preservation, failed/successful extraction, stage-pack invalidation and marker publication. Pinned Python tests passed: `test_extract_all.py` (5), `test_gdi_extract.py` (9), `test_dc_sfx_render.py` (7); compilation and diff checks passed. Fresh image-to-cache verification is unavailable because original descriptor/tracks are absent here.
 
+Latest image-input work (2026-11-24, cloud session; the user's PC and disc image were unreachable): CHD v5 GD-ROM images are now decoded by setup itself (`tools/chd_reader.py`; `.chd` is discovered/selected like a `.gdi`, with manifest `chd` info and decoded tracks in `work/chd-tracks`, removed after audio export). It gates on hunk CRCs, the header raw SHA-1, sector-header addresses and track 03 at LBA 45000; cdzs/parent/pre-v5/`CHGT`/CD-ROM CHDs are reported. `tools/test_chd_reader.py` (11 tests; FLAC against ffmpeg frames, ECC against ECMA-130 syndromes, synthetic GD-ROM CHD) passes with the other setup tests (25 total). Not yet run on a real CHD.
+
 ## Latest verified gameplay/UI work
 
 - Dreamcast-only setup has previously passed clean Windows source setup/build from a USA GDI/CUE alone, exporting 128 models, 15 CD WAVs, 128 SFX cues and Puzzle/Battle/Stage Challenge. CUE outputs matched equivalent GDI files and audio hashes. Packaged Windows and Linux userland setup/route checks also passed. These older checks do not exercise the new stale-cache refresh; repeat from a real image when available.
@@ -16,10 +18,11 @@ Latest setup fix (2026-11-24): Dreamcast extraction previously reused cached fil
 
 ## Next tasks
 
-1. Re-run image-only setup from a fresh cache using the original Dreamcast descriptor/tracks when available; specifically verify refreshed files/assets and version marker, then `ccr --prepare`/build route smoke.
-2. Continue Puzzle launch per-element parity using saved TA packets; resolve the rocket scale writer before renderer changes.
-3. Trace Battle trigger-taunt callbacks and phrase selection before implementing controls. `GAMEVOICE` textures are roulette/battle announcement art, not proof of trigger phrases. US `VOICE.AFS` entries tested as silent; do not map phrases speculatively.
-4. Prioritize remaining Dreamcast gameplay/UI and image-only gaps; keep `docs/HANDOFF.md` current. Commit/push validated work as requested.
+1. Real-CHD check: `chdman createcd -i <tested USA GDI> -o usa.chd`, then `local/tools/windows/python-3.12.10-pillow-12.2.0/python.exe tools/chd_reader.py usa.chd local/chd-check` and fresh `setup.cmd` from the `.chd` alone; diff the 1,305 files and 15 WAVs against the GDI extraction (SHA-256). Record any 'CHD note' LBA warnings and decode time.
+2. Re-run image-only setup from a fresh cache using the original Dreamcast descriptor/tracks when available; specifically verify refreshed files/assets and version marker, then `ccr --prepare`/build route smoke.
+3. Continue Puzzle launch per-element parity using saved TA packets; resolve the rocket scale writer before renderer changes.
+4. Trace Battle trigger-taunt callbacks and phrase selection before implementing controls. `GAMEVOICE` textures are roulette/battle announcement art, not proof of trigger phrases. US `VOICE.AFS` entries tested as silent; do not map phrases speculatively.
+5. Prioritize remaining Dreamcast gameplay/UI and image-only gaps; keep `docs/HANDOFF.md` current. Commit/push validated work as requested.
 
 ## Key evidence and paths
 

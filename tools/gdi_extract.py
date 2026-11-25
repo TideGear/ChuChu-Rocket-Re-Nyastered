@@ -1,7 +1,8 @@
-"""Extract the ISO9660 high-density area from Dreamcast GDI or separate-file BIN/CUE.
+"""Extract the ISO9660 high-density area from Dreamcast GDI, separate-file BIN/CUE or CHD.
 
 A GDI track row is: number, start LBA, type, sector size, filename, file offset.
-Usage: gdi_extract.py <disc.gdi | disc.cue | directory with Track NN.bin> <outdir> [legacy gap sectors]
+A CHD is first decoded and verified into per-track files (tools/chd_reader.py).
+Usage: gdi_extract.py <disc.gdi | disc.cue | disc.chd | directory with Track NN.bin> <outdir> [legacy gap sectors]
 """
 import os
 import re
@@ -308,8 +309,15 @@ def parse_cue(path):
     return tracks
 
 
-def extract(source, outdir, gap=0):
+def extract(source, outdir, gap=0, scratch=None):
+    """Extract the disc's files; CHD tracks are decoded into `scratch` (default: beside outdir)."""
     source = Path(source)
+    if source.is_file() and source.suffix.lower() == '.chd':
+        import chd_reader
+        scratch = Path(scratch) if scratch is not None else Path(str(outdir) + '-chd-tracks')
+        tracks = chd_reader.convert(source, scratch, lambda message: print(message, flush=True))
+        extract_records(tracks, outdir)
+        return tracks
     if source.is_file() and source.suffix.lower() in ('.gdi', '.cue'):
         tracks = parse_gdi(source) if source.suffix.lower() == '.gdi' else parse_cue(source)
         extract_records(tracks, outdir)
