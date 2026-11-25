@@ -1712,6 +1712,76 @@
         ]
       },
       "note": "flyhost Challenge A1, cursor on the rocket cell (LEFT@2520, LEFT@2540), shot 2584 = tick 286; the dimmed bracket (grey 127, no size pulse, 0x8c01480c)"
+    },
+    {
+      "name": "puzzle_normal08",
+      "ref": "local/dc_ref/groups/n08_02390.bmp",
+      "args": [
+        "puzzle",
+        "7"
+      ],
+      "env": {
+        "CCR_TICKS": "200",
+        "CCR_GLOBAL_TIME": "1625",
+        "CCR_MODELS": "1"
+      },
+      "elements": {
+        "r_trigger_panel": [
+          5,
+          32,
+          133,
+          160
+        ],
+        "l_trigger_panel": [
+          5,
+          160,
+          133,
+          288
+        ],
+        "normal_plate": [
+          3,
+          278,
+          234,
+          324
+        ],
+        "stage_label": [
+          5,
+          325,
+          133,
+          389
+        ],
+        "stage_digits": [
+          38,
+          375,
+          119,
+          426
+        ],
+        "available_label": [
+          132,
+          372,
+          275,
+          392
+        ],
+        "hint_bubble": [
+          316,
+          365,
+          596,
+          402
+        ],
+        "list_box": [
+          132,
+          402,
+          596,
+          448
+        ],
+        "board": [
+          136,
+          23,
+          595,
+          366
+        ]
+      },
+      "note": "flyhost Puzzle Normal 08 \"Lots of mice\" (RIGHT x2, DOWN x1 before the final START), shot 2390, RAM clock 1826; local/pz8"
     }
   ]
 }
