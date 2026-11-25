@@ -334,7 +334,7 @@ public:
                 const float n1x = nx * cy + nz * sy, n1z = -nx * sy + nz * cy;
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
-                o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, light[0] * n2x + light[1] * n2y + light[2] * n2z)) * (tri.mat == 10 ? run10Diffuse : 1.0f);   // material slot 10 = the mouse's cream run with chunk diffuse b2b2b2 (0xb2 / 255)   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
+                o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, (light[0] * n2x + light[1] * n2y + light[2] * n2z) * modelScale)) * (tri.mat == 10 ? run10Diffuse : 1.0f);   // a uniform njScale also scales the normals the Dreamcast lights with (as for the rocket dome)   // material slot 10 = the mouse's cream run with chunk diffuse b2b2b2 (0xb2 / 255)   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
                 const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - tri.v[k].v, tri.v[k].u} : SDL_FPoint{tri.v[k].u, tri.v[k].v};
                 o.u[k] = uv.x; o.v[k] = uv.y;
