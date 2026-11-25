@@ -112,4 +112,16 @@ Directly selected descriptor optional-BIOS discovery: `extract_all.py` searches 
 
 2026-11-22 Android arm64 cross-build: with Android NDK 27.3.13750724, CMake/Ninja configured SDL2 2.30.9's Android backend and linked the app target `ccr` as a 14,682,560-byte AArch64 ELF64 PIE (NDK `llvm-readelf` verified the machine type and Android system-library dependencies). The separate Android build tree also cross-compiled `puzzle_pause_test`, `puzzle_audio_test`, `events_test`, `battle_full_test`, and `determinism_test`. These are build artifacts only: there is no APK wrapper in this project, no connected device, and the app-owned device tool is disabled. Therefore no install, launch, setup-from-image, or gameplay result is claimed. The binaries and build trees are temporary and are not part of the release.
 
+2026-11-24 end-to-end setup, three ways (Windows, `tools/setup-wizard.ps1 -GameFiles <input> -Cache <throwaway>`, the script `setup.cmd` runs, including the build). Throwaway caches are under `local/e2e-20261124/cfg-*`.
+- Dreamcast image only (the USA CUE/BIN zip): exit 0 in 5 min 4 s; 647 MB of assets.
+- Mobile releases only (2 APKs, 6 IPAs): exit 0 in 3 min 5 s; 758 MB.
+- Every original file (Dreamcast, DLC, GBA, Android, iOS): exit 0 in 5 min 30 s.
+
+Each cache reported Puzzle, Battle and Stage Challenge as playable. `ccr` started headless on each, and the Mode Select/Main Menu, Puzzle 01 and Battle shots were viewed:
+- The Dreamcast-only cache shows the Dreamcast look.
+- The mobile-only cache shows the mobile look with 2D sprites (no model pack).
+- The full cache shows the Dreamcast look by default, and the mobile look with 3D models under `CCR_PRESENTATION=mobile`.
+
+`input_regression_test` passed on all three caches. This checks that setup and play work end to end; it is not visual parity. RecompLauncher itself was not driven; its `--presentation=`/`--sound=` arguments were run directly against `ccr --launcher`.
+
 2026-11-24 CHD reader (cloud checkout, Linux Python 3.13, no disc image available): `python3 -m unittest test_chd_reader test_gdi_extract test_extract_all` in `tools/` passes 25 tests. FLAC is compared against ffmpeg-encoded frames (lossless round trip to the source PCM); ECC against ECMA-130 syndromes; CHD container/track handling against a synthetic GD-ROM CHD written by the test. Not run on a real CHD; the setup-time SHA-1 gate is the check on the user's machine.
