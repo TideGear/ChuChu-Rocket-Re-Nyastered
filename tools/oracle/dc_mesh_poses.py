@@ -9,7 +9,7 @@ models = M.find_models(d, B)
 cands = []     # (model address, group index, verts, uvs, positions)
 for (o, vo, po, vl, pl) in models:
     g = []
-    for s, rev, tex, mat in pl:
+    for s, rev, tex, mat, *_ in pl:
         if g and g[-1][0] == tex: g[-1][1] += list(s)
         else: g.append([tex, list(s)])
     for gi, (tex, flat) in enumerate(g):

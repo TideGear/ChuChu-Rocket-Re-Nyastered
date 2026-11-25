@@ -63,7 +63,7 @@ def main(path, out):
                 if x['model'] is not None and not fl & 8:
                     vl, pl = models[x['model']]; base = len(verts); keys = sorted(vl); remap = {k: base + i + 1 for i, k in enumerate(keys)}
                     for k in keys: verts.append(xf(vl[k][0]))
-                    for s, rev, tex, mat in pl:
+                    for s, rev, tex, mat, *_ in pl:
                         for i in range(len(s) - 2):
                             t3 = [s[i], s[i + 1], s[i + 2]]
                             if (i & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]

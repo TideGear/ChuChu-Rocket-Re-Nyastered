@@ -72,7 +72,7 @@ def parse_plist(d, o, maxidx):
                     if idx > maxidx: return None
                     s.append((idx, u, v))
                     if k >= 2: p += uflags * 2
-                strips.append((s, rev, tex, mat))
+                strips.append((s, rev, tex, mat, fl))   # fl: the strip chunk's flags (0x08 use alpha, 0x10 double side, 0x01 ignore light)
             o = end; continue
         return None
     return strips if strips else None
@@ -101,7 +101,7 @@ def write_obj(path, vl, pl):
         for k in keys:
             if vl[k][1]: f.write('vn %f %f %f\n' % vl[k][1])
         tris = 0
-        for s, rev, tex, mat in pl:
+        for s, rev, tex, mat, *_ in pl:
             f.write('# strip tex=%s\n' % tex)
             for i in range(len(s) - 2):
                 a, b, c = s[i][0], s[i + 1][0], s[i + 2][0]

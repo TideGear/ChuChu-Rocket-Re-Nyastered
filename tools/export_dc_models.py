@@ -94,13 +94,13 @@ class Pack:
                 w = world(i, p); nw = world(i, nr if nr else (0.0, 1.0, 0.0), True)
                 l = math.sqrt(nw[0] ** 2 + nw[1] ** 2 + nw[2] ** 2) or 1.0
                 verts.append(tuple(w) + (nw[0] / l, nw[1] / l, nw[2] / l))
-            for strip, rev, tex, mat in pl:
+            for strip, rev, tex, mat, sfl in pl:
                 for q in range(len(strip) - 2):
                     t3 = [strip[q], strip[q + 1], strip[q + 2]]
                     if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
                     a, b, c = t3[0][0], t3[1][0], t3[2][0]
                     if a in remap and b in remap and c in remap and len({a, b, c}) == 3:
-                        tris.append((10 if special and mat[0] == 17 and tex is not None and (tex & 0x1fff) == 2 else (tex if tex is not None else untextured) & 0x1fff, [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
+                        tris.append(((10 if special and mat[0] == 17 and tex is not None and (tex & 0x1fff) == 2 else (tex if tex is not None else untextured) & 0x1fff) | (0x80 if sfl & 8 else 0), [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
         return tris
     def assemble_cached(self, order, pos=None, ang=None):
         """Objects whose polygon lists live apart from their vertex lists (the ghost 0x8c097e44): every node's vertex chunk writes its vertices, transformed by that node's matrix, into one shared
@@ -118,7 +118,7 @@ class Pack:
             return v
         buf = {}; blend = {}; cache = {}; tris = []
         def draw(strips):
-            for strip, rev, tex, mat in strips:
+            for strip, rev, tex, mat, *_ in strips:
                 for q in range(len(strip) - 2):
                     t3 = [strip[q], strip[q + 1], strip[q + 2]]
                     if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
@@ -259,7 +259,7 @@ def main(root, exe):
         launch = name.startswith('launch_')
         tris = pack.assemble_cached(order) if name == 'ghost' else pack.assemble(order, special=special, untextured=len(texlist) if launch else 0)
         full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_') or name == 'ghost'    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
-        mats = [tex(texlist[m if m < len(texlist) else 2]) if (m < len(texlist) or special) else 0 for m in range(len(texlist) if full else max(m for m, _ in tris) + 1)]
+        mats = [tex(texlist[m if m < len(texlist) else 2]) if (m < len(texlist) or special) else 0 for m in range(len(texlist) if full else max(m & 0x7f for m, _ in tris) + 1)]
         if launch:
             if 'WHITE' not in tex_ids: tex_ids['WHITE'] = len(textures); textures.append(Image.new('RGBA', (4, 4), (255, 255, 255, 255)))
             mats[len(texlist)] = tex_ids['WHITE']
