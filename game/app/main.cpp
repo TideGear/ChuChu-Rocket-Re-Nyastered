@@ -1288,9 +1288,9 @@ struct App {
         else blit(cur, bracket ? 4 : player & 3, x, y, scale);
     }
     // Corner brackets are drawn by board() between the floor and the walls: in Flycast (Challenge frame 2500) the walls hide parts of the bracket.
-    struct QueuedBracket { int cx, cy, player, ticks; bool dim; };
+    struct QueuedBracket { int cx, cy, player, ticks; bool dim; int dimTicks; };
     std::vector<QueuedBracket> queuedBrackets;
-    void queueBracket(int cx, int cy, int player, int ticks, bool dim = false) { queuedBrackets.push_back({cx, cy, player, ticks, dim}); }
+    void queueBracket(int cx, int cy, int player, int ticks, bool dim = false, int dimOffset = 0) { queuedBrackets.push_back({cx, cy, player, ticks, dim, ticks + dimOffset}); }   // dimOffset: the grey pulse's own phase (Puzzle), the size pulse keeps ticks
     // Battle cursor draw 0x8c0146e6: on a cell whose word has any of 0xF00 (rocket, generator, hole, arrow) the bracket's vertex colour is alpha 0xc0 and grey
     // 0x80 + trunc(16 * sin((task+32) >> 2)), task+32 = (player << 14) + 0x1000 per pass (update 0x8c0145ee); otherwise opaque white. Flycast 3100: 0x80/0x86/0x8b/0x8e for players 0-3.
     void flushBrackets(FieldLayout field) {
@@ -1298,7 +1298,7 @@ struct App {
         for (const auto& b : q) {
             SDL_Texture* t = useDcCursors() && dcCursorBracket.tex ? dcCursorBracket.tex : nullptr;
             if (b.dim && t) {
-                const int ang = (b.player << 14) + 0x1000 * b.ticks;
+                const int ang = (b.player << 14) + 0x1000 * b.dimTicks;
                 const int grey = 0x80 + (int)(16.0f * std::sin(((ang >> 2) & 0xffff) * (6.283185307f / 65536.0f)));
                 SDL_SetTextureColorMod(t, (Uint8)grey, (Uint8)grey, (Uint8)grey); SDL_SetTextureAlphaMod(t, 0xc0);
             }
@@ -3510,9 +3510,9 @@ struct PuzzleMode : Screen {
         const int aimX = mouseCursor ? aim.cellX() : curX, aimY = mouseCursor ? aim.cellY() : curY;
         const bool showCursor = state == 0 && (!mouseCursor || aim.inside);
         if (hasBoardTasks) {
-            if (showCursor && ((dreamcastPuzzleControls(a) && !mouseCursor) || (sim.coll[aimY][aimX] & 0xF00))) a.queueBracket(aimX, aimY, 0, cticks - 53, dreamcastPuzzleControls(a) && (sim.coll[aimY][aimX] & 0xF00));   /* pulse origin: two flyhost runs with the moves 40 frames apart give the same phase (270 deg at RAM clock 1919 = port tick 293), i.e. the counter starts 53 ticks into the stage (mod 64), not on a move */   // Flycast Puzzle 01 and 02: the pad cursor's corner bracket; on a rocket it is dimmed like Battle's (flyhost frame 2485 on the column-5 rocket: vertex colour c0717171)
+            if (showCursor && ((dreamcastPuzzleControls(a) && !mouseCursor) || (sim.coll[aimY][aimX] & 0xF00))) a.queueBracket(aimX, aimY, 0, cticks, dreamcastPuzzleControls(a) && (sim.coll[aimY][aimX] & 0xF00), -53);   /* pulse origin: two flyhost runs with the moves 40 frames apart give the same phase (270 deg at RAM clock 1919 = port tick 293), i.e. the counter starts 53 ticks into the stage (mod 64), not on a move */   // Flycast Puzzle 01 and 02: the pad cursor's corner bracket; on a rocket it is dimmed like Battle's (flyhost frame 2485 on the column-5 rocket: vertex colour c0717171)
             const int set = gApp ? gApp->stageSet : 0;
-            a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
+            a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   /* Dreamcast: every group keeps the tan and pink floor (flyhost Hard/Special/Mania 01, 2026-11-24) */   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
             for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, pf(a));
         }
         if (hasBoardTasks) a.mousePoseOverride = mousePose;
@@ -3572,7 +3572,7 @@ struct PuzzleMode : Screen {
         if (!phonePuzzleHudAvailable(a)) {
         if (!dcPanelDrawn) { float x = (float)OX + 40.0f; a.blit(a.hdPhud, 2, x, 690.0f); for (int k = 0; k < 10; k++) { x += 64.0f; a.blit(a.hdPhud, 3, x, 690.0f); } x += 64.0f; a.blit(a.hdPhud, 4, x, 690.0f); }
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
-        { static const int ordIpad[4] = {3, 1, 2, 0}, ordDc[4] = {2, 3, 0, 1};   // Flycast Normal 25: the panel shows up, then right (order beyond those two unverified)
+        { static const int ordIpad[4] = {3, 1, 2, 0}, ordDc[4] = {0, 1, 2, 3};   // the Dreamcast direction-code order S, W, N, E: Normal 25 shows up before right, Hard 01 down before right, Mania 01 left before right (flyhost); S/W/N among themselves unverified
           const int* ord = dcPanelDrawn ? ordDc : ordIpad; float x = dcPanelDrawn ? 253.0f : (float)OX + 64.0f; const float iy = dcPanelDrawn ? 667.0f : 706.0f; const float isc = dcPanelDrawn ? 0.8f : 0.6f;   // Dreamcast: first icon quad x 142-174, y 401-433 of 640 x 480 (x1.6); the slot pitch for further arrows is not measured yet
           for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.arrowIcon(x, iy, d, 0, isc); x += dcPanelDrawn ? 54.4f : 60.0f; } } }   // Dreamcast: icons 34 px apart on the 640 x 480 screen (x 142-174 and 176-208)
         }
@@ -4294,7 +4294,7 @@ struct StageSelectMode : Screen {
         const SDL_Rect aperture{364, 244, 252, 187};
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderFillRect(a.ren, &aperture);
         const auto& field = ChallengeSelectMode::preview; const Stage& stage = stages.list[cur].st;
-        a.board(stage, ((cur / 25) & 3) + 2, 2, field);
+        a.board(stage, 2, 2, field);   // the Dreamcast select preview keeps the tan and pink floor for every group (flyhost Hard select, 2026-11-24)
         if (const Model3D* lid = a.models3d.find("lid1"))
             for (int r = 0; r < kRows; ++r) for (int c = 0; c < kCols; ++c)
                 if (stage.tiles[r * kCols + c] == T_Rocket)
