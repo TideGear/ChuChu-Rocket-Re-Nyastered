@@ -1931,6 +1931,79 @@
       "note": "flyhost Puzzle Normal 01 with R2@2300-2310 (run, no arrows placed), shot 2450 = tick 260; the run key at tick 108 (scan 96-116: 108 gives 0.73, neighbours 6-8.5); local/sweep"
     },
     {
+      "name": "puzzle01_dash_2450",
+      "ref": "local/dash/d_02450.bmp",
+      "args": [
+        "puzzle"
+      ],
+      "env": {
+        "CCR_TICKS": "260",
+        "CCR_GLOBAL_TIME": "1687",
+        "CCR_KEYS": " ",
+        "CCR_KEY_TICK": "108",
+        "CCR_MODELS": "1",
+        "CCR_KEYS2": " ",
+        "CCR_KEY_TICK2": "154"
+      },
+      "elements": {
+        "r_trigger_panel": [
+          5,
+          32,
+          133,
+          160
+        ],
+        "l_trigger_panel": [
+          5,
+          160,
+          133,
+          288
+        ],
+        "normal_plate": [
+          3,
+          278,
+          234,
+          324
+        ],
+        "stage_label": [
+          5,
+          325,
+          133,
+          389
+        ],
+        "stage_digits": [
+          38,
+          375,
+          119,
+          426
+        ],
+        "available_label": [
+          132,
+          372,
+          275,
+          392
+        ],
+        "hint_bubble": [
+          316,
+          365,
+          596,
+          402
+        ],
+        "list_box": [
+          132,
+          402,
+          596,
+          448
+        ],
+        "board": [
+          136,
+          23,
+          595,
+          366
+        ]
+      },
+      "note": "flyhost Puzzle Normal 01, no arrows: R2@2300-2310 starts, R2@2340-2345 dashes; shot 2450 = tick 260 (local/dash). Port Dash key at tick 154 and clock 1687 are the best of a scan (Dash steps twice per pass, so neighbouring ticks are 6-9)"
+    },
+    {
       "name": "puzzle_select_2050",
       "ref": "local/dc_ref/groups/sel_02050.bmp",
       "args": [

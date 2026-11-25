@@ -3292,7 +3292,7 @@ struct PuzzleMode : Screen {
                 return;
             }
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0, pf(a));
-            if (k == SDLK_SPACE) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; tutGo(); } } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
+            if (k == SDLK_SPACE) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; tutGo(); } } else if (running && !dash) { dash = true; a.playSfx(0xc); } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
             else if (k == SDLK_p) {
                 // Dreamcast: Start only pauses (pause controller 0x8c01a174; Flycast pa1 frame 2500 shows the placing board idle under the overlay). The mobile
                 // look keeps the port's Start-runs-the-puzzle convenience for setups without a Start/Dash button.
@@ -5443,8 +5443,8 @@ int main(int argc, char** argv) {
             e.type = SDL_MOUSEMOTION;
             if (sscanf(aim, "%d,%d", &e.motion.x, &e.motion.y) == 2) mode->event(app, e);
         }
-        auto sendKeys = [&]() {
-            const char* keys = getenv("CCR_KEYS");
+        auto sendKeys = [&](const char* var = "CCR_KEYS") {   // CCR_KEYS at CCR_KEY_TICK; CCR_KEYS2 at CCR_KEY_TICK2 (a later press, e.g. Puzzle Dash after the start)
+            const char* keys = getenv(var);
             if (!keys) return;
             for (const char* p = keys; *p; p++) {
                 SDL_Event e{};
@@ -5464,10 +5464,12 @@ int main(int argc, char** argv) {
         const char* keyTickOption = getenv("CCR_KEY_TICK");
         const int keyTick = keyTickOption ? atoi(keyTickOption) : -1;
         if (keyTick < 0) sendKeys();
+        const int keyTick2 = getenv("CCR_KEY_TICK2") ? atoi(getenv("CCR_KEY_TICK2")) : -1;
         std::vector<std::array<int, 5>> clicks; if (const char* c = getenv("CCR_CLICKS")) { int t, x, y, n; const char* p = c; while (sscanf(p, "%d:%d,%d%n", &t, &x, &y, &n) == 3) { p += n; int x2 = x, y2 = y; if (*p == '>' && sscanf(p + 1, "%d,%d%n", &x2, &y2, &n) == 2) p += 1 + n; clicks.push_back({t, x, y, x2, y2}); if (*p == ';') p++; else break; } }   // headless test input: tick:x,y[>x2,y2];... (window pixels; ">" releases elsewhere = a swipe)
         if (const char* clock = getenv("CCR_GLOBAL_TIME")) app.globalTime = (uint32_t)strtoul(clock, nullptr, 0);
         int lastSong = -2; for (int i = 0; i < ticks; i++) {
             if (i == keyTick) sendKeys();
+            if (i == keyTick2) sendKeys("CCR_KEYS2");
             for (auto& ck : clicks) if (ck[0] == i && ck[1] < 0) { SDL_Event e{}; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); }   // x < 0: a Return key press
             for (auto& ck : clicks) if (ck[0] == i && ck[1] >= 0) for (int ty : {SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP}) { SDL_Event e{}; e.type = ty; e.button.button = SDL_BUTTON_LEFT; e.button.x = ty == SDL_MOUSEBUTTONUP ? ck[3] : ck[1]; e.button.y = ty == SDL_MOUSEBUTTONUP ? ck[4] : ck[2]; mode->event(app, e); if (const char* nx = mode->next()) enter(nx); } mode->tick(app); ++app.globalTime; if (const char* nx = mode->next()) enter(nx); if (getenv("CCR_AUDIO_TEST")) { app.pumpMusic(mode->music()); if (app.curTrack != lastSong) { lastSong = app.curTrack; if (lastSong >= 0) printf("tick %d: song %d (DC track %d), loop %zu..%zu of %zu samples\n", i, lastSong, lastSong + 4, app.songs[lastSong].loopStart, app.songs[lastSong].loopEnd, app.songs[lastSong].pcm.size()); else printf("tick %d: music stopped\n", i); } } }
         mode->draw(app, 1.0f);
