@@ -527,7 +527,7 @@ def main():
     work, assets = os.path.join(cache, 'work'), os.path.join(cache, 'assets')
     os.makedirs(work, exist_ok=True); os.makedirs(assets, exist_ok=True)
     clear_derived_stage_packs(assets)
-    manifest = {'created': time.strftime('%Y-%m-%d %H:%M:%S'), 'inputs': []}
+    manifest = {'created': time.strftime('%Y-%m-%d %H:%M:%S'), 'game_files': os.path.abspath(gf), 'inputs': []}   # game_files: lets the game offer to refresh an out-of-date cache from the same originals
     actions = {'ios': do_ios, 'android': do_apk, 'gba': do_gba, 'dreamcast': do_dreamcast}
     for kind, path, label in discover(Path(gf), work, exclude=(a.exclude_cache or Path(cache)).resolve()):
         if kind == 'error':

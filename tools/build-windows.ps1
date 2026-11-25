@@ -58,4 +58,23 @@ $output = Join-Path $root 'build/game'
     '-DCMAKE_BUILD_TYPE=Release'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $cmake --build $build @args
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# Keep the development asset cache in step with the game it was just built for, so a build never runs on stale art
+# (the game shows "Game art out of date" otherwise). The version the game needs is kDcAssetsVersion in game/app/main.cpp;
+# extract_all.py writes the cache's version to assets/ret_all/dc_assets_version.txt. Set CCR_SKIP_ASSET_REFRESH=1 to skip.
+$cache = Join-Path $root 'local/cache'
+$have = Join-Path $cache 'assets/ret_all/dc_assets_version.txt'
+if (-not $env:CCR_SKIP_ASSET_REFRESH -and (Test-Path -LiteralPath $have)) {
+    $need = [int]([regex]::Match((Get-Content -Raw (Join-Path $root 'game/app/main.cpp')), 'kDcAssetsVersion = (\d+)').Groups[1].Value)
+    $current = [int]((Get-Content -Raw -LiteralPath $have).Trim())
+    if ($current -lt $need) {
+        $gameFiles = Join-Path $root 'Original Game Files'
+        $manifestPath = Join-Path $cache 'manifest.json'
+        if (Test-Path -LiteralPath $manifestPath) { $m = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json; if ($m.game_files -and (Test-Path -LiteralPath $m.game_files)) { $gameFiles = $m.game_files } }
+        Write-Output "Dev asset cache is version $current, the game needs ${need}: re-extracting from $gameFiles (a few minutes; saves and settings are kept)"
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'prepare.ps1') -GameFiles $gameFiles -Cache $cache
+        if ($LASTEXITCODE -ne 0) { Write-Output 'Asset refresh failed: see local/cache/setup.log'; exit $LASTEXITCODE }
+    }
+}
+exit 0
