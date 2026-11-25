@@ -220,12 +220,21 @@ int main(int argc, char** argv) {
         button.type = SDL_CONTROLLERBUTTONDOWN;
         button.cbutton.which = instance;
         button.cbutton.button = SDL_CONTROLLER_BUTTON_A;
-        options.event(app, button);
-        button.type = SDL_CONTROLLERBUTTONUP;
+        options.event(app, button);   // 0x8c054600: A is only "Previous"; the delete chord needs Start (the footer's triangle)
+        check(options.page == -1 && ChallengeMode::loadSave(app.saveDir).mask == 0x15,
+              "Records L+R+A returns without deleting (the chord is L+R+Start)");
+        options.page = 2;
+        options.event(app, trigger);   // the right trigger is still held; press the left again
+        trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+        options.event(app, trigger);
+        app.settings.characterStyle = 1;   // Chao needs every Challenge clear, so the original resets it to Normal
+        button.cbutton.button = SDL_CONTROLLER_BUTTON_START;
         options.event(app, button);
         const ChallengeMode::Save cleared = ChallengeMode::loadSave(app.saveDir);
         check(cleared.mask == 0 && std::all_of(std::begin(cleared.best), std::end(cleared.best), [](uint32_t t) { return t == 0; }),
-              "Dreamcast L+R+A clears only Stage Challenge records");
+              "Dreamcast L+R+Start clears only Stage Challenge records");
+        check(app.settings.characterStyle == 0, "Records delete resets the Chao costume to Normal");
+        check(options.page == -1, "Records L+R+Start returns after deleting (Start is also Previous)");
         std::string preserved;
         check(readFile((app.saveDir + "/progress.bin").c_str(), preserved) && preserved == std::string(unrelated, sizeof unrelated),
               "Records delete preserves unrelated progress save");
@@ -234,11 +243,11 @@ int main(int argc, char** argv) {
         options.event(app, trigger);
         trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
         options.event(app, trigger);
-        button.type = SDL_CONTROLLERBUTTONDOWN;
+        options.page = 2;
+        app.settings.characterStyle = 2;
+        button.cbutton.button = SDL_CONTROLLER_BUTTON_START;
         options.event(app, button);
-        button.type = SDL_CONTROLLERBUTTONUP;
-        options.event(app, button);
-        check(options.page == -1, "A/B exits Dreamcast Records page");
+        check(options.page == -1 && app.settings.characterStyle == 2, "Start alone returns from Records and keeps the Pian costume");
         options.page = 2;
         button.type = SDL_CONTROLLERBUTTONDOWN;
         button.cbutton.button = SDL_CONTROLLER_BUTTON_B;

@@ -16,7 +16,9 @@ struct Settings {
     std::string filter = "linear";   // "linear" or "nearest" scaling
     int width = 0, height = 0;   // window size, 0 = default
     std::string cpuStyle = "dreamcast";   // computer opponents in Battle: "dreamcast" (the Dreamcast/iOS/Android placement rules) or "gba"
-    bool models3d = true;        // prefer Dreamcast visuals when setup provides dreamcast/models.bin
+    std::string presentation = "auto";   // screens, menus, HUDs and fonts: "dreamcast", "mobile", or "auto" (Dreamcast when its art is installed, else mobile)
+    std::string soundSource = "auto";    // music and effects: "dreamcast" (CD tracks, CHU2_SE cues), "mobile" (iOS/Android Ogg files), or "auto" (Dreamcast first, mobile fills gaps)
+    bool models3d = true;        // mobile presentation only: draw the field with the Dreamcast 3D characters and board when dreamcast/models.bin exists (the Dreamcast presentation always does)
     bool unlockAll = false;      // open every puzzle group and costume without clearing the stages (the original opens group n after all 25 stages of group n-1 are cleared)
     int characterStyle = 0;      // Dreamcast mouse appearance: 0 Normal, 1 Chao, 2 Pians
     int battleTime = 3, battleSpeed = 3, battleMice = 0, battleArrow = 0;
@@ -38,6 +40,8 @@ inline Settings parseSettings(const std::string& text) {
         if (k == "fullscreen") s.fullscreen = parseBool(v, s.fullscreen);
         else if (k == "vsync") s.vsync = parseBool(v, s.vsync);
         else if (k == "filter") { if (v == "linear" || v == "nearest") s.filter = v; }
+        else if (k == "presentation") { if (v == "auto" || v == "dreamcast" || v == "mobile") s.presentation = v; }
+        else if (k == "sound_source") { if (v == "auto" || v == "dreamcast" || v == "mobile") s.soundSource = v; }
         else if (k == "models_3d") s.models3d = parseBool(v, s.models3d);
         else if (k == "unlock_all") s.unlockAll = parseBool(v, s.unlockAll);
         else if (k == "character_style") s.characterStyle = std::max(0, std::min(2, atoi(v.c_str())));
@@ -59,7 +63,7 @@ inline Settings parseSettings(const std::string& text) {
     return s;
 }
 inline std::string settingsText(const Settings& s) {
-    char b[2300];
+    char b[3400];
     snprintf(b, sizeof b,
         "# ChuChu Rocket! Re-Nyastered settings (an unofficial fan project, not affiliated with SEGA).\n"
         "# Edit with any text editor; the game reads this file at start. Lines starting with # are comments.\n"
@@ -69,7 +73,9 @@ inline std::string settingsText(const Settings& s) {
         "# How the picture is scaled: linear (smooth) or nearest (sharp pixels).\nfilter = %s\n\n"
         "# Window size in pixels; 0 uses the default size.\nwindow_width = %d\nwindow_height = %d\n\n"
         "# Battle computer players: dreamcast or gba (the GBA game's placement rules).\ncpu_style = %s\n\n"
-        "# Use Dreamcast 3D characters and board art when setup provides the model pack.\nmodels_3d = %s\n\n"
+        "# Look of the screens, menus and HUDs: dreamcast, mobile, or auto (Dreamcast when its art was extracted, otherwise mobile).\npresentation = %s\n\n"
+        "# Music and sound effects: dreamcast (CD tracks and original cues), mobile (iOS/Android files), or auto (Dreamcast first; mobile fills gaps).\nsound_source = %s\n\n"
+        "# With the mobile presentation: draw cats, mice and boards with the Dreamcast 3D models when setup provides them (the Dreamcast presentation always does).\nmodels_3d = %s\n\n"
         "# Open every puzzle group and costume without playing for them: true or false (the original unlocks them by clearing stages).\nunlock_all = %s\n\n"
         "# Dreamcast mouse appearance: 0 = Normal, 1 = Chao, 2 = Pians (requires the original unlock conditions).\ncharacter_style = %d\n\n"
         "# Dreamcast Options 4P/Team values: play time 1-3, speed 1-5, High mice, and arrow reset.\n"
@@ -78,7 +84,7 @@ inline std::string settingsText(const Settings& s) {
         "sound_output = %d\njump_pack = %d\nmusic_test = %d\nse_test = %d\n\n"
         "# Log detail: 0 = off, 1 = sessions and match results, 2 = also every screen change.\nlog_level = %d\n\n"
         "# The log file (logs/ccr.log) rotates when it reaches this many kilobytes; this many old files are kept.\nlog_max_kb = %d\nlog_keep_files = %d\n",
-        s.fullscreen ? "true" : "false", s.vsync ? "true" : "false", s.filter.c_str(), s.width, s.height, s.cpuStyle.c_str(), s.models3d ? "true" : "false", s.unlockAll ? "true" : "false", s.characterStyle,
+        s.fullscreen ? "true" : "false", s.vsync ? "true" : "false", s.filter.c_str(), s.width, s.height, s.cpuStyle.c_str(), s.presentation.c_str(), s.soundSource.c_str(), s.models3d ? "true" : "false", s.unlockAll ? "true" : "false", s.characterStyle,
         s.battleTime, s.battleSpeed, s.battleMice, s.battleArrow, s.soundOutput, s.jumpPack, s.musicTest, s.seTest,
         s.logLevel, s.logMaxKb, s.logKeepFiles);
     return b;

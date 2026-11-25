@@ -93,7 +93,19 @@ For Dreamcast, a dump whose track checksums match the **USA multilingual ChuChu 
 - **Dreamcast only** supplies the 100 main puzzles, 25 Battle boards, 25 Challenge boards, and original models, textures and music. A fresh Windows build and setup from the USA CUE/BIN tracks produced playable Puzzle, Battle, Team Battle and Challenge headless runs without mobile files. The disc-only interface uses original Mode Select and Challenge selection art. See the [audit](docs/audit.md) for remaining presentation and platform gaps.
 - **Game Boy Advance only** supplies puzzles. A GBA graphics path is still needed for standalone play.
 - **All four platforms shipped Battle.** The old Dreamcast requirement came from the stage exporter. Setup now recognizes the byte-identical mobile Battle maps. The GBA Battle boards are still outside the stage importer. `CCR_CPU=gba` enables the port's GBA-style AI with any exported Battle boards and needs no GBA ROM. [Stage format notes](docs/stages.md)
-- **Missing optional files** reduce the available art, music or stage sets. The mobile Ogg soundtrack plays if Dreamcast CD tracks are absent. For presentation the port uses the iPad assets when available, then the Android phone art. With neither set, it opens a simple Puzzle and Battle menu.
+- **Missing optional files** reduce the available art, music or stage sets. The mobile Ogg soundtrack plays if Dreamcast CD tracks are absent. In the mobile look, the port uses the iPad assets when available, then the Android phone art. With neither set, it opens a simple Puzzle and Battle menu.
+
+### Dreamcast look or mobile look
+
+Setup works with a Dreamcast image alone, with mobile releases alone, or with both. When both are set up, three settings choose what you see and hear. Each is a row in Options > Settings (on the Dreamcast look, Options > Re-Nyastered Settings), a line in `settings.ini`, and a RecompLauncher setting:
+
+| Setting | Choices | Default |
+|---|---|---|
+| Look (`presentation`) | `dreamcast`: the disc's startup, Mode Select, Options, Help, HUDs, cursors and pause screens. `mobile`: the iPad/iPhone/Android screens and HUDs. | `auto`: Dreamcast when its files were set up, otherwise mobile. |
+| Sound (`sound_source`) | `dreamcast`: CD tracks and the original sound effects. `mobile`: the iOS/Android music and effects. | `auto`: Dreamcast first; mobile fills any gaps. |
+| 3D characters (`models_3d`) | With the mobile look, draws cats, mice, rockets and boards with the Dreamcast 3D models. The Dreamcast look always uses them. | On, when a Dreamcast image was set up. |
+
+If you choose a look whose files were not set up, the game uses the other one and says so in the setting's label.
 
 ### Launching a mode directly
 
@@ -110,7 +122,7 @@ In Puzzle and Battle, aim with the mouse and press **WASD** or the **arrow keys*
 
 The default launch plays the iPad startup logos when available. Pass `title` to skip the logos. If you supply a Dreamcast disc, setup also exports its title logo and Start prompt for the desktop build.
 
-When setup exports a Dreamcast model pack, new settings enable its 3D characters and board art by default. You can turn them off in Options > Settings or set `models_3d = false` in `settings.ini`.
+When setup exports a Dreamcast model pack, the 3D characters and board art are on by default. With the mobile look you can turn them off in Options > Settings or set `models_3d = false` in `settings.ini`.
 
 The [presentation audit](docs/presentation_audit.md) tracks missing startup screens, effects, and animation. Dreamcast-only setup supplies the live board models, character meshes, and disc UI sheets. The [Dreamcast rendering notes](docs/dreamcast_models.md) document the Flycast comparisons and remaining gaps.
 

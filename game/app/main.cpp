@@ -229,7 +229,58 @@ struct App {
     uint32_t globalTime = 0; // 0x8c016cc8: once per outer task pass, including menus
     StarBackground stars;
     SDL_Window* win = nullptr; SDL_Renderer* ren = nullptr; std::string root, saveDir; RotatingLog log; PadMap padMap; QuitHold quitHold; DreamcastTitleChord titleChord; Settings settings; ModelPack models3d; bool models3dTried = false, mobileSheetsMissing = false;
-    bool useModels3d() { if (!models3dTried) { models3dTried = true; if (settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
+    // Presentation (settings.ini "presentation", CCR_PRESENTATION overrides): dcLook = the Dreamcast screens, menus, HUDs, cursors and 3D field; otherwise the mobile ones.
+    // Resolved once at start by resolvePresentation(): "auto" takes the Dreamcast look whenever its art was extracted, and either choice falls back to the other when its own art is missing.
+    bool dcLook = false, mobileArt = false, dcArt = false;
+    bool mobileSound = false;   // sound_source = mobile and the iOS/Android audio is installed: mobile music and cues 0..28 first, Dreamcast fills the rest
+    bool useModels3d() { if (!models3dTried) { models3dTried = true; if (dcLook || settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
+    // An environment/launcher override (CCR_PRESENTATION, CCR_SOUND_SOURCE) wins until the player changes that row in Options, which clears it.
+    static std::string requestedChoice(const char* env, const std::string& setting) { const char* e = getenv(env); const std::string v = e && *e ? e : setting; return v == "dreamcast" || v == "mobile" ? v : "auto"; }
+    void resolvePresentation() {
+        std::error_code ec;
+        dcArt = dcModeSelect.tex && dcStartup.tex && std::filesystem::exists(root + "/dreamcast/models.bin", ec);
+        const std::string want = requestedChoice("CCR_PRESENTATION", settings.presentation);
+        dcLook = want == "mobile" ? !mobileArt && dcArt : want == "dreamcast" ? dcArt || !mobileArt : dcArt;
+        const std::string got = dcLook ? "dreamcast" : "mobile";
+        char line[200]; snprintf(line, sizeof line, "presentation %s (requested %s; Dreamcast art %s, mobile art %s)", got.c_str(), want.c_str(), dcArt ? "yes" : "no", mobileArt ? "yes" : "no");
+        log.write(1, line); if (want != "auto" && want != got) printf("%s\n", line);
+    }
+    // This port's own settings rows, shared by the mobile Options page and the Dreamcast Options "Re-Nyastered Settings" page (neither original has them).
+    enum PortRow { PortLook, PortSound, Port3d, PortCpu, PortUnlock, PortFullscreen, PortVsync, PortFilter, PortLog, PortRemap, PortRowCount };
+    static const char* choiceName(const std::string& v) { return v == "dreamcast" ? "Dreamcast" : v == "mobile" ? "Mobile" : "Auto"; }
+    static std::string nextChoice(const std::string& v, int dir) { static const char* const order[3] = {"auto", "dreamcast", "mobile"}; int i = v == "dreamcast" ? 1 : v == "mobile" ? 2 : 0; return order[(i + 3 + (dir < 0 ? -1 : 1)) % 3]; }
+    std::string portSettingLabel(int i) const {
+        const Settings& st = settings; char b[96];
+        switch (i) {
+        case PortLook: snprintf(b, sizeof b, "Look: %s%s", choiceName(st.presentation), st.presentation == "auto" ? (dcLook ? " (Dreamcast)" : " (Mobile)") : (st.presentation == "dreamcast") == dcLook ? "" : " (not installed)"); return b;
+        case PortSound: snprintf(b, sizeof b, "Sound: %s%s", choiceName(st.soundSource), st.soundSource == "mobile" && !mobileSound ? " (not installed)" : ""); return b;
+        case Port3d: return dcLook ? std::string("3D characters: On (Dreamcast look)") : std::string("3D characters: ") + (st.models3d ? "On" : "Off");
+        case PortCpu: return "Battle CPU: " + std::string(st.cpuStyle == "gba" ? "GBA" : "Dreamcast");
+        case PortUnlock: return std::string("Unlock all: ") + (st.unlockAll ? "On" : "Off");
+        case PortFullscreen: return std::string("Fullscreen: ") + (st.fullscreen ? "On" : "Off");
+        case PortVsync: return std::string("VSync: ") + (st.vsync ? "On" : "Off");
+        case PortFilter: return "Scaling: " + st.filter;
+        case PortLog: snprintf(b, sizeof b, "Log detail: %d", st.logLevel); return b;
+        default: return "Remap arrow buttons";
+        }
+    }
+    // Changes one row (dir -1 or +1; the On/Off rows toggle) and saves settings.ini. PortRemap is handled by the page, which captures controller buttons.
+    void portSettingChange(int i, int dir) {
+        Settings& st = settings;
+        switch (i) {
+        case PortLook: st.presentation = nextChoice(st.presentation, dir); ccrSetEnv("CCR_PRESENTATION", "", 1); resolvePresentation(); models3d.clear(); models3dTried = false; break;
+        case PortSound: st.soundSource = nextChoice(st.soundSource, dir); ccrSetEnv("CCR_SOUND_SOURCE", "", 1); reloadSounds(); break;
+        case Port3d: if (dcLook) return; st.models3d = !st.models3d; models3d.clear(); models3dTried = false; break;
+        case PortCpu: st.cpuStyle = st.cpuStyle == "gba" ? "dreamcast" : "gba"; break;
+        case PortUnlock: st.unlockAll = !st.unlockAll; break;
+        case PortFullscreen: st.fullscreen = !st.fullscreen; if (win) SDL_SetWindowFullscreen(win, st.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0); break;
+        case PortVsync: st.vsync = !st.vsync; vsync = st.vsync; if (ren) SDL_RenderSetVSync(ren, vsync); break;
+        case PortFilter: st.filter = st.filter == "linear" ? "nearest" : "linear"; break;
+        case PortLog: st.logLevel = (st.logLevel + (dir < 0 ? 2 : 1)) % 3; break;
+        default: return;
+        }
+        saveSettings(); log.write(1, ("setting changed: " + portSettingLabel(i)).c_str());
+    }
     void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
     void setSoundOutput(int output) {
         if (adev) SDL_LockAudioDevice(adev);
@@ -378,6 +429,7 @@ struct App {
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         const bool mobileSheets = loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font);
+        mobileArt = mobileSheets;
         if (!mobileSheets) {   // a Dreamcast-only install: the 3D model pack (cats, mice, rockets, floor, walls) carries the field and labels use the built-in bitmap font
             FILE* mp = fopen((root + "/dreamcast/models.bin").c_str(), "rb");
             if (!mp) { printf("missing sprite sheets in %s (tools/export_sprites.py <ccrret> <dir> all) and no Dreamcast model pack\n", ret.c_str()); return false; }
@@ -419,6 +471,7 @@ struct App {
         loadSheet(ret + "dc_cursors", dcCursors);
         loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
         loadSheet(ret + "dc_battle_hud", dcBattleHud);
+        resolvePresentation();
         if (dcPuzzleStart.tex || dcHelp.tex) {   // Dreamcast art present: warn when it predates the current atlas layout (the picture and the click areas would not match)
             int have = 0; if (FILE* vf = fopen((ret + "dc_assets_version.txt").c_str(), "rb")) { if (fscanf(vf, "%d", &have) != 1) have = 0; fclose(vf); }
             if (have < kDcAssetsVersion) {
@@ -475,6 +528,19 @@ struct App {
         for (int i = 0; i < outFrames; i++) { int si = std::min(frames - 1, (int)(i * step)); out[2 * i] = pcm[si * ch]; out[2 * i + 1] = pcm[si * ch + (ch > 1 ? 1 : 0)]; }
     }
     void loadAudio() {
+        loadSoundFiles();
+        openAudioDevice();
+    }
+    // Options "Sound" row: drop every decoded song and cue, then load them again from the newly chosen source (music restarts on the next screen request).
+    void reloadSounds() {
+        if (adev) SDL_LockAudioDevice(adev);
+        voices.clear(); musOn = false; curTrack = -1; musPos = 0;
+        for (Song& sg : songs) sg = Song{};
+        sfx.clear(); sfxJapanese.clear(); for (auto& v : rouletteVoice) v.clear(); for (auto& v : rouletteVoiceJapanese) v.clear();
+        loadSoundFiles();
+        if (adev) SDL_UnlockAudioDevice(adev);
+    }
+    void loadSoundFiles() {
         namespace fs = std::filesystem;
         std::string sfxDir; std::error_code ec;
         for (auto& e : fs::directory_iterator(root + "/ios", ec)) if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) sfxDir = (e.path() / "audio_sfx").string();
@@ -483,7 +549,9 @@ struct App {
                 if (fs::exists(e.path() / "audio_sfx" / "000.ogg")) { sfxDir = (e.path() / "audio_sfx").string(); break; }
         sfx.resize(128);   // Dreamcast CHU2_SE cue ids 0..127; ids 117..124 dispatch mobile roulette voices
         sfxJapanese.resize(128);
+        mobileSound = !sfxDir.empty() && requestedChoice("CCR_SOUND_SOURCE", settings.soundSource) == "mobile";
         for (int i = 0; i < static_cast<int>(sfx.size()); ++i) {   // the Dreamcast cue is preferred; mobile clips only fill cues the renderer does not support
+            if (mobileSound && i < 29) continue;   // sound_source = mobile: the mobile clips 000..028 carry these cue ids
             char cue[512]; snprintf(cue, sizeof cue, "%s/dreamcast/sfx/cue%03d.wav", root.c_str(), i);
             SDL_AudioSpec spec; Uint8* buf; Uint32 len;
             if (!SDL_LoadWAV(cue, &spec, &buf, &len)) continue;
@@ -513,6 +581,8 @@ struct App {
                 loadClip(117 + i, "J", rouletteVoiceJapanese[i]);
             }
         }
+    }
+    void openAudioDevice() {
         if (headless && !getenv("CCR_AUDIO_TEST")) return;   // CCR_AUDIO_TEST=1: open the (dummy) audio device in headless runs to exercise the music code
         SDL_AudioSpec want{}; want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024; want.callback = audioCb; want.userdata = this; SDL_AudioSpec have;
         if (headless && getenv("CCR_AUDIO_CAPTURE")) audioCapture = fopen(getenv("CCR_AUDIO_CAPTURE"), "wb");
@@ -580,7 +650,7 @@ struct App {
             if (mobileFrames > 0) break;
         }
         char wp[512]; snprintf(wp, sizeof wp, "%s/dreamcast/audio/track%02d.wav", root.c_str(), n + 4); SDL_AudioSpec sp; Uint8* buf; Uint32 len;
-        if (SDL_LoadWAV(wp, &sp, &buf, &len)) {                                  // best source: the lossless Dreamcast CD track
+        if (!(mobileSound && !mobile.empty()) && SDL_LoadWAV(wp, &sp, &buf, &len)) {   // sound_source = mobile skips the CD track when the mobile song exists                                  // best source: the lossless Dreamcast CD track
             // The track WAV begins with its 2.0 s silent pre-gap. The original plays from the track start (index 1, after the pre-gap) and repeats the whole
             // track from there (measured in Flycast: two exact matches of track 6 content 36.01 s apart = 38.01 s - 2.00 s). The command queue entry built by
             // 1ST_READ FUN_8c012350 carries repeat 0 (play once) for tracks 0x10, 0x11, 0x12 and 0xb, i.e. songs 12, 13, 14 and 7, and 0xf (forever) otherwise.
@@ -719,12 +789,12 @@ struct App {
         if (!battleArrowVisible(ttl)) return;   // FUN_8c0103e2 flickers arrows on odd TTL values in their last 60 ticks
         // DC Battle draw 0x8c0103e2 submits quad 0x8c075aac: x/z +/-6.75
         // inside a 15-unit cell. Hit scaling (0x8c0104b0) is additional.
-        const float tileScale = settings.models3d && dcArrows.tex && dcArrows.fr.size() == 4 ? 13.5f / 15.0f : 1.0f;
+        const float tileScale = dcLook && dcArrows.tex && dcArrows.fr.size() == 4 ? 13.5f / 15.0f : 1.0f;
         arrowIcon(field.x(x + 0.5f), field.y(y + 0.5f), dir, owner, (hits ? 0.7f : 1.0f) * tileScale * field.scale());
     }
     void arrowIcon(float cx, float cy, int dir, int owner, float sc) {
         static const double rot[4] = {180.0, 270.0, 0.0, 90.0};
-        if (settings.models3d && dcArrows.tex && dcArrows.fr.size() == 4) {
+        if (dcLook && dcArrows.tex && dcArrows.fr.size() == 4) {
             // The Dreamcast texture points west and covers one cell.
             const SDL_Rect& src = dcArrows.fr[owner & 3];
             const float w = src.w * sc, h = src.h * sc;
@@ -868,8 +938,7 @@ struct App {
         SDL_SetTextureAlphaMod(sh->tex, (Uint8)alpha); SDL_RenderCopyEx(ren, sh->tex, &fr, &dst, 0.0, nullptr, (SDL_RendererFlip)((flags & 2 ? SDL_FLIP_HORIZONTAL : 0) | (flags & 4 ? SDL_FLIP_VERTICAL : 0))); SDL_SetTextureAlphaMod(sh->tex, 255); }
 
     bool useDcBattleHud() {
-        return dcBattleHud.tex && dcBattleHud.fr.size() >= 31 &&
-               (mobileSheetsMissing || useModels3d());
+        return dcLook && dcBattleHud.tex && dcBattleHud.fr.size() >= 31 && useModels3d();
     }
 
     void dcBattleSprite(int frame, float x, float y, float width, float height) {
@@ -1142,7 +1211,7 @@ struct App {
             if ((reach >> t) & 1) drawImage(0x91, 0, tx + (t == 0 ? layF(0x2fc) : layF(0x300)), iy + layF(0x304), 0, 1.0f, 255); } }
     void drawFrame5(int x, int y, int width) { const int t = 56; int n = width / t; int px = x - (t * n / 2 - t / 2); for (int i = 0; i < n; i++, px += t) blit(hdFrame78, i == 0 ? 0 : i == n - 1 ? 2 : 1, (float)px, (float)y); }
     bool useDcCursors() {
-        return dcCursors.tex && dcCursors.fr.size() == 4 && (!cur.tex || useModels3d());
+        return dcCursors.tex && dcCursors.fr.size() == 4 && (!cur.tex || dcLook);
     }
     void dcCursorAt(Sheet& sheet, float x, float y, int player, float size) {
         const SDL_FRect dst{x - size / 2, y - size / 2, size, size};
@@ -2287,28 +2356,17 @@ struct OptionsMode : Screen {
     int capture = -1;   // sub 3: -1 list, 0..3 waiting for the controller button of arrow dir 0..3
     std::array<int, 4> pendingArrowButtons{};
     int back() const { return sub == 2 ? 6 : sub == 1 ? 2 : 7; }
-    static constexpr int PR = 8, PX = 225, PY0 = 173, PPITCH = 70;   // port settings rows
+    static constexpr int PR = App::PortRowCount, PCOL = 5, PY0 = 173, PPITCH = 90;   // port settings rows (App::portSettingLabel order) in two columns of five: game choices left, display/system right
+    static int portX(int i) { return i < PCOL ? 120 : 567; }
+    static int portY(int i) { return PY0 + PPITCH * (i % PCOL); }
     static const char* dirName(int d) { static const char* n[4] = {"down", "left", "up", "right"}; return n[d]; }
     std::string portLabel(App& a, int i) {
-        const Settings& st = a.settings; char b[96];
-        switch (i) { case 0: return std::string("Fullscreen: ") + (st.fullscreen ? "On" : "Off"); case 1: return std::string("VSync: ") + (st.vsync ? "On" : "Off"); case 2: return "Scaling: " + st.filter;
-            case 3: snprintf(b, sizeof b, "Log detail: %d", st.logLevel); return b;
-            case 7: return std::string("3D characters: ") + (st.models3d ? "On" : "Off");
-            case 6: return std::string("Unlock all: ") + (st.unlockAll ? "On" : "Off");
-            case 5: return "Battle CPU: " + std::string(st.cpuStyle == "gba" ? "GBA" : "Dreamcast");
-            default: if (capture >= 0) { snprintf(b, sizeof b, "Press pad button for arrow %s", dirName(capture)); return b; } return "Remap arrow buttons"; } }
-    int portHit(float lx, float ly, App& a) { for (int i = 0; i < PR; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (PX <= lx && lx <= PX + w && PY0 + PPITCH * i <= ly && ly <= PY0 + PPITCH * i + h) return i; } int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 99; return -1; }
-    void portAct(App& a, int i) {
-        Settings& st = a.settings;
-        if (i == 0) { st.fullscreen = !st.fullscreen; SDL_SetWindowFullscreen(a.win, st.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0); }
-        else if (i == 1) { st.vsync = !st.vsync; a.vsync = st.vsync; SDL_RenderSetVSync(a.ren, a.vsync); }
-        else if (i == 2) st.filter = st.filter == "linear" ? "nearest" : "linear";
-        else if (i == 3) st.logLevel = (st.logLevel + 1) % 3;
-        else if (i == 4) { capture = 0; return; }
-        else if (i == 7) { st.models3d = !st.models3d; a.models3d.clear(); a.models3dTried = false; }
-        else if (i == 6) st.unlockAll = !st.unlockAll;
-        else if (i == 5) st.cpuStyle = st.cpuStyle == "gba" ? "dreamcast" : "gba";
-        a.saveSettings(); a.log.write(1, ("setting changed: " + portLabel(a, i)).c_str()); }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
+        if (i == App::PortRemap && capture >= 0) { char b[96]; snprintf(b, sizeof b, "Press pad button for arrow %s", dirName(capture)); return b; }
+        return a.portSettingLabel(i); }
+    int portHit(float lx, float ly, App& a) { for (int i = 0; i < PR; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; if (portX(i) <= lx && lx <= portX(i) + w && portY(i) <= ly && ly <= portY(i) + h) return i; } int bw = a.ssArrows.box[0].x, bh = a.ssArrows.box[0].y; if (0 <= lx && lx <= bw && 768 - bh <= ly && ly <= 768) return 99; return -1; }
+    // Two-column grid: Up/Down move within the column (wrapping), Left/Right jump to the same row of the other column; Enter/A changes the value.
+    void portMove(App& a, int dCol, int dRow) { int col = sel / PCOL, row = sel % PCOL; if (dCol) col ^= 1; row = (row + dRow + PCOL) % PCOL; sel = col * PCOL + row; a.playSfx(0); }
+    void portAct(App& a, int i, int dir = 1) { if (i == App::PortRemap) { capture = 0; return; } a.portSettingChange(i, dir); }   // sound list: 0 music, 1 sfx, 2 back (the vibration row exists only when AppData[0x685] is set)
     int drag = -1; static constexpr int SX = 303, SY0 = 245, SPITCH = 45, SW = 234;
     int sliderX(App& a) { int w = 0; for (int i = 0; i < 2; i++) if (const std::string* s = a.hdString(0x164 + i)) w = std::max(w, a.hdTextWidth(*s, 0, 1.0f)); return SX + w; }   // initSoundMenuItems: item x = 303 + the widest label
     int music() override { return phase == 0x11 ? -1 : 5; }
@@ -2333,8 +2391,8 @@ struct OptionsMode : Screen {
                 return;
             }
             if (capture >= 0 && e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) { capture = -1; return; }
-            if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_ESCAPE) { a.playSfx(2); sub = 0; sel = 3; } else if (k == SDLK_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (k == SDLK_RETURN && capture < 0) { a.playSfx(2); portAct(a, sel); } return; }
-            if (e.type == SDL_CONTROLLERBUTTONDOWN && capture < 0) { int b = e.cbutton.button; if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN) { sel = (sel + 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_DPAD_UP) { sel = (sel + PR - 1) % PR; a.playSfx(0); } else if (b == SDL_CONTROLLER_BUTTON_A) { a.playSfx(2); portAct(a, sel); } else if (b == SDL_CONTROLLER_BUTTON_B) { a.playSfx(2); sub = 0; sel = 3; } return; }
+            if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_ESCAPE) { a.playSfx(2); sub = 0; sel = 3; } else if (capture < 0 && (k == SDLK_DOWN || k == SDLK_UP)) portMove(a, 0, k == SDLK_DOWN ? 1 : -1); else if (capture < 0 && (k == SDLK_LEFT || k == SDLK_RIGHT)) portMove(a, 1, 0); else if ((k == SDLK_RETURN || k == SDLK_SPACE) && capture < 0) { a.playSfx(2); portAct(a, sel); } return; }
+            if (e.type == SDL_CONTROLLERBUTTONDOWN && capture < 0) { int b = e.cbutton.button; if (b == SDL_CONTROLLER_BUTTON_DPAD_DOWN || b == SDL_CONTROLLER_BUTTON_DPAD_UP) portMove(a, 0, b == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? 1 : -1); else if (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT || b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) portMove(a, 1, 0); else if (b == SDL_CONTROLLER_BUTTON_A) { a.playSfx(2); portAct(a, sel); } else if (b == SDL_CONTROLLER_BUTTON_B) { a.playSfx(2); sub = 0; sel = 3; } return; }
             if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && capture < 0) { float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly); int h = portHit(lx, ly, a); if (h == 99) { a.playSfx(2); sub = 0; sel = 3; } else if (h >= 0) { if (sel != h) { sel = h; a.playSfx(0); } else { a.playSfx(2); portAct(a, h); } } }
             return; }
         if (phase == 0x12 && sub == 1 && (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONUP) && drag >= 0) {   // handleInput param_3 == 1 (move) and 2 (release)
@@ -2382,9 +2440,9 @@ struct OptionsMode : Screen {
         for (int r = 0; r < 6; r++) for (int c = 0; c < 8; c++) a.rtex(a.opBg, tm[r * 8 + c], (float)(c * 128), (float)(r * 128), 128, 128);
         a.rtex(a.opHdr, 0, 208, 50, a.opHdr.fr[0].w, a.opHdr.fr[0].h);
         if (sub == 3) {
-            for (int i = 0; i < PR; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)PX, (float)(PY0 + PPITCH * i), w, h);
-                const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(portLabel(a, i), (float)(PX + w / 2), (float)(PY0 + PPITCH * i) + ((float)h - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1);
-                if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(PX + 36 - m.w), (float)(PY0 + PPITCH * i + (h - m.h) / 2), m.w, m.h); } }
+            for (int i = 0; i < PR; i++) { int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)portX(i), (float)portY(i), w, h);
+                const float sc = 0.6667f; const float lh = (float)a.hdFont1.box[91].y * sc; a.printString(portLabel(a, i), (float)(portX(i) + w / 2), (float)portY(i) + ((float)h - lh) * 0.5f, 255, 255, 255, 255, sc, 0, false, 1);
+                if (i == sel) { const SDL_Rect& m = a.mnMasc.fr[mascot]; a.rtex(a.mnMasc, mascot, (float)(portX(i) + 36 - m.w), (float)(portY(i) + (h - m.h) / 2), m.w, m.h); } }
             a.rtex(a.ssArrows, 0, 0, (float)(768 - a.ssArrows.box[0].y), a.ssArrows.box[0].x, a.ssArrows.box[0].y); return; }
         if (sub == 1) { drawSounds(a, a.musicVol, a.sfxVol, drag, nullptr); if (phase != 0x12) { SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, (Uint8)(int)(fade / 500000.0 * 255.0)); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all); } return; }
         for (int i = 0; i < N; i++) { if (!shown(i)) continue; int w = a.mnBars.box[0].x, h = a.mnBars.box[0].y; a.rtex(a.mnBars, i == sel ? 1 : 0, (float)px[i], (float)py[i], w, h);
@@ -2505,7 +2563,7 @@ struct DcOptionsMode : Screen {
     int genRow = 0, genSound = 1, genJump = 0, genMusic = 0, genSe = 0;
     // Settings for 4P Battle and Team Battle (Flycast frame 2750): play time 1-3 minutes, game speed 1-5, '% of ? mice' Normal/High, arrow reset Off/On. Untraced and unwired like General Settings.
     int bRow = 0, bTime = 3, bSpeed = 3, bMice = 0, bArrow = 0;
-    bool recordLeft = false, recordRight = false, recordConfirm = false, recordsDeleted = false;
+    bool recordLeft = false, recordRight = false;   // Records page: L and R held on controller recordPad
     SDL_JoystickID recordPad = -1;
     // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
     static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
@@ -2532,11 +2590,30 @@ struct DcOptionsMode : Screen {
         else if (sel == 2 && hasLanguagePage(a)) { page = 2; a.playSfx(1); }
         else if (sel == 3 && hasLanguagePage(a)) {
             page = 3; for (int i = 0; i < 5; ++i) if (kLangOf[i] == a.lang) langRow = i; a.playSfx(1);
-        } else { a.playSfx(1); leave = true; }
+        } else if (sel == kPortMenuRow) { page = kPortPage; portRow = 0; portCapture = -1; a.playSfx(1); }
+        else { a.playSfx(1); leave = true; }
     }
-    static constexpr int kRows[6] = {172, 204, 236, 268, 300, 364};
-    void move(App& a, int d) { if (page == 3) langRow = (langRow + 5 + d) % 5; else if (page == 0) genRow = (genRow + 6 + d) % 6; else if (page == 1) bRow = (bRow + 5 + d) % 5; else sel = (sel + 6 + d) % 6; a.playSfx(0); }
+    // The six original rows plus this port's own "Re-Nyastered Settings" row in the empty slot above Return (not on the Dreamcast disc: it carries the presentation, sound source and
+    // other port settings so a Dreamcast-look player can reach every option; the mobile Options page shows the same rows).
+    static constexpr int kRows[7] = {172, 204, 236, 268, 300, 332, 364};   // the original leaves y 332 empty; the port row uses it so nothing overlaps the controls strip at y 407
+    static constexpr int kMenuRows = 7, kPortMenuRow = 5, kPortPage = 5;
+    int portRow = 0, portCapture = -1; std::array<int, 4> portPending{};
+    static constexpr int kPortTop = 156, kPortPitch = 25;   // below the 64 px title plate at y 88, above the controls strip at y 407
+    void move(App& a, int d) { if (page == kPortPage) { if (portCapture >= 0) return; portRow = (portRow + App::PortRowCount + d) % App::PortRowCount; } else if (page == 3) langRow = (langRow + 5 + d) % 5; else if (page == 0) genRow = (genRow + 6 + d) % 6; else if (page == 1) bRow = (bRow + 5 + d) % 5; else sel = (sel + kMenuRows + d) % kMenuRows; a.playSfx(0); }
+    void portChange(App& a, int d) {
+        if (portCapture >= 0) return;
+        if (portRow == App::PortRemap) { if (d > 0) { portCapture = 0; a.playSfx(1); } return; }
+        a.portSettingChange(portRow, d); a.playSfx(0);
+    }
+    // Remap arrow buttons on this page: the next four controller face/shoulder buttons become the down, left, up and right arrows (as on the mobile page).
+    bool portCaptureButton(App& a, int button) {
+        if (portCapture < 0 || button >= SDL_CONTROLLER_BUTTON_DPAD_UP) return false;
+        portPending[portCapture++] = button; a.playSfx(0);
+        if (portCapture == 4) { std::copy(portPending.begin(), portPending.end(), a.padMap.arrow); portCapture = -1; a.savePadMap(); a.log.write(1, "setting changed: arrow buttons remapped"); a.playSfx(1); }
+        return true;
+    }
     void adjust(App& a, int d) {   // Left/Right on the General Settings values
+        if (page == kPortPage) { portChange(a, d); return; }
         if (page == 1) {
             switch (bRow) {
             case 0: bTime = 1 + (bTime - 1 + 3 + d) % 3; break;
@@ -2565,6 +2642,7 @@ struct DcOptionsMode : Screen {
         a.playSfx(0);
     }
     void accept(App& a) {
+        if (page == kPortPage) { portChange(a, 1); return; }
         if (page == 3) { a.lang = kLangOf[langRow]; a.saveOptions(); a.playSfx(1); }
         else if (page == 1) { if (bRow == 4) { bTime = 3; bSpeed = 3; bMice = 0; bArrow = 0; a.settings.battleTime = bTime; a.settings.battleSpeed = bSpeed; a.settings.battleMice = bMice; a.settings.battleArrow = bArrow; a.saveSettings(); a.playSfx(1); } else adjust(a, 1); }
         else if (page == 0) { if (genRow == 5) { genCharacter = 0; genSound = 1; genJump = 0; genMusic = 0; genSe = 0; a.settings.characterStyle = genCharacter; a.settings.soundOutput = genSound; a.settings.jumpPack = genJump; a.settings.musicTest = genMusic; a.settings.seTest = genSe; a.setSoundOutput(genSound); a.saveSettings(); a.playSfx(1); } else if (genRow == 0 || genRow == 1 || genRow == 2) adjust(a, 1); else if (genRow == 4) a.playSfx(genSe); else if (genRow == 3) a.playSong(genMusic); /* FUN_8c05368a: A/Start plays the selected value + 4 as a CD track */ }
@@ -2580,25 +2658,28 @@ struct DcOptionsMode : Screen {
         if (wrote && closed) { a.challengeMask = 0; a.challengeMaskLoaded = true; }
         return wrote && closed;
     }
-    bool recordChord(App& a, SDL_JoystickID pad, int control, bool down) {
-        if (recordPad != -1 && recordPad != pad) return false;
-        if (down && recordPad == -1) recordPad = pad;
-        if (recordPad != pad) return false;
-        if (control == 0) recordLeft = down;
-        else if (control == 1) recordRight = down;
-        else recordConfirm = down;
-        if (recordLeft && recordRight && recordConfirm && !recordsDeleted) {
-            recordsDeleted = true;
-            if (!deleteChallengeRecords(a)) a.log.write(1, "could not delete Stage Challenge records");
-            else a.playSfx(1);
-            return true;
-        }
-        if (!recordLeft && !recordRight && !recordConfirm) { recordsDeleted = false; recordPad = -1; }
-        return false;
+    // Records page task 0x8c05455c, state 1 (0x8c054600). Delete: while pad A's held word (PDS_PERIPHERAL +8 at 0x8c1aee88) has TR 0x10000, TL 0x20000 and Start 8
+    // (or, on the Arcade Stick, Z 0x100, C 1 and Start 8) it clears the Stage Challenge mask and 25 times (0x8c02b620), redraws zeros (0x8c0546f6, 0x8c0547f0), and if
+    // the gameplay style (0x8c016bd4) is 1 (Chao, which needs every Challenge clear) writes General Character option 0 and style 0 (Normal) through 0x8c0521b0 and
+    // 0x8c016c06; style 2 (Pian) keeps its style and sets option 0 to 1 (Pian becomes the first unlocked slot); then saves (0x8c05212c). Leave: any newly pressed
+    // A, B or Start (0x8c1aefd8 & 0xe, cue 3). The footer art reads "A/B/(Start) Previous, L+R+(Start) Delete all" - the triangle is the Start button.
+    // The port: L/R come from one controller's shoulder buttons or triggers; SDL has no C/Z, so only the L+R+Start chord exists. The port stores the style itself, so
+    // only Chao needs the reset.
+    void recordsDeleteAll(App& a) {
+        if (!deleteChallengeRecords(a)) { a.log.write(1, "could not delete Stage Challenge records"); return; }
+        if (a.settings.characterStyle == 1) { a.settings.characterStyle = 0; a.saveSettings(); }
+        a.log.write(1, "Stage Challenge records deleted");
+    }
+    void recordHold(SDL_JoystickID pad, int control, bool down) {
+        if (down && recordPad != pad) { recordPad = pad; recordLeft = recordRight = false; }
+        if (recordPad != pad) return;
+        if (control == 0) recordLeft = down; else recordRight = down;
     }
     void back(App& a) {
+        if (page == kPortPage && portCapture >= 0) { portCapture = -1; a.playSfx(0); return; }
         if (page >= 0) {
-            page = -1; recordPad = -1; recordLeft = recordRight = recordConfirm = recordsDeleted = false; a.playSfx(0);
+            if (page == 2) a.playSfx(3); else a.playSfx(0);   // Records leaves with cue 3 (0x8c054672)
+            page = -1; recordPad = -1; recordLeft = recordRight = false;
         } else leave = true;
     }
     void event(App& a, const SDL_Event& e) override {
@@ -2610,21 +2691,17 @@ struct DcOptionsMode : Screen {
             case SDLK_ESCAPE: back(a); break; default: break; }
         } else if (page == 2 && (e.type == SDL_CONTROLLERBUTTONDOWN || e.type == SDL_CONTROLLERBUTTONUP)) {
             const bool down = e.type == SDL_CONTROLLERBUTTONDOWN;
-            int control = -1;
-            if (e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) control = 0;
-            else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) control = 1;
-            else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A) control = 2;
-            if (control >= 0 && (recordPad == -1 || recordPad == e.cbutton.which)) {
-                const bool wasConfirm = control == 2 && recordConfirm;
-                const bool wasDeleted = recordsDeleted;
-                const bool deleted = recordChord(a, e.cbutton.which, control, down);
-                if (control == 2 && !down && wasConfirm && !wasDeleted && !deleted) back(a);
-            } else if (down && e.cbutton.button == SDL_CONTROLLER_BUTTON_B) back(a);
+            const int b = e.cbutton.button;
+            if (b == SDL_CONTROLLER_BUTTON_LEFTSHOULDER || b == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) recordHold(e.cbutton.which, b == SDL_CONTROLLER_BUTTON_LEFTSHOULDER ? 0 : 1, down);
+            else if (down && (b == SDL_CONTROLLER_BUTTON_A || b == SDL_CONTROLLER_BUTTON_B || b == SDL_CONTROLLER_BUTTON_START)) {
+                if (b == SDL_CONTROLLER_BUTTON_START && recordPad == e.cbutton.which && recordLeft && recordRight) recordsDeleteAll(a);   // delete is checked before the leave test
+                back(a);
+            }
         } else if (page == 2 && e.type == SDL_CONTROLLERAXISMOTION &&
                    (e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)) {
-            const int control = e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT ? 0 : 1;
-            recordChord(a, e.caxis.which, control, e.caxis.value > SDL_JOYSTICK_AXIS_MAX / 2);
+            recordHold(e.caxis.which, e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT ? 0 : 1, e.caxis.value > SDL_JOYSTICK_AXIS_MAX / 2);
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+            if (page == kPortPage && portCaptureButton(a, e.cbutton.button)) return;
             switch (e.cbutton.button) {
             case SDL_CONTROLLER_BUTTON_DPAD_UP: move(a, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: move(a, 1); break;
             case SDL_CONTROLLER_BUTTON_DPAD_LEFT: adjust(a, -1); break; case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: adjust(a, 1); break;
@@ -2713,8 +2790,19 @@ struct DcOptionsMode : Screen {
             for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, cy + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
             return;
         }
-        static const char* const labels[6] = {"General Settings", "Settings for 4P Battle and Team Battle", "Records", "Language", "Keyboard F-key Settings", "Return to Initial Settings"};
-        for (int i = 0; i < 6; ++i) {
+        if (page == kPortPage) {   // this port's settings (not a Dreamcast page): the same rows as the mobile Options page, in the Options page's text and cursor style
+            for (int i = 0; i < App::PortRowCount; ++i) {
+                std::string label = a.portSettingLabel(i);
+                if (i == App::PortRemap && portCapture >= 0) { static const char* const dirs[4] = {"down", "left", "up", "right"}; label = std::string("Press pad button for arrow ") + dirs[portCapture]; }
+                drawText(a, label, 80, kPortTop + kPortPitch * i);
+            }
+            const int cy = kPortTop + kPortPitch * portRow + 12;
+            SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
+            for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, cy + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
+            return;
+        }
+        static const char* const labels[kMenuRows] = {"General Settings", "Settings for 4P Battle and Team Battle", "Records", "Language", "Keyboard F-key Settings", "Re-Nyastered Settings", "Return to Initial Settings"};
+        for (int i = 0; i < kMenuRows; ++i) {
             int x = 100; const int y = kRows[i] - 12;
             drawText(a, labels[i], x, y);
         }
@@ -2741,7 +2829,7 @@ struct DcModeSelect : Screen {
     const char* destination = nullptr;
 
     static bool available(const App& a) {
-        return a.mobileSheetsMissing && a.dcModeSelect.tex && a.dcModeSelect.fr.size() == FrameCount;
+        return a.dcLook && a.dcModeSelect.tex && a.dcModeSelect.fr.size() == FrameCount;
     }
 
     int music() override { return 0; }
@@ -3133,7 +3221,7 @@ struct PuzzleMode : Screen {
                !a.str(217).empty() && !a.str(218).empty();
     }
     bool phonePuzzleHudAvailable(const App& a) const {
-        return a.hdPhud.fr.empty() && !a.phonePuzzleHud.fr.empty();
+        return !a.dcLook && a.hdPhud.fr.empty() && !a.phonePuzzleHud.fr.empty();
     }
     // Fit the 480 × 320 handset UI at integer scale on the shared gameplay canvas.
     static constexpr int phoneX = (GW - 960) / 2, phoneY = (GH - 640) / 2;
@@ -3141,7 +3229,7 @@ struct PuzzleMode : Screen {
     static constexpr SDL_Rect dcStartRect{8, 51, 202, 206};   // one extra row overlaps the L panel: the sheet's last row is half transparent and the bilinear edge left a navy hairline between the panels
     static constexpr SDL_Rect dcCancelRect{8, 256, 202, 117};
     bool dreamcastPuzzleControls(const App& a) const {
-        return a.settings.models3d && a.dcPuzzleStart.tex && a.dcPuzzleCancel.tex && !phonePuzzleHudAvailable(a);
+        return a.dcLook && a.dcPuzzleStart.tex && a.dcPuzzleCancel.tex;
     }
     void drawPhonePause(App& a) const {
         auto art = [&](Sheet& sheet, int frame, int x, int y, bool mirror = false) {
@@ -3771,7 +3859,7 @@ struct ChallengeSelectMode : Screen {
     const char* destination = nullptr;
 
     static bool available(App& a) {
-        return a.dcChallengeSelect.tex && a.dcChallengeSelect.fr.size() == FrameCount && a.useModels3d();
+        return a.dcLook && a.dcChallengeSelect.tex && a.dcChallengeSelect.fr.size() == FrameCount && a.useModels3d();
     }
     bool finalUnlocked() const { return (progress.mask & kRegularClearMask) == kRegularClearMask; }
     bool load(App& a, int stage) {
@@ -3922,7 +4010,7 @@ struct ChallengeSelectMode : Screen {
 struct DcBattleSetupMode : Screen {
     int phase = 0, col = 0, row = 0, stage = 0, points = 3, ticks = 0; bool team = false; bool human[4] = {true, false, false, false}; int type[4] = {0, 0, 0, 0};
     Stages stages; const char* destination = nullptr; bool leave = false;
-    static bool available(App& a) { return a.dcBattleSetup.tex && a.dcBattleSetup.fr.size() == 30 && a.useModels3d(); }
+    static bool available(App& a) { return a.dcLook && a.dcBattleSetup.tex && a.dcBattleSetup.fr.size() == 30 && a.useModels3d(); }
     bool load(App& a) { return loadStages((a.root + "/battle_stages.bin").c_str(), stages, 2) && stages.list.size() >= 25; }
     int level(int p) const { return human[p] ? -1 : (type[p] == 5 ? -2 : type[p]); }   // -1 human, -2 none
     bool canStart() const { for (int p = 0; p < 4; ++p) if (human[p]) return true; return false; }
@@ -4024,7 +4112,7 @@ struct DcBattleSetupMode : Screen {
 
 struct StageSelectMode : Screen {
     Stages stages; int cur = 0, page = 0; bool go = false, back = false; static constexpr int COLS = 5, ROWS = 4, PER = COLS * ROWS;
-    bool dc() const { return gApp && gApp->stageSet == 0 && gApp->settings.models3d && gApp->dcPuzzleSelect.tex && stages.list.size() >= 100; }
+    bool dc() const { return gApp && gApp->stageSet == 0 && gApp->dcLook && gApp->dcPuzzleSelect.tex && stages.list.size() >= 100; }
     void dcGroup(App& a, int delta) {
         int group = cur / 25 + delta;
         if (group < 0 || group > a.maxStage()) { a.playSfx(0x13); return; }
@@ -4257,7 +4345,7 @@ struct BattleMode : Screen {
               const SettingsPaneItems::PadRules* rules = nullptr, int localTeam = -1) {
         if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 2)) return false; cur = stage % (int)stages.list.size(); seed = sd;
         game.teamMode = localTeam < 0 ? getenv("CCR_TEAM") != nullptr : localTeam != 0;
-        dcProjection = gApp && gApp->useModels3d();
+        dcProjection = gApp && gApp->dcLook && gApp->useModels3d();
         field = dcProjection ? dcBattleField : FieldLayout{};
         game.rocketPulseDecay = dcProjection ? 0.05f : 0.0f;
         game.gbaCpu = getenv("CCR_CPU") ? std::string(getenv("CCR_CPU")) == "gba" : (gApp && gApp->settings.cpuStyle == "gba");
@@ -4841,6 +4929,8 @@ int main(int argc, char** argv) {
             else if (!strcmp(arg, "--no-vsync")) ccrSetEnv("CCR_VSYNC", "0", 1);
             else if (!strcmp(arg, "--filter=nearest")) ccrSetEnv("CCR_FILTER", "nearest", 1);
             else if (!strcmp(arg, "--filter=linear")) ccrSetEnv("CCR_FILTER", "linear", 1);
+            else if (!strncmp(arg, "--presentation=", 15)) ccrSetEnv("CCR_PRESENTATION", arg + 15, 1);   // RecompLauncher "Look": dreamcast or mobile (absent = the settings.ini choice)
+            else if (!strncmp(arg, "--sound=", 8)) ccrSetEnv("CCR_SOUND_SOURCE", arg + 8, 1);
             else break;
             ++shift;
         }
@@ -4875,7 +4965,7 @@ int main(int argc, char** argv) {
             mode = std::move(demo);
         }
         else if (name == "DC_TITLE") { app.playSong(0); auto title = std::make_unique<DcStartupMode>(); title->phase = 2; mode = std::move(title); }
-        else if (name == "STARTUP" && !app.titleOk && DcStartupMode::available(app)) mode = std::make_unique<DcStartupMode>();
+        else if (name == "STARTUP" && (app.dcLook || !app.titleOk) && DcStartupMode::available(app)) mode = std::make_unique<DcStartupMode>();
         else if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
         else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
@@ -4893,8 +4983,8 @@ int main(int argc, char** argv) {
             mode = std::move(m);
         }
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
-        else if (name == "BATTLE" && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
-        else if ((name == "BATTLE" || name == "TEAM_BATTLE") && !BattleSetupMode::available(app) && DcBattleSetupMode::available(app)) { auto m = std::make_unique<DcBattleSetupMode>(); m->team = name == "TEAM_BATTLE"; if (!m->load(app)) { puts("cannot load battle stages"); return false; } mode = std::move(m); }
+        else if (name == "BATTLE" && !app.dcLook && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
+        else if ((name == "BATTLE" || name == "TEAM_BATTLE") && DcBattleSetupMode::available(app)) { auto m = std::make_unique<DcBattleSetupMode>(); m->team = name == "TEAM_BATTLE"; if (!m->load(app)) { puts("cannot load battle stages"); return false; } mode = std::move(m); }
         else if (name == "DC_BATTLE_MATCH") {
             const auto& setup = static_cast<const DcBattleSetupMode&>(*mode);
             auto battle = std::make_unique<BattleMode>();
@@ -4930,18 +5020,20 @@ int main(int argc, char** argv) {
             }
             mode = std::move(battle);
         }
+        else if (name == "HELP" && app.dcLook && DcHelpMode::available(app)) mode = std::make_unique<DcHelpMode>();
         else if (name == "HELP" && HelpMode::ok(app)) mode = std::make_unique<HelpMode>();
         else if (name == "HELP" && DcHelpMode::available(app)) mode = std::make_unique<DcHelpMode>();
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
         else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
+        else if (name == "OPTIONS" && app.dcLook && DcOptionsMode::available(app)) mode = std::make_unique<DcOptionsMode>();
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();
         else if (name == "OPTIONS" && DcOptionsMode::available(app)) mode = std::make_unique<DcOptionsMode>();
-        else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
-        else if (DcModeSelect::available(app)) {
+        else if (DcModeSelect::available(app)) {   // requires the Dreamcast presentation
             auto m = std::make_unique<DcModeSelect>();
             if (name == "MENU_CHALLENGE") m->selected = 3;
             mode = std::move(m);
         }
+        else if (HdMenuMode::ok(app)) mode = std::make_unique<HdMenuMode>();
         else mode = std::make_unique<MenuMode>();
         return true;
     };

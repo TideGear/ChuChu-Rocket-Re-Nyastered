@@ -23,6 +23,13 @@ int main() {
           parseSettings("character_style=9\n").characterStyle == 2 &&
           parseSettings("character_style=-1\n").characterStyle == 0);
     CHECK(parseSettings(settingsText(parseSettings("character_style=1\n"))).characterStyle == 1);
+    CHECK(parseSettings("").presentation == "auto" && parseSettings("").soundSource == "auto");
+    CHECK(parseSettings("presentation = mobile\nsound_source = dreamcast\n").presentation == "mobile" &&
+          parseSettings("presentation = mobile\nsound_source = dreamcast\n").soundSource == "dreamcast");
+    CHECK(parseSettings("presentation = gba\nsound_source = loud\n").presentation == "auto" &&
+          parseSettings("presentation = gba\nsound_source = loud\n").soundSource == "auto");
+    { Settings s; s.presentation = "dreamcast"; s.soundSource = "mobile"; const Settings r = parseSettings(settingsText(s));
+      CHECK(r.presentation == "dreamcast" && r.soundSource == "mobile" && r.logMaxKb == s.logMaxKb && r.logKeepFiles == s.logKeepFiles); }   // the larger text still fits the buffer (the last keys survive)
     Settings dreamcastTests = parseSettings("music_test=99\nse_test=999\n");
     CHECK(dreamcastTests.musicTest == 14 && dreamcastTests.seTest == 127);
     Settings dreamcastRoundTrip = parseSettings(settingsText(dreamcastTests));

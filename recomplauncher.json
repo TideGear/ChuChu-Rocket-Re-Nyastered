@@ -89,6 +89,54 @@
           ]
         }
       ]
+    },
+    {
+      "id": "presentation",
+      "label": "Look",
+      "help": "Dreamcast or mobile (iOS/Android) screens, menus and HUDs. Game default uses Dreamcast when its files were set up. It falls back to the other look when the chosen one was not set up.",
+      "in": "args",
+      "choices": [
+        {
+          "label": "Game default",
+          "args": []
+        },
+        {
+          "label": "Dreamcast",
+          "args": [
+            "--presentation=dreamcast"
+          ]
+        },
+        {
+          "label": "Mobile",
+          "args": [
+            "--presentation=mobile"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sound",
+      "label": "Sound",
+      "help": "Dreamcast CD music and effects, or the mobile releases' music and effects. Game default prefers Dreamcast and fills gaps from mobile.",
+      "in": "args",
+      "choices": [
+        {
+          "label": "Game default",
+          "args": []
+        },
+        {
+          "label": "Dreamcast",
+          "args": [
+            "--sound=dreamcast"
+          ]
+        },
+        {
+          "label": "Mobile",
+          "args": [
+            "--sound=mobile"
+          ]
+        }
+      ]
     }
   ],
   "prepare": {
