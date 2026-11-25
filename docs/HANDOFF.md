@@ -43,7 +43,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 4. **Hard 05 cat shading:** body strips at 0x269cd0 / 0x269f30 in `local/hd5/p_02390.state` (intensity 0.30-0.85); a single light vector does not fit, so trace the cat normal transform (draw `0x8c0119fe`, morph `0x8c0e673e`).
 5. **Puzzle pad tip:** about 4% too large on Normal 03, pulse counter not the game clock (series in local/pz3s).
 
-Other open (outside the milestone): Challenge dim-bracket crop 7.46 (pointer edges, rocket pose); golden mouse (only polygons with face colour 2.0 per channel, textures 080e5700/080e5b00, base 0x271414 in local/gold5; rasterise the strips and diff before changing the port); START banner 2.39 (alpha-0 colour, texel precision and vertex colour ruled out; left: 4444 filter order).
+Other open (outside the milestone): Challenge dim-bracket crop 7.46 (pointer edges, rocket pose); golden mouse (only polygons with face colour 2.0 per channel, textures 080e5700/080e5b00, base 0x271594 in local/gold5; rasterise the strips and diff before changing the port); START banner 2.39 (alpha-0 colour, texel precision and vertex colour ruled out; left: 4444 filter order).
 
 ## Blocked (needs an input first)
 
