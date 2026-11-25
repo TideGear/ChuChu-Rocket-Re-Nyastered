@@ -30,19 +30,27 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 
 ## Done 2026-11-25
 
-- Flycast banner captures, Challenge bracket phase, Normal 03 case (see Next tasks 3-6). `flyhost` gained `FLY_POKE_ONCE`. Tutorial gate follows `puzzlestage_endflag`; tap shortcut (Input flag 4 writer) still unfound.
-- Tests run: tutorial_test, puzzle_pause_test, userdata_test, input_regression_test pass; port-vs-port only for The Basics.
+- Puzzle cat walks in place during arrow placement (was frozen); start tick 32 measured from a scan, not traced. Hard 05 board 1.24 -> 0.87.
+- Dimmed cursor bracket has no size pulse (`0x8c01480c`); Challenge pad pointer pulse phase `cticks + 2`; pad aim confirmed against RAM `0x8c186cfc` (DcCursor already exact).
+- Count2/count1 banner scales fit `8 - 0.13 t`. New parity cases: `puzzle_normal08` (board passes), `puzzle_hard05`, `challenge_play_a1_dim_bracket` (partial). Headless hook `CCR_PAD_AIM=x,y` (Challenge).
+- goal.md: current milestone (Dreamcast Puzzle end to end), "pass (rounding)" rule, honest-reporting and visible-gaps-first working style.
 
-## Next tasks
+## Next tasks (milestone: Dreamcast Puzzle end to end)
 
-1. **Pian right mice crop:** 1.036 against the per-element limit of 1 (no off-edge pixels). Left passes. The ignore-light strip uses the measured 0.912; its origin is not traced.
-2. **Golden mouse:** texture, UV range and vertex intensities match Flycast (gk03400.state), but a colour-mask comparison says the body is ~15% brighter. Needs an aligned golden-mouse crop (force with `FLY_POKE=0:1ae8f8=3f800000` in flyhost and `CCR_GOLDEN_P=1` in the port).
-3. **Challenge bracket:** grey phase measured (period 64, `dimOffset` 18); the dimmed bracket has no size pulse (`0x8c01480c`, done); the white bracket pulse is centred (the apparent left-edge anchor was wall occlusion): consistent. No parity case has a dim bracket.
-4. **Time-left / 3-2-1 Battle banners:** Flycast frames captured with `FLY_POKE_ONCE=3000:1ae8e0=<BCD clock>` (flyhost); 2:00, 1:00, 0:30 and the "3" fit `4 - 0.033 t` / `8 - 0.13 t` and the blend follows the texture alpha. count2/count1 also fit (7.40 at 3008 ... slope 0.132, roadmap). Open: absolute pixel diff.
-5. **START banner crop:** 2.39, placement exact; residue is partial-alpha edge texels (+9 R/G at 150 px). Battle and Challenge pause have no parity case.
-6. **Puzzle coverage:** `puzzle_normal03` added (full 0.99, board 1.07 / 1 off-edge px). The residue is the pad cursor tip (about 4% too large; its pulse counter is not the game clock; a consecutive-frame series is in local/pz3s, tip area fits period 16, phase unresolved). Other groups' later stages, star twinkles, launch per element open.
-7. **The Basics** (mobile tutorial, HD 1.0 `PuzzleGameScreen` tutorial): ported in the mobile look (`game/core/tutorial.hpp`, `PuzzleMode` with `basics`, Main Menu item 0, `progress.bin` fifth word gates Puzzle/Challenge/Battle). Played to the cleared flag headless (port-vs-port; roadmap 2026-11-24 "played end to end" has the arrows and script). Open: no mobile-original frame diff, the tap shortcut (Input flag 4), the lesson-index source on a stage change (inferred), the press sparkle (image 0x9f), the 0x109/0x20a branches, the Continue label/scale. Dreamcast mode 16 (`0x8c058292`) is a network battle, not a tutorial.
-8. **Languages:** French Help title plate and footer unverified; the Puzzle tap-timing writer and MANATEE.DRV command 0x8a (Monaural) stay open.
+1. **Stream tool:** one `tools/oracle/ta_dump.py` that finds the first polygon header (lists start at e.g. 0x253e10; vertices can sit 16 bytes off the 32-byte grid), the VRAM base per state (method in `local/findbase.py`: re-encode models.bin textures and vote; base differs per run), and renders a chosen polygon set with its texture. Every residue task below needs it.
+2. **Puzzle visible-gap sweep:** one Flycast shot per Puzzle state (select, placing, run, pause, clear, fail, launch, result/save) against the port; list gross differences (missing animation, pose, effect) before any residue work. Star twinkles are known missing.
+3. **Re-measure under "pass (rounding)":** Pian right mice (1.036; signed +1.6 R / +0.2 G / +1.5 B, 0 off-edge px) and other elements near 1; update audit.md.
+4. **Hard 05 cat shading:** body strips at 0x269cd0 / 0x269f30 in `local/hd5/p_02390.state` (intensity 0.30-0.85); a single light vector does not fit, so trace the cat normal transform (draw `0x8c0119fe`, morph `0x8c0e673e`).
+5. **Puzzle pad tip:** about 4% too large on Normal 03, pulse counter not the game clock (series in local/pz3s).
+
+Other open (outside the milestone): Challenge dim-bracket crop 7.46 (pointer edges, rocket pose); golden mouse (only polygons with face colour 2.0 per channel, textures 080e5700/080e5b00, base 0x271414 in local/gold5; rasterise the strips and diff before changing the port); START banner 2.39 (alpha-0 colour, texel precision and vertex colour ruled out; left: 4444 filter order).
+
+## Blocked (needs an input first)
+
+- **Languages:** French Help plate/footer need a non-USA dump.
+- **The Basics:** needs mobile-original frames to diff (port is port-vs-port only).
+- **Banner pixel diff (3-2-1, time-left):** needs a clean background; the board moves behind every Flycast banner frame (geometry already fits).
+- **Battle captures:** flyhost Battle runs differ between invocations; dump (`FLY_DUMP`) in the same run as the shot you need.
 
 Capture recipes (flyhost): Puzzle `START@1350-1360;START@1510-1520;DOWN@1800-1804;DOWN@1840-1844;DOWN@1880-1884;START@1950-1960;START@2120-2130`; Challenge drops one DOWN and adds `START@2300-2310`; Battle `START@1350/1510/1800/2400/2550`. Keys: X places the north arrow, R2 = R trigger. RAM pokes: style 0x1ae8d0, Puzzle masks 0x22d8a4.., golden 0x1ae8f8. Language: resume `local/star-trace/opt/o03050.state`.
 
