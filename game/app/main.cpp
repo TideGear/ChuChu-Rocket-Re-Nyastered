@@ -361,7 +361,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide;
+    Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -394,7 +394,16 @@ struct App {
     static constexpr int kDcAssetsVersion = 5;   // tools/export_dc_ui.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets
     bool dcAssetsStale = false;
     // Dreamcast-look sheets; a language's folder dc_loc_<xx> (tools/extract_all.py exports one per disc language folder) replaces the English set.
+    std::string dcRoot;   // the main ret_all: BIOS font sheets and per-language stage titles are only there
+    std::vector<uint16_t> dcSjisCodes; std::vector<std::string> dcTitles;   // dc_bios_sjis frame codes; this language's Puzzle titles (dreamcast_titles_<xx>.bin)
+    void loadDcTitles() {   // assets/dreamcast_titles_<xx>.bin (tools/extract_all.py): the Puzzle hint text in this language; English when the file is missing
+        dcTitles.clear();
+        for (const char* code : {langDir(lang), "en"}) if (FILE* f = fopen((root + "/dreamcast_titles_" + code + ".bin").c_str(), "rb")) {
+            char rec[32]; while (fread(rec, 1, 32, f) == 32) dcTitles.emplace_back(rec, strnlen(rec, 32)); fclose(f); if (dcTitles.size() != 100) dcTitles.clear(); else break; }
+    }
     void loadDcSheets(const std::string& dir) {
+        if (dcRoot.empty()) dcRoot = dir;
+        loadDcTitles();
         freeSheet(dcModeSelect); loadSheet(dir + "dc_mode_select", dcModeSelect);
         freeSheet(dcChallengeSelect); loadSheet(dir + "dc_challenge_select", dcChallengeSelect);
         freeSheet(dcStartup); loadSheet(dir + "dc_startup", dcStartup);
@@ -402,9 +411,11 @@ struct App {
         freeSheet(dcHelp); loadSheet(dir + "dc_help", dcHelp);
         freeSheet(dcHelpPages); loadSheet(dir + "dc_help_pages", dcHelpPages);
         freeSheet(dcOptions); loadSheet(dir + "dc_options", dcOptions);
-        freeSheet(dcSelectClock); loadSheet(dir + "dc_select_clock", dcSelectClock);
-        freeSheet(dcBiosAnsi); loadSheet(dir + "dc_bios_ansi", dcBiosAnsi);
-        freeSheet(dcBiosWide); loadSheet(dir + "dc_bios_wide", dcBiosWide);   // full-width Shift-JIS glyphs (tools/export_dc_bios_font.py WIDE)
+        freeSheet(dcSelectClock); loadSheet(dcRoot + "dc_select_clock", dcSelectClock);
+        freeSheet(dcBiosAnsi); loadSheet(dcRoot + "dc_bios_ansi", dcBiosAnsi);
+        freeSheet(dcBiosWide); loadSheet(dcRoot + "dc_bios_wide", dcBiosWide);   // full-width Shift-JIS glyphs (tools/export_dc_bios_font.py WIDE)
+        freeSheet(dcBiosSjis); loadSheet(dcRoot + "dc_bios_sjis", dcBiosSjis); dcSjisCodes.clear();
+        if (FILE* f = fopen((dcRoot + "dc_bios_sjis.codes.bin").c_str(), "rb")) { uint16_t n = 0; if (fread(&n, 2, 1, f) == 1) { dcSjisCodes.resize(n); if (fread(dcSjisCodes.data(), 2, n, f) != n) dcSjisCodes.clear(); } fclose(f); }
         freeSheet(dcChallengeIntro); loadSheet(dir + "dc_challenge_intro", dcChallengeIntro);
         freeSheet(dcChallengeFailure); loadSheet(dir + "dc_challenge_failure", dcChallengeFailure);
         freeSheet(dcChallengeResult); loadSheet(dir + "dc_challenge_result", dcChallengeResult);
@@ -3586,14 +3597,24 @@ struct PuzzleMode : Screen {
         else a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv && labelRow < 0) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
-            std::string hint; if (discNames) { hint = stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == '\0')) hint.pop_back(); } else if (const std::string* hs = a.hdString(0x1e8 + cur)) hint = *hs;
+            std::string hint; if (discNames) { hint = a.dcTitles.size() == 100 && dcBubble ? a.dcTitles[cur] : stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == '\0')) hint.pop_back(); } else if (const std::string* hs = a.hdString(0x1e8 + cur)) hint = *hs;
             const bool biosHint = dcBubble && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95 && !hint.empty();
             if (biosHint) {   // the game draws the hint with the BIOS ANSI font, left-aligned in a 1:1 texture glyphs at (336, 370) of 640 x 480 (texture at y 368, text row 2), 12 px per character, colour (32, 32, 64); the port's layout is 1.6 times that
                 SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 32, 32, 64);
-                for (size_t k = 0; k < hint.size() && k < 59; ++k) { const unsigned char c = hint[k]; if (c <= 0x20 || c > 0x7e) continue; const bool exactCell = a.dcBiosAnsi.h == 24;   // the BIOS ROM atlas has 12 x 24 cells, drawn 1:1 by the game; the 2x look-alike atlas keeps its tuned rectangle
-                    const SDL_FRect d = exactCell ? SDL_FRect{(336 + 12 * (int)k) * 1.6f, 370 * 1.6f, 12 * 1.6f, 24 * 1.6f} : SDL_FRect{(float)std::lround((336 + 12 * (int)k) * 1.6), (float)std::lround(370 * 1.6), 20.0f, 39.0f};
+                if (a.dcBiosSjis.tex) SDL_SetTextureColorMod(a.dcBiosSjis.tex, 32, 32, 64);
+                int col = 0;   // 12 px columns: a full-width Shift-JIS character (Japanese titles) takes two, from the dc_bios_sjis sheet
+                for (size_t k = 0; k < hint.size() && col < 59; ++k) { const unsigned char c = hint[k];
+                    if ((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xef)) {
+                        if (k + 1 >= hint.size()) break;
+                        const uint16_t code = (uint16_t)(c << 8 | (unsigned char)hint[++k]);
+                        const auto it = std::lower_bound(a.dcSjisCodes.begin(), a.dcSjisCodes.end(), code);
+                        if (a.dcBiosSjis.tex && it != a.dcSjisCodes.end() && *it == code && (size_t)(it - a.dcSjisCodes.begin()) < a.dcBiosSjis.fr.size()) {
+                            const SDL_FRect d{(336 + 12 * col) * 1.6f, 370 * 1.6f, 24 * 1.6f, 24 * 1.6f}; SDL_RenderCopyF(a.ren, a.dcBiosSjis.tex, &a.dcBiosSjis.fr[it - a.dcSjisCodes.begin()], &d); }
+                        col += 2; continue; }
+                    const int kcol = col++; if (c <= 0x20 || c > 0x7e) continue; const bool exactCell = a.dcBiosAnsi.h == 24;   // the BIOS ROM atlas has 12 x 24 cells, drawn 1:1 by the game; the 2x look-alike atlas keeps its tuned rectangle
+                    const SDL_FRect d = exactCell ? SDL_FRect{(336 + 12 * kcol) * 1.6f, 370 * 1.6f, 12 * 1.6f, 24 * 1.6f} : SDL_FRect{(float)std::lround((336 + 12 * kcol) * 1.6), (float)std::lround(370 * 1.6), 20.0f, 39.0f};
                     SDL_RenderCopyF(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); }
-                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
+                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255); if (a.dcBiosSjis.tex) SDL_SetTextureColorMod(a.dcBiosSjis.tex, 255, 255, 255);
             } else if (discNames) {   // no BIOS font: mixed-case 5 x 7 glyphs, left-aligned where the original draws its text, navy, heavier strokes, 18 px advance (the original's 12 px x 1.6 is 19)
                 SDL_SetRenderDrawColor(a.ren, 32, 32, 64, 255);
                 for (size_t k = 0; k < hint.size() && k < 59; ++k) if (const uint8_t* g = font57mixed((unsigned char)hint[k]))

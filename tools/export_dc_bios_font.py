@@ -43,7 +43,7 @@ def is_bios(data):
     """True for a 2 MiB image whose ROM font holds the verified full-width zero (116 lit pixels after thickening)."""
     return len(data) == 2097152 and sum(map(sum, glyph(data[0x100000:0x200000], ZERO))) == 116
 
-def main(bios, out):
+def main(bios, out, assets=None):
     data = open(bios, 'rb').read()
     if not is_bios(data):
         raise SystemExit('Not a Dreamcast BIOS image with the expected ROM font')
@@ -88,7 +88,40 @@ def main(bios, out):
         f.write(struct.pack('<I', len(WIDE)))
         for i in range(len(WIDE)): f.write(struct.pack('<9f', 24 * i / wide.width, 0, 24 * (i + 1) / wide.width, 1, 0, 0, 0, 0, 0))
     print('dc_bios_wide %dx24' % wide.width)
+    # Every full-width glyph the per-language stage titles use (assets/dreamcast_titles_<xx>.bin from extract_all.py), for the Japanese Puzzle hint text:
+    # dc_bios_sjis sheet plus dc_bios_sjis.codes.bin (uint16 count, then the Shift-JIS codes in frame order).
+    codes = set()
+    if assets:
+        import glob
+        for path in glob.glob(os.path.join(assets, 'dreamcast_titles_*.bin')):
+            data = open(path, 'rb').read()
+            for k in range(0, len(data), 32):
+                t = data[k:k + 32]; i = 0
+                while i < len(t) and t[i]:
+                    if 0x81 <= t[i] <= 0x9f or 0xe0 <= t[i] <= 0xef:
+                        if i + 1 < len(t): codes.add(t[i] << 8 | t[i + 1])
+                        i += 2
+                    else: i += 1
+    codes = sorted(codes)
+    if codes:
+        sj = Image.new('RGBA', (24 * 64, 24 * ((len(codes) + 63) // 64)))
+        for k, code in enumerate(codes):
+            row, col = sjis_to_jis(code)
+            px = glyph(rom, 10400 + ((row - 0x21) * 94 + (col - 0x21)) * 72)
+            cell = Image.new('RGBA', (24, 24))
+            cell.putdata([(255, 255, 255, 255) if px[r][c] else (0, 0, 0, 0) for r in range(24) for c in range(24)])
+            sj.paste(cell, (24 * (k % 64), 24 * (k // 64)))
+        with open(os.path.join(out, 'dc_bios_sjis.tex.bin'), 'wb') as f:
+            f.write(struct.pack('<2I', sj.width, sj.height)); f.write(sj.tobytes())
+        with open(os.path.join(out, 'dc_bios_sjis.frames.bin'), 'wb') as f:
+            f.write(struct.pack('<I', len(codes)))
+            for k in range(len(codes)):
+                x, y = 24 * (k % 64), 24 * (k // 64)
+                f.write(struct.pack('<9f', x / sj.width, y / sj.height, (x + 24) / sj.width, (y + 24) / sj.height, 0, 0, 0, 0, 0))
+        with open(os.path.join(out, 'dc_bios_sjis.codes.bin'), 'wb') as f:
+            f.write(struct.pack('<H', len(codes))); f.write(struct.pack('<%dH' % len(codes), *codes))
+        print('dc_bios_sjis %d glyphs' % len(codes))
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3: raise SystemExit(__doc__)
-    main(sys.argv[1], sys.argv[2])
+    if len(sys.argv) not in (3, 4): raise SystemExit(__doc__)
+    main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)

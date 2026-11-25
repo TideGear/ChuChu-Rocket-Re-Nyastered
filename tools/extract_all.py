@@ -388,6 +388,14 @@ def export_playable_stages(assets):
             for stage, slot in enumerate(main_slots(dc_puzzles.read_bytes())):
                 write_record(stream, 4, stage, slot)
         sources['dreamcast_puzzles'] = dc_puzzles.relative_to(root).as_posix()
+    # Per-language stage titles (the Puzzle hint text, slot bytes 0x1eb..0x200, Shift-JIS on the Japanese disc folder): 100 x 32 bytes each.
+    for folder, code in (('ENGLISH', 'en'), ('FRENCH', 'fr'), ('GERMAN', 'de'), ('SPANISH', 'es'), ('JAPANIESE', 'ja')):
+        lang_puzzles = root / 'dreamcast' / 'files' / folder / 'PZSTAGE100.DAT'
+        if lang_puzzles.is_file() and lang_puzzles.stat().st_size == 153600:
+            data = lang_puzzles.read_bytes()
+            with (root / f'dreamcast_titles_{code}.bin').open('wb') as stream:
+                for k in range(100):
+                    stream.write(data[k * 1536 + 640 + 0x1eb:k * 1536 + 640 + 0x200].split(b'\0')[0].ljust(32, b'\0'))
     if puzzle_digest in by_digest:
         path = by_digest[puzzle_digest]
         data = path.read_bytes()
@@ -575,7 +583,7 @@ def main():
     for candidate in bios_candidates(gf):
         try:
             if candidate.stat().st_size == 2097152 and export_dc_bios_font.is_bios(candidate.read_bytes()):
-                export_dc_bios_font.main(str(candidate), str(Path(assets, 'ret_all')))
+                export_dc_bios_font.main(str(candidate), str(Path(assets, 'ret_all')), str(assets))
                 manifest['dreamcast_bios_font'] = candidate.name
                 print('[bios] ROM font exported from', candidate.name, flush=True)
                 break
