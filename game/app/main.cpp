@@ -1429,7 +1429,7 @@ struct App {
                           float alpha, const float* puku = nullptr, FieldLayout field = {},
                           bool dcProjection = false, int soloRocket = 0,
                           const std::array<DcRocketLid, kCols * kRows>* launchLids = nullptr, int launchAge = -1,
-                          const int* partnerLid = nullptr) {   // partnerLid[i]: the lid whose colour fills the dome's other half (Team Battle and Challenge domes are two lids in two colours: docs/layers.md)
+                          const int* partnerLid = nullptr, float soloPulse = 1.0f) {   // soloPulse: the dome scale when puku is null (Puzzle: rocket pulse slot 0)   // partnerLid[i]: the lid whose colour fills the dome's other half (Team Battle and Challenge domes are two lids in two colours: docs/layers.md)
         // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
         static const int mouseFrameOverride = getenv("CCR_MOUSE_FRAME") ? atoi(getenv("CCR_MOUSE_FRAME")) : -1;   // headless comparison: force the keyframe the real frame showed
         const int mouseFrame = mouseFrameOverride >= 0 ? mouseFrameOverride & 7 : mousePoseOverride >= 0 ? mousePoseOverride & 7 : std::max(0, sim.now - 1) & 7;
@@ -1509,7 +1509,7 @@ struct App {
                         const int lidLaunchAge = launchLids ? (*launchLids)[cell].age : launchAge;
                         if (launchLids && !DcRocketLid::visibleAtLaunchAge(launchAge)) continue;
                         models3d.drawDcRocketDome(ren, *lid, {x, z}, {GW / 2.0f, GH / 2.0f},
-                                                 field.cell / kCell, puku ? puku[i] : 1.0f, 218.0f, partnerLid && partnerLid[i] >= 0 ? models3d.find(lids[partnerLid[i]]) : nullptr,
+                                                 field.cell / kCell, puku ? puku[i] : soloPulse, 218.0f, partnerLid && partnerLid[i] >= 0 ? models3d.find(lids[partnerLid[i]]) : nullptr,
                                                  opening, launchAge >= 0 ? models3d.find("launch_blue") : nullptr, lidLaunchAge,
                                                  launchAge >= 0 ? models3d.find("launch_base") : nullptr, models3d.find("fire"), launchLids ? &(*launchLids)[cell].smokeBirths : nullptr,
                                                  launchLids ? DcRocketLid::launchScaleAtAge(launchAge) : 1.0f);
@@ -3253,14 +3253,14 @@ struct PuzzleMode : Screen {
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
     bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; for (int i = 0; i < SDL_NumJoysticks(); ++i) if (!pad && SDL_IsGameController(i)) pad = SDL_GameControllerOpen(i); cur = stage % (int)stages.list.size(); reset(); return true; }
     bool dcPanelDrawn = false;   // the Dreamcast bottom panel replaces the iPad arrow strip
-    bool dash = false; bool paused = false, pconf = false; bool pauseQuit = false;   // pauseQuit: the Dreamcast pause dialog's QUIT is highlighted (RIGHT moves there, A takes it: Flycast local/quit, Stage Select 10 frames later)   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
+    bool dash = false; bool paused = false, pconf = false; bool pauseQuit = false; float domePulse = 1.0f;   // pauseQuit: the Dreamcast pause dialog's QUIT is highlighted (RIGHT moves there, A takes it: Flycast local/quit, Stage Select 10 frames later)   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
     ccr::PuzzlePauseState pauseState;
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
         cursorTrail = {};
         launchLids = {}; clearSaved = false; launchSoundStarted = false;
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
-        paused = false; pconf = false; pauseQuit = false; pauseState.resume(); mousePose = 0;
+        paused = false; pconf = false; pauseQuit = false; domePulse = 1.0f; pauseState.resume(); mousePose = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
@@ -3472,12 +3472,15 @@ struct PuzzleMode : Screen {
             sim.tickEffects();
             a.stepAngles(sim, true);
             if (dash) { ++sim.now; sim.tickEffects(); a.stepAngles(sim, true); }
+            for (int pass = 0; pass < (dash ? 2 : 1); ++pass) domePulse = std::max(1.0f, domePulse - 0.05f);
             return;
         }
         if (!running) { if (!paused && cticks > 31) a.stepAngles(sim, false); return; }   // the cat task keeps animating while the arrows are placed (Flycast Hard 05, shots 2300-2418: the cat walks in place)
         auto tickPuzzleSimulation = [&] {
             sim.events.clear();
             sim.tick(); a.stepAngles(sim);
+            for (const auto& ev : sim.events) if (ev.kind == Event::PuzzleRocket) domePulse = std::min(1.5f, domePulse + 0.2f);   // 0x8c01cbc8: +0.2, cap 1.5, on the rocket owner's slot; Puzzle's domes are all player 0's, so they swell together (Flycast local/dome2 232, 262)
+            domePulse = std::max(1.0f, domePulse - 0.05f);   // rocket task 0x8c01c380: every pulse slot at 0x8c1af1e4+20 loses 0.05 per pass, floor 1; it runs after the mouse tasks in the pass (launch ages -9..-7 in local/star-trace/lau match only in this order)
             puzzleAudioRequests.afterSimulationPass(sim.events, [&](int cue) { a.playSfx(cue); });
         };
         tickPuzzleSimulation();
@@ -3594,7 +3597,7 @@ struct PuzzleMode : Screen {
         if (hasBoardTasks) a.mousePoseOverride = mousePose;
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a), 0,
                                             state == 2 || prelaunch ? &launchLids : nullptr,
-                                            state == 2 ? clearFrames * (dash ? 2 : 1) : -1);
+                                            state == 2 ? clearFrames * (dash ? 2 : 1) : -1, nullptr, state == 2 || prelaunch ? 1.0f : domePulse);   // after the clear the launch tasks (0x8c01b8a0 / 0x8c01b9a0) draw the domes without the pulse (launch ages 1-3 lose 0.4-1.3 with it)
         a.mousePoseOverride = -1;
         if (fieldDepth) a.models3d.endDepthScene();
         drawFailureFocus(a, true);
