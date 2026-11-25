@@ -340,9 +340,9 @@ public:
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
                 o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, (light[0] * n2x + light[1] * n2y + light[2] * n2z) * modelScale)) * (tri.mat == 10 ? run10Diffuse : 1.0f);   // a uniform njScale also scales the normals the Dreamcast lights with (as for the rocket dome)   // material slot 10 = the mouse's cream run with chunk diffuse b2b2b2 (0xb2 / 255)   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
-                if (ti < m.colours.size() && (m.name.rfind("chao", 0) == 0 || m.name.rfind("pian", 0) == 0)) {   // costume material colours: channel = 0.3 + diffuse term * material diffuse
+                if (ti < m.colours.size() && (m.name.rfind("chao", 0) == 0 || m.name.rfind("pian", 0) == 0)) {   // costume material colours: channel = min(1, 0.3 + diffuse term) * material diffuse (face colour)
                     const auto& mc = m.colours[ti]; const float dterm = std::max(0.0f, (light[0] * n2x + light[1] * n2y + light[2] * n2z) * modelScale);
-                    for (int ch = 0; ch < 3; ++ch) { const int bi = 2 - ch; o.lightRGB[k][ch] = std::min(1.0f, 0.3f + dterm * mc[bi] / 255.0f); }   // material diffuse only: applying the ambient chunks (type 18/19, e.g. the Chao's ff7f7f) made the Chao worse in either byte order, so their use is not understood yet
+                    for (int ch = 0; ch < 3; ++ch) { const int bi = 2 - ch; o.lightRGB[k][ch] = std::min(1.0f, 0.3f + dterm) * mc[bi] / 255.0f; }   // the material diffuse is the PowerVR face colour (Flycast s102390.state: header face (1, 0, 0.498, 1) for the Chao's ff7f00ff chunk) and multiplies the whole vertex intensity; the ambient chunks do not reach the hardware
                     o.rgb = true;
                 }
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
