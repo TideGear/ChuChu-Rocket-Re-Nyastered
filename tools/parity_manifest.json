@@ -177,7 +177,7 @@
         "CCR_MODELS": "1",
         "CCR_TICKS": "30"
       },
-      "note": "tick alignment not established",
+      "note": "tick 30 is the best of a 10-80 sweep (2.13; 35 gives 2.17, 31 2.79); left: the START text, cursor pulse size, stars",
       "elements": {
         "board": [
           136,

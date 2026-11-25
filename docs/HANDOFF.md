@@ -20,7 +20,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 
 1. **Mouse pose clock: done** (Puzzle only; Battle and Challenge still use `sim.now`, untraced there). puzzle_pause full frame 1.95, mice pass.
 2. **Puzzle pause overlay: done**, every element passes (audit.md). Battle/Challenge pause have no parity case yet.
-3. **Battle cursor cell marker: done** (draw `0x8c0146e6`: cell word & 0xF00 -> bracket colour 0xc0 alpha, grey 0x80 + trunc(16 sin((task+32) >> 2)), task+32 += 0x1000 per pass in `0x8c0145ee`; else white). Pixels match Flycast 3100 within 1 level; battle_3100 2.30 -> 2.13. Still open: `battle_3100` tick alignment (CPU cursor positions), and whether Puzzle/Challenge brackets share this rule.
+3. **Battle cursor cell marker: done** (draw `0x8c0146e6`: cell word & 0xF00 -> bracket colour 0xc0 alpha, grey 0x80 + trunc(16 sin((task+32) >> 2)), task+32 += 0x1000 per pass in `0x8c0145ee`; else white). Pixels match Flycast 3100 within 1 level; battle_3100 2.30 -> 2.13. `battle_3100` alignment: tick 30 is the best of a 10-80 sweep; the residue is the missing START text over the board centre, the cursor pointers' pulse size, and the stars. Still open: whether Puzzle/Challenge brackets share this rule.
 4. **Remaining Flycast checks:** Chao/Pian costumes (need a save with all Challenge or Mania clears) and the golden mouse frame by frame.
 5. **Puzzle coverage:** Hard, Special and Mania stages; star twinkles; launch per element. **Tutorial** (mode 16, `0x8c058292`) and The Basics: not implemented.
 6. **Dreamcast-look language:** export the disc's fr/de/es/ja art and fall back to English for Italian. The Puzzle tap-timing writer and MANATEE.DRV command 0x8a (Monaural) stay open.
