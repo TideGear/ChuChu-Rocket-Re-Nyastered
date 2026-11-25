@@ -3412,7 +3412,7 @@ struct PuzzleMode : Screen {
             if (paused && pauseState.freeze) return;
         }
         if (pauseState.freeze) return;
-        if (tut.enabled) { ++tutTicks; tut.process(tutTicks == 0x78, state == 1 && tutPrevState == 0); tutPrevState = state; }   // PuzzleStageControll 0x3c108 sets the tap flag when its counter passes 0x77 (the tap shortcut, flag 4, is not wired); RO_GoGoRocketPz 0x16f58 sets the skip flag at launch
+        if (tut.enabled) { ++tutTicks; tut.process(tutTicks == 0x78, state == 1 && tutPrevState == 0); tutPrevState = state; if (tut.deleteArrows) { tut.deleteArrows = false; std::vector<std::pair<int, int>> at; for (auto& ar : sim.arrows) if (ar.live) at.push_back({ar.x, ar.y}); for (auto& c : at) sim.removeArrow(c.first, c.second); } }   // step 4 calls AR_DeleteArrowsPuzzle (0x3d03c); PuzzleStageControll 0x3c108 sets the tap flag when its counter passes 0x77 (the tap shortcut, flag 4, is not wired); RO_GoGoRocketPz 0x16f58 sets the skip flag at launch
         mousePose = (int)((a.globalTime - 1) & 7);   // the previous pass's clock: fits Flycast Puzzle 2390/2500 (RAM clock 1826/1936) and the launch frames
         if (pad && state == 0) {
             padAim.tick(pad);
