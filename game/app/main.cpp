@@ -366,7 +366,7 @@ struct App {
         }
         if (battlePreviewTexture) SDL_RenderCopy(ren, battlePreviewTexture.get(), nullptr, &dst);
     }
-    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFrame73, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
+    Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFrame73, hdButton, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
     Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
@@ -481,7 +481,7 @@ struct App {
         ren = SDL_CreateRenderer(win, -1, headless ? (gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE) : (SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0)));
         SDL_RenderSetLogicalSize(ren, W, H);
         std::string ret = root + "/ret_all/";
-        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "img/hd_115", hdFrame73); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_hlp_hdr", hlHdr); loadSheet(ret + "hd_hlp_tab", hlTab); loadSheet(ret + "hd_hlp_frm", hlFrm); loadSheet(ret + "hd_hlp_dia", hlDia); loadSheet(ret + "img/hd_35", plPanels); loadSheet(ret + "img/hd_36", plLabels); loadSheet(ret + "img/hd_12", plBottom); loadSheet(ret + "img/hd_28", plTiles); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
+        gameArtOk = loadSheet(ret + "r0645", arw) && loadSheet(ret + "r0732", cur) && loadSheet(ret + "r0651", rk[0]) && loadSheet(ret + "r0663", rk[1]) && loadSheet(ret + "r0675", rk[2]) && loadSheet(ret + "r0687", rk[3]); if (gameArtOk) { loadFit(ret + "hd_arrows.frames.bin", arw); loadFit(ret + "hd_cursors.frames.bin", cur); loadSheet(ret + "hd_time", hdTime); loadSheet(ret + "hd_bhud65", hdHud65); loadSheet(ret + "hd_bhud68", hdHud68); loadSheet(ret + "hd_stagenum", hdStageNum); loadSheet(ret + "hd_frame78", hdFrame78); loadSheet(ret + "img/hd_115", hdFrame73); loadSheet(ret + "img/hd_158", hdButton); loadSheet(ret + "hd_font0", hdFont); loadSheet(ret + "hd_font1", hdFont1); loadSheet(ret + "hd_ss_bg", ssBg); loadSheet(ret + "hd_ss_bubble", ssBubble); loadSheet(ret + "hd_ss_cells", ssCells); loadSheet(ret + "hd_ss_tab", ssTab); loadSheet(ret + "hd_ss_panel", ssPanel); loadSheet(ret + "hd_ss_arrows", ssArrows); loadSheet(ret + "hd_bub9", hdBub9); loadSheet(ret + "hd_mn_bg", mnBg); loadSheet(ret + "hd_mn_bars", mnBars); loadSheet(ret + "hd_mn_masc", mnMasc); loadSheet(ret + "hd_op_bg", opBg); loadSheet(ret + "hd_lang_ja", langJa); loadSheet(ret + "hd_op_snd", opSnd); loadSheet(ret + "hd_hlp_hdr", hlHdr); loadSheet(ret + "hd_hlp_tab", hlTab); loadSheet(ret + "hd_hlp_frm", hlFrm); loadSheet(ret + "hd_hlp_dia", hlDia); loadSheet(ret + "img/hd_35", plPanels); loadSheet(ret + "img/hd_36", plLabels); loadSheet(ret + "img/hd_12", plBottom); loadSheet(ret + "img/hd_28", plTiles); loadSheet(ret + "hd_op_sld", opSld); loadSheet(ret + "hd_bubtail", hdBubTail); loadHdText(ret); loadLocale(ret); }
         loadFit(ret + "hd_crowns.frames.bin", crowns);
         const bool mobileSheets = loadSheet(ret + "r0930", atlas) && loadSheet(ret + "r0447", cat) && loadSheet(ret + "r0503", mouse) && loadSheet(ret + "r0484", gold) && loadSheet(ret + "r0729", digits) &&
               loadSheet(ret + "r0726", crowns) && loadSheet(ret + "r0749", timefont) && loadSheet(ret + "r0023", font);
@@ -2556,7 +2556,7 @@ struct HdMenuMode : Screen {
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_DOWN) { sel = (sel + 1) % N; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + N - 1) % N; a.playSfx(0); } else if (k == SDLK_RETURN || k == SDLK_SPACE) act(a, sel); } }
     void act(App& a, int i) {
         if (!tutorialCleared(a) && i >= 1 && i <= 3) { a.playSfx(3); return; }
-        if ((i == 0 && !(a.hdFrame73.tex && !a.hdFontW.empty() && a.hdString(0x1be))) || (i == 2 && !challengeBoardsAvailable(a.root)) || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics is not ported yet; Stage Challenge needs the Challenge boards (docs/roadmap.md)
+        if ((i == 0 && !(a.hdFrame73.tex && a.hdButton.tex && !a.hdFontW.empty() && a.hdString(0x1be))) || (i == 2 && !challengeBoardsAvailable(a.root)) || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics is not ported yet; Stage Challenge needs the Challenge boards (docs/roadmap.md)
         a.playSfx(2); chosen = i; fade = 0; phase = 0x10; }
     void tick(App& a) override {
         if (phase == 0xe) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0xf; } }
@@ -3302,6 +3302,7 @@ struct PuzzleMode : Screen {
                 mouseCursor = true;
                 if (putAt(aim.cellX(), aim.cellY(), arrowKey(k))) a.playSfx(1);
             } }
+        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && tutorialNextHit(a, e)) {}   // handleInput 0x13050: Input rect 12
         else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && hudButton(a, e)) {}   // HD 1.0 PuzzleGameScreen::handleInput: rect 3 Start (flag 1), rect 4 Cancel (flag 2)
         else if (e.type == SDL_MOUSEBUTTONDOWN && state == 0 && e.button.button == SDL_BUTTON_LEFT) drag.begin(a, e, pf(a));
         else if (e.type == SDL_MOUSEBUTTONUP && state == 0 && e.button.button == SDL_BUTTON_LEFT && drag.on) { int cx = drag.cx, cy = drag.cy; int d = drag.end(a, e); if (putAt(cx, cy, d)) a.playSfx(1); }   // a tap (d = -1) deletes the arrow on the cell
@@ -3521,6 +3522,11 @@ struct PuzzleMode : Screen {
             previous = scale;
         }
     }
+    // Input rect 12 (0x12c36: addButtonRect(12, AppData[0] * 0.5 = 512, layout +0x498 = 460), size = layout +8 / +0xc (200 x 40) x layout +0x10 (1.7)): (342, 426)-(682, 494); a press on it calls Tutorial::pressNext (sound 2 on accept).
+    bool tutorialNextHit(App& a, const SDL_Event& e) {
+        if (!tut.enabled) return false; float lx, ly; SDL_RenderSetLogicalSize(a.ren, GW, GH); ccrWindowToLogical(a.ren, e.button.x, e.button.y, &lx, &ly);
+        if (lx < 342.0f || lx > 682.0f || ly < 426.0f || ly > 494.0f) return false;
+        if (tut.pressNext()) a.playSfx(2); return true; }
     // PuzzleGameScreen::drawTutorialDialog (0x3d6ec): drawFrame(6, 542, 180, 650, 280), the tail image 0x9c frame 8 at (840, 390), then the wrapped text (width 620, scale 1.0) centred on y = 180 in black.
     // Unverified: the tail's scale/alpha/flags (the decompile hides the register arguments), the "Next" button (text 0x1b0, drawButton) is not drawn, and the original's gate `*DAT_000137ac != 0` is not traced.
     void drawTutorialDialog(App& a) const {
@@ -3529,7 +3535,10 @@ struct PuzzleMode : Screen {
         std::vector<uint16_t> out; const int lines = App::wrapText(a.hdFontW, *str, out, 0x100, 620, 1.0f);
         const float lh = (float)a.hdFont.box[91].y; float ty = 180.0f - 0.5f * (float)lines * lh + 0.5f * lh;
         for (int k = 0; k < lines; k++, ty += lh) { const int a0 = out[k], len = (int)out[k + 1] - a0; std::string ln = (*str + std::string(1, (char)0)).substr(a0, std::max(0, len)); if (!ln.empty()) ln.pop_back();
-            if (!ln.empty()) a.printString(ln, 542.0f, ty, 0, 0, 0, 255, 1.0f, 0, true, -1); } }
+            if (!ln.empty()) a.printString(ln, 542.0f, ty, 0, 0, 0, 255, 1.0f, 0, true, -1); }
+        // Render::drawButton (0x1a514) at (542, 460) with text 0x1b0: image 0x9e frame 0 (blue), frame 1 (orange) while the press runs (+0xa70 > 0). Unverified: scale 1.7 (the layout factor the hit rect uses) and the label scale; the press sparkle (image 0x9f) is not drawn.
+        const bool pressed = tut.a70 > 0; a.blit(a.hdButton, pressed ? 1 : 0, 542.0f, 460.0f, 1.7f);
+        if (const std::string* nx = a.hdString(0x1b0)) a.printString(*nx, 542.0f, 460.0f, 255, 255, 255, 255, 1.0f, 0, true, -1); }
     void draw(App& a, float alpha) override {
         dcPanelDrawn = false;
         const bool hasBoardTasks = failureFrames <= kFailureHoldFrames;
