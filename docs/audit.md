@@ -226,3 +226,19 @@ The mobile counterpart of the Dreamcast table. Reference: the iPad HD 1.0 binary
 - 2026-11-19 fresh AICA sampled setup: zero-register disabled slots start from scheduled sample/loop/envelope/filter/pitch/LFO/mix writes; fresh PCM/ADPCM and filter-latch variants match 87,622 stereo pairs. Final regression including prior ARM fixtures matches 175,244 pairs/310 writes. Eager FEG-rate mutation rejected. Functional evidence only (TAINTED load); original-loop cues, all-slot cold clocks, monitor/DSP and gameplay audio remain open. Coverage unchanged; see docs/audio.md.
 
 - 2026-11-19 sampled AICA monitor: actual ARM read fixtures match 46,120 status/CA reads, including 502 set-loop and 234 end-clamp reads, plus 43,811 stereo pairs/118 writes. Missing latch consumption and incomplete traces reject. Synthetic short samples with parked ARM main loop, not original-loop cue proof; TAINTED load/no timing measurements. AFSEL/FEG, stream voices, live cue read/write timing and gameplay audio remain open; coverage unchanged. See docs/audio.md.
+
+## Look separation (2026-11-24)
+
+`tools/look_leak.py` renders 21 screens/ticks headlessly from a one-platform cache and from the all-files cache, with the look forced to that platform. Any difference means art from the other platform leaked in.
+
+- **Dreamcast look:** 0 of 21 differ, after fixing three leaks: the mobile star sprites (image 154) over the field, the iPad Round/count banners (images 95, 107-109) over the Battle HUD, and the mobile rocket pad (atlas frame 6) under the 3D domes.
+- **Mobile look** (`CCR_MODELS=0`): 0 Dreamcast-art leaks. The title differs only in logo-animation progress (same mobile art); its cause is not traced.
+- The audit also found a crash, now fixed: `DC_TITLE` on a mobile-only install. `DC_TITLE` falls back to the mobile title and opens the Dreamcast title only in the Dreamcast look.
+- **Mode Select B:** the original update `0x8c022fbc` never tests B. The port's B-to-mobile-title is removed; Escape goes to the Dreamcast title as a port-only keyboard exit.
+
+| Item | Status |
+|---|---|
+| Screens in only one version | Dreamcast look: Credits, Costumes and the Tutorial are mobile-only and unreachable (Dreamcast Mode Select has no entries for them). Puzzle Edit, Network and Homepage have no port screen (cue 0x13, untraced). Mobile look: Dreamcast Records, General and 4P Settings have no mobile screen. |
+| Screen shape | Both looks are 4:3 (Dreamcast 640x480, iPad 1024x768) and letterboxed by SDL's logical size. Phone art (480x320) is fitted at integer scale inside the iPad canvas. No change needed. |
+| Language in the Dreamcast look | open. Setup exports only the `ENGLISH__` disc art, so every language shows English Dreamcast art. Rule: show the disc's own art for its five languages (en, ja, fr, de, es) and English disc art for mobile-only ones (it), never mobile text. |
+| GBA look | open. The GBA ROM supplies puzzles and rules only; there is no GBA presentation. |

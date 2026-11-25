@@ -233,7 +233,7 @@ struct App {
     // Resolved once at start by resolvePresentation(): "auto" takes the Dreamcast look whenever its art was extracted, and either choice falls back to the other when its own art is missing.
     bool dcLook = false, mobileArt = false, dcArt = false;
     bool mobileSound = false;   // sound_source = mobile and the iOS/Android audio is installed: mobile music and cues 0..28 first, Dreamcast fills the rest
-    bool useModels3d() { if (!models3dTried) { models3dTried = true; if (dcLook || settings.models3d || getenv("CCR_MODELS")) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
+    bool useModels3d() { if (!models3dTried) { models3dTried = true; const char* force = getenv("CCR_MODELS"); if (dcLook || (force && *force ? atoi(force) != 0 : settings.models3d)) models3d.load(ren, root + "/dreamcast/models.bin"); } return !models3d.models.empty(); }
     // An environment/launcher override (CCR_PRESENTATION, CCR_SOUND_SOURCE) wins until the player changes that row in Options, which clears it.
     static std::string requestedChoice(const char* env, const std::string& setting) { const char* e = getenv(env); const std::string v = e && *e ? e : setting; return v == "dreamcast" || v == "mobile" ? v : "auto"; }
     void resolvePresentation() {
@@ -762,7 +762,7 @@ struct App {
             }
             if (t == T_Hole) { blit(atlas, 7, ax, ay, field.scale()); continue; }
             if (!three) blit(atlas, 8 + floorColor * 2 + ((c ^ r) & 1), ax, ay, 1.0f, 0.0, 1);
-            if (t >= 1 && t <= 4) blit(atlas, 6, ax, ay, field.scale());
+            if (t >= 1 && t <= 4) { if (!(three && dcLook)) blit(atlas, 6, ax, ay, field.scale()); }   // mobile rocket pad; the Dreamcast look draws only the 3D dome
             else if (isGenerator) blit(atlas, ring[(c >> 2) + 3 * (r / 3)], ax, ay, field.scale());
         }
         if (three) { flushBrackets(field); walls3d(st, wallColor, field); return; }   // walls3d applies the wall plane itself (it was applied twice before)
@@ -1472,7 +1472,7 @@ struct App {
 };
 
 void StarBackground::draw(App& a) const {
-    if (!a.imgSheet(154)) return;
+    if (a.dcLook || !a.imgSheet(154)) return;   // mobile star sprites (image 154); the Dreamcast look draws its own field background
     for (const auto& star : stars) a.drawImage(154, star.frame, star.x, star.y, 0, 1.0f, 128);
     for (const auto& star : twinkles)
         if (star.remaining * 2 < star.period) a.drawImage(154, 11, star.x, star.y, 0, 1.0f, 128);
@@ -2859,14 +2859,15 @@ struct DcModeSelect : Screen {
             case SDLK_UP: select(a, (selected + kCount - 1) % kCount); break;
             case SDLK_DOWN: select(a, (selected + 1) % kCount); break;
             case SDLK_RETURN: case SDLK_SPACE: confirm(a); break;
-            case SDLK_ESCAPE: if (a.titleOk) destination = "TITLE"; break;
+            case SDLK_ESCAPE: destination = "DC_TITLE"; break;   // port-only keyboard exit to the Dreamcast title (the original Mode Select has no back input)
             }
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+            // Mode Select update 0x8c022fbc ORs the four pads' pressed words (0x8c1aefd8): Down 0x20 / Up 0x10 move with wrap (cue 0), A|Start (0xc) confirm
+            // (cue 2, mode from table 0x8c07f2b4 via 0x8c019088). B is not tested, so it does nothing.
             switch (e.cbutton.button) {
             case SDL_CONTROLLER_BUTTON_DPAD_UP: select(a, (selected + kCount - 1) % kCount); break;
             case SDL_CONTROLLER_BUTTON_DPAD_DOWN: select(a, (selected + 1) % kCount); break;
             case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_START: confirm(a); break;
-            case SDL_CONTROLLER_BUTTON_B: if (a.titleOk) destination = "TITLE"; break;
             }
         } else if (e.type == SDL_MOUSEMOTION ||
                    (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT)) {
@@ -4607,7 +4608,7 @@ struct BattleMode : Screen {
               const int frames[] = {mm % 10, 10, ss / 10, ss % 10};
               for (int i = 0; i < 4; ++i) a.blit(a.timefont, frames[i], 65.0f + i * 19.0f, y, scale);
           } }
-        SDL_RenderSetViewport(a.ren, nullptr); for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // banner tasks drawn over the HUD
+        SDL_RenderSetViewport(a.ren, nullptr); if (!a.dcLook) for (auto& bn : banners) { if (bn.kind == 1) a.roundPanel(bn.mode, bn.tick); else a.battleCount(bn.mode, bn.tick); }   // iPad banner tasks drawn over the HUD (mobile art: not in the Dreamcast look)
         int rollTick, roller, outcome;
         if (game.rouletteDrawState(rollTick, roller, outcome)) {
             const auto& cell = game.sim.rocketPos[roller];
@@ -4964,10 +4965,10 @@ int main(int argc, char** argv) {
             if (!demo->loadDemo(app)) { puts("cannot load Dreamcast demo recording"); return false; }
             mode = std::move(demo);
         }
-        else if (name == "DC_TITLE") { app.playSong(0); auto title = std::make_unique<DcStartupMode>(); title->phase = 2; mode = std::move(title); }
+        else if (name == "DC_TITLE" && (app.dcLook || !app.titleOk) && DcStartupMode::available(app)) { app.playSong(0); auto title = std::make_unique<DcStartupMode>(); title->phase = 2; mode = std::move(title); }
         else if (name == "STARTUP" && (app.dcLook || !app.titleOk) && DcStartupMode::available(app)) mode = std::make_unique<DcStartupMode>();
         else if (name == "STARTUP" && app.titleOk && StartupMode::available(app)) mode = std::make_unique<StartupMode>();
-        else if ((name == "STARTUP" || name == "TITLE" || name == "title") && app.titleOk) mode = std::make_unique<TitleMode>();
+        else if ((name == "STARTUP" || name == "TITLE" || name == "title" || name == "DC_TITLE") && app.titleOk) mode = std::make_unique<TitleMode>();
         else if (name == "PUZZLE" || name == "puzzle") { auto m = std::make_unique<PuzzleMode>(); int sn = app.nextStage >= 0 ? app.nextStage : stageNo; app.nextStage = -1; if (!m->load(app.root, sn)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "CHALLENGE_SELECT" && ChallengeSelectMode::available(app)) {
             auto m = std::make_unique<ChallengeSelectMode>();
