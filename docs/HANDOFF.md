@@ -28,14 +28,19 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Golden mouse: crash fix on Dreamcast-only installs, "50" marker no longer mirrored, environment-mapped body.
 - Parity: 132 cases, all within the full-frame limit (with a BIOS in the local test caches). Asset version 5 (re-run setup).
 
+## Done 2026-11-25
+
+- Flycast banner captures, Challenge bracket phase, Normal 03 case (see Next tasks 3-6). `flyhost` gained `FLY_POKE_ONCE`. Tutorial gate follows `puzzlestage_endflag`; tap shortcut (Input flag 4 writer) still unfound.
+- Tests run: tutorial_test, puzzle_pause_test, userdata_test, input_regression_test pass; port-vs-port only for The Basics.
+
 ## Next tasks
 
 1. **Pian right mice crop:** 1.036 against the per-element limit of 1 (no off-edge pixels). Left passes. The ignore-light strip uses the measured 0.912; its origin is not traced.
 2. **Golden mouse:** texture, UV range and vertex intensities match Flycast (gk03400.state), but a colour-mask comparison says the body is ~15% brighter. Needs an aligned golden-mouse crop (force with `FLY_POKE=0:1ae8f8=3f800000` in flyhost and `CCR_GOLDEN_P=1` in the port).
-3. **Challenge bracket phase origin:** dims correctly; phase not measured.
-4. **Time-left / 3-2-1 Battle banners:** implemented from the trace, no Flycast frame yet.
-5. **START banner crop:** 2.39 (sub-pixel filtering); Battle and Challenge pause have no parity case.
-6. **Puzzle coverage:** other stages per group, star twinkles, launch per element.
+3. **Challenge bracket phase:** grey pulse measured (period 64, `dimOffset` 18, 90-frame series); the size pulse is not re-measured.
+4. **Time-left / 3-2-1 Battle banners:** Flycast frames captured with `FLY_POKE_ONCE=3000:1ae8e0=<BCD clock>` (flyhost); 2:00, 1:00, 0:30 and the "3" fit `4 - 0.033 t` / `8 - 0.13 t` and the blend follows the texture alpha. Open: count2/count1 digits, absolute pixel diff.
+5. **START banner crop:** 2.39, placement exact; residue is partial-alpha edge texels (+9 R/G at 150 px). Battle and Challenge pause have no parity case.
+6. **Puzzle coverage:** `puzzle_normal03` added (full 0.99, board 1.07 / 1 off-edge px). The residue is the pad cursor tip (about 4% too large; its pulse counter is not the game clock; a consecutive-frame series is in local/pz3s, tip area fits period 16, phase unresolved). Other groups' later stages, star twinkles, launch per element open.
 7. **The Basics** (mobile tutorial, HD 1.0 `PuzzleGameScreen` tutorial): ported in the mobile look (`game/core/tutorial.hpp`, `PuzzleMode` with `basics`, Main Menu item 0, `progress.bin` fifth word gates Puzzle/Challenge/Battle). Played to the cleared flag headless (port-vs-port; roadmap 2026-11-24 "played end to end" has the arrows and script). Open: no mobile-original frame diff, the tap shortcut (Input flag 4), the lesson-index source on a stage change (inferred), the press sparkle (image 0x9f), the 0x109/0x20a branches, the Continue label/scale. Dreamcast mode 16 (`0x8c058292`) is a network battle, not a tutorial.
 8. **Languages:** French Help title plate and footer unverified; the Puzzle tap-timing writer and MANATEE.DRV command 0x8a (Monaural) stay open.
 
