@@ -84,7 +84,7 @@ class Pack:
                 if not normal and not fl & 1: v = (v[0] + pos[i][0], v[1] + pos[i][1], v[2] + pos[i][2])
                 i = n['parent']
             return v
-        verts = []; tris = []
+        verts = []; tris = []; self.last_colours = []
         for i, n in enumerate(order):
             if n['mp'] == 0 or n['fl'] & 8: continue
             vl, pl = self.models[n['mp']]; keys = sorted(vl); base = len(verts); remap = {k: base + j for j, k in enumerate(keys)}
@@ -94,13 +94,19 @@ class Pack:
                 w = world(i, p); nw = world(i, nr if nr else (0.0, 1.0, 0.0), True)
                 l = math.sqrt(nw[0] ** 2 + nw[1] ** 2 + nw[2] ** 2) or 1.0
                 verts.append(tuple(w) + (nw[0] / l, nw[1] / l, nw[2] / l))
+            dif, amb = bytes([0xff, 0xff, 0xff, 0xff]), bytes([0x7f, 0x7f, 0x7f, 0xff])   # material chunk colours (B, G, R, A): 17 diffuse, 18 ambient, 19 both; they persist to later strips of the list
             for strip, rev, tex, mat, sfl in pl:
+                if mat is not None:
+                    if mat[0] in (17, 19): dif = bytes(mat[2][0:4])
+                    if mat[0] == 18: amb = bytes(mat[2][0:4])
+                    if mat[0] == 19: amb = bytes(mat[2][4:8])
                 for q in range(len(strip) - 2):
                     t3 = [strip[q], strip[q + 1], strip[q + 2]]
                     if (q & 1) ^ rev: t3[1], t3[2] = t3[2], t3[1]
                     a, b, c = t3[0][0], t3[1][0], t3[2][0]
                     if a in remap and b in remap and c in remap and len({a, b, c}) == 3:
                         tris.append(((10 if special and mat[0] == 17 and tex is not None and (tex & 0x1fff) == 2 else (tex if tex is not None else untextured) & 0x1fff) | (0xc0 if sfl >> 8 == 64 and not sfl & 0x40 else (0x80 if sfl & 8 else 0) | (0x40 if sfl & 0x40 else 0)), [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
+                        self.last_colours.append(dif + amb)
         return tris
     def assemble_cached(self, order, pos=None, ang=None):
         """Objects whose polygon lists live apart from their vertex lists (the ghost 0x8c097e44): every node's vertex chunk writes its vertices, transformed by that node's matrix, into one shared
@@ -268,7 +274,8 @@ def main(root, exe):
             mats.append(tex_ids['WHITE'])
         frames = pack.cat_frames(order) if name == 'cat' else golden_mouse_frames(pack, order) if name == 'mouse_b' else motion_frames(pack, order, 0x8c0988a0, 8) if name == 'ghost' else flame_frames(pack, order) if name == 'fire' else []
         for fr in frames: assert len(fr) == len(tris), (len(fr), len(tris))
-        out_models.append((name, tris, mats, frames))
+        colours = list(pack.last_colours) if name != 'ghost' and len(getattr(pack, 'last_colours', [])) == len(tris) else []
+        out_models.append((name, tris, mats, frames, colours))
     # Sprite 0x8c0b4ba8 / frame table 0x8c0b4a68: 32x32, pivot
     # (16,16), scale .5; EFFECT slots 40..55. Live stream quads are
     # 16 world units square, camera-facing, with source-alpha blending.
@@ -276,17 +283,17 @@ def main(root, exe):
         def smokev(x, z, u, v): return (x, 0.0, z, u, v, 0.0, 1.0, 0.0)
         a, b, c, d = smokev(-8, -8, 0, 1), smokev(-8, 8, 0, 0), smokev(8, -8, 1, 1), smokev(8, 8, 1, 0)
         out_models.append(('smoke%d' % frame, [(0, [a, b, c]), (0, [c, b, d])],
-                           [tex('EFFECT_smoke%02d' % (frame + 1))], []))
+                           [tex('EFFECT_smoke%02d' % (frame + 1))], [], []))
     # Mouse marker quads (0x8c056d00): a 13.5-unit plane (half size 6.75) textured with texture 46 + 3 * kind of the CHALLENGECLEAR list: kind 0 = plus50 (golden mouse), kind 1 = hatena (roulette mouse)
     for qname, qtex in (('marker_plus50', 'CHALLENGECLEAR_plus50'), ('marker_hatena', 'CHALLENGECLEAR_hatena')):
         h = 6.75
         def qv(x, y, u, v): return (x, y, 0.0, u, v, 0.0, 0.0, 1.0)
         qtris = [(0, [qv(-h, h, 0, 0), qv(-h, -h, 0, 1), qv(h, h, 1, 0)]), (0, [qv(h, h, 1, 0), qv(-h, -h, 0, 1), qv(h, -h, 1, 1)])]
-        out_models.append((qname, qtris, [tex(qtex)], []))
-    out = bytearray(b'CCM3' + struct.pack('<I', len(textures)))
+        out_models.append((qname, qtris, [tex(qtex)], [], []))
+    out = bytearray(b'CCM4' + struct.pack('<I', len(textures)))   # CCM4: CCM3 plus per-triangle material colours after the frames
     for im in textures: out += struct.pack('<HH', im.width, im.height) + im.tobytes()
     out += struct.pack('<I', len(out_models))
-    for name, tris, mats, frames in out_models:
+    for name, tris, mats, frames, colours in out_models:
         out += name.encode().ljust(24, b'\0') + struct.pack('<II', len(tris), len(mats)) + struct.pack('<%dI' % len(mats), *mats)
         for m, vs in tris:
             out += struct.pack('<B', m)
@@ -295,6 +302,8 @@ def main(root, exe):
         for fr in frames:
             for m, vs in fr:
                 for v in vs: out += struct.pack('<6f', v[0], v[1], v[2], v[5], v[6], v[7])
+        out += struct.pack('<I', len(colours))   # per triangle: material diffuse then ambient, 4 bytes each (B, G, R, A as in the Ninja chunk)
+        for c in colours: out += c
     open(os.path.join(root, 'models.bin'), 'wb').write(out)
     print('models', len(out_models), 'textures', len(textures), 'bytes', len(out))
 

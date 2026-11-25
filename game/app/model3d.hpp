@@ -9,12 +9,13 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <array>
 #include <string>
 #include <vector>
 struct Model3D {
     struct V { float x, y, z, u, v, nx, ny, nz; };
     struct Tri { uint8_t mat; V v[3]; bool alphaStrip = false; bool envMap = false; bool untextured = false; };   // alphaStrip: the Ninja strip chunk's use-alpha flag (0x08), exported in the material byte's top bit
-    std::string name; std::vector<Tri> tris; std::vector<uint32_t> matTex; std::vector<std::vector<float>> frames; bool hasStripAlpha = false;   // animation poses: 18 floats per triangle (3 x position xyz + normal xyz)
+    std::string name; std::vector<Tri> tris; std::vector<uint32_t> matTex; std::vector<std::vector<float>> frames; bool hasStripAlpha = false; std::vector<std::array<uint8_t, 8>> colours;   /* CCM4: per triangle material diffuse then ambient (B, G, R, A) */   // animation poses: 18 floats per triangle (3 x position xyz + normal xyz)
 };
 // Lighting: the Dreamcast chunk models carry vertex normals (chunk type 41) and a material with diffuse 0xffffffff and ambient 0x7f7f7fff; the colour of a vertex is
 // ambient + diffuse * max(0, N.L) with N turned to view space. L, ambient and diffuse are set from the fit against the mobile art (docs/dreamcast_models.md) or CCR_LIGHT=lx,ly,lz,amb,diff.
@@ -58,7 +59,7 @@ private:
         size_t p = 0;
         auto remaining = [&] { return d.size() - p; };
         auto rd = [&](void* o, size_t k) { if (k > remaining()) return false; memcpy(o, d.data() + p, k); p += k; return true; };
-        char magic[4]; uint32_t nt; if (!rd(magic, 4) || memcmp(magic, "CCM3", 4) || !rd(&nt, 4)) return false;
+        char magic[4]; uint32_t nt; if (!rd(magic, 4) || (memcmp(magic, "CCM3", 4) && memcmp(magic, "CCM4", 4)) || !rd(&nt, 4)) return false; const bool ccm4 = !memcmp(magic, "CCM4", 4);
         for (uint32_t i = 0; i < nt; i++) {
             uint16_t w, h;
             if (!rd(&w, 2) || !rd(&h, 2) || !w || !h || h > remaining() / (size_t(w) * 4)) return false;
@@ -83,12 +84,13 @@ private:
             if (!rd(&nf, 4) || (nf && (!frameBytes || nf > remaining() / frameBytes))) return false;
             m.frames.resize(nf);
             for (auto& fr : m.frames) { fr.resize((size_t)ntri * 18); if (!rd(fr.data(), fr.size() * 4)) return false; }
+            if (ccm4) { uint32_t nc; if (!rd(&nc, 4) || (nc && (nc != ntri || nc > remaining() / 8))) return false; m.colours.resize(nc); for (auto& c : m.colours) if (!rd(c.data(), 8)) return false; }
             models.push_back(std::move(m));
         }
         return true;
     }
 public:
-    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool additive = false; };   // wrap: repeat the texture (the floor quad's UVs run past 1)
+    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool additive = false; bool rgb = false; float lightRGB[3][3] = {}; };   // rgb: per-channel vertex light (material colours)   // wrap: repeat the texture (the floor quad's UVs run past 1)
 
     // The Battle draw task builds a dome from two copies of the lid,
     // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
@@ -226,7 +228,9 @@ public:
                     const float lum = b0 * t.light[0] + b1 * t.light[1] + b2 * t.light[2];
                     float c[4]; sample(t.tex, u, v, t.wrap, c);
                     uint32_t& dst = color[(size_t)y * W + x];
-                    const float r = std::min(255.0f, c[0] * lum), g = std::min(255.0f, c[1] * lum), bl = std::min(255.0f, c[2] * lum);
+                    float lr = lum, lg = lum, lb = lum;
+                    if (t.rgb) { lr = b0 * t.lightRGB[0][0] + b1 * t.lightRGB[1][0] + b2 * t.lightRGB[2][0]; lg = b0 * t.lightRGB[0][1] + b1 * t.lightRGB[1][1] + b2 * t.lightRGB[2][1]; lb = b0 * t.lightRGB[0][2] + b1 * t.lightRGB[1][2] + b2 * t.lightRGB[2][2]; }
+                    const float r = std::min(255.0f, c[0] * lr), g = std::min(255.0f, c[1] * lg), bl = std::min(255.0f, c[2] * lb);
                     if (t.additive) {
                         uint32_t& d = added[(size_t)y * W + x];
                         const auto rr = (uint32_t)std::min(255.0f, (d & 255) + r + 0.5f);
@@ -336,6 +340,11 @@ public:
                 const float n2x = n1x, n2y = ny * ct - n1z * st, n2z = ny * st + n1z * ct;
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
                 o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, (light[0] * n2x + light[1] * n2y + light[2] * n2z) * modelScale)) * (tri.mat == 10 ? run10Diffuse : 1.0f);   // a uniform njScale also scales the normals the Dreamcast lights with (as for the rocket dome)   // material slot 10 = the mouse's cream run with chunk diffuse b2b2b2 (0xb2 / 255)   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
+                if (ti < m.colours.size() && (m.name.rfind("chao", 0) == 0 || m.name.rfind("pian", 0) == 0)) {   // costume material colours: channel = 0.3 + diffuse term * material diffuse
+                    const auto& mc = m.colours[ti]; const float dterm = std::max(0.0f, (light[0] * n2x + light[1] * n2y + light[2] * n2z) * modelScale);
+                    for (int ch = 0; ch < 3; ++ch) { const int bi = 2 - ch; o.lightRGB[k][ch] = std::min(1.0f, 0.3f + dterm * mc[bi] / 255.0f); }   // material diffuse only: applying the ambient chunks (type 18/19, e.g. the Chao's ff7f7f) made the Chao worse in either byte order, so their use is not understood yet
+                    o.rgb = true;
+                }
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
                 float mu = tri.v[k].u, mv = tri.v[k].v;
                 if (tri.envMap) {   // Ninja strip flag 0x40 (environment map, strips without UVs: the golden mouse's body): UV from the view-space normal
