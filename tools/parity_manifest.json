@@ -82,7 +82,7 @@
       ],
       "env": {
         "CCR_TICKS": "200",
-        "CCR_GLOBAL_TIME": "1625",
+        "CCR_GLOBAL_TIME": "1624",
         "CCR_CHARACTER_STYLE": "1",
         "CCR_MODELS": "1"
       },
@@ -100,7 +100,7 @@
           370
         ]
       },
-      "note": "flyhost Puzzle Normal 01 script with FLY_POKE 0:1ae8d0=1 (style global 0x8c1ae8d0), shot 2390, RAM clock 1825; local/costume-capture"
+      "note": "flyhost Puzzle Normal 01 script with FLY_POKE 0:1ae8d0=1 (style global 0x8c1ae8d0), shot 2390, RAM clock 1825; local/costume-capture; CCR_GLOBAL_TIME 1624 aligns the pose (keyframe 6): flyhost runs differ by a clock step (1825 vs 1826 at 2390) and the clock advances 2 per video frame here, frames 2391-2395 fit pose = (RAM clock - 4) & 7"
     },
     {
       "name": "puzzle01_pian",
@@ -110,7 +110,7 @@
       ],
       "env": {
         "CCR_TICKS": "200",
-        "CCR_GLOBAL_TIME": "1625",
+        "CCR_GLOBAL_TIME": "1624",
         "CCR_CHARACTER_STYLE": "2",
         "CCR_MODELS": "1"
       },
@@ -128,7 +128,7 @@
           370
         ]
       },
-      "note": "flyhost Puzzle Normal 01 script with FLY_POKE 0:1ae8d0=2 (style global 0x8c1ae8d0), shot 2390, RAM clock 1825; local/costume-capture"
+      "note": "flyhost Puzzle Normal 01 script with FLY_POKE 0:1ae8d0=2 (style global 0x8c1ae8d0), shot 2390, RAM clock 1825; local/costume-capture; CCR_GLOBAL_TIME 1624 aligns the pose (keyframe 6): flyhost runs differ by a clock step (1825 vs 1826 at 2390) and the clock advances 2 per video frame here, frames 2391-2395 fit pose = (RAM clock - 4) & 7"
     },
     {
       "name": "save_completed_218",
