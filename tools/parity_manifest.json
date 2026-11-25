@@ -1849,6 +1849,12 @@
           23,
           595,
           366
+        ],
+        "cat": [
+          225,
+          55,
+          305,
+          145
         ]
       },
       "note": "flyhost Puzzle Hard 05 \"Loopy\" (masks poked 0x22d8a4.. = 0x1ffffff, R2 then RIGHT x4 before the final START), shot 2390, RAM clock 1826; local/hd5"

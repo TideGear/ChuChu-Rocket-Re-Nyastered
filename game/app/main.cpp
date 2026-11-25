@@ -3463,7 +3463,7 @@ struct PuzzleMode : Screen {
             if (dash) { ++sim.now; sim.tickEffects(); a.stepAngles(sim, true); }
             return;
         }
-        if (!running) return;
+        if (!running) { if (!paused && cticks > 31) a.stepAngles(sim, false); return; }   // the cat task keeps animating while the arrows are placed (Flycast Hard 05, shots 2300-2418: the cat walks in place)
         auto tickPuzzleSimulation = [&] {
             sim.events.clear();
             sim.tick(); a.stepAngles(sim);
