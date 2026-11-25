@@ -39,7 +39,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 
 1. **Stream tool: done** (`tools/oracle/ta_dump.py info|list|tex|render`). Open in it: how characters are ordered (all their vertices have z = 0.005; Flycast draws the rocket dome over the mouse, the tool's depth test does not).
 2. **Puzzle visible-gap sweep:** done for stage select (1.82; only the preview domes differ), placing, run (0.73) and failure. The failure ring was the mobile one and is now the Dreamcast task 0x8c02c600 (1.04 / 1.16). Left: clear/launch per element (cases exist), the moving background streaks ("star twinkles": not in any polygon list; SH-4 trace next), Dash, and the pause menu's Quit path. The look-leak case `stages` differs by 232 px; this predates today's changes.
-3. **Re-measure under "pass (rounding)":** Pian right mice (1.036; signed +1.6 R / +0.2 G / +1.5 B, 0 off-edge px) and other elements near 1; update audit.md.
+3. **"Pass (rounding)": done.** `tools/parity.py` now writes `<element>_verdict` (pass / pass (rounding) / fail), `_offset` and `_residual`. Across 140 cases: 95 pass, 9 pass (rounding) (Pian right mice and the Puzzle list box in 8 cases), 101 fail.
 4. **Hard 05 cat shading:** body strips at 0x269cd0 / 0x269f30 in `local/hd5/p_02390.state` (intensity 0.30-0.85); a single light vector does not fit, so trace the cat normal transform (draw `0x8c0119fe`, morph `0x8c0e673e`).
 5. **Puzzle pad tip:** about 4% too large on Normal 03, pulse counter not the game clock (series in local/pz3s).
 

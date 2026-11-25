@@ -102,6 +102,15 @@ def main():
             row[name + '_off_edge_gt8'] = off
             row[name + '_pass'] = bool(row[name + '_mean'] <= 1 and (dx, dy) == (0, 0) and off == 0)
             row[name + '_shift'] = '%d,%d' % (dx, dy)
+            # goal.md "pass (rounding)": the only residue is a uniform signed offset of at most 2 levels per channel (GPU/emulator rounding):
+            # shift (0,0), no off-edge pixel over 8, and once the per-channel offset is removed the mean error is <= 1.
+            d = (p - r)[y0:y1, x0:x1].astype(float)
+            o = d.reshape(-1, 3).mean(0)
+            residual = float(np.abs(d - o).mean())
+            row[name + '_offset'] = '%+.2f,%+.2f,%+.2f' % tuple(o)
+            row[name + '_residual'] = round(residual, 4)
+            rounding = (not row[name + '_pass']) and (dx, dy) == (0, 0) and off == 0 and float(np.abs(o).max()) <= 2 and residual <= 1
+            row[name + '_verdict'] = 'pass' if row[name + '_pass'] else 'pass (rounding)' if rounding else 'fail'
         sheet = Image.new('RGB', (r.shape[1] * 3, r.shape[0]))
         sheet.paste(Image.fromarray(r.astype(np.uint8)), (0, 0))
         sheet.paste(Image.fromarray(p.astype(np.uint8)), (r.shape[1], 0))

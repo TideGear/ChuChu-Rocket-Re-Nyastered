@@ -24,7 +24,7 @@ Golden mouse:
 - flyhost Battle runs differ between invocations, so dump in the same run as the shot.
 
 Pian:
-- The right mice crop is 1.036 with 0 off-edge px. The bias is uniform: +1.6 R, +0.2 G, +1.5 B. It is a candidate for "pass (rounding)" under the goal.md rule; re-measure it.
+- The right mice crop is 1.036 with 0 off-edge px; the whole-crop offset is +0.90 R / +0.25 G / +0.74 B and the residual after removing it is 0.84, so it is "pass (rounding)" (`tools/parity.py` verdict, 2026-11-25). The same verdict applies to the Puzzle list box in all 8 cases (about +1.3 / +0.5 / +1.2).
 
 Stream tool:
 - `tools/oracle/ta_dump.py` finds the list start (first type-4 header followed by two plausible vertices), the list end, and the VRAM base by voting with re-encoded models.bin textures. In both states checked, the base sits at list end + 4 (gold5 g_03180: list 0x253e10..0x271590, base 0x271594; hd5 p_02390: ..0x26b070, base 0x26b074). Commands: `info`, `list --box`, `tex`, `render --shot [--face 1|header] [--swapuv] [--measure tex]`.
