@@ -75,6 +75,76 @@
       }
     },
     {
+      "name": "puzzle_normal13",
+      "ref": "local/dc_ref/groups/n13_02420.bmp",
+      "args": [
+        "puzzle",
+        "12"
+      ],
+      "env": {
+        "CCR_TICKS": "200",
+        "CCR_GLOBAL_TIME": "1655",
+        "CCR_MODELS": "1"
+      },
+      "elements": {
+        "r_trigger_panel": [
+          5,
+          32,
+          133,
+          160
+        ],
+        "l_trigger_panel": [
+          5,
+          160,
+          133,
+          288
+        ],
+        "normal_plate": [
+          3,
+          278,
+          234,
+          324
+        ],
+        "stage_label": [
+          5,
+          325,
+          133,
+          389
+        ],
+        "stage_digits": [
+          38,
+          375,
+          119,
+          426
+        ],
+        "available_label": [
+          132,
+          372,
+          275,
+          392
+        ],
+        "hint_bubble": [
+          316,
+          365,
+          596,
+          402
+        ],
+        "list_box": [
+          132,
+          402,
+          596,
+          448
+        ],
+        "board": [
+          136,
+          23,
+          595,
+          366
+        ]
+      },
+      "note": "flyhost Normal 13 (select RIGHT x2, DOWN x2), shot 2420, RAM clock 1855: stock shows down, left, up"
+    },
+    {
       "name": "puzzle_hard01",
       "ref": "local/dc_ref/groups/g1_02390.bmp",
       "args": [

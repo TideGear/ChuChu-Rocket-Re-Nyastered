@@ -3572,7 +3572,7 @@ struct PuzzleMode : Screen {
         if (!phonePuzzleHudAvailable(a)) {
         if (!dcPanelDrawn) { float x = (float)OX + 40.0f; a.blit(a.hdPhud, 2, x, 690.0f); for (int k = 0; k < 10; k++) { x += 64.0f; a.blit(a.hdPhud, 3, x, 690.0f); } x += 64.0f; a.blit(a.hdPhud, 4, x, 690.0f); }
         // then the remaining arrows: AR_GetArrowdataPuzzle order east, west, north, south (rotations 4, 12, 0, 8 in 1/16 turns), image 0x54 frame 0 at scale 0.6, x from origin + 64 in steps of 60, y 706
-        { static const int ordIpad[4] = {3, 1, 2, 0}, ordDc[4] = {0, 1, 2, 3};   // the Dreamcast direction-code order S, W, N, E: Normal 25 shows up before right, Hard 01 down before right, Mania 01 left before right (flyhost); S/W/N among themselves unverified
+        { static const int ordIpad[4] = {3, 1, 2, 0}, ordDc[4] = {0, 1, 2, 3};   // the Dreamcast direction-code order S, W, N, E: Normal 25 shows up before right, Hard 01 down before right, Mania 01 left before right, Normal 13 down, left, up (flyhost)
           const int* ord = dcPanelDrawn ? ordDc : ordIpad; float x = dcPanelDrawn ? 253.0f : (float)OX + 64.0f; const float iy = dcPanelDrawn ? 667.0f : 706.0f; const float isc = dcPanelDrawn ? 0.8f : 0.6f;   // Dreamcast: first icon quad x 142-174, y 401-433 of 640 x 480 (x1.6); the slot pitch for further arrows is not measured yet
           for (int k = 0; k < 4; k++) { int d = ord[k]; for (int n = 0; n < stock[d] - used(d); n++) { a.arrowIcon(x, iy, d, 0, isc); x += dcPanelDrawn ? 54.4f : 60.0f; } } }   // Dreamcast: icons 34 px apart on the 640 x 480 screen (x 142-174 and 176-208)
         }
