@@ -153,7 +153,7 @@
       ],
       "env": {
         "CCR_TICKS": "200",
-        "CCR_GLOBAL_TIME": "1457",
+        "CCR_GLOBAL_TIME": "1459",
         "CCR_MODELS": "1"
       },
       "elements": {
@@ -212,7 +212,7 @@
           366
         ]
       },
-      "note": "flyhost Puzzle Normal script with RIGHT@2030-2034;RIGHT@2060-2064 before the final START (stage 03 Zigzag), shot 2390, RAM clock 1658 (GT = clock - 201 as in puzzle01); local/pz3"
+      "note": "flyhost Puzzle Normal script with RIGHT@2030-2034;RIGHT@2060-2064 before the final START (stage 03 Zigzag), shot 2390, RAM clock 1658; GT 1459 chosen by a scan of 1449-1465 (the pose repeats every 8; 1457 gave 2.49, 1459 gives 1.06 on the board); local/pz3"
     },
     {
       "name": "puzzle_hard01",
