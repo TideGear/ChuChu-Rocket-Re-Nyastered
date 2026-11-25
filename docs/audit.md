@@ -134,17 +134,17 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 
 | Update / draw | What it is | Port |
 | --- | --- | --- |
-| `0x8c010494` / `0x8c0104e0` | always live; draws object `0x8c0b2b04` | unidentified |
+| `0x8c010494` / `0x8c0104e0` | placed arrows: table `0x8c1862a4` (24-byte entries: direction x 90 deg, a half-width flag), object `0x8c075aac`, texture list `0x8c0b2b04` | ported (half-width flag: Battle, unchecked) |
 | `0x8c0113f0` / `0x8c011198` (state `0x8c011340`) | cat | ported (walk, pose, light open: cat shading) |
 | `0x8c014054` / `0x8c01406a` | short task spawned by the cursor update (`0x8c014100`); seen at the clear | unidentified |
 | `0x8c0145ee` / `0x8c0146e6` | cursor (pointer and bracket) | ported |
-| `0x8c0191d4` / `0x8c0192e0` | seen in failure runs only | unidentified |
+| `0x8c0191d4` / `0x8c0192e0` | ghost of an eaten mouse: object `0x8c097e44`, motion `0x8c0988a0` | ported (shared `drawFieldObjects` ghost) |
 | `0x8c019880` / `0x8c01944c` (states `0x8c0195d4`, `0x8c01952e`, `0x8c019688`, `0x8c01958e`) | mouse: run, entering a rocket, others | run ported; the other states unchecked |
 | `0x8c01b8a0`, `0x8c01b976`, `0x8c01b9a0` | rocket launch body, lid, flame/smoke | ported |
 | `0x8c01c26e` / `0x8c01c31a` | parked dome | ported |
 | `0x8c01c380` | dome pulse decay (with add `0x8c01cbc8`) | ported 2026-11-25 |
 | `0x8c01cbfa` / `0x8c01cc10` | launch smoke puff: 15-pass sprite animation `0x8c0e4328` (frame = age), created by `0x8c01cc62` from the launch body `0x8c01b8a0` (also from `0x8c013696`, outside Puzzle) | ported (`smokeBirths`) |
-| `0x8c01f272` / `0x8c01f2a0` | always live; draws `0x8c085c60` / `0x8c0b36f0` | unidentified |
+| `0x8c01f272` / `0x8c01f2a0` | background sky: sphere `0x8c0b36f0` (60 triangles, radius 500) x 5 at the board centre (90, 0, 67.5), angles +8 / +16 / +8 per pass, texture list `0x8c085c60`; follows `[0x8c1863cc]` when set. The source of the moving "star" streaks | **missing**: the port draws a static backdrop |
 | `0x8c02b73a` / `0x8c02b73e` | always live; Puzzle screen task (texture lists `0x8c0bda90`..) | HUD ported; contents unchecked |
 | `0x8c02c4e0` / `0x8c02c4f8` | failure focus ring | ported 2026-11-25 |
 | `0x8c02ccc0` / `0x8c02ccd8` | "Save Completed" banner: lives 300 passes, draws sprite list `0x8c0be388` while age mod 60 < 40 (Flycast puzzle-clear s_00320/400/500) | ported (`saveAge`) |
