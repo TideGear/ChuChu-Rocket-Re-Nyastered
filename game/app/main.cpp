@@ -5,6 +5,7 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include "../core/battle.hpp"
+#include "../core/tutorial.hpp"
 #include "../core/dc_cursor.hpp"
 #include "../core/audio_mix.hpp"
 #include "../core/dc_demo.hpp"
@@ -2548,13 +2549,13 @@ struct HdMenuMode : Screen {
         else if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym; if (k == SDLK_DOWN) { sel = (sel + 1) % N; a.playSfx(0); } else if (k == SDLK_UP) { sel = (sel + N - 1) % N; a.playSfx(0); } else if (k == SDLK_RETURN || k == SDLK_SPACE) act(a, sel); } }
     void act(App& a, int i) {
         if (!tutorialCleared() && i >= 1 && i <= 3) { a.playSfx(3); return; }
-        if (i == 0 || (i == 2 && !challengeBoardsAvailable(a.root)) || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics is not ported yet; Stage Challenge needs the Challenge boards (docs/roadmap.md)
+        if ((i == 0 && !(a.hdFrame73.tex && !a.hdFontW.empty() && a.hdString(0x1be))) || (i == 2 && !challengeBoardsAvailable(a.root)) || (i == 4 && !OptionsMode::ok(a))) { a.playSfx(0x13); return; }   // The Basics is not ported yet; Stage Challenge needs the Challenge boards (docs/roadmap.md)
         a.playSfx(2); chosen = i; fade = 0; phase = 0x10; }
     void tick(App& a) override {
         if (phase == 0xe) { fade -= 16384.0; if (fade <= 0) { fade = 0; phase = 0xf; } }
         else if (phase == 0xf) { t1 += 16384.0; if (t1 >= 500000.0) { t1 -= 500000.0; bubbleFrame = (bubbleFrame + 1) & 1; } t2 += 16384.0; if (t2 >= 166666.671875) { t2 -= 166666.671875; mascot = (mascot + 1) % 12; } }
         else if (phase == 0x10) { fade += 16384.0; if (fade >= 500000.0) { fade = 500000.0; leave = true; } } }
-    const char* next() override { if (!leave) return nullptr; leave = false; static const char* to[N] = {nullptr, "STAGES", "CHALLENGE", "BATTLE", "OPTIONS"}; return to[chosen]; }
+    const char* next() override { if (!leave) return nullptr; leave = false; static const char* to[N] = {"BASICS", "STAGES", "CHALLENGE", "BATTLE", "OPTIONS"}; return to[chosen]; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         static const int tm[48] = {0,1,2,3,0,0,0,4,5,6,7,8,9,10,11,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,28,28,29,30,31,32,33,34,35,34,34,36,37,38,39};   // tilemap resource 0x124 (HD ccrpad rec 878)
@@ -3202,6 +3203,8 @@ struct PuzzleMode : Screen {
     int failureFrames = 0;
     int clearFrames = 0;
     bool clearSaved = false;
+    ccr::Tutorial tut; int tutTicks = 0, tutPrevState = 0; bool basics = false;   // The Basics (HD 1.0 PuzzleGameScreen tutorial; core/tutorial.hpp)
+    bool goBlocked() const { return tut.enabled && (tut.mask & 1) != 0; }   // handleInput: the Go button is ignored while step flag 1 is set
     bool launchSoundStarted = false;
     ccr::PuzzleAudioRequests puzzleAudioRequests;
     std::array<DcRocketLid, kCols * kRows> launchLids{};
@@ -3218,13 +3221,18 @@ struct PuzzleMode : Screen {
                alive == 0 && preview.saved == totalMice;
     }
     void nextPuzzle() {
+        if (basics && cur % 25 == 2) { back = true; return; }   // PuzzleLoop 0x1854c: the tutorial ends on stage index 2 (setTutorialCleared)
         if ((cur + 1) % 25 == 0 || cur + 1 >= (int)stages.list.size()) { back = true; return; }
-        ++cur; reset();
+        ++cur; reset(); if (basics) { tut.reset(-1); tutTicks = 0; tutPrevState = 0; }   // next lesson = step (lesson << 8); the lesson source on stage change is inferred, see roadmap
     }
     PadAim padAim{97.5f, 67.5f};   // Flycast Normal Puzzle 01 and 02: the pad cursor starts on cell (6, 4), its pointer at the cell centre
     Stages stages; int cur = 0; Sim sim; std::vector<std::pair<float, float>> prev; bool running = false; int state = 0;   // 0 planning, 1 running, 2 clear, 3 miss
     int stock[4] = {0, 0, 0, 0}; int totalMice = 0; bool back = false; DragGesture drag; int curX = 6, curY = 4; SDL_GameController* pad = nullptr;
-    bool putAt(int cx, int cy, int d) { sim.removeArrow(cx, cy); if (d >= 0 && used(d) < stock[d]) return sim.placeArrow(cx, cy, d); return false; }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
+    bool putAt(int cx, int cy, int d) {
+        if (tut.enabled && (tut.mask & 4)) return false;   // handleInput: no arrow input while step flag 4 is set
+        sim.removeArrow(cx, cy); bool ok = false; if (d >= 0 && used(d) < stock[d]) ok = sim.placeArrow(cx, cy, d);
+        if (tut.enabled) { tut.f74 = true; if (ok && tut.mode == 1) { tut.t4c = -1; tut.trigger(true, false); } }   // AR_PutArrowPzSp (line 15717): a placed arrow in a wait-for-arrow step starts the next step
+        return ok; }   // AR_PutArrowPzSp: an arrow already there is deleted first; a direction without stock places nothing
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
     bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; for (int i = 0; i < SDL_NumJoysticks(); ++i) if (!pad && SDL_IsGameController(i)) pad = SDL_GameControllerOpen(i); cur = stage % (int)stages.list.size(); reset(); return true; }
     bool dcPanelDrawn = false;   // the Dreamcast bottom panel replaces the iPad arrow strip
@@ -3274,11 +3282,11 @@ struct PuzzleMode : Screen {
                 return;
             }
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0, pf(a));
-            if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
+            if (k == SDLK_SPACE) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; } } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
             else if (k == SDLK_p) {
                 // Dreamcast: Start only pauses (pause controller 0x8c01a174; Flycast pa1 frame 2500 shows the placing board idle under the overlay). The mobile
                 // look keeps the port's Start-runs-the-puzzle convenience for setups without a Start/Dash button.
-                if (state == 0 && !dreamcastPuzzleControls(a)) { state = 1; running = true; dash = false; }
+                if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; } dash = false; }
                 pauseState.press();
             }
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
@@ -3306,16 +3314,16 @@ struct PuzzleMode : Screen {
             mouseCursor = false;
             { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) { if (state == 0 && putAt(curX, curY, d)) a.playSfx(1); }
             else if (b == pm.pause) {
-                if (state == 0 && !dreamcastPuzzleControls(a)) { state = 1; running = true; dash = false; a.playSfx(2); }   // Dreamcast: Start only pauses (see the key path)
+                if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); }   // Dreamcast: Start only pauses (see the key path)
                 pauseState.press();
             } else if (b == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-                if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
+                if (state == 0) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); }
                 else if (running && !dash) { dash = true; a.playSfx(0xc); }
             } }
         }
         else if (e.type == SDL_CONTROLLERAXISMOTION && pad && e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT &&
                  SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.caxis.which && e.caxis.value > 16000 && !paused) {
-            if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
+            if (state == 0) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); }
             else if (running && !dash) { dash = true; a.playSfx(0xc); }
         }
     }
@@ -3386,7 +3394,7 @@ struct PuzzleMode : Screen {
         const bool phoneHud = phonePuzzleHudAvailable(a);
         const bool dcControls = dreamcastPuzzleControls(a);
         auto inRect = [&](const SDL_Rect& r) { return in(r.x, r.y, r.x + r.w, r.y + r.h); };
-        if (dcControls ? inRect(dcStartRect) : phoneHud ? handset(0, 0, 56, 40) : in(18, 88, 160, 190)) { if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
+        if (dcControls ? inRect(dcStartRect) : phoneHud ? handset(0, 0, 56, 40) : in(18, 88, 160, 190)) { if (state == 0) { if (!goBlocked()) { state = 1; running = true; } dash = false; a.playSfx(2); } else if (running && !dash) { dash = true; a.playSfx(0xc); } return true; }   // PuzzleLoop: placing -> start (sound 2); running -> Dash (sound 0xc, two simulation steps per frame)
         if (dcControls ? inRect(dcCancelRect) : phoneHud ? handset(0, 39, 56, 84) : in(21, 229, 159, 275)) { if (state == 0) { std::vector<std::pair<int,int>> cells; for (auto& ar : sim.arrows) if (ar.live) cells.push_back({ar.x, ar.y}); for (auto& c : cells) sim.removeArrow(c.first, c.second); }   // placing: AR_DeleteArrowPz (all arrows removed)
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
         return false;
@@ -3404,6 +3412,7 @@ struct PuzzleMode : Screen {
             if (paused && pauseState.freeze) return;
         }
         if (pauseState.freeze) return;
+        if (tut.enabled) { ++tutTicks; tut.process(tutTicks == 0x78, state == 1 && tutPrevState == 0); tutPrevState = state; }   // PuzzleStageControll 0x3c108 sets the tap flag when its counter passes 0x77 (the tap shortcut, flag 4, is not wired); RO_GoGoRocketPz 0x16f58 sets the skip flag at launch
         mousePose = (int)((a.globalTime - 1) & 7);   // the previous pass's clock: fits Flycast Puzzle 2390/2500 (RAM clock 1826/1936) and the launch frames
         if (pad && state == 0) {
             padAim.tick(pad);
@@ -3456,7 +3465,7 @@ struct PuzzleMode : Screen {
             if (a.headless && getenv("CCR_PUZZLE_CLEAR_TRACE")) printf("puzzle clear stage %d tick %d saved %d\n", cur, cticks, sim.saved);
         }
     }
-    const char* next() override { if (back) { back = false; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
+    const char* next() override { if (back) { back = false; if (basics) return "MENU"; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void drawClearResult(App& a) const {
         // 0x8c02bf00 advances phase 4 to 5; 0x8c02bf60 first draws on
         // the following task pass (live phase-5 counter 2, not 1).
@@ -3505,6 +3514,15 @@ struct PuzzleMode : Screen {
             previous = scale;
         }
     }
+    // PuzzleGameScreen::drawTutorialDialog (0x3d6ec): drawFrame(6, 542, 180, 650, 280), the tail image 0x9c frame 8 at (840, 390), then the wrapped text (width 620, scale 1.0) centred on y = 180 in black.
+    // Unverified: the tail's scale/alpha/flags (the decompile hides the register arguments), the "Next" button (text 0x1b0, drawButton) is not drawn, and the original's gate `*DAT_000137ac != 0` is not traced.
+    void drawTutorialDialog(App& a) const {
+        const std::string* str = a.hdString(tut.text); if (!str || a.hdFontW.empty() || a.hdFont.box.size() < 92) return;
+        a.drawFrame6(542, 180, 650, 280); a.imgDraw(0x9c, 8, 840.0f, 390.0f, 0, 1.0f, 255);
+        std::vector<uint16_t> out; const int lines = App::wrapText(a.hdFontW, *str, out, 0x100, 620, 1.0f);
+        const float lh = (float)a.hdFont.box[91].y; float ty = 180.0f - 0.5f * (float)lines * lh + 0.5f * lh;
+        for (int k = 0; k < lines; k++, ty += lh) { const int a0 = out[k], len = (int)out[k + 1] - a0; std::string ln = (*str + std::string(1, (char)0)).substr(a0, std::max(0, len)); if (!ln.empty()) ln.pop_back();
+            if (!ln.empty()) a.printString(ln, 542.0f, ty, 0, 0, 0, 255, 1.0f, 0, true, -1); } }
     void draw(App& a, float alpha) override {
         dcPanelDrawn = false;
         const bool hasBoardTasks = failureFrames <= kFailureHoldFrames;
@@ -3643,6 +3661,7 @@ struct PuzzleMode : Screen {
             a.drawDcPause(0.0f);
             return;
         }
+        if (tut.enabled && tut.text >= 0) drawTutorialDialog(a);
         if (paused) {   // PuzzleGameScreen::render pause branch (0x13620): black rect alpha getAlphaRect() = 0xc0, drawPauseBanner(512, 400, [0xa21]) (0x1b63c), name frame drawFrame(5, 512, 50, 320), name text at (512, 50) scale 0.8
             SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 0xc0); SDL_Rect all{0, 0, GW, GH}; SDL_RenderFillRect(a.ren, &all);
             if (phonePause) {
@@ -5108,6 +5127,7 @@ int main(int argc, char** argv) {
             app.nextStage = -1;
             mode = std::move(m);
         }
+        else if (name == "BASICS") { auto m = std::make_unique<PuzzleMode>(); app.nextStage = -1; if (!m->load(app.root, 0)) { printf("cannot load puzzle stages\n"); return false; } m->basics = true; m->tut.enabled = true; m->tut.reset(0); mode = std::move(m); }   // The Basics: Main Menu item 0 starts Puzzle stage 0 with the tutorial flag (MenuScreen 0xf410 writes AppData +0x378)
         else if (name == "STAGES") { auto m = std::make_unique<StageSelectMode>(); if (!m->load(app.root, app.nextStage >= 0 ? app.nextStage : stageNo)) { printf("cannot load puzzle stages\n"); return false; } mode = std::move(m); }
         else if (name == "BATTLE" && !app.dcLook && BattleSetupMode::available(app)) mode = std::make_unique<BattleSetupMode>();
         else if ((name == "BATTLE" || name == "TEAM_BATTLE") && DcBattleSetupMode::available(app)) { auto m = std::make_unique<DcBattleSetupMode>(); m->team = name == "TEAM_BATTLE"; if (!m->load(app)) { puts("cannot load battle stages"); return false; } mode = std::move(m); }
