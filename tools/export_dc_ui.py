@@ -400,8 +400,8 @@ def main(prs_png, out, png=None):
         if all(os.path.exists(q) for q in paths):
             tiles = [Image.open(q).convert('RGBA') for q in paths]
             export_atlas(out, 'dc_battle_count', [t.transpose(Image.Transpose.TRANSPOSE) if i < 3 else t for i, t in enumerate(tiles)])
-        # Round panel (loader 0x8c0291c0: round.pvr, winno0-9.pvr; task draw 0x8c028fd8): frame 0 "Round" 256 x 64, frames 1-10 the digits 0-9 (32 x 32 textures, stored transposed).
-        rpaths = [os.path.join(png, L('ROUND.png'))] + [os.path.join(png, L(f'WINNO{i}.png')) for i in range(10)]
+        # Round panel (loader 0x8c0291c0: round.pvr, winno0-9.pvr; task draw 0x8c028fd8): frame 0 "Round" 256 x 64, frames 1-10 the digits 0-9 (32 x 32 PLAYERCLEAR winno textures, stored transposed).
+        rpaths = [os.path.join(png, L('ROUND.png'))] + [os.path.join(prs_png, f'PLAYERCLEAR_winno{i}.png') for i in range(10)]   # Flycast tag frame 3050 (VRAM 100c7b00, ARGB4444): the digits are PLAYERCLEAR's winno textures (same name as the loose WINNO PVRs, which differ), exact alpha match
         if all(os.path.exists(q) for q in rpaths):
             tiles = [Image.open(q).convert('RGBA') for q in rpaths]
             export_atlas(out, 'dc_battle_round', [tiles[0]] + [t.transpose(Image.Transpose.TRANSPOSE) for t in tiles[1:]])
