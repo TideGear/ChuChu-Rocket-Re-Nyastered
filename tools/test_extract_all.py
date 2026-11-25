@@ -77,7 +77,7 @@ class DreamcastCacheTest(unittest.TestCase):
             (dreamcast / 'models.bin').write_bytes(b'stale model pack')
             (ret / 'dc_options.tex.bin').parent.mkdir(parents=True, exist_ok=True)
             (ret / 'dc_options.tex.bin').write_bytes(b'stale Dreamcast atlas')
-            (ret / 'dc_assets_version.txt').write_text('4', encoding='ascii')
+            (ret / 'dc_assets_version.txt').write_text('5', encoding='ascii')
             (ret / 'r0930.tex.bin').write_bytes(b'mobile atlas')
             (assets / 'challenge.bin').write_bytes(b'user save')
 
@@ -105,7 +105,7 @@ class DreamcastCacheTest(unittest.TestCase):
             sfx.mkdir(parents=True)
             (sfx / 'cues.json').write_text('{}', encoding='ascii')
             self.assertTrue(extract_all.publish_dc_asset_version(str(assets), entry))
-            self.assertEqual(marker.read_text(encoding='ascii'), '4')
+            self.assertEqual(marker.read_text(encoding='ascii'), '5')
 
 
 if __name__ == '__main__':

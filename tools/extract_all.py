@@ -234,7 +234,7 @@ def publish_dc_asset_version(assets, entry):
     version = Path(assets, 'ret_all', 'dc_assets_version.txt')
     version.parent.mkdir(parents=True, exist_ok=True)
     temporary = version.with_suffix('.tmp')
-    temporary.write_text('4', encoding='ascii')
+    temporary.write_text('5', encoding='ascii')
     os.replace(temporary, version)
     return True
 
