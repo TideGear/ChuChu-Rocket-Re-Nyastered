@@ -1521,6 +1521,7 @@ struct App {
             if (walkOk) {   // original view choice (CA_CatDrawSTPriority / FUN_0003582c, literals from the code): back view for angles in [0x6001, 0xA000], front outside [0x2001, 0xE000], side otherwise
                 unsigned a = (unsigned)ang & 0xffff; int view = (a >= 0x6001 && a <= 0xA000) ? 1 : ((a < 0x2001 || a > 0xE000) ? 2 : 0);
                 Sheet& sh = !en.mouse ? catV[view] : (en.type == 1 ? goldV[view] : mouseV[view]);
+                if (sh.fr.empty() || !sh.tex) continue;   // a Dreamcast-only install has no mobile sprite sheets (CCR_GOLDEN_P=1 crashed here)
                 int frame = !en.mouse ? (i < cphase.size() ? (int)cphase[i] : 0) : gtime % 11; frame = std::min(frame, (int)sh.fr.size() - 1);
                 const SDL_Rect& fr = sh.fr[frame]; const SDL_Point& of = sh.off[frame]; float sc = walkScale * (field.cell / 64.0f); if (frame < (int)sh.fit.size()) sc *= sh.fit[frame];   // drawn at the original iPad (HD 1.0) frame size
                 SDL_Rect dst{(int)std::lround(x + of.x * sc), (int)std::lround(z + of.y * sc), (int)std::lround(fr.w * sc), (int)std::lround(fr.h * sc)};
@@ -1528,6 +1529,7 @@ struct App {
                 SDL_RenderCopyEx(ren, sh.tex, &fr, &dst, 0.0, nullptr, flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE); continue;
             }
             Sheet& sh = !en.mouse ? cat : (en.type == 1 ? gold : mouse);
+            if (sh.fr.size() < 32 || !sh.tex) continue;   // no mobile sprite sheet (Dreamcast-only install): nothing to draw rather than an out-of-range frame
             const SDL_Rect& fr = sh.fr[(ang >> 11) & 31]; float sc = walkScale * field.cell * 0.95f / fr.w; int dw = (int)(fr.w * sc), dh = (int)(fr.h * sc);
             SDL_Rect dst{(int)(x) - dw / 2, (int)(z) - dh * 2 / 3, dw, dh}; SDL_RenderCopy(ren, sh.tex, &fr, &dst);
         }
@@ -4463,6 +4465,7 @@ struct BattleMode : Screen {
         game.rouletteManager = true;
         game.rotateOwn = !game.dreamcastRng;
         game.generatorParams = GenParams{};
+        if (const char* gp = getenv("CCR_GOLDEN_P")) game.generatorParams.pSpecial1 = (float)atof(gp);   // headless comparison: the original's pSpecial1 lives at RAM 0x8c1ae8f8 (flyhost FLY_POKE 1.0 forces golden mice)
         if (rules) {
             // HD 1.0 GA_OnGameFlag and GE_StartGenerator4Manager.
             constexpr float speeds[] = {0.25f, 0.75f, 1.0f, 1.25f, 2.0f};

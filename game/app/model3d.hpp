@@ -352,7 +352,7 @@ public:
             for (int k = 0; k < 3; ++k) {
                 o.light[k] = 1.0f; o.iw[k] = 1.0f;
                 o.p[k] = {centre.x + tri.v[k].x / halfUnits * size * 0.5f, centre.y - tri.v[k].y / halfUnits * size * 0.5f};
-                o.u[k] = tri.v[k].v; o.v[k] = 1.0f - tri.v[k].u;   // the exported PNG is the quad's texture turned a quarter turn: quad UV (X, Y) reads PNG (Y, 1 - X)
+                o.u[k] = tri.v[k].v; o.v[k] = tri.v[k].u;   // transposed: the asymmetric "50" reads correctly only this way (flyhost golden-mouse capture, 2026-11-24); the "?" is symmetric
             }
             out.push_back(o);
         }
