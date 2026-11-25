@@ -3179,7 +3179,7 @@ struct PuzzleMode : Screen {
         cursorTrail = {};
         launchLids = {}; clearSaved = false; launchSoundStarted = false;
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
-        paused = false; pconf = false; pauseState.resume(); poseClock = 0; mousePose = 0;
+        paused = false; pconf = false; pauseState.resume(); mousePose = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
@@ -3336,7 +3336,7 @@ struct PuzzleMode : Screen {
         return false;
     }
     int cticks = 0;
-    uint32_t poseClock = 0; int mousePose = 0;   // 0x8c016cc0 resets the clock at stage setup (0x8c018698); each unpaused task pass stores clock & 7 before the clock advances
+    int mousePose = 0;   // 0x8c019b0c stores global clock (0x8c1ae8d8) & 7 on each unpaused task pass; the Puzzle RAM dumps show the clock is not reset at stage start (2390: 1826, 2500: 1936)
     void tick(App& a) override {
         a.stars.tick(false);
         if (paused && pauseState.freeze) return;
@@ -3348,7 +3348,7 @@ struct PuzzleMode : Screen {
             if (paused && pauseState.freeze) return;
         }
         if (pauseState.freeze) return;
-        mousePose = (int)(++poseClock & 7);
+        mousePose = (int)((a.globalTime - 1) & 7);   // the previous pass's clock: fits Flycast Puzzle 2390/2500 (RAM clock 1826/1936) and the launch frames
         if (pad && state == 0) {
             padAim.tick(pad);
             if (padAim.x != padAim.previousX || padAim.y != padAim.previousY) mouseCursor = false;

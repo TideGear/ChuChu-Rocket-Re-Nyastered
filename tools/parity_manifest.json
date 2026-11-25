@@ -14,7 +14,8 @@
         "puzzle"
       ],
       "env": {
-        "CCR_TICKS": "200"
+        "CCR_TICKS": "200",
+        "CCR_GLOBAL_TIME": "1626"
       },
       "elements": {
         "r_trigger_panel": [
@@ -1178,7 +1179,8 @@
         "CCR_MODELS": "1",
         "CCR_KEYS": "p",
         "CCR_KEY_TICK": "110",
-        "CCR_TICKS": "310"
+        "CCR_TICKS": "310",
+        "CCR_GLOBAL_TIME": "1626"
       },
       "note": "Normal 01 placing phase; Start at Flycast 2300-2310, shot 2500; port tick = Flycast frame - 2190 (puzzle01_play aligns 2390 with tick 200)",
       "elements": {
