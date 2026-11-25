@@ -1336,6 +1336,7 @@ struct App {
             }
         return true;
     }
+    int mousePoseOverride = -1;   // a mode's own pose clock (Puzzle: 0x8c019b0c stores global clock & 7, reset by 0x8c016cc0 at stage setup, frozen while paused)
     void drawFieldObjects(const Sim& sim, std::vector<std::pair<float, float>>& prev,
                           float alpha, const float* puku = nullptr, FieldLayout field = {},
                           bool dcProjection = false, int soloRocket = 0,
@@ -1343,7 +1344,7 @@ struct App {
                           const int* partnerLid = nullptr) {   // partnerLid[i]: the lid whose colour fills the dome's other half (Team Battle and Challenge domes are two lids in two colours: docs/layers.md)
         // The Dreamcast resets the clock on stage load and samples it before advancing the task loop.
         static const int mouseFrameOverride = getenv("CCR_MOUSE_FRAME") ? atoi(getenv("CCR_MOUSE_FRAME")) : -1;   // headless comparison: force the keyframe the real frame showed
-        const int mouseFrame = mouseFrameOverride >= 0 ? mouseFrameOverride & 7 : std::max(0, sim.now - 1) & 7;
+        const int mouseFrame = mouseFrameOverride >= 0 ? mouseFrameOverride & 7 : mousePoseOverride >= 0 ? mousePoseOverride & 7 : std::max(0, sim.now - 1) & 7;
         fieldObjects.clear();
         pendingMarkers.clear();
         auto rocket = [&](int x, int y, int player) {
@@ -3129,7 +3130,7 @@ struct PuzzleMode : Screen {
         cursorTrail = {};
         launchLids = {}; clearSaved = false; launchSoundStarted = false;
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
-        paused = false; pconf = false; pauseState.resume();
+        paused = false; pconf = false; pauseState.resume(); poseClock = 0; mousePose = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
@@ -3286,6 +3287,7 @@ struct PuzzleMode : Screen {
         return false;
     }
     int cticks = 0;
+    uint32_t poseClock = 0; int mousePose = 0;   // 0x8c016cc0 resets the clock at stage setup (0x8c018698); each unpaused task pass stores clock & 7 before the clock advances
     void tick(App& a) override {
         a.stars.tick(false);
         if (paused && pauseState.freeze) return;
@@ -3297,6 +3299,7 @@ struct PuzzleMode : Screen {
             if (paused && pauseState.freeze) return;
         }
         if (pauseState.freeze) return;
+        mousePose = (int)(++poseClock & 7);
         if (pad && state == 0) {
             padAim.tick(pad);
             if (padAim.x != padAim.previousX || padAim.y != padAim.previousY) mouseCursor = false;
@@ -3419,9 +3422,11 @@ struct PuzzleMode : Screen {
             a.board(stages.list[cur].st, set == 1 ? 1 : a.useModels3d() ? ((cur / 25) & 3) + 2 : (cur & 3) + 2, set == 1 ? 1 : 2, pf(a));   // Dreamcast 3D board: the real Normal 01 and 02 both show yuka03 (tan and pink), so the floor follows the group of 25, not the stage number (other groups unverified)
             for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, pf(a));
         }
+        if (hasBoardTasks) a.mousePoseOverride = mousePose;
         if (hasBoardTasks) a.drawFieldObjects(sim, prev, running ? alpha : 1.0f, nullptr, pf(a), dreamcastPuzzleControls(a), 0,
                                             state == 2 || prelaunch ? &launchLids : nullptr,
                                             state == 2 ? clearFrames * (dash ? 2 : 1) : -1);
+        a.mousePoseOverride = -1;
         if (fieldDepth) a.models3d.endDepthScene();
         if (showCursor) {
             cursorTrail.draw(a, 0);
