@@ -4642,7 +4642,7 @@ struct BattleMode : Screen {
                 const auto [cx, cy] = cpuCursor ? cursorCell(p) : std::pair<int, int>{-1, -1};
                 const float x = cpuCursor ? field.x(cx + 0.5f) : padAim[p].logicalX(cursorAlpha, field);
                 const float y = cpuCursor ? field.y(cy + 0.5f) : padAim[p].logicalY(cursorAlpha, field);
-                a.drawDcBattlePadCursor(x, y, p, taskAge);
+                a.drawDcBattlePadCursor(x, y, p, game.frame);   // the cursor angle (task+32, update 0x8c0145ee) only advances once play runs: the 3005-3110 intro frames keep one pose
             } else padAim[p].draw(a, p, game.frame, cursorAlpha, field);
         }
         if (dcPlayerOverlays) {
