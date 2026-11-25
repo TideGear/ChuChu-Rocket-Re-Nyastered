@@ -143,11 +143,11 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 | `0x8c01b8a0`, `0x8c01b976`, `0x8c01b9a0` | rocket launch body, lid, flame/smoke | ported |
 | `0x8c01c26e` / `0x8c01c31a` | parked dome | ported |
 | `0x8c01c380` | dome pulse decay (with add `0x8c01cbc8`) | ported 2026-11-25 |
-| `0x8c01cbfa` / `0x8c01cc10` | 15-pass effect at the clear; draws `0x8c0b4ba8` / `0x8c0b2dac` | unidentified |
+| `0x8c01cbfa` / `0x8c01cc10` | launch smoke puff: 15-pass sprite animation `0x8c0e4328` (frame = age), created by `0x8c01cc62` from the launch body `0x8c01b8a0` (also from `0x8c013696`, outside Puzzle) | ported (`smokeBirths`) |
 | `0x8c01f272` / `0x8c01f2a0` | always live; draws `0x8c085c60` / `0x8c0b36f0` | unidentified |
 | `0x8c02b73a` / `0x8c02b73e` | always live; Puzzle screen task (texture lists `0x8c0bda90`..) | HUD ported; contents unchecked |
 | `0x8c02c4e0` / `0x8c02c4f8` | failure focus ring | ported 2026-11-25 |
-| `0x8c02ccc0` / `0x8c02ccd8` | seen at the clear; draws `0x8c0be388` | unidentified |
+| `0x8c02ccc0` / `0x8c02ccd8` | "Save Completed" banner: lives 300 passes, draws sprite list `0x8c0be388` while age mod 60 < 40 (Flycast puzzle-clear s_00320/400/500) | ported (`saveAge`) |
 
 ## Next work
 
