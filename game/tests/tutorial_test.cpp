@@ -25,5 +25,10 @@ int main() {
     t.setStep(0x209, -1); CHECK(t.next == -1 && t.to60 == 0x20a);
     t.a78 = 0x300; t.setStep(0x1000, -1); CHECK(t.text == 0x1c9 && t.next == 0x300);
     t.reset(-1); CHECK(t.lesson == 1 && t.next == 0x100);   // retry/skip moves to the next lesson
+    // Next button: a press on a text step runs 10 frames, then the next step starts after its delay
+    t = Tutorial(); t.enabled = true; t.setStep(0x102, -1); CHECK(t.mode == 0 && t.text == 0x1c2);
+    CHECK(t.pressNext() && t.a70 == 10 && !t.pressNext());
+    for (int i = 0; i < 9; ++i) { t.process(false, false); CHECK(!t.pending); }
+    t.process(false, false); CHECK(t.pending && t.next == 0x103 && t.delay == 30.0f && t.a70 == 0);
     printf("tutorial: %s\n", bad ? "FAILED" : "ok"); return bad ? 1 : 0;
 }

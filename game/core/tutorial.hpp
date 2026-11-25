@@ -93,9 +93,13 @@ struct Tutorial {
         a34 = 0;
     }
 
+    // handleInput 0x13050: a press inside Input rect 12 on a text-only step (mode 0, dialog shown, no press running, no delay) sets the press animation to 10 frames and plays sound 2. Returns whether it was accepted.
+    bool pressNext() { if (!enabled || text < 0 || mode != 0 || a70 != 0 || delay != 0.0f) return false; a70 = 10; ++sfx; return true; }
+
     // PuzzleGameScreen::processTutorial (0x3d568), once per frame. tapFlag = Input flag 0x20, skipFlag = Input flag 0x40 (both consumed).
     void process(bool tapFlag, bool skipFlag) {
         if (!enabled) return;
+        struct Next { Tutorial& t; ~Next() { if (t.a70 > 0 && --t.a70 == 0) t.trigger(false, false); } } afterProcess{*this};   // PuzzleGameScreen::process 0x12db2 runs after processTutorial: the Next press animation (+0xa70) ends after 10 frames and starts the next step (no sound, delayed)
         if (tapFlag && mode == 4) trigger(true, false);
         if (f74) { if (t54 > 0) t54 = 0x4b0; f74 = false; }
         if (skipFlag) t54 = -1;
