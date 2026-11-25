@@ -37,7 +37,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 
 1. **Pian right mice crop:** 1.036 against the per-element limit of 1 (no off-edge pixels). Left passes. The ignore-light strip uses the measured 0.912; its origin is not traced.
 2. **Golden mouse:** texture, UV range and vertex intensities match Flycast (gk03400.state), but a colour-mask comparison says the body is ~15% brighter. Needs an aligned golden-mouse crop (force with `FLY_POKE=0:1ae8f8=3f800000` in flyhost and `CCR_GOLDEN_P=1` in the port).
-3. **Challenge bracket phase:** grey pulse measured (period 64, `dimOffset` 18, 90-frame series); the size pulse is not re-measured.
+3. **Challenge bracket:** grey phase measured (period 64, `dimOffset` 18); the dimmed bracket has no size pulse (`0x8c01480c`, done); the white bracket pulse anchors at the left edge (top edge moves 3 px, period 8), the port centres it: open. No parity case has a dim bracket.
 4. **Time-left / 3-2-1 Battle banners:** Flycast frames captured with `FLY_POKE_ONCE=3000:1ae8e0=<BCD clock>` (flyhost); 2:00, 1:00, 0:30 and the "3" fit `4 - 0.033 t` / `8 - 0.13 t` and the blend follows the texture alpha. count2/count1 also fit (7.40 at 3008 ... slope 0.132, roadmap). Open: absolute pixel diff.
 5. **START banner crop:** 2.39, placement exact; residue is partial-alpha edge texels (+9 R/G at 150 px). Battle and Challenge pause have no parity case.
 6. **Puzzle coverage:** `puzzle_normal03` added (full 0.99, board 1.07 / 1 off-edge px). The residue is the pad cursor tip (about 4% too large; its pulse counter is not the game clock; a consecutive-frame series is in local/pz3s, tip area fits period 16, phase unresolved). Other groups' later stages, star twinkles, launch per element open.

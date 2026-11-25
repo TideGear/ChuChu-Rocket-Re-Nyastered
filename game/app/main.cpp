@@ -1291,10 +1291,11 @@ struct App {
         const float half = 32.0f * (1.0f + 0.1f * std::sin(phase));
         dcCursorAt(dcCursors, x + half, y + half, player, 2 * half);
     }
+    bool bracketStill = false;
     void cursorAt(float x, float y, int player, int ticks, bool bracket = false, float fieldScale = 1.0f) {
         int ang = (player << 14) + 0x1000 * ticks;
         float phase = (bracket ? 2.0f : 1.0f) * ang * 6.283185307f / 65536.0f;
-        const float scale = fieldScale * (1.0f + (bracket ? 0.075f : 0.1f) * std::sin(phase));
+        const float scale = fieldScale * (1.0f + (bracket ? (bracketStill ? 0.0f : 0.075f) : 0.1f) * std::sin(phase));   // 0x8c01480c: the bracket's njScale pulse is skipped when the cell word has any of 0xF00 (the dimmed bracket)
         if (!bracket && useDcCursors()) {
             // newk1..4 point from the texture's top-left corner. MouseAim's
             // coordinates are the active point used to select the board cell.
@@ -1320,7 +1321,7 @@ struct App {
                 const int grey = 0x80 + (int)(16.0f * std::sin(((ang >> 2) & 0xffff) * (6.283185307f / 65536.0f)));
                 SDL_SetTextureColorMod(t, (Uint8)grey, (Uint8)grey, (Uint8)grey); SDL_SetTextureAlphaMod(t, 0xc0);
             }
-            cursor(b.cx, b.cy, b.player, b.ticks, true, field);
+            bracketStill = b.dim && t; cursor(b.cx, b.cy, b.player, b.ticks, true, field); bracketStill = false;
             if (b.dim && t) { SDL_SetTextureColorMod(t, 255, 255, 255); SDL_SetTextureAlphaMod(t, 255); }
         }
     }
