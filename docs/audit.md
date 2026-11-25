@@ -187,7 +187,7 @@ The mobile counterpart of the Dreamcast table. Reference: the iPad HD 1.0 binary
 | Costumes | screen | open | - |
 | Celebration rockets | animation | open | - |
 | Phone / larger-device HUD layouts | screen | open | - |
-| Tutorial highlights (The Basics) | screen | open | state machine transcribed in game/core/tutorial.hpp from the HD 1.0 decompile (roadmap 2026-11-24); not wired, no frame diff |
+| Tutorial highlights (The Basics) | screen | partial | ported (game/core/tutorial.hpp, PuzzleMode basics, Continue button, saved cleared flag); lessons 0-2 clear headless; no mobile-original frame diff, tap shortcut and press sparkle open (roadmap 2026-11-24) |
 | Split-screen | screen | open | - |
 
 **Totals: 25 items; 14 verified, 5 partial, 6 open.** Update this table in the same commit as any iPad change. Next: capture or derive an original iPad frame per row so the RGB bar can be applied.

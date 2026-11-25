@@ -36,7 +36,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 4. **Time-left / 3-2-1 Battle banners:** implemented from the trace, no Flycast frame yet.
 5. **START banner crop:** 2.39 (sub-pixel filtering); Battle and Challenge pause have no parity case.
 6. **Puzzle coverage:** other stages per group, star twinkles, launch per element.
-7. **The Basics** (mobile tutorial, HD 1.0 `triggerTutorial` / `drawTutorialDialog` 0x3d6ec): not implemented, mobile look only. Dreamcast mode 16 (`0x8c058292`) is a network battle, not a tutorial.
+7. **The Basics** (mobile tutorial, HD 1.0 `PuzzleGameScreen` tutorial): ported in the mobile look (`game/core/tutorial.hpp`, `PuzzleMode` with `basics`, Main Menu item 0, `progress.bin` fifth word gates Puzzle/Challenge/Battle). Played to the cleared flag headless (port-vs-port; roadmap 2026-11-24 "played end to end" has the arrows and script). Open: no mobile-original frame diff, the tap shortcut (Input flag 4), the lesson-index source on a stage change (inferred), the press sparkle (image 0x9f), the 0x109/0x20a branches, the Continue label/scale. Dreamcast mode 16 (`0x8c058292`) is a network battle, not a tutorial.
 8. **Languages:** French Help title plate and footer unverified; the Puzzle tap-timing writer and MANATEE.DRV command 0x8a (Monaural) stay open.
 
 Capture recipes (flyhost): Puzzle `START@1350-1360;START@1510-1520;DOWN@1800-1804;DOWN@1840-1844;DOWN@1880-1884;START@1950-1960;START@2120-2130`; Challenge drops one DOWN and adds `START@2300-2310`; Battle `START@1350/1510/1800/2400/2550`. Keys: X places the north arrow, R2 = R trigger. RAM pokes: style 0x1ae8d0, Puzzle masks 0x22d8a4.., golden 0x1ae8f8. Language: resume `local/star-trace/opt/o03050.state`.
