@@ -1693,7 +1693,7 @@
       "env": {
         "CCR_MODELS": "1",
         "CCR_KEYS": "E",
-        "CCR_PAD_CELL": "3,3",
+        "CCR_PAD_AIM": "53.7,52.5",
         "CCR_KEY_TICK": "5",
         "CCR_TICKS": "286"
       },
