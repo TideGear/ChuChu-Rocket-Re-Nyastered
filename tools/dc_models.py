@@ -72,7 +72,7 @@ def parse_plist(d, o, maxidx):
                     if idx > maxidx: return None
                     s.append((idx, u, v))
                     if k >= 2: p += uflags * 2
-                strips.append((s, rev, tex, mat, fl))   # fl: the strip chunk's flags (0x08 use alpha, 0x10 double side, 0x01 ignore light)
+                strips.append((s, rev, tex, mat, fl | t << 8))   # strip chunk flags (0x08 use alpha, 0x10 double side, 0x01 ignore light, 0x40 environment) | chunk type << 8 (64 = no UVs)
             o = end; continue
         return None
     return strips if strips else None

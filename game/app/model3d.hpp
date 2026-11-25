@@ -13,7 +13,7 @@
 #include <vector>
 struct Model3D {
     struct V { float x, y, z, u, v, nx, ny, nz; };
-    struct Tri { uint8_t mat; V v[3]; bool alphaStrip = false; bool envMap = false; };   // alphaStrip: the Ninja strip chunk's use-alpha flag (0x08), exported in the material byte's top bit
+    struct Tri { uint8_t mat; V v[3]; bool alphaStrip = false; bool envMap = false; bool untextured = false; };   // alphaStrip: the Ninja strip chunk's use-alpha flag (0x08), exported in the material byte's top bit
     std::string name; std::vector<Tri> tris; std::vector<uint32_t> matTex; std::vector<std::vector<float>> frames; bool hasStripAlpha = false;   // animation poses: 18 floats per triangle (3 x position xyz + normal xyz)
 };
 // Lighting: the Dreamcast chunk models carry vertex normals (chunk type 41) and a material with diffuse 0xffffffff and ambient 0x7f7f7fff; the colour of a vertex is
@@ -77,7 +77,7 @@ private:
             constexpr size_t triangleBytes = 1 + 3 * 32;
             if (ntri > remaining() / triangleBytes) return false;
             m.tris.resize(ntri);
-            for (auto& t : m.tris) { if (!rd(&t.mat, 1)) return false; t.alphaStrip = (t.mat & 0x80) != 0; t.envMap = (t.mat & 0x40) != 0; t.mat &= 0x3f; if (t.alphaStrip) m.hasStripAlpha = true; for (auto& v : t.v) if (!rd(&v, 32)) return false; }
+            for (auto& t : m.tris) { if (!rd(&t.mat, 1)) return false; t.untextured = (t.mat & 0xc0) == 0xc0; t.alphaStrip = !t.untextured && (t.mat & 0x80) != 0; t.envMap = !t.untextured && (t.mat & 0x40) != 0; t.mat &= 0x3f;   /* 0xc0: a strip without UVs and without environment mapping, drawn untextured (white x light: the Pian's white piece) */ if (t.alphaStrip) m.hasStripAlpha = true; for (auto& v : t.v) if (!rd(&v, 32)) return false; }
             const size_t frameBytes = size_t(ntri) * 18 * 4;
             uint32_t nf;
             if (!rd(&nf, 4) || (nf && (!frameBytes || nf > remaining() / frameBytes))) return false;
@@ -195,6 +195,7 @@ public:
         static std::vector<uint32_t> color, added; static std::vector<float> depth;
         color.assign((size_t)W * H, 0u); added.assign((size_t)W * H, 0u); bool hasAdditive = false; depth.assign((size_t)W * H, -1.0f);
         auto sample = [&](int tex, float u, float v, bool wrap, float out[4]) {
+            if (tex == -2) { out[0] = out[1] = out[2] = 255; out[3] = 255; return; }   // untextured strip: white, lit by the vertex intensity
             if (tex < 0 || tex >= (int)cpuPixels.size()) { out[0] = out[1] = out[2] = 0; out[3] = 255; return; }
             const int tw = cpuSize[tex].x, th = cpuSize[tex].y; const uint8_t* px = cpuPixels[tex].data();
             const float fx = u * tw - 0.5f, fy = v * th - 0.5f; const int ix = (int)std::floor(fx), iy = (int)std::floor(fy); const float ax = fx - ix, ay = fy - iy;
@@ -319,7 +320,7 @@ public:
         const std::vector<float>* b = (frame >= 0 && !m.frames.empty() && blend > 0.0f) ? &m.frames[(frame + 1) % (int)m.frames.size()] : nullptr;
         std::vector<SoftTri> out; out.reserve(m.tris.size());
         for (size_t ti = 0; ti < m.tris.size(); ++ti) {
-            const auto& tri = m.tris[ti]; SoftTri o{}; const size_t mat = (texRemap && tri.mat < 10) ? (size_t)texRemap[tri.mat] : (size_t)tri.mat; o.tex = (mat < m.matTex.size()) ? (int)m.matTex[mat] : -1; o.translucent = (m.hasStripAlpha && (m.name.rfind("chao", 0) == 0 || m.name.rfind("pian", 0) == 0)) ? tri.alphaStrip : ((translucentMaterials >> (tri.mat & 31)) & 1u);   /* costumes: per strip (strips without use-alpha are opaque even on alpha textures: the Pian's white piece); the cat and mice keep their verified material masks (the cat's second-list blend is not the strip flag) */
+            const auto& tri = m.tris[ti]; SoftTri o{}; const size_t mat = (texRemap && tri.mat < 10) ? (size_t)texRemap[tri.mat] : (size_t)tri.mat; o.tex = tri.untextured ? -2 : (mat < m.matTex.size()) ? (int)m.matTex[mat] : -1; o.translucent = (m.hasStripAlpha && (m.name.rfind("chao", 0) == 0 || m.name.rfind("pian", 0) == 0)) ? tri.alphaStrip : ((translucentMaterials >> (tri.mat & 31)) & 1u);   /* costumes: per strip (strips without use-alpha are opaque even on alpha textures: the Pian's white piece); the cat and mice keep their verified material masks (the cat's second-list blend is not the strip flag) */
             for (int k = 0; k < 3; ++k) {
                 float vx = tri.v[k].x, vy = tri.v[k].y, vz = tri.v[k].z, nx = tri.v[k].nx, ny = tri.v[k].ny, nz = tri.v[k].nz;
                 if (a) {
