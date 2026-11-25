@@ -1025,16 +1025,23 @@ struct App {
 
     // The Dreamcast pause overlay (Flycast Puzzle pause frame and Battle pause frame): no dimming, nine quads on the 640 x 480 screen drawn here at 1.6 times that, far to near:
     // the PAUSED board, the bubbles with the cat, then the labels. Battle's is the same shifted up 60 pixels (dy = -60).
-    void drawDcPause(float dy, float playerPlateY = -1.0f) {
+    void drawDcPause(float dy, float playerPlateY = -1.0f, bool quitSelected = false) {
         if (!dcPause.tex) return;
         struct Part { SDL_Rect src; float x, y, w, h; bool flip; };
+        // QUIT highlighted (Flycast Puzzle pause after RIGHT, local/quit 2340): the orange box and its cap move to the QUIT side and the blue ones to RESUME, mirrored.
+        static const Part quitParts[] = {
+            {{0, 0, 256, 256}, 132, 144, 256, 256, false}, {{256, 0, 128, 256}, 388, 144, 128, 256, false},
+            {{128, 256, 128, 64}, 133, 199, 128, 64, true}, {{416, 128, 32, 64}, 255, 199, 32, 64, false},
+            {{0, 256, 128, 64}, 379, 199, 128, 64, true}, {{384, 128, 32, 64}, 353, 199, 32, 64, true},
+            {{384, 0, 64, 128}, 285, 196, 64, 128, true},
+            {{256, 256, 128, 32}, 144, 205, 128, 32, false}, {{384, 256, 128, 32}, 400, 205, 128, 32, false}};
         static const Part parts[] = {
             {{0, 0, 256, 256}, 132, 144, 256, 256, false}, {{256, 0, 128, 256}, 388, 144, 128, 256, false},
             {{0, 256, 128, 64}, 133, 199, 128, 64, false}, {{384, 128, 32, 64}, 255, 199, 32, 64, false},
             {{128, 256, 128, 64}, 379, 199, 128, 64, false}, {{416, 128, 32, 64}, 353, 199, 32, 64, true},
             {{384, 0, 64, 128}, 285, 196, 64, 128, true},
             {{256, 256, 128, 32}, 144, 205, 128, 32, false}, {{384, 256, 128, 32}, 400, 205, 128, 32, false}};
-        for (const Part& pt : parts) {
+        for (const Part& pt : quitSelected ? quitParts : parts) {
             // The two board pieces abut at x 388; their edge texels blend to transparent under bilinear scaling and leave a hairline, so each piece is drawn one logical pixel wider (towards its neighbour).
             const int grow = 0;
             // Exact float rectangles: rounding to the 1.6x grid put the board at 143.75 on the 640 x 480 screen and blurred every texel row (Flycast draws it on whole pixels).
@@ -3246,14 +3253,14 @@ struct PuzzleMode : Screen {
     int music() override { return 9; }   // PuzzleInit: BGM_Play(0xd) = song 9
     bool load(const std::string& root, int stage) { if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; for (int i = 0; i < SDL_NumJoysticks(); ++i) if (!pad && SDL_IsGameController(i)) pad = SDL_GameControllerOpen(i); cur = stage % (int)stages.list.size(); reset(); return true; }
     bool dcPanelDrawn = false;   // the Dreamcast bottom panel replaces the iPad arrow strip
-    bool dash = false; bool paused = false, pconf = false;   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
+    bool dash = false; bool paused = false, pconf = false; bool pauseQuit = false;   // pauseQuit: the Dreamcast pause dialog's QUIT is highlighted (RIGHT moves there, A takes it: Flycast local/quit, Stage Select 10 frames later)   // PA_IsPaused and PuzzleGameScreen[0xa21] (the pause dialog's second state)
     ccr::PuzzlePauseState pauseState;
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
         cursorTrail = {};
         launchLids = {}; clearSaved = false; launchSoundStarted = false;
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
-        paused = false; pconf = false; pauseState.resume(); mousePose = 0;
+        paused = false; pconf = false; pauseQuit = false; pauseState.resume(); mousePose = 0;
         for (auto& e : sim.ents) if (e.mouse) totalMice++;
         for (int d = 0; d < 4; d++) stock[d] = stages.list[cur].stock[d];
     }
@@ -3287,7 +3294,9 @@ struct PuzzleMode : Screen {
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (paused) {
-                if (k == SDLK_p || k == SDLK_RETURN || k == SDLK_SPACE) { paused = false; pconf = false; pauseState.resume(); }
+                if (dreamcastPuzzleControls(a) && (k == SDLK_LEFT || k == SDLK_RIGHT)) { if (pauseQuit != (k == SDLK_RIGHT)) { pauseQuit = k == SDLK_RIGHT; a.playSfx(0); } return; }
+                if ((k == SDLK_RETURN || k == SDLK_SPACE) && pauseQuit && dreamcastPuzzleControls(a)) { back = true; return; }
+                if (k == SDLK_p || k == SDLK_RETURN || k == SDLK_SPACE) { paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }
                 else if (k == SDLK_ESCAPE || k == SDLK_b) back = true;
                 return;
             }
@@ -3318,7 +3327,9 @@ struct PuzzleMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad &&
                  SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cbutton.which) { int b = e.cbutton.button;
             if (paused) {
-                if (b == (gApp ? gApp->padMap.pause : 6) || b == SDL_CONTROLLER_BUTTON_A) { paused = false; pconf = false; pauseState.resume(); }
+                if (dreamcastPuzzleControls(a) && (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT || b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) { if (pauseQuit != (b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) { pauseQuit = b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT; a.playSfx(0); } return; }
+                if (b == SDL_CONTROLLER_BUTTON_A && pauseQuit && dreamcastPuzzleControls(a)) { back = true; return; }
+                if (b == (gApp ? gApp->padMap.pause : 6) || b == SDL_CONTROLLER_BUTTON_A) { paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }
                 else if (b == SDL_CONTROLLER_BUTTON_B) back = true;
                 return;
             }
@@ -3694,7 +3705,7 @@ struct PuzzleMode : Screen {
         drawClearResult(a);
         drawFailureFocus(a);
         if (paused && dreamcastPuzzleControls(a) && a.dcPause.tex) {   // Flycast Puzzle pause frame (docs/dreamcast_models.md)
-            a.drawDcPause(0.0f);
+            a.drawDcPause(0.0f, -1.0f, pauseQuit);
             return;
         }
         if (tut.enabled && tut.text >= 0 && !tutIntro()) drawTutorialDialog(a);
