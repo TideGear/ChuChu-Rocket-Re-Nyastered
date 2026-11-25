@@ -18,12 +18,14 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 
 ## Next tasks
 
-1. Flycast per-element verification of the partial rows that already have traced code: Chao/Pian costumes (needs a save with all Challenge clears or all Mania clears), Battle CPU cursors, golden-mouse animation frame by frame, and the Puzzle pause screen. Each pass raises the audit total (7/41 verified).
-2. Puzzle mode coverage lags Battle. Measure Normal 02/08 and Hard, Special and Mania stages, and draw the star twinkles. Continue the launch per-element work (body, flame, smoke, lid from TA packets).
-3. Tutorial: neither the Dreamcast tutorial (mode 16, `0x8c058292`) nor The Basics is implemented; `tutorialCleared()` is hard-wired true. Trace mode 16 and implement it.
-4. Find the Puzzle tap/hold pause timing writer (start from handler setter `0x8c01a2b6` callers in the Puzzle task `0x8c02b97e`). Decode MANATEE.DRV command 0x8a for Monaural.
-5. Real-CHD check: `chdman createcd` from the tested GDI/CUE, then setup from the `.chd` alone; diff files and WAVs against the CUE extraction.
-6. Trace Battle trigger-taunt callbacks and phrase selection before implementing them (`VOICE.AFS` entries tested as silent; do not map phrases speculatively).
+1. **Mouse pose clock (ready to implement):** `0x8c019b0c` stores global clock `0x8c1ae8d8 & 7` per mouse-task pass, and the pose freezes while paused. The port uses `sim.now` (main.cpp `mouseFrame`), which is frozen during placing. Switch to `app.globalTime` sampled on unpaused passes, then re-run `parity.py --only puzzle_pause` (keyframe 6 gives mice crop 0.63) and `puzzle01_play`, `save_completed_218` and `launch_age_*` to check nothing regresses.
+2. **Puzzle pause overlay:** after the pose fix, re-measure PAUSED, RESUME, QUIT and the cat ring; the ring's concentric-line filtering is the likely remaining residue.
+3. **Battle cursor cell marker:** drawn white; the original darkens the floor. Find its quad in the 3D translucent list (extend `tools/oracle/dc_layers.py`), then fix the blend. Establish the tick alignment of `battle_3100` for the CPU cursor positions.
+4. **Remaining Flycast checks:** Chao/Pian costumes (need a save with all Challenge or Mania clears) and the golden mouse frame by frame.
+5. **Puzzle coverage:** Hard, Special and Mania stages; star twinkles; launch per element. **Tutorial** (mode 16, `0x8c058292`) and The Basics: not implemented.
+6. **Dreamcast-look language:** export the disc's fr/de/es/ja art and fall back to English for Italian. The Puzzle tap-timing writer and MANATEE.DRV command 0x8a (Monaural) stay open.
+
+Look separation: `py tools/look_leak.py <exe> <one-platform cache> local/e2e-20261124/cfg-both/assets <out> --look dreamcast|mobile` must report 0 differing cases after UI changes.
 
 ## Key evidence and paths
 
