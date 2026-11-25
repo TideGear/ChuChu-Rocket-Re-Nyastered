@@ -1221,6 +1221,61 @@
           140
         ]
       }
+    },
+    {
+      "name": "puzzle_pause_ja",
+      "ref": "local/dc_ref/ja/b_00770.bmp",
+      "args": [
+        "puzzle",
+        "0"
+      ],
+      "env": {
+        "CCR_MODELS": "1",
+        "CCR_KEYS": "p",
+        "CCR_KEY_TICK": "110",
+        "CCR_TICKS": "310",
+        "CCR_GLOBAL_TIME": "2938",
+        "CCR_LANG": "ja"
+      },
+      "note": "Japanese: flyhost from local/star-trace/opt/o03050.state, Language -> Japanese, Puzzle Normal 01, START at 570, shot 770 (RAM clock 3248); local/ja-capture",
+      "elements": {
+        "paused_title": [
+          210,
+          145,
+          432,
+          192
+        ],
+        "resume_button": [
+          137,
+          200,
+          258,
+          243
+        ],
+        "quit_button": [
+          383,
+          200,
+          507,
+          243
+        ],
+        "cat_ring_centre": [
+          285,
+          195,
+          355,
+          280
+        ],
+        "r_trigger_panel": [
+          5,
+          32,
+          133,
+          160
+        ],
+        "mice_left_group": [
+          136,
+          60,
+          330,
+          140
+        ]
+      }
     }
   ]
 }
