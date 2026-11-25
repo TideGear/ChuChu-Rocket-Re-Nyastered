@@ -75,6 +75,62 @@
       }
     },
     {
+      "name": "puzzle01_chao",
+      "ref": "local/dc_ref/costume/s1_02390.bmp",
+      "args": [
+        "puzzle"
+      ],
+      "env": {
+        "CCR_TICKS": "200",
+        "CCR_GLOBAL_TIME": "1625",
+        "CCR_CHARACTER_STYLE": "1",
+        "CCR_MODELS": "1"
+      },
+      "elements": {
+        "mice_left": [
+          135,
+          40,
+          330,
+          335
+        ],
+        "mice_right": [
+          400,
+          80,
+          600,
+          370
+        ]
+      },
+      "note": "flyhost Puzzle Normal 01 script with FLY_POKE 0:1ae8d0=1 (style global 0x8c1ae8d0), shot 2390, RAM clock 1825; local/costume-capture"
+    },
+    {
+      "name": "puzzle01_pian",
+      "ref": "local/dc_ref/costume/s2_02390.bmp",
+      "args": [
+        "puzzle"
+      ],
+      "env": {
+        "CCR_TICKS": "200",
+        "CCR_GLOBAL_TIME": "1625",
+        "CCR_CHARACTER_STYLE": "2",
+        "CCR_MODELS": "1"
+      },
+      "elements": {
+        "mice_left": [
+          135,
+          40,
+          330,
+          335
+        ],
+        "mice_right": [
+          400,
+          80,
+          600,
+          370
+        ]
+      },
+      "note": "flyhost Puzzle Normal 01 script with FLY_POKE 0:1ae8d0=2 (style global 0x8c1ae8d0), shot 2390, RAM clock 1825; local/costume-capture"
+    },
+    {
       "name": "save_completed_218",
       "ref": "local/rocket-resume/notice_00030.bmp",
       "args": [

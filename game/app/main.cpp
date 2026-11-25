@@ -1384,7 +1384,8 @@ struct App {
         float phase = 0.0f; int frame = -1;
         if (!en.mouse) { phase = (i < cphase.size() ? std::max(0.0f, cphase[i]) : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
         else if (en.type == 1) frame = mouseFrame & 7;
-        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u, en.type == 2 && specialMouse ? kind2Remap : nullptr, (en.mouse && !specialMouse) ? 178.0f / 255.0f : 1.0f);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
+        const bool costumed = en.mouse && costume && m == models3d.find(dcMouseModelName(en.type, mouseFrame, costume));   // dispatcher 0x8c019e26 styles 1 and 2: njScale(1.3, 1.3, 1.3) (vector 0x8c0b4c18) before the Chao/Pian model
+        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f * (costumed ? 1.3f : 1.0f), -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, en.mouse ? 1u : 2u, en.type == 2 && specialMouse ? kind2Remap : nullptr, (en.mouse && !specialMouse) ? 178.0f / 255.0f : 1.0f);   // second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
 
         // FUN_8c056e1e -> FUN_8c056d00: type 1 (golden) and type 2 (roulette) mice carry a 13.5-unit marker quad (texture 46 + 3 * kind of the CHALLENGECLEAR list: plus50, hatena) at
         // (x, height 9.5, z - 10), RotateY(0x8000); perspective 218 / (218 - 9.5) as for the crown.
@@ -5052,6 +5053,7 @@ int main(int argc, char** argv) {
         char* bp2 = SDL_GetBasePath(); const std::string programDir = bp2 ? bp2 : "."; if (bp2) SDL_free(bp2);
         const bool quiet = (getenv("CCR_SHOT") || getenv("CCR_HEADLESS") || getenv("CCR_BENCH")) && !getenv("CCR_USERDATA_TEST");   // test runs never create settings or logs (CCR_USERDATA_TEST=1 exercises them headlessly)
         app.saveDir = quiet ? root : resolveDataDir(programDir, root, portableFlag);
+        if (const char* cs = getenv("CCR_CHARACTER_STYLE")) { app.settings.characterStyle = atoi(cs); app.settings.unlockAll = true; }   // headless comparison: force the Chao (1) or Pian (2) costume
         if (!quiet) {
             const Settings st = loadOrCreateSettings(app.saveDir); app.settings = st;
             if (st.fullscreen) ccrSetEnv("CCR_FULLSCREEN", "1", 0);
