@@ -3952,7 +3952,7 @@ struct ChallengeMode : Screen {
             a.mouseCursorAt(aim.x, aim.y, 0, cticks, field.scale());
         else if (fieldCursor && dc) {
             const float x = padAim.logicalX(1.0f, field), y = padAim.logicalY(1.0f, field);
-            a.drawDcBattlePadCursor(x, y, 0, cticks);
+            a.drawDcBattlePadCursor(x, y, 0, cticks + 2);   // Flycast A1 shots 2570-2593 (local/chbr): the pointer area has period 16, minimum at frame 2580 = tick 282, while the port's minimum is at tick 284
             // (the bracket was queued before the board is drawn)
         }
         SDL_RenderSetViewport(a.ren, nullptr);
