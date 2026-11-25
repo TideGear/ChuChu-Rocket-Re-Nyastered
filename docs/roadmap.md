@@ -28,3 +28,6 @@ Pian:
 
 Stream tool:
 - `tools/oracle/ta_dump.py` finds the list start (first type-4 header followed by two plausible vertices), the list end, and the VRAM base by voting with re-encoded models.bin textures. In both states checked, the base sits at list end + 4 (gold5 g_03180: list 0x253e10..0x271590, base 0x271594; hd5 p_02390: ..0x26b070, base 0x26b074). Commands: `info`, `list --box`, `tex`, `render --shot [--face 1|header] [--swapuv] [--measure tex]`.
+Puzzle visible-gap sweep (milestone task 2):
+- Stage select (`puzzle_select_2050`, Flycast shot 2050 of the Normal 01 script, port `STAGES` at tick 60): full 1.815; grid 0.61 and header 0.60 pass. The preview is 4.81 with 184 off-edge px: the rocket domes' shading and pose and a 1 px offset of the frame and wall line. No gross gap.
+- Run (`puzzle01_run_2450`, R2@2300-2310 with no arrows, shot 2450 = tick 260): with the run key at tick 108, full 0.731 and board 0.556 (a scan of 96-116 gives 6-8.5 on every other tick). The running board matches; no gap.
