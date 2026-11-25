@@ -13,7 +13,7 @@
 #include <vector>
 struct Model3D {
     struct V { float x, y, z, u, v, nx, ny, nz; };
-    struct Tri { uint8_t mat; V v[3]; bool alphaStrip = false; };   // alphaStrip: the Ninja strip chunk's use-alpha flag (0x08), exported in the material byte's top bit
+    struct Tri { uint8_t mat; V v[3]; bool alphaStrip = false; bool envMap = false; };   // alphaStrip: the Ninja strip chunk's use-alpha flag (0x08), exported in the material byte's top bit
     std::string name; std::vector<Tri> tris; std::vector<uint32_t> matTex; std::vector<std::vector<float>> frames; bool hasStripAlpha = false;   // animation poses: 18 floats per triangle (3 x position xyz + normal xyz)
 };
 // Lighting: the Dreamcast chunk models carry vertex normals (chunk type 41) and a material with diffuse 0xffffffff and ambient 0x7f7f7fff; the colour of a vertex is
@@ -77,7 +77,7 @@ private:
             constexpr size_t triangleBytes = 1 + 3 * 32;
             if (ntri > remaining() / triangleBytes) return false;
             m.tris.resize(ntri);
-            for (auto& t : m.tris) { if (!rd(&t.mat, 1)) return false; t.alphaStrip = (t.mat & 0x80) != 0; t.mat &= 0x7f; if (t.alphaStrip) m.hasStripAlpha = true; for (auto& v : t.v) if (!rd(&v, 32)) return false; }
+            for (auto& t : m.tris) { if (!rd(&t.mat, 1)) return false; t.alphaStrip = (t.mat & 0x80) != 0; t.envMap = (t.mat & 0x40) != 0; t.mat &= 0x3f; if (t.alphaStrip) m.hasStripAlpha = true; for (auto& v : t.v) if (!rd(&v, 32)) return false; }
             const size_t frameBytes = size_t(ntri) * 18 * 4;
             uint32_t nf;
             if (!rd(&nf, 4) || (nf && (!frameBytes || nf > remaining() / frameBytes))) return false;
@@ -336,7 +336,11 @@ public:
                 const float depth = 218.0f - y2, scale = pixelsPerUnit * 218.0f / depth;
                 o.light[k] = std::min(1.0f, 0.3f + std::max(0.0f, (light[0] * n2x + light[1] * n2y + light[2] * n2z) * modelScale)) * (tri.mat == 10 ? run10Diffuse : 1.0f);   // a uniform njScale also scales the normals the Dreamcast lights with (as for the rocket dome)   // material slot 10 = the mouse's cream run with chunk diffuse b2b2b2 (0xb2 / 255)   // the stream's intensities reach 1.08 (mice), but the packed vertex intensity saturates at 1.0 before the texture multiply: unsaturated looked too white against the real frame
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
-                const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - tri.v[k].v, tri.v[k].u} : SDL_FPoint{tri.v[k].u, tri.v[k].v};
+                float mu = tri.v[k].u, mv = tri.v[k].v;
+                if (tri.envMap) {   // Ninja strip flag 0x40 (environment map, strips without UVs: the golden mouse's body): UV from the view-space normal
+                    mu = 0.5f + 0.5f * n2x; mv = 0.5f - 0.5f * n2y;   // the usual Ninja mapping; the four sign variants all leave the body ~15% brighter than Flycast (open)
+                }
+                const SDL_FPoint uv = uvMode == 1 ? SDL_FPoint{1.0f - mv, mu} : SDL_FPoint{mu, mv};
                 o.u[k] = uv.x; o.v[k] = uv.y;
             }
             out.push_back(o);
