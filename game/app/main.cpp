@@ -361,7 +361,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound;
+    Sheet dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -404,6 +404,7 @@ struct App {
         freeSheet(dcOptions); loadSheet(dir + "dc_options", dcOptions);
         freeSheet(dcSelectClock); loadSheet(dir + "dc_select_clock", dcSelectClock);
         freeSheet(dcBiosAnsi); loadSheet(dir + "dc_bios_ansi", dcBiosAnsi);
+        freeSheet(dcBiosWide); loadSheet(dir + "dc_bios_wide", dcBiosWide);   // full-width Shift-JIS glyphs (tools/export_dc_bios_font.py WIDE)
         freeSheet(dcChallengeIntro); loadSheet(dir + "dc_challenge_intro", dcChallengeIntro);
         freeSheet(dcChallengeFailure); loadSheet(dir + "dc_challenge_failure", dcChallengeFailure);
         freeSheet(dcChallengeResult); loadSheet(dir + "dc_challenge_result", dcChallengeResult);
@@ -2618,6 +2619,20 @@ struct DcOptionsMode : Screen {
     // Dreamcast language list order (Japanese, English, Deutsch, Francais, Espanol) and the port's language numbers (en, fr, it, de, es, ja).
     static constexpr int kLangOf[5] = {5, 0, 3, 1, 4};
     static bool available(App& a) { return a.dcOptions.tex && a.dcOptions.fr.size() >= 3; }
+    // One line of an original Shift-JIS string (Options strings at 0x8c083060): ASCII at a 12 px advance, full-width codes at 24 px from the BIOS ROM font.
+    bool drawSjisLine(App& a, const std::string& s, int x, int y) const {
+        static const uint16_t wide[] = {0x8140, 0x8148, 0x815E, 0x824F, 0x8250, 0x8251, 0x8252, 0x8253, 0x8254, 0x8255, 0x8256, 0x8257, 0x8258};
+        if (!a.dcBiosAnsi.tex || a.dcBiosAnsi.fr.size() != 95 || !a.dcBiosWide.tex || a.dcBiosWide.fr.size() != 13) return false;
+        for (size_t i = 0; i < s.size(); ++i) {
+            const unsigned char c = (unsigned char)s[i];
+            if (c >= 0x81 && c <= 0x9f && i + 1 < s.size()) {
+                const uint16_t code = (uint16_t)(c << 8 | (unsigned char)s[++i]);
+                for (int k = 0; k < 13; ++k) if (wide[k] == code) { const SDL_Rect d{x, y, 24, 24}; SDL_RenderCopy(a.ren, a.dcBiosWide.tex, &a.dcBiosWide.fr[k], &d); }
+                x += 24;
+            } else { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; }
+        }
+        return true;
+    }
     void drawText(App& a, const std::string& s, int x, int y) const {
         if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95) {
             for (unsigned char c : s) { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; }
@@ -2771,13 +2786,21 @@ struct DcOptionsMode : Screen {
             auto box = [&](int x, int y, int w) { SDL_SetRenderDrawColor(a.ren, 238, 156, 17, 255); const SDL_Rect r{x, y, w, 32}; SDL_RenderFillRect(a.ren, &r); };
             static const char* const labels[4] = {"Play time", "Game speed", "% of ? mice", "Arrow reset"};
             static const int top[4] = {149, 181, 213, 245};
-            for (int i = 0; i < 4; ++i) { text(labels[i], 81, top[i]); text("<", 260, top[i]); }
             box(284 + 36 * (bTime - 1), 144, 24); box(356 + 36 * (bSpeed - 1), 177, 24); box(bMice ? 429 : 284, 210, bMice ? 48 : 72); box(bArrow ? 392 : 284, 243, bArrow ? 24 : 48);
-            for (int i = 0; i < 5; ++i) { const char c[2] = {"1.2.3"[i], 0}; text(c, 290 + 18 * i, 149); } text(">", 393, 149); text("minutes", 417, 149);   // digits and dots on an 18 px pitch (Flycast frame 2750)
-            text("Slow", 285, 181); for (int i = 0; i < 9; ++i) { const char c[2] = {"1.2.3.4.5"[i], 0}; text(c, 365 + 18 * i, 181); } text("Fast", 549, 181); text(">", 609, 181);
-            text("Normal", 284, 213); text(".", 380, 213); text("High", 429, 213); text(">", 513, 213);
-            text("Off", 290, 245); text("/", 350, 245); text("On", 392, 245); text(">", 441, 245);
-            text("Return to Initial Settings", 117, 309);
+            const bool sjis = drawSjisLine(a, "Play time      < \x82P.\x82Q.\x82R > minutes", 80, 149);   // the original lines (0x8c0832dc), drawn whole from x 80
+            if (sjis) {
+                drawSjisLine(a, "Game speed\x81@   < Slow  \x82P.\x82Q.\x82R.\x82S.\x82T  Fast >", 80, 181);
+                drawSjisLine(a, "% of ? mice    < Normal  .   High   >", 80, 213);
+                drawSjisLine(a, "Arrow reset    < Off  \x81^  On  >", 80, 245);
+                drawSjisLine(a, "\x81@ Return to Initial Settings", 80, 309);
+            } else {
+                for (int i = 0; i < 4; ++i) { text(labels[i], 81, top[i]); text("<", 260, top[i]); }
+                for (int i = 0; i < 5; ++i) { const char c[2] = {"1.2.3"[i], 0}; text(c, 290 + 18 * i, 149); } text(">", 393, 149); text("minutes", 417, 149);   // digits and dots on an 18 px pitch (Flycast frame 2750)
+                text("Slow", 285, 181); for (int i = 0; i < 9; ++i) { const char c[2] = {"1.2.3.4.5"[i], 0}; text(c, 365 + 18 * i, 181); } text("Fast", 549, 181); text(">", 609, 181);
+                text("Normal", 284, 213); text(".", 380, 213); text("High", 429, 213); text(">", 513, 213);
+                text("Off", 290, 245); text("/", 350, 245); text("On", 392, 245); text(">", 441, 245);
+                text("Return to Initial Settings", 117, 309);
+            }
             const int cy = (bRow == 4 ? 309 : top[bRow]) + 12;
             SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
             for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, cy + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
@@ -2797,15 +2820,24 @@ struct DcOptionsMode : Screen {
             const int styleSlot = selectedStyle == styles.end() ? 0 : static_cast<int>(selectedStyle - styles.begin());
             if (styleSlot == 0) box(260, 0, 96); else box(362 + (styleSlot - 1) * 24, 0, 24);
             box(genSound ? 416 : 0, 1, genSound ? 96 : 0); box(genJump ? 0 : 272, 2, genJump ? 0 : 48); if (genJump) box(374, 2, 36);
+            auto fullDigits = [](int value, int n) { std::string r; for (int k = 0; k < n; ++k) { int p = 1; for (int m = k + 1; m < n; ++m) p *= 10; r += (char)0x82; r += (char)(0x4F + (value / p) % 10); } return r; };
+            if (drawSjisLine(a, "Character\x81@   < Normal .\x81H.\x81H.  Download  >", 80, 149)) {   // the original lines, drawn whole from x 80
+                drawSjisLine(a, "Sound output  < Monaural \x81^  Stereo  >", 80, 181);
+                drawSjisLine(a, "Jump Pack     < Off  \x81^  On  >", 80, 213);
+                drawSjisLine(a, "< " + fullDigits(genMusic, 2) + " >", 248, 245);
+                drawSjisLine(a, "< " + fullDigits(genSe, 3) + " >", 248, 277);
+                drawSjisLine(a, "\x81@ Return to Initial Settings", 80, 341);
+            } else {
             for (int i = 0; i < 5; ++i) text("<", 248, 149 + 32 * i);
-            text("Normal", 272, 149);
-            text(".?.?.", 362, 149);
-            text("Download", 465, 149); text(">", 584, 149);
-            text("Monaural", 272, 181); text("/", 384, 181); text("Stereo", 428, 181); text(">", 524, 181);
-            text("Off", 278, 213); text("/", 337, 213); text("On", 380, 213); text(">", 428, 213);
-            digits(genMusic, 2, 274, 245); text(">", 332, 245);
-            digits(genSe, 3, 274, 277); text(">", 356, 277);
-            text("Return to Initial Settings", 117, 341);
+                text("Normal", 272, 149);
+                text(".?.?.", 362, 149);
+                text("Download", 465, 149); text(">", 584, 149);
+                text("Monaural", 272, 181); text("/", 384, 181); text("Stereo", 428, 181); text(">", 524, 181);
+                text("Off", 278, 213); text("/", 337, 213); text("On", 380, 213); text(">", 428, 213);
+                digits(genMusic, 2, 274, 245); text(">", 332, 245);
+                digits(genSe, 3, 274, 277); text(">", 356, 277);
+                text("Return to Initial Settings", 117, 341);
+            }
             const int cy = (genRow == 5 ? 341 : 149 + 32 * genRow) + 12;
             SDL_SetRenderDrawColor(a.ren, 255, 0, 0, 255);
             for (int i = 0; i < 18; ++i) { const SDL_Rect d{32, cy + i - 8, 30 - std::abs(i - 9) * 30 / 9, 1}; SDL_RenderFillRect(a.ren, &d); }
