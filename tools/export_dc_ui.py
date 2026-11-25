@@ -1,5 +1,8 @@
 """Export Dreamcast UI textures (the highest-resolution title logo) into the app's sheet format. usage: export_dc_ui.py <dreamcast prs_png dir> <ret_all output dir> [<dreamcast png dir>]   (the optional third directory supplies the English 'PRESS START BUTTON!' prompt, ENGLISH/PRESSSTART)   (derived data, never committed)"""
 import os, struct, sys
+
+LANG = 'ENGLISH'   # disc language folder whose loose PVRs (png/<LANG>__*.png) are used; the 4th argument picks another
+def L(name): return f'{LANG}__{name}'
 from PIL import Image
 
 def export_player_sheet(prs_png, out, sources, name, transpose=False, gutter=0):
@@ -91,7 +94,7 @@ def export_atlas(out, name, tiles):
 def export_mode_select(prs_png, png, out):
     if not png:
         return
-    back = os.path.join(png, 'ENGLISH__MENU.png')
+    back = os.path.join(png, L('MENU.png'))
     parts = [f'MENU_modeback{i}' for i in range(1, 5)]
     parts += ['MENU_bluerocket2', 'MENU_yellowrocket2', 'MENU_modefukidasi', 'MENU_netsousa00',
               'MENU_middleneko0', 'MENU_middleneko1']
@@ -118,7 +121,7 @@ def export_challenge_select(prs_png, png, out):
     names += tuple(f'challengesetumei{i}' for i in range(6))
     parts = [os.path.join(prs_png, 'CHALLENGE_' + name + '.png') for name in names]
     backs = [os.path.join(prs_png, f'CHALLENGE_selectback{i}.png') for i in range(8)]
-    title = os.path.join(png, 'ENGLISH__CHALLENGE.png')
+    title = os.path.join(png, L('CHALLENGE.png'))
     digits = [os.path.join(prs_png, f'FOURADV_nums{i:02}.png') for i in range(10)]
     if not all(os.path.isfile(path) for path in (title, *parts, *backs, *digits)):
         return
@@ -235,7 +238,7 @@ def export_dc_startup(prs_png, png, out):
     3 Title logo 512 x 256 (at (16, 64)); 4 Title PRESS START (176,360);
     5 flying rocket; 6 logo edge shadow; 7 disc PRESSSTART for the demo (176,220)."""
     seg = [os.path.join(prs_png, f'SEGALOGO_segalogo{i}.png') for i in range(6)]
-    logo = os.path.join(png, 'ENGLISH__LOGO.png') if png else ''
+    logo = os.path.join(png, L('LOGO.png')) if png else ''
     title = [os.path.join(prs_png, f'TITLE_titlegamen{i}.png') for i in range(8)]
     extra = [os.path.join(prs_png, 'TITLE_newtitle0.png'), os.path.join(prs_png, 'TITLE_pressstart.png'), os.path.join(prs_png, 'TITLE_titlerocket.png')]
     if not (png and all(os.path.isfile(f) for f in seg + title + extra + [logo])):
@@ -249,7 +252,7 @@ def export_dc_startup(prs_png, png, out):
         tile = read(f)
         bg.alpha_composite(tile.transpose(Image.Transpose.TRANSPOSE) if i == 3 else tile, at)
     rocket = os.path.join(prs_png, 'TITLE_titlerocket.png')
-    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket), read(os.path.join(prs_png, 'TITLE_newtitle1.png')), read(os.path.join(png, 'ENGLISH__PRESSSTART.png'))])   # frame 5: the flying rocket, 128 x 256 upright; frame 6: the logo's 8 x 32 right-edge shadow strip at (528,152)
+    export_atlas(out, 'dc_startup', [sega, read(logo).transpose(Image.Transpose.TRANSPOSE), bg, read(extra[0]), read(extra[1]), read(rocket), read(os.path.join(prs_png, 'TITLE_newtitle1.png')), read(os.path.join(png, L('PRESSSTART.png')))])   # frame 5: the flying rocket, 128 x 256 upright; frame 6: the logo's 8 x 32 right-edge shadow strip at (528,152)
 
 def export_dc_battle_setup(prs_png, out):
     """Dreamcast 4P Battle 'Select Players' and 'Stage Select' art (Flycast frames 1900/2300, packets matched to disc textures with 0 differing values).
@@ -393,18 +396,18 @@ def main(prs_png, out, png=None):
     # The count digits decode transposed like the other twiddled sheets; the rest are upright.
     if png:
         names = ['COUNT1', 'COUNT2', 'COUNT3', 'ATO30', 'ATO1', 'ATO2', 'START']
-        paths = [os.path.join(png, f'ENGLISH__{n}.png') for n in names]
+        paths = [os.path.join(png, L(f'{n}.png')) for n in names]
         if all(os.path.exists(q) for q in paths):
             tiles = [Image.open(q).convert('RGBA') for q in paths]
             export_atlas(out, 'dc_battle_count', [t.transpose(Image.Transpose.TRANSPOSE) if i < 3 else t for i, t in enumerate(tiles)])
         # Round panel (loader 0x8c0291c0: round.pvr, winno0-9.pvr; task draw 0x8c028fd8): frame 0 "Round" 256 x 64, frames 1-10 the digits 0-9 (32 x 32 textures, stored transposed).
-        rpaths = [os.path.join(png, 'ENGLISH__ROUND.png')] + [os.path.join(png, f'ENGLISH__WINNO{i}.png') for i in range(10)]
+        rpaths = [os.path.join(png, L('ROUND.png'))] + [os.path.join(png, L(f'WINNO{i}.png')) for i in range(10)]
         if all(os.path.exists(q) for q in rpaths):
             tiles = [Image.open(q).convert('RGBA') for q in rpaths]
             export_atlas(out, 'dc_battle_round', [tiles[0]] + [t.transpose(Image.Transpose.TRANSPOSE) for t in tiles[1:]])
     for src, name, src_dir in (
         ('TITLE_newtitle0.png', 'dlogo', prs_png),
-        ('ENGLISH__PRESSSTART.png', 'dpress', png),
+        (L('PRESSSTART.png'), 'dpress', png),
         ('PUZZLEMENU_pzleft01.png', 'dc_puzzle_start', prs_png),
         ('PUZZLEMENU_pzleft02.png', 'dc_puzzle_cancel', prs_png),
         ('PUZZLEMENU_pzright.png', 'dc_puzzle_panel', prs_png),
@@ -517,4 +520,6 @@ def main(prs_png, out, png=None):
                         'dc_cursor_trail', transpose=True, gutter=1)
     export_battle_hud(prs_png, out)
 
-if __name__ == '__main__': main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
+if __name__ == '__main__':
+    if len(sys.argv) > 4: LANG = sys.argv[4]
+    main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)

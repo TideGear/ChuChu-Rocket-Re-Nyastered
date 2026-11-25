@@ -263,6 +263,17 @@ def _do_dreamcast(src, work, assets, entry):
     entry['prs_textures'] = len(glob.glob(os.path.join(prs_out, '*.pvr')))
     run_tool('export_dc_ui.py', os.path.join(assets, 'dreamcast', 'prs_png'),
              os.path.join(assets, 'ret_all'), png)
+    # The other disc languages: each folder holds the same 54 PRS archives and loose PVRs with that language's text; the app loads ret_all/dc_loc_<xx> for its language
+    # (Italian has no folder and keeps English).
+    for folder, code in (('FRENCH', 'fr'), ('GERMAN', 'de'), ('SPANISH', 'es'), ('JAPANIESE', 'ja')):
+        if not os.path.isdir(os.path.join(files, folder)): continue
+        lang_prs = os.path.join(assets, 'dreamcast', 'prs_' + code)
+        if not os.path.isdir(lang_prs):
+            import prs as _prs
+            for f in sorted(glob.glob(os.path.join(files, folder, '*.PRS'))): _prs.main(f, lang_prs)
+            run_tool('pvr2png.py', lang_prs, os.path.join(assets, 'dreamcast', 'prs_png_' + code))
+        run_tool('export_dc_ui.py', os.path.join(assets, 'dreamcast', 'prs_png_' + code),
+                 os.path.join(assets, 'ret_all', 'dc_loc_' + code), png, folder)
     models = os.path.join(assets, 'dreamcast', 'models')
     if not os.path.isdir(models):
         import dc_models

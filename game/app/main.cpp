@@ -393,6 +393,42 @@ struct App {
     }
     static constexpr int kDcAssetsVersion = 4;   // tools/export_dc_ui.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets
     bool dcAssetsStale = false;
+    // Dreamcast-look sheets; a language's folder dc_loc_<xx> (tools/extract_all.py exports one per disc language folder) replaces the English set.
+    void loadDcSheets(const std::string& dir) {
+        freeSheet(dcModeSelect); loadSheet(dir + "dc_mode_select", dcModeSelect);
+        freeSheet(dcChallengeSelect); loadSheet(dir + "dc_challenge_select", dcChallengeSelect);
+        freeSheet(dcStartup); loadSheet(dir + "dc_startup", dcStartup);
+        freeSheet(dcBattleSetup); loadSheet(dir + "dc_battle_setup", dcBattleSetup);
+        freeSheet(dcHelp); loadSheet(dir + "dc_help", dcHelp);
+        freeSheet(dcHelpPages); loadSheet(dir + "dc_help_pages", dcHelpPages);
+        freeSheet(dcOptions); loadSheet(dir + "dc_options", dcOptions);
+        freeSheet(dcSelectClock); loadSheet(dir + "dc_select_clock", dcSelectClock);
+        freeSheet(dcBiosAnsi); loadSheet(dir + "dc_bios_ansi", dcBiosAnsi);
+        freeSheet(dcChallengeIntro); loadSheet(dir + "dc_challenge_intro", dcChallengeIntro);
+        freeSheet(dcChallengeFailure); loadSheet(dir + "dc_challenge_failure", dcChallengeFailure);
+        freeSheet(dcChallengeResult); loadSheet(dir + "dc_challenge_result", dcChallengeResult);
+        freeSheet(dcArrows); loadSheet(dir + "dc_arrows", dcArrows);
+        freeSheet(dcPuzzleStart); loadSheet(dir + "dc_puzzle_start", dcPuzzleStart);
+        freeSheet(dcPuzzleCancel); loadSheet(dir + "dc_puzzle_cancel", dcPuzzleCancel);
+        freeSheet(dcPuzzlePanel); loadSheet(dir + "dc_puzzle_panel", dcPuzzlePanel);
+        freeSheet(dcPuzzleStage); loadSheet(dir + "dc_puzzle_stage", dcPuzzleStage);
+        freeSheet(dcPuzzleDigits); loadSheet(dir + "dc_puzzle_digits", dcPuzzleDigits);
+        freeSheet(dcPuzzleResult); loadSheet(dir + "dc_puzzle_result", dcPuzzleResult);
+        freeSheet(dcPuzzleSaved); loadSheet(dir + "dc_puzzle_saved", dcPuzzleSaved);
+        freeSheet(dcPuzzleSelect); loadSheet(dir + "dc_puzzle_select", dcPuzzleSelect);
+        freeSheet(dcPuzzlePlate); loadSheet(dir + "dc_puzzle_plate", dcPuzzlePlate);
+        freeSheet(dcPuzzleLabels); loadSheet(dir + "dc_puzzle_labels", dcPuzzleLabels);
+        freeSheet(dcPause); loadSheet(dir + "dc_pause", dcPause);
+        freeSheet(dcBattleCount); loadSheet(dir + "dc_battle_count", dcBattleCount);
+        freeSheet(dcBattleRound); loadSheet(dir + "dc_battle_round", dcBattleRound);
+        freeSheet(dcPauseBoxes); loadSheet(dir + "dc_pause_boxes", dcPauseBoxes);
+        freeSheet(dcPauseTeam); loadSheet(dir + "dc_pause_team", dcPauseTeam);
+        freeSheet(dcPauseMarks); loadSheet(dir + "dc_pause_marks", dcPauseMarks);
+        freeSheet(dcCursorBracket); loadSheet(dir + "dc_cursor_bracket", dcCursorBracket);
+        freeSheet(dcCursors); loadSheet(dir + "dc_cursors", dcCursors);
+        freeSheet(dcCursorTrail); loadSheet(dir + "dc_cursor_trail", dcCursorTrail);
+        freeSheet(dcBattleHud); loadSheet(dir + "dc_battle_hud", dcBattleHud);
+    }
     bool loadSheet(const std::string& base, Sheet& s) {
         FILE* f = fopen((base + ".tex.bin").c_str(), "rb"); if (!f) return false;
         uint32_t wh[2]; if (fread(wh, 4, 2, f) != 2) { fclose(f); return false; }
@@ -440,39 +476,7 @@ struct App {
         menuOk = loadSheet(ret + "a0134", mbg) && loadSheet(ret + "a0113", mbtn) && loadSheet(ret + "a0110", mdeco);
         dlogoOk = loadSheet(ret + "dlogo", dlogo);
         dpressOk = loadSheet(ret + "dpress", dpress);
-        loadSheet(ret + "dc_mode_select", dcModeSelect);
-        loadSheet(ret + "dc_challenge_select", dcChallengeSelect);
-        loadSheet(ret + "dc_startup", dcStartup);
-        loadSheet(ret + "dc_battle_setup", dcBattleSetup);
-        loadSheet(ret + "dc_help", dcHelp);
-        loadSheet(ret + "dc_help_pages", dcHelpPages);
-        loadSheet(ret + "dc_options", dcOptions);
-        loadSheet(ret + "dc_select_clock", dcSelectClock);   // optional: BIOS glyphs, tools/export_dc_bios_font.py
-        loadSheet(ret + "dc_bios_ansi", dcBiosAnsi);   // optional: BIOS ANSI glyphs for the hint text
-        loadSheet(ret + "dc_challenge_intro", dcChallengeIntro);
-        loadSheet(ret + "dc_challenge_failure", dcChallengeFailure);
-        loadSheet(ret + "dc_challenge_result", dcChallengeResult);
-        loadSheet(ret + "dc_arrows", dcArrows);
-        loadSheet(ret + "dc_puzzle_start", dcPuzzleStart);
-        loadSheet(ret + "dc_puzzle_cancel", dcPuzzleCancel);
-        loadSheet(ret + "dc_puzzle_panel", dcPuzzlePanel);
-        loadSheet(ret + "dc_puzzle_stage", dcPuzzleStage);
-        loadSheet(ret + "dc_puzzle_digits", dcPuzzleDigits);
-        loadSheet(ret + "dc_puzzle_result", dcPuzzleResult);
-        loadSheet(ret + "dc_puzzle_saved", dcPuzzleSaved);
-        loadSheet(ret + "dc_puzzle_select", dcPuzzleSelect);
-        loadSheet(ret + "dc_puzzle_plate", dcPuzzlePlate);
-        loadSheet(ret + "dc_puzzle_labels", dcPuzzleLabels);
-        loadSheet(ret + "dc_pause", dcPause);
-        loadSheet(ret + "dc_battle_count", dcBattleCount);
-        loadSheet(ret + "dc_battle_round", dcBattleRound);
-        loadSheet(ret + "dc_pause_boxes", dcPauseBoxes);
-        loadSheet(ret + "dc_pause_team", dcPauseTeam);
-        loadSheet(ret + "dc_pause_marks", dcPauseMarks);
-        loadSheet(ret + "dc_cursor_bracket", dcCursorBracket);
-        loadSheet(ret + "dc_cursors", dcCursors);
-        loadSheet(ret + "dc_cursor_trail", dcCursorTrail);
-        loadSheet(ret + "dc_battle_hud", dcBattleHud);
+        loadDcSheets(ret); if (!gameArtOk) loadLocale(ret); else if (dcLangAvailable(lang)) loadDcSheets(retDir + "dc_loc_" + langDir(lang) + "/");   // a Dreamcast-only install has no mobile pack, so its language comes from here
         resolvePresentation();
         if (dcPuzzleStart.tex || dcHelp.tex) {   // Dreamcast art present: warn when it predates the current atlas layout (the picture and the click areas would not match)
             int have = 0; if (FILE* vf = fopen((ret + "dc_assets_version.txt").c_str(), "rb")) { if (fscanf(vf, "%d", &have) != 1) have = 0; fclose(vf); }
@@ -815,7 +819,8 @@ struct App {
     int lang = 0, musicVol = 75, sfxVol = 100; std::string retDir;   // AppData +0x54 / +0x58 (initializeOptionsData: 0x4b and 100), 0..255
     static const char* langDir(int l) { static const char* n[6] = {"en", "fr", "it", "de", "es", "ja"}; return n[l < 0 || l > 5 ? 0 : l]; }
     void freeSheet(Sheet& s) { if (s.tex) SDL_DestroyTexture(s.tex); s = Sheet(); }
-    bool langAvailable(int l) { FILE* f = fopen((retDir + "loc_" + langDir(l) + "/hd_text.tsv").c_str(), "rb"); if (f) fclose(f); return f != nullptr; }
+    bool dcLangAvailable(int l) { FILE* f = fopen((retDir + "dc_loc_" + langDir(l) + "/dc_pause.tex.bin").c_str(), "rb"); if (f) fclose(f); return f != nullptr; }
+    bool langAvailable(int l) { if (l == 0 || dcLangAvailable(l)) return true; FILE* f = fopen((retDir + "loc_" + langDir(l) + "/hd_text.tsv").c_str(), "rb"); if (f) fclose(f); return f != nullptr; }
     void loadLocale(const std::string& ret) {
         retDir = ret; if (const char* e = getenv("CCR_LANG")) for (int i = 0; i < 6; i++) if (!strcmp(e, langDir(i))) lang = i;
         if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; unsigned char v[2]; if (fread(v, 1, 2, f) == 2) { musicVol = v[0]; sfxVol = v[1]; } fclose(f); }
@@ -824,6 +829,7 @@ struct App {
     void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); saveOptions(); }
     void applyLocale() {
         dropImages();
+        if (!retDir.empty() && dcPause.tex) loadDcSheets(lang != 0 && dcLangAvailable(lang) ? retDir + "dc_loc_" + langDir(lang) + "/" : retDir);   // Italian has no disc folder: English
         std::string d = retDir + "loc_" + langDir(lang) + "/"; Sheet* sh[5] = {&hdPhud, &hdPause, &ssHdr, &mnDeco, &opHdr}; const char* nm[5] = {"hd_phud5c", "hd_pause79", "hd_ss_hdr", "hd_mn_deco", "hd_op_hdr"};
         for (int i = 0; i < 5; i++) { freeSheet(*sh[i]); loadSheet(d + nm[i], *sh[i]); }
         hdText.clear(); FILE* g = fopen((d + "hd_text.tsv").c_str(), "rb"); if (!g) return; std::string all; char bb[4096]; size_t n; while ((n = fread(bb, 1, sizeof bb, g)) > 0) all.append(bb, n); fclose(g);
