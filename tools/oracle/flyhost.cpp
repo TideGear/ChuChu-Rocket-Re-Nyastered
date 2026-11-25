@@ -343,6 +343,14 @@ int main(int argc, char** argv) {
                 while (m && sscanf(q, "%x=%x%n", &off, &val, &step) == 2) { if (off + 4 <= n) memcpy((uint8_t*)m + off, &val, 4); q += step; if (*q == ',') ++q; else break; }
             }
         }
+        if (const char* pk = getenv("FLY_POKE_ONCE")) {   // FLY_POKE_ONCE=<frame>:<hex main-RAM offset>=<hex u32>[,...] writes those words once, after exactly that frame (set a counter and let the game run on)
+            unsigned at = 0; int used = 0;
+            if (sscanf(pk, "%u:%n", &at, &used) == 1 && gFrame == (int)at) {
+                void* m = retro_get_memory_data(2); const size_t n = retro_get_memory_size(2);
+                const char* q = pk + used; unsigned off, val; int step;
+                while (m && sscanf(q, "%x=%x%n", &off, &val, &step) == 2) { if (off + 4 <= n) memcpy((uint8_t*)m + off, &val, 4); q += step; if (*q == ',') ++q; else break; }
+            }
+        }
         if (const char* w = getenv("FLY_WATCH")) {   // FLY_WATCH=<hex main-RAM offset>:<bytes>:<first frame> appends frame number + that RAM range to <prefix>watch.bin every frame from the first frame
             unsigned off = 0, len = 0, first = 0;
             if (sscanf(w, "%x:%u:%u", &off, &len, &first) == 3 && gFrame >= (int)first) {
