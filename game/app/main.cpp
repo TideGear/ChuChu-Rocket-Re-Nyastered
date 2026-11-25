@@ -3170,7 +3170,9 @@ struct PuzzleMode : Screen {
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0, pf(a));
             if (k == SDLK_SPACE) { if (state == 0) { state = 1; running = true; } else if (state == 2) { cur = (cur + 1) % (int)stages.list.size(); reset(); } }   /* a cleared stage leads to the next one */
             else if (k == SDLK_p) {
-                if (state == 0) { state = 1; running = true; dash = false; }
+                // Dreamcast: Start only pauses (pause controller 0x8c01a174; Flycast pa1 frame 2500 shows the placing board idle under the overlay). The mobile
+                // look keeps the port's Start-runs-the-puzzle convenience for setups without a Start/Dash button.
+                if (state == 0 && !dreamcastPuzzleControls(a)) { state = 1; running = true; dash = false; }
                 pauseState.press();
             }
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
@@ -3198,7 +3200,7 @@ struct PuzzleMode : Screen {
             mouseCursor = false;
             { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) { if (state == 0 && putAt(curX, curY, d)) a.playSfx(1); }
             else if (b == pm.pause) {
-                if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }
+                if (state == 0 && !dreamcastPuzzleControls(a)) { state = 1; running = true; dash = false; a.playSfx(2); }   // Dreamcast: Start only pauses (see the key path)
                 pauseState.press();
             } else if (b == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
                 if (state == 0) { state = 1; running = true; dash = false; a.playSfx(2); }

@@ -1160,6 +1160,59 @@
       "env": {
         "CCR_TICKS": "100"
       }
+    },
+    {
+      "name": "puzzle_pause_2500",
+      "ref": "local/dc_ref/pa1/p__02500.bmp",
+      "args": [
+        "puzzle",
+        "0"
+      ],
+      "env": {
+        "CCR_MODELS": "1",
+        "CCR_KEYS": "p",
+        "CCR_KEY_TICK": "30",
+        "CCR_TICKS": "220"
+      },
+      "note": "Normal 01 placing phase, Start tapped at Flycast 2300-2310, shot 2500 (docs/dreamcast_models.md)",
+      "elements": {
+        "paused_title": [
+          210,
+          145,
+          432,
+          192
+        ],
+        "resume_button": [
+          137,
+          200,
+          258,
+          243
+        ],
+        "quit_button": [
+          383,
+          200,
+          507,
+          243
+        ],
+        "cat_ring_centre": [
+          285,
+          195,
+          355,
+          280
+        ],
+        "r_trigger_panel": [
+          5,
+          32,
+          133,
+          160
+        ],
+        "mice_left_group": [
+          136,
+          60,
+          330,
+          140
+        ]
+      }
     }
   ]
 }
