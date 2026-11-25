@@ -1171,10 +1171,10 @@
       "env": {
         "CCR_MODELS": "1",
         "CCR_KEYS": "p",
-        "CCR_KEY_TICK": "30",
-        "CCR_TICKS": "220"
+        "CCR_KEY_TICK": "110",
+        "CCR_TICKS": "310"
       },
-      "note": "Normal 01 placing phase, Start tapped at Flycast 2300-2310, shot 2500 (docs/dreamcast_models.md)",
+      "note": "Normal 01 placing phase; Start at Flycast 2300-2310, shot 2500; port tick = Flycast frame - 2190 (puzzle01_play aligns 2390 with tick 200)",
       "elements": {
         "paused_title": [
           210,
