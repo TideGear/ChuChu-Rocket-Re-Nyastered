@@ -315,10 +315,10 @@ public:
     // sy with Z. Lighting per vertex: 0.3 + max(0, light . R n). `blend` > 0 mixes pose frame `frame` with pose frame `frame + 1` (the cat's head morph and walk pose are interpolated by
     // the fractional part of its phase); basic mice and golden mice select their source-derived frame (the golden mouse's eight poses are sampled from its position/angle motion).
     void drawDcCharacter(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, float translateZ,
-                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f, float height = 0.0f, float modelScale = 1.0f) const {
+                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f, float height = 0.0f, float modelScale = 1.0f, const float* constRGB = nullptr, float tiltDeg = -45.0f) const {   // constRGB: a constant per-channel vertex colour (the focus ring: face (1, 0.3, 0.3) x intensity 0.8 in the stream)
         if (m.tris.empty()) return;
         const float ya = yawDeg * 0.017453292f, cy = cosf(ya), sy = sinf(ya);
-        constexpr float kTilt = -45.0f * 0.017453292f; const float ct = cosf(kTilt), st = sinf(kTilt);
+        const float kTilt = tiltDeg * 0.017453292f; const float ct = cosf(kTilt), st = sinf(kTilt);   // characters stand at RotateX(-45); a model drawn flat on the board (the focus ring) passes 0
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit + translateZ;
         const std::vector<float>* a = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
         const std::vector<float>* b = (frame >= 0 && !m.frames.empty() && blend > 0.0f) ? &m.frames[(frame + 1) % (int)m.frames.size()] : nullptr;
@@ -345,6 +345,7 @@ public:
                     for (int ch = 0; ch < 3; ++ch) { const int bi = 2 - ch; o.lightRGB[k][ch] = (mc[7] == 0 ? 0.912f : std::min(1.0f, 0.3f + dterm)) * mc[bi] / 255.0f; }   /* mc[7] == 0: the strip's ignore-light flag (0x01): a constant intensity, 0.912 on every vertex of that Pian strip in Flycast s202390.state (origin of the value not traced) */   // the material diffuse is the PowerVR face colour (Flycast s102390.state: header face (1, 0, 0.498, 1) for the Chao's ff7f00ff chunk) and multiplies the whole vertex intensity; the ambient chunks do not reach the hardware
                     o.rgb = true;
                 }
+                if (constRGB) { o.light[k] = 1.0f; for (int ch = 0; ch < 3; ++ch) o.lightRGB[k][ch] = constRGB[ch]; o.rgb = true; }
                 o.p[k] = {camera.x + (ox + x1) * scale, camera.y + (oz + z2) * scale}; o.iw[k] = 1.0f / depth;
                 float mu = tri.v[k].u, mv = tri.v[k].v;
                 if (tri.envMap) {   // Ninja strip flag 0x40 (environment map, strips without UVs: the golden mouse's body): UV from the view-space normal

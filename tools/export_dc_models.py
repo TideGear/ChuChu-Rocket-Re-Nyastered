@@ -37,6 +37,11 @@ MODELS += [(name, off, BATTLE_TEX) for name, off in (
     ('launch_blue', 0x9a328), ('launch_orange', 0x9b478),
     ('launch_red', 0x9c5c8), ('launch_green', 0x9d718), ('launch_base', 0x98438))]
 
+# Puzzle failure focus ring (task 0x8c02c600: update 0x8c02c4e0 retires at age 180; draw 0x8c02c4f8 translates to the killed mouse (0x8c019d8e) or the cat in
+# the rocket (0x8c011998) at height 8.0, njScale(16 - 0.5 * age, 1, same) below age 30, material colour (1, 1, 0.3, 0.3) from 0x8c080528): object 0x8c0bdeb0,
+# 16 outer (r 25.76) and 16 inner (r 22.41) vertices on the board plane, untextured.
+MODELS += [('focus_ring', 0xadeb0, BATTLE_TEX)]
+
 # Mouse draw dispatcher 0x8c019e26 part trees (roots 0x8c08e138 kind 2, 0x8c0960ec kind 1, 0x8c096be8 chain); texture slots as MOUSE_TEX
 MODELS += [('mouse_a', 0x7e138, MOUSE_TEX), ('mouse_b', 0x860ec, MOUSE_TEX), ('mouse_c', 0x86be8, MOUSE_TEX), ('ghost', 0x87e44, MOUSE_TEX)]   # ghost: object 0x8c097e44 + motion 0x8c0988a0 (8 frames), drawn by 0x8c0192e0 with texture list 0x8c085d18
 MODELS += [('chao%d' % i, 0x8c818 + 0xb98 * i, CHAO_TEX) for i in range(8)]
@@ -262,7 +267,7 @@ def main(root, exe):
     out_models = []
     for name, off, texlist in MODELS:
         order = pack.tree(off); special = name.startswith('mouse') and name[5:].isdigit()   # mouse keyframes: the 4-vertex cream run (material flags 17, texture 2) is lit by its own light, so it gets material slot 10 (texture 2 again)
-        launch = name.startswith('launch_')
+        launch = name.startswith('launch_') or name == 'focus_ring'   # untextured strips get the WHITE texture
         tris = pack.assemble_cached(order) if name == 'ghost' else pack.assemble(order, special=special, untextured=len(texlist) if launch else 0)
         full = name in ('floor', 'wall', 'hole_out', 'hole_in') or name.startswith('h_') or name.startswith('mouse_') or name == 'ghost'    # the board pieces keep the whole texture list: the game picks the floor (yuka01-06) and wall (kabetx01-03) style by stage
         mats = [tex(texlist[m if m < len(texlist) else 2]) if (m < len(texlist) or special) else 0 for m in range(len(texlist) if full else max(m & 0x3f for m, _ in tris) + 1)]

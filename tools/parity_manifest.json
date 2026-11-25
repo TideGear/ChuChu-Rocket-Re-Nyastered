@@ -1960,6 +1960,54 @@
         ]
       },
       "note": "flyhost Puzzle Stage Select (Normal 01 selected), shot 2050; local/sweep. Visible-gap sweep case"
+    },
+    {
+      "name": "puzzle_hard05_fail_2780",
+      "ref": "local/dc_ref/groups/h05fail_02780.bmp",
+      "args": [
+        "puzzle",
+        "29"
+      ],
+      "env": {
+        "CCR_TICKS": "587",
+        "CCR_GLOBAL_TIME": "2012",
+        "CCR_MODELS": "1",
+        "CCR_KEYS": " ",
+        "CCR_KEY_TICK": "108"
+      },
+      "elements": {
+        "board": [
+          136,
+          23,
+          595,
+          366
+        ]
+      },
+      "note": "flyhost Puzzle Hard 05 run with no arrows (R2@2300-2310), shot 2780 = tick 587 (this run: frame 2720 matches tick 527, offset 2193); a cat eats a mouse and the Dreamcast focus ring (task 0x8c02c600) closes in; local/sweep2"
+    },
+    {
+      "name": "puzzle_hard05_fail_2840",
+      "ref": "local/dc_ref/groups/h05fail_02840.bmp",
+      "args": [
+        "puzzle",
+        "29"
+      ],
+      "env": {
+        "CCR_TICKS": "647",
+        "CCR_GLOBAL_TIME": "2072",
+        "CCR_MODELS": "1",
+        "CCR_KEYS": " ",
+        "CCR_KEY_TICK": "108"
+      },
+      "elements": {
+        "board": [
+          136,
+          23,
+          595,
+          366
+        ]
+      },
+      "note": "flyhost Puzzle Hard 05 run with no arrows (R2@2300-2310), shot 2840 = tick 647 (this run: frame 2720 matches tick 527, offset 2193); a cat eats a mouse and the Dreamcast focus ring (task 0x8c02c600) closes in; local/sweep2"
     }
   ]
 }

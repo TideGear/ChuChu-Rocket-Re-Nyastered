@@ -33,8 +33,9 @@ def plausible_vertex(st, o):
     return -200 < x < 900 and -200 < y < 700 and 0 < z < 100
 
 
-def find_list(st, lo=0x200000, hi=0x400000):
+def find_list(st, lo=0x200000, hi=None):
     """First 16-byte-aligned polygon header (type 4) followed by two plausible vertices; the list runs until 64 consecutive non-parameter words."""
+    hi = hi or len(st) - 128   # the PowerVR double-buffers its parameter lists, so a state can hold the list well past 0x400000
     for o in range(lo, hi, 16):
         w = struct.unpack_from('<I', st, o)[0]
         if w >> 29 == 4 and plausible_vertex(st, o + 32) and plausible_vertex(st, o + 64):

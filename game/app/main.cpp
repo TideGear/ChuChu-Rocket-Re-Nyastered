@@ -399,7 +399,7 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
-    static constexpr int kDcAssetsVersion = 5;   // tools/export_dc_ui.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets
+    static constexpr int kDcAssetsVersion = 6;   // tools/extract_all.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets, 6 the Puzzle focus ring model
     bool dcAssetsStale = false;
     // Dreamcast-look sheets; a language's folder dc_loc_<xx> (tools/extract_all.py exports one per disc language folder) replaces the English set.
     std::string dcRoot;   // the main ret_all: BIOS font sheets and per-language stage titles are only there
@@ -3505,13 +3505,29 @@ struct PuzzleMode : Screen {
         }
         SDL_RenderSetLogicalSize(a.ren, GW, GH);
     }
-    void drawFailureFocus(App& a) const {
+    void drawFailureFocus(App& a, bool boardPass = false) const {   // boardPass: the Dreamcast ring is a board-scene model drawn under the HUD (Flycast Hard 05 2780: the HUD panels cover it)
         if (failureFrames <= 0 || failureFrames > kFailureHoldFrames) return;
         const int passes = dash ? 2 : 1;
         if (failureFrames * passes >= 180) return;   // FocusControll retires the task at age 180.
         const int target = sim.lastKilledMouse >= 0 ? sim.lastKilledMouse : sim.lastCatInRocket;
         if (target < 0) return;
         const auto& entity = sim.ents[target];
+        if (a.dcLook && a.useModels3d() && a.models3d.find("focus_ring")) {
+            if (!boardPass) return;
+            // Dreamcast focus task 0x8c02c600 (update 0x8c02c4e0: age + 1 per pass, retired at 180; draw 0x8c02c4f8): object 0x8c0bdeb0 at the killed mouse
+            // (0x8c019d8e) or the cat in the rocket (0x8c011998), height 8.0, njScale(16 - 0.5 * age, 1, same) below age 30, colour (1, 0.3, 0.3) from table
+            // 0x8c080528. Flycast Hard 05 stream (local/sweep3): one untextured 34-vertex strip, base intensity 0.8, outer radius 901 -> 72 px over 23 passes.
+            if (const Model3D* ring = a.models3d.find("focus_ring")) {
+                const int age = failureFrames * passes;
+                const float s = age < 30 ? 16.0f - 0.5f * (float)age : 1.0f;
+                static const float kRingRGB[3] = {0.8f, 0.24f, 0.24f};
+                static const float kNoLight[3] = {0.0f, 0.0f, 0.0f};
+                const FieldLayout field = pf(a);
+                a.models3d.drawDcCharacter(a.ren, *ring, {field.x(entity.x / kCell), field.y(entity.z / kCell)}, {GW / 2.0f, GH / 2.0f}, field.cell / 15.0f, 0.0f, 0.0f,
+                                           kNoLight, -1, 0.0f, 0, 0u, nullptr, 1.0f, 8.0f, s, kRingRGB, 0.0f);   // no character tilt: the draw routine translates and scales only
+                return;
+            }
+        }
         const float x = OX + entity.x * (CELL / kCell), y = OY + entity.z * (CELL / kCell);
         const int opacity[] = {200, 120, 60};
         float previous = 0.0f;
@@ -3570,6 +3586,7 @@ struct PuzzleMode : Screen {
                                             state == 2 ? clearFrames * (dash ? 2 : 1) : -1);
         a.mousePoseOverride = -1;
         if (fieldDepth) a.models3d.endDepthScene();
+        drawFailureFocus(a, true);
         if (showCursor) {
             cursorTrail.draw(a, 0);
             if (mouseCursor) a.mouseCursorAt(aim.x, aim.y, 0, cticks, pf(a).scale());

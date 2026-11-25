@@ -26,7 +26,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Costumes: njScale 1.3 on the model only, scaled diffuse, per-strip alpha / untextured / environment flags and material diffuse as face colour (models.bin CCM4). Chao passes per element in both mice crops; Pian left passes.
 - Hard/Special/Mania: floor stays tan/pink, arrow stock in direction-code order S, W, N, E. Puzzle clear masks RAM 0x8c22d8a4 + 4 * group.
 - Golden mouse: crash fix on Dreamcast-only installs, "50" marker no longer mirrored, environment-mapped body.
-- Parity: 132 cases, all within the full-frame limit (with a BIOS in the local test caches). Asset version 5 (re-run setup).
+- Parity: 132 cases, all within the full-frame limit (with a BIOS in the local test caches). Asset version 6 (re-run setup).
 
 ## Done 2026-11-25
 
@@ -38,7 +38,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 ## Next tasks (milestone: Dreamcast Puzzle end to end)
 
 1. **Stream tool: done** (`tools/oracle/ta_dump.py info|list|tex|render`). Open in it: how characters are ordered (all their vertices have z = 0.005; Flycast draws the rocket dome over the mouse, the tool's depth test does not).
-2. **Puzzle visible-gap sweep:** one Flycast shot per Puzzle state (select, placing, run, pause, clear, fail, launch, result/save) against the port; list gross differences (missing animation, pose, effect) before any residue work. Star twinkles are known missing.
+2. **Puzzle visible-gap sweep:** done for stage select (1.82; only the preview domes differ), placing, run (0.73) and failure. The failure ring was the mobile one and is now the Dreamcast task 0x8c02c600 (1.04 / 1.16). Left: clear/launch per element (cases exist), star twinkles (known missing), Dash, and the pause menu's Quit path. The look-leak case `stages` differs by 232 px; this predates today's changes.
 3. **Re-measure under "pass (rounding)":** Pian right mice (1.036; signed +1.6 R / +0.2 G / +1.5 B, 0 off-edge px) and other elements near 1; update audit.md.
 4. **Hard 05 cat shading:** body strips at 0x269cd0 / 0x269f30 in `local/hd5/p_02390.state` (intensity 0.30-0.85); a single light vector does not fit, so trace the cat normal transform (draw `0x8c0119fe`, morph `0x8c0e673e`).
 5. **Puzzle pad tip:** about 4% too large on Normal 03, pulse counter not the game clock (series in local/pz3s).
