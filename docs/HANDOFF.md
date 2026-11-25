@@ -19,7 +19,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 ## Next tasks
 
 1. **Mouse pose clock: done** (Puzzle only; Battle and Challenge still use `sim.now`, untraced there). puzzle_pause full frame 1.95, mice pass.
-2. **Puzzle pause overlay:** after the pose fix, re-measure PAUSED, RESUME, QUIT and the cat ring; the ring's concentric-line filtering is the likely remaining residue.
+2. **Puzzle pause overlay: done**, every element passes (audit.md). Battle/Challenge pause have no parity case yet.
 3. **Battle cursor cell marker:** drawn white; the original darkens the floor. Find its quad in the 3D translucent list (extend `tools/oracle/dc_layers.py`), then fix the blend. Establish the tick alignment of `battle_3100` for the CPU cursor positions.
 4. **Remaining Flycast checks:** Chao/Pian costumes (need a save with all Challenge or Mania clears) and the golden mouse frame by frame.
 5. **Puzzle coverage:** Hard, Special and Mania stages; star twinkles; launch per element. **Tutorial** (mode 16, `0x8c058292`) and The Basics: not implemented.

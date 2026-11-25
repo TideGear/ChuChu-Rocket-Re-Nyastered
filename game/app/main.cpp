@@ -1008,9 +1008,10 @@ struct App {
             {{256, 256, 128, 32}, 144, 205, 128, 32, false}, {{384, 256, 128, 32}, 400, 205, 128, 32, false}};
         for (const Part& pt : parts) {
             // The two board pieces abut at x 388; their edge texels blend to transparent under bilinear scaling and leave a hairline, so each piece is drawn one logical pixel wider (towards its neighbour).
-            const int grow = (pt.src.w >= 128 && pt.src.h == 256) ? 1 : 0;
-            const SDL_Rect dst{(int)std::lround(pt.x * 1.6f) - (pt.x > 300 && grow ? 1 : 0), (int)std::lround((pt.y + dy) * 1.6f), (int)std::lround(pt.w * 1.6f) + grow, (int)std::lround(pt.h * 1.6f)};
-            SDL_RenderCopyEx(ren, dcPause.tex, &pt.src, &dst, 0.0, nullptr, pt.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+            const int grow = 0;
+            // Exact float rectangles: rounding to the 1.6x grid put the board at 143.75 on the 640 x 480 screen and blurred every texel row (Flycast draws it on whole pixels).
+            const SDL_FRect dst{pt.x * 1.6f - (pt.x > 300 && grow ? 1.0f : 0.0f), (pt.y + dy) * 1.6f, pt.w * 1.6f + grow, pt.h * 1.6f};
+            SDL_RenderCopyExF(ren, dcPause.tex, &pt.src, &dst, 0.0, nullptr, pt.flip ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
         }
         if (playerPlateY >= 0) {   // "Player 1" plate, 256 x 64 at x 230 (Battle y 270, Challenge y 400 in Flycast frames)
             const SDL_Rect src{0, 320, 256, 64}, dst{368, (int)std::lround(playerPlateY * 1.6f), 410, 102};
