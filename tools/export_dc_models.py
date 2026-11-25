@@ -106,7 +106,7 @@ class Pack:
                     a, b, c = t3[0][0], t3[1][0], t3[2][0]
                     if a in remap and b in remap and c in remap and len({a, b, c}) == 3:
                         tris.append(((10 if special and mat[0] == 17 and tex is not None and (tex & 0x1fff) == 2 else (tex if tex is not None else untextured) & 0x1fff) | (0xc0 if sfl >> 8 == 64 and not sfl & 0x40 else (0x80 if sfl & 8 else 0) | (0x40 if sfl & 0x40 else 0)), [verts[remap[x[0]]][:3] + (x[1], 1.0 - x[2]) + verts[remap[x[0]]][3:] for x in t3]))
-                        self.last_colours.append(dif + amb)
+                        self.last_colours.append(dif + (amb[:3] + bytes([0]) if sfl & 1 else amb))   # ambient alpha 0 marks a strip with the ignore-light flag (0x01); the ambient chunk colours themselves are not used by the hardware
         return tris
     def assemble_cached(self, order, pos=None, ang=None):
         """Objects whose polygon lists live apart from their vertex lists (the ghost 0x8c097e44): every node's vertex chunk writes its vertices, transformed by that node's matrix, into one shared
