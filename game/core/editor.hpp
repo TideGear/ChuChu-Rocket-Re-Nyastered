@@ -27,6 +27,10 @@ inline bool editorCanPlaceTile(const uint8_t* tiles, size_t cell, uint8_t next) 
     return count < limit;
 }
 inline bool editorCanAddArrow(size_t count) { return count < 12; }
+inline bool editorHasMouse(const uint8_t* tiles) {
+    for (size_t i = 0; i < 108; ++i) if (tiles[i] >= 9 && tiles[i] <= 12) return true;
+    return false;
+}
 struct EditorStage {
     uint8_t bytes[0x175] = {};   // tiles 0..0x6b, walls 0x6c..0x158 (row stride 25), stock 0x15c..0x15f, title 0x160..0x174 (bytes 0x159..0x15b are not written)
     std::vector<EditorArrow> arrows;

@@ -1820,8 +1820,8 @@ struct DcEditMode : Screen {
     static int kEndAge() { static const int v = getenv("CCR_EDIT_END") ? atoi(getenv("CCR_EDIT_END")) : 125; return v; }
     // Buttons 0..3 = Dreamcast A, B, X, Y. Rockets (tool 6) and Holes (7): A sets the tile on the cursor cell, B deletes it (Flycast local/modecap/ed3). Walls (2): the four
     // Facing buttons toggle the south, east, west and north wall edge of the cursor cell (local/modecap/wl: RAM lattice words flip 0 <-> 1, a repeat A clears the south wall).
-    // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Solution (5): the Facing buttons put an arrow. The same facing again removes a mouse, cat or arrow. Not yet: edit limits, sounds.
-    void startPlay() { sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: the edited stage runs on the Puzzle simulation (phases 5-8 of mode 8 reuse Puzzle's)
+    // Mice (3) and Cats (4): Facing places a start tile in that direction; Solution (5) places an arrow. Repeating the same facing removes it. Original object caps are enforced (FUN_8c031f0a; error strings 0x8c0bff52..ffc9).
+    void startPlay() { if (!editorHasMouse(st.tiles)) { fileScreen = 6; if (gApp) gApp->playSfx(4); if (gApp && gApp->headless && getenv("CCR_EDIT_TRACE")) puts("edit play rejected: no mouse"); return; } sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: original Puzzle Edit rejects Play with no mouse (text 0x8c0bff0c; edit handler FUN_8c031f0a)
     void stopPlay() { playing = false; endAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
     void refreshPuzzleFiles() {
         savedPuzzles.clear(); puzzlePaths.clear(); puzzleSlots.clear(); if (!gApp) return;
@@ -1923,10 +1923,12 @@ struct DcEditMode : Screen {
             centered("ENTER / A: OK", 350, 18, 190);
         } else if (fileScreen == 4) {
             centered("NO PUZZLE DATA!", 180, 28, 255); centered("ENTER / A: OK", 350, 18, 190);
+        } else if (fileScreen == 6) {
+            centered("You cannot play the puzzle", 170, 20, 230); centered("unless at least 1 mouse is set.", 202, 20, 230); centered("ENTER / A: OK", 350, 18, 190);
         } else {
             centered("PUZZLE FILE SAVE FAILED", 170, 26, 255); centered("Check writable storage and free slots.", 220, 18, 220); centered("ENTER / A: OK", 350, 18, 190);
         }
-        centered("PORT STORAGE", 404, 12, 145);
+        if (fileScreen >= 1 && fileScreen <= 5) centered("PORT STORAGE", 404, 12, 145);
         SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_NONE);
     }
     void stepCue() { if (gApp) gApp->playSfx(0); }   // a tool step files cue 0 (Flycast SE ring)
