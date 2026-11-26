@@ -4,6 +4,10 @@ Dated evidence for work in progress: the frame, address and measured error behin
 
 The full log from 2026-11-12 to 2026-11-25, which holds every capture recipe, address trace and measurement, is in [archive/roadmap_2026-11-12_to_11-25.md](archive/roadmap_2026-11-12_to_11-25.md). Search it before re-deriving anything.
 
+## 2026-11-26
+
+- Challenge stage 24 seed 3000: the archived claim that CPU heat differs until f2785 was a frame-alignment error. Re-ran Android 1.15 `ChallengeLoop` (0x30388), holding its team-score counters neutral after the natural early failure, and the port's `ChallengeBattleGame` with the identical hashed player-arrow schedule. At f2779 both have heat sum/nonzero cells -263/44; f2780 both transition to -219/29, with the same row-1 collision words and registered cat/mouse grid positions. Compared all 132 CPU arrow placements through f4200: exact frame/player/cell/direction match. No code change justified; more seeds and Dreamcast-loop verification remain open. Original heat/registration probes use `tools/oracle/challenge_probe.py`; port replay uses `build/game/challenge_battle_game_test.exe`.
+
 ## 2026-11-25
 
 Puzzle Edit save files:

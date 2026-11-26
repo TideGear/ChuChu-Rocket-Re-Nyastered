@@ -15,7 +15,8 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Monaural: traced to sound-driver command 0x8a. The port's final-mix fold differs for panned voices.
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: the full-frame sweep (ages -9..80) passes; only the age -1 dome crops pass per element.
-- Dreamcast Stage Select uses localized title records and ANSI/Shift-JIS BIOS glyphs; missing or unmapped Japanese BIOS glyphs fall back to the ASCII stage title. Headless fallback capture checked; Japanese glyph parity remains open.
+- Stage Select uses localized BIOS glyphs with ASCII fallback; Japanese parity open.
+- Challenge 24 seed 3000: f2785 heat divergence was misaligned; original/port transition f2780, all 132 CPU arrows match through f4200. More seeds and DC-loop check open.
 
 ## Done 2026-11-24
 
