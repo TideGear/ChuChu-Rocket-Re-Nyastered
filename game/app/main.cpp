@@ -1357,7 +1357,7 @@ struct App {
     }
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
-    std::vector<int> angs; std::vector<float> cphase; int gtime = 0;   // cat walk phase (+0.45 per tick, wraps at 20.0: FUN_00028ffc), global tick for the mouse walk frame (TI_GetGlobalTime mod 11: FUN_000353e0)
+    std::vector<int> angs, fallPose; std::vector<float> cphase; int gtime = 0;   // cat walk phase (+0.45 per tick, wraps at 20.0: FUN_00028ffc), global tick for the mouse walk frame (TI_GetGlobalTime mod 11: FUN_000353e0)
     void stepAngles(const Sim& sim, bool effectsOnly = false) {
         if (!effectsOnly) {
             gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(useModels3d() ? -0.25f : 0.0f);   // Dreamcast: the cat task's first update is its initialisation and does not advance +0x30 (Flycast frames 2300..3550: phase = 0.25 x (updates - 1))
@@ -1525,7 +1525,9 @@ struct App {
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
             if (headless && getenv("CCR_ENT_TRACE")) printf("ent %zu %s type %d world %.2f %.2f ang %04x frame %d phase %.3f\n", i, en.mouse ? "mouse" : "cat", en.type, object.x / kCell * 15.0f, object.z / kCell * 15.0f, ang & 0xffff, mouseFrame, i < cphase.size() ? cphase[i] : -1.0f);
-            if (useModels3d() && en.mouse && en.drawsHoleFall() && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell, en.rocketCounter)) continue;   // Puzzle hole fall (Flycast Normal 08 frames 2420-2464, local/hole: the mouse spins in the hole)
+            if (fallPose.size() < sim.ents.size()) fallPose.resize(sim.ents.size(), -1);
+            if (!en.drawsHoleFall()) fallPose[i] = -1; else if (fallPose[i] < 0) { fallPose[i] = ((mouseFrame - (sim.now - en.catHoleFallTick)) % 8 + 8) & 7;   /* the hole branch (0x8c019990) swaps to 0x8c01952e before the pose store 0x8c019b14, and the fall state never writes +52: the pose freezes (Flycast RAM local/hole-ram 2420/2440: +52 = 6 throughout) */ if (headless && getenv("CCR_FALL_TRACE")) printf("fall ent %zu passes %d live %d pose %d scale %.4f ang %x\n", i, sim.now - en.catHoleFallTick, mouseFrame, fallPose[i], en.rocketCounter, ang); }
+            if (useModels3d() && en.mouse && en.drawsHoleFall() && draw3dCharacter(en, i, ang, x, z, fallPose[i], field.cell, en.rocketCounter)) continue;   // Puzzle hole fall (Flycast Normal 08 frames 2420-2464, local/hole: the mouse spins in the hole)
             if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell)) continue;
             if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter * field.scale(), 255);
