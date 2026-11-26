@@ -1792,7 +1792,7 @@ struct DcEditMode : Screen {
     static int kEndAge() { static const int v = getenv("CCR_EDIT_END") ? atoi(getenv("CCR_EDIT_END")) : 125; return v; }
     // Buttons 0..3 = Dreamcast A, B, X, Y. Rockets (tool 6) and Holes (7): A sets the tile on the cursor cell, B deletes it (Flycast local/modecap/ed3). Walls (2): the four
     // Facing buttons toggle the south, east, west and north wall edge of the cursor cell (local/modecap/wl: RAM lattice words flip 0 <-> 1, a repeat A clears the south wall).
-    // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Solution (5): the Facing buttons put an arrow. Not yet: deleting, edit limits, sounds.
+    // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Solution (5): the Facing buttons put an arrow. The same facing again removes a mouse, cat or arrow. Not yet: edit limits, sounds.
     void startPlay() { sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: the edited stage runs on the Puzzle simulation (phases 5-8 of mode 8 reuse Puzzle's)
     void stopPlay() { playing = false; endAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
     void edit(int button) {
@@ -1807,11 +1807,12 @@ struct DcEditMode : Screen {
         else if (tool == 7) { if (button == 0) t = T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }
         else if (tool == 3 || tool == 4) {   // Mice / Cats: the Facing button sets the start direction (RAM cell word 0x3d..0x40 mice, 0x47..0x4a cats = down, left, up, right; stage tile 9 / 13 + offset: 0 down, 1 left, 2 up, 3 right)
             static const int heading[4] = {0, 3, 1, 2};   // tile offset per button, from the Flycast mc frames: Dreamcast A down (tile 9 faces the camera), B right (+3), X left (+1), Y up (+2)
-            t = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]); }
+            const uint8_t nt = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]); t = t == nt ? (uint8_t)T_Floor : nt; }   // the same facing again removes the figure (Flycast local/modecap/del)
         else if (tool == 5) {   // Solution: the Facing buttons put an arrow (Dreamcast A down, B right, X left, Y up = arrow codes 0, 3, 1, 2: the same order as the mouse and cat tile offsets); an arrow already on the cell is replaced (Flycast local/modecap/sol)
             static const int dir[4] = {0, 3, 1, 2};
-            for (size_t k = 0; k < arrows.size(); ++k) if (arrows[k][0] == cx && arrows[k][1] == cy) { arrows.erase(arrows.begin() + k); break; }
-            arrows.push_back({cx, cy, dir[button]}); }
+            bool removed = false; int removedDir = -1;
+            for (size_t k = 0; k < arrows.size(); ++k) if (arrows[k][0] == cx && arrows[k][1] == cy) { removed = true; removedDir = arrows[k][2]; arrows.erase(arrows.begin() + k); break; }
+            if (!(removed && removedDir == dir[button])) arrows.push_back({cx, cy, dir[button]}); }   // the same direction again removes the arrow
         else if (tool == 2) {
             uint8_t& w = button == 0 ? st.hw[(cy + 1) * kCols + cx] : button == 1 ? st.vw[cy * 13 + cx + 1] : button == 2 ? st.vw[cy * 13 + cx] : st.hw[cy * kCols + cx];
             w ^= 1; }
