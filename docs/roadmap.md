@@ -6,7 +6,7 @@ The full log from 2026-11-12 to 2026-11-25, which holds every capture recipe, ad
 
 ## 2026-11-26
 
-- Challenge stage 24 seed 3000: the archived claim that CPU heat differs until f2785 was a frame-alignment error. Re-ran Android 1.15 `ChallengeLoop` (0x30388), holding its team-score counters neutral after the natural early failure, and the port's `ChallengeBattleGame` with the identical hashed player-arrow schedule. At f2779 both have heat sum/nonzero cells -263/44; f2780 both transition to -219/29, with the same row-1 collision words and registered cat/mouse grid positions. Compared all 132 CPU arrow placements through f4200: exact frame/player/cell/direction match. No code change justified; more seeds and Dreamcast-loop verification remain open. Original heat/registration probes use `tools/oracle/challenge_probe.py`; port replay uses `build/game/challenge_battle_game_test.exe`.
+- Challenge stage 24: natural-play seed 1000 failure at f1377 matches between Android 1.15 `ChallengeLoop` (0x30388) and `ChallengeBattleGame`. Seed 3000's archived f2785 heat discrepancy was alignment: both heat maps transition at f2780 (-263/44 -> -219/29); with the same aligned hashed-arrow stream and neutralized score counters, all 132 CPU placements match through f4200. Rechecking seeds 1000/2000 shows sensitivity to arrow injection/end conditions; comparable conditions remain unresolved, so no parity claim. No code change justified. Probes: `tools/oracle/challenge_probe.py`, `build/game/challenge_battle_game_test.exe`.
 
 ## 2026-11-25
 

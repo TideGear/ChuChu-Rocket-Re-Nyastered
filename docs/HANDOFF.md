@@ -14,9 +14,9 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Results: Puzzle DC navigation is A/Start next, B back, Y ignored; mobile Y retained. Challenge clear sets pending 1 at all-25, else -1 (`0x8c02aa7a–0x8c02aa8a`); final A/B/Start enters Chao roll (`0x8c02ad02–0x8c02ad22`). Regression covers route/text. Puzzle/Challenge Flycast inputs remain unverified.
 - Monaural: traced to sound-driver command 0x8a. The port's final-mix fold differs for panned voices.
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
-- Puzzle launch: the full-frame sweep (ages -9..80) passes; only the age -1 dome crops pass per element.
-- Stage Select uses localized BIOS glyphs with ASCII fallback; Japanese parity open.
-- Challenge 24 seed 3000: f2785 heat divergence was misaligned; original/port transition f2780, all 132 CPU arrows match through f4200. More seeds and DC-loop check open.
+- Puzzle launch: ages -9..80 full-frame sweep passes; only age -1 dome crops pass per element.
+- Stage Select: BIOS glyphs with ASCII fallback; Japanese parity open.
+- Challenge 24: seed 1000 natural failure matches at f1377. Seed 3000 matches 132 CPU arrows through f4200; heat transition is f2780 in both. Seeded 1000/2000 checks remain alignment-sensitive.
 
 ## Done 2026-11-24
 
