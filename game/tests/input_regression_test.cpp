@@ -293,6 +293,34 @@ int main(int argc, char** argv) {
         puzzle.event(app, accept);
         check(std::string(puzzle.next()) == "DC_STAFFROLL",
               "Dreamcast Start leaves a queued Puzzle result for the staff roll");
+        {
+            const bool oldDcLook = app.dcLook;
+            SDL_Texture* oldStart = app.dcPuzzleStart.tex;
+            SDL_Texture* oldCancel = app.dcPuzzleCancel.tex;
+            app.dcLook = true;
+            app.dcPuzzleStart.tex = app.dcPuzzleCancel.tex = reinterpret_cast<SDL_Texture*>(1);
+            puzzle.staffRoll = false; puzzle.back = false; puzzle.cur = 0;
+            puzzle.state = 2; puzzle.clearFrames = 211;
+            accept.cbutton.button = SDL_CONTROLLER_BUTTON_Y;
+            puzzle.event(app, accept);
+            check(puzzle.cur == 0, "Dreamcast Y is ignored on an ordinary Puzzle result");
+            accept.cbutton.button = SDL_CONTROLLER_BUTTON_START;
+            puzzle.event(app, accept);
+            check(puzzle.cur == 1, "Dreamcast Start advances an ordinary Puzzle result");
+            puzzle.cur = 0; puzzle.state = 2; puzzle.clearFrames = 211;
+            accept.cbutton.button = SDL_CONTROLLER_BUTTON_B;
+            puzzle.event(app, accept);
+            check(puzzle.back, "Dreamcast B leaves an ordinary Puzzle result");
+            app.dcLook = false;
+            puzzle.cur = 0; puzzle.back = false; puzzle.state = 2; puzzle.clearFrames = 211;
+            accept.cbutton.button = SDL_CONTROLLER_BUTTON_Y;
+            puzzle.event(app, accept);
+            check(puzzle.cur == 1, "mobile-look Puzzle result retains its Y next-stage control");
+            app.dcLook = oldDcLook;
+            app.dcPuzzleStart.tex = oldStart;
+            app.dcPuzzleCancel.tex = oldCancel;
+            puzzle.back = false;
+        }
         puzzle.state = 1;
         puzzle.running = true;
         puzzle.pauseState.press();

@@ -3542,7 +3542,9 @@ struct PuzzleMode : Screen {
                 else if (e.key.keysym.sym == SDLK_ESCAPE) back = true;
             } else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad &&
                        SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cbutton.which) {
-                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) nextPuzzle();
+                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A ||
+                    (dreamcastPuzzleControls(a) ? e.cbutton.button == SDL_CONTROLLER_BUTTON_START
+                                                : e.cbutton.button == SDL_CONTROLLER_BUTTON_Y)) nextPuzzle(); // DC result handler 0x8c02c306: Start/A next, B back; Y is ignored
                 else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B) back = true;
             } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 float x, y; SDL_RenderSetLogicalSize(a.ren, 640, 480);
