@@ -362,7 +362,7 @@ public:
 
     // Background sky (draw 0x8c01f2a0): njTranslate(centre), njRotateXYZ(ang) (X, then Y, then Z, the order measured for node angles in
     // tools/export_dc_models.py), njScale(scale), drawn with the Puzzle view (straight down from height 218). The sphere surrounds the eye,
-    // so triangles are clipped at the eye plane. Lit like a chunk model, 0.3 + 0.8 max(0, -n.L) (this sign matches Flycast's margin brightness, Normal 03 right 6.7 vs 7.0). Not called: the streaks still land in other places than Flycast's (Normal 03 full frame 0.99 -> 1.33): rotation order, phase origin or UVs differ.
+    // so triangles are clipped at the eye plane. Lit like a chunk model, 0.3 + 0.8 max(0, -n.L) (this sign matches Flycast's margin brightness, Normal 03 right 6.7 vs 7.0). Rotation X, then Y, then Z: projecting the export with the real view puts every vertex on the stream's (Hard 05 sky strip at 0x26a310, angles 0x850/0x10a0/0x850: 0.0 px mean). Not called yet: the texture (tex word 0x880a6800, bit 31) is mipmapped and the sky is heavily minified, so the hardware samples small mip levels (dim specks); softRender samples level 0, which turns the stars into bright streaks.
     void drawDcSky(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, const int ang[3], float scale) const {
         const float kNear = 1.0f;
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
@@ -379,7 +379,7 @@ public:
                 t = x * c[2] - y * s[2]; y = x * s[2] + y * c[2]; x = t;      // Z
                 float nx = tri.v[k].nx, ny = tri.v[k].ny, nz = tri.v[k].nz;
                 t = ny * c[0] - nz * s[0]; nz = ny * s[0] + nz * c[0]; ny = t; t = nx * c[1] + nz * s[1]; nz = -nx * s[1] + nz * c[1]; nx = t; t = nx * c[2] - ny * s[2]; ny = nx * s[2] + ny * c[2]; nx = t;
-                const float lit = std::min(1.0f, 0.3f + 0.8f * std::max(0.0f, -(nx * kL[0] + ny * kL[1] + nz * kL[2])));
+                const float lit = std::min(1.0f, 0.3f + 0.8f * scale * std::max(0.0f, -(nx * kL[0] + ny * kL[1] + nz * kL[2]))   /* Ninja lights with the njScale(5) normals: stream base intensity 0.3..3.09 (local/hd5, sky strip at 0x26a310) */);
                 in[k] = {ox + x, oz + z, 218.0f - y, tri.v[k].u, tri.v[k].v, lit};   // the Puzzle view matrix (RAM matrix stack at [0x8c2c75d4], local/tip2 2390): rows (1,0,0), (0,0,-1), (0,1,0), translation (-72, -85.5, 218): straight down from height 218, no tilt
             }
             V poly[4]; int n = 0;   // clip against depth >= kNear (Sutherland-Hodgman on one plane)
