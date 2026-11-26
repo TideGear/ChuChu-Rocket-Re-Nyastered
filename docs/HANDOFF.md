@@ -37,6 +37,8 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 
 ## Next tasks (milestone: Dreamcast Puzzle end to end)
 
+- **Unlock screen (mode 17), visible gap:** a Puzzle clear that unlocks something switches to mode 17 (`0x8c02c18c`); the port has none. See audit.md mode table.
+
 0. **Hole fall pose (time-boxed):** the "3 passes late" was Flycast display latency, not port timing: the RAM dump leads the shown frame by 3 passes (ring age 21 in RAM, the shown ring matches the port's age 18; ring formula identical, no rotation in draw `0x8c02c4f8`), which the case tick already absorbs. Open: the frozen pose is 6 in RAM; the port's (clock - passes since fall) gives 3, and +3 (pose 6) brings the hole crop from 5.38 to 1.12, but the clock relation behind the +3 is not derived, so it is not committed. Flycast runs also differ between invocations (local/hole vs local/hole-ram).
 
 1. **Stream tool: done** (`tools/oracle/ta_dump.py info|list|tex|render`). Open in it: how characters are ordered (all their vertices have z = 0.005; Flycast draws the rocket dome over the mouse, the tool's depth test does not).
