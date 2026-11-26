@@ -1763,7 +1763,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false; int ticks = 0;
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false; int ticks = 0;
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1787,7 +1787,7 @@ struct DcEditMode : Screen {
     void tick(App&) override { ++ticks; }
     // Buttons 0..3 = Dreamcast A, B, X, Y. Rockets (tool 6) and Holes (7): A sets the tile on the cursor cell, B deletes it (Flycast local/modecap/ed3). Walls (2): the four
     // Facing buttons toggle the south, east, west and north wall edge of the cursor cell (local/modecap/wl: RAM lattice words flip 0 <-> 1, a repeat A clears the south wall).
-    // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Not yet: Solution, deleting, edit limits, sounds.
+    // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Solution (5): the Facing buttons put an arrow. Not yet: deleting, edit limits, sounds.
     void edit(int button) {
         uint8_t& t = st.tiles[cy * kCols + cx];
         if (tool == 6) { if (button == 0) t = T_Rocket; else if (button == 1 && t == T_Rocket) t = T_Floor; }
@@ -1795,10 +1795,14 @@ struct DcEditMode : Screen {
         else if (tool == 3 || tool == 4) {   // Mice / Cats: the Facing button sets the start direction (RAM cell word 0x3d..0x40 mice, 0x47..0x4a cats = down, left, up, right; stage tile 9 / 13 + offset: 0 down, 1 left, 2 up, 3 right)
             static const int heading[4] = {0, 3, 1, 2};   // tile offset per button, from the Flycast mc frames: Dreamcast A down (tile 9 faces the camera), B right (+3), X left (+1), Y up (+2)
             t = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]); }
+        else if (tool == 5) {   // Solution: the Facing buttons put an arrow (Dreamcast A down, B right, X left, Y up = arrow codes 0, 3, 1, 2: the same order as the mouse and cat tile offsets); an arrow already on the cell is replaced (Flycast local/modecap/sol)
+            static const int dir[4] = {0, 3, 1, 2};
+            for (size_t k = 0; k < arrows.size(); ++k) if (arrows[k][0] == cx && arrows[k][1] == cy) { arrows.erase(arrows.begin() + k); break; }
+            arrows.push_back({cx, cy, dir[button]}); }
         else if (tool == 2) {
             uint8_t& w = button == 0 ? st.hw[(cy + 1) * kCols + cx] : button == 1 ? st.vw[cy * 13 + cx + 1] : button == 2 ? st.vw[cy * 13 + cx] : st.hw[cy * kCols + cx];
             w ^= 1; }
-        sim.load(st); prev.clear();
+        sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear();
     }
     void runScript() {   // headless: CCR_EDIT_SCRIPT="tool,x,y,A|B|X|Y;..."
         if (scripted) return; scripted = true;
@@ -1815,6 +1819,7 @@ struct DcEditMode : Screen {
         if (const char* c = getenv("CCR_EDIT_CELL")) { int x = 0, y = 0; if (sscanf(c, "%d,%d", &x, &y) == 2) { cx = (x % 12 + 12) % 12; cy = (y % 9 + 9) % 9; } }
         runScript();
         a.board(st, 2, 2, field);
+        for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);   // solution arrows (Puzzle draws them before the objects)
         a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, nullptr, -1, nullptr, 1.0f);   // rocket domes from the edited stage
         if (a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
