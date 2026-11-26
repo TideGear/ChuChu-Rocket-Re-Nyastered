@@ -1792,10 +1792,10 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) edit(3);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT || e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) move(e.key.keysym.sym == SDLK_RIGHT ? 1 : e.key.keysym.sym == SDLK_LEFT ? -1 : 0, e.key.keysym.sym == SDLK_DOWN ? 1 : e.key.keysym.sym == SDLK_UP ? -1 : 0);
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)) move(e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? -1 : 0, e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ? -1 : 0);
-        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_e || e.key.keysym.sym == SDLK_PAGEDOWN)) tool = (tool + 1) & 7;
-        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7;
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_e || e.key.keysym.sym == SDLK_PAGEDOWN)) tool = (tool + 1) & 7, stepCue();
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7, stepCue();
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7, stepCue();
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7, stepCue(); }
     void tick(App& a) override { runScript(); ++ticks; if (getenv("CCR_EDIT_PAUSE")) paused = true; if (paused) return; if (const char* f = getenv("CCR_EDIT_FF")) ff = ticks >= atoi(f);   // headless: F.F. held from this tick
         for (int pass = 0; pass < (ff && playing ? 2 : 1); ++pass) tickPass(a); }
     void tickPass(App& a) { if (playing && endAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
@@ -1811,9 +1811,9 @@ struct DcEditMode : Screen {
     void stopPlay() { playing = false; endAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
     void edit(int button) {
         if (dialog) {   // File > Create: 'The current puzzle will be lost. Are you sure?' A = Yes clears the board, B = No
-            if (button == 0) { st = Stage{}; arrows.clear(); saved = false; sim.load(st); prev.clear(); dialog = false; } else if (button == 1) dialog = false;
+            if (button == 0) { st = Stage{}; arrows.clear(); saved = false; sim.load(st); prev.clear(); dialog = false; if (gApp && !scripting) gApp->playSfx(2); } else if (button == 1) { dialog = false; if (gApp && !scripting) gApp->playSfx(3); }   // Yes 2, No 3 (Flycast local/modecap/snd2)
             return; }
-        if (tool == 0) { if (button == 0) dialog = true; return; }   // Delete / Load / Save (buttons 1-3) are not ported
+        if (tool == 0) { if (button == 0) { dialog = true; if (gApp && !scripting) gApp->playSfx(4); } return; }   // opening Create plays 4   // Delete / Load / Save (buttons 1-3) are not ported
         if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); else if (button == 2) ff = true; return; }   // X = F.F.: two simulation passes per frame while held (Flycast local/modecap/ff)
         if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
@@ -1841,6 +1841,7 @@ struct DcEditMode : Screen {
         while (i < str.size()) { size_t j = str.find(';', i); if (j == std::string::npos) j = str.size(); int tl = 0, x = 0, y = 0; char b = 'A';
             if (sscanf(str.substr(i, j - i).c_str(), "%d,%d,%d,%c", &tl, &x, &y, &b) == 4) { tool = tl & 7; cx = x; cy = y; edit(b == 'A' ? 0 : b == 'B' ? 1 : b == 'X' ? 2 : 3); } i = j + 1; }
     }
+    void stepCue() { if (gApp) gApp->playSfx(0); }   // a tool step files cue 0 (Flycast SE ring)
     void move(int dx, int dy) { cx = (cx + dx + 12) % 12; cy = (cy + dy + 9) % 9; }
     const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
     void draw(App& a, float) override {
