@@ -3600,8 +3600,8 @@ struct PuzzleMode : Screen {
                                             state == 2 || prelaunch ? &launchLids : nullptr,
                                             state == 2 ? clearFrames * (dash ? 2 : 1) : -1, nullptr, state == 2 || prelaunch ? 1.0f : domePulse);   // after the clear the launch tasks (0x8c01b8a0 / 0x8c01b9a0) draw the domes without the pulse (launch ages 1-3 lose 0.4-1.3 with it)
         a.mousePoseOverride = -1;
+        drawFailureFocus(a, true);   // inside the depth scene: the ring (height 8) hides the lower part of a dome and the dome's top shows through it (Flycast Normal 08 frame 2440, local/hole)
         if (fieldDepth) a.models3d.endDepthScene();
-        drawFailureFocus(a, true);
         if (showCursor) {
             cursorTrail.draw(a, 0);
             if (mouseCursor) a.mouseCursorAt(aim.x, aim.y, 0, cticks, pf(a).scale());
