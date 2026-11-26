@@ -123,7 +123,14 @@ def main():
     for m in range(NMODES):
         own = {f for f in reach[m] if count[f] == 1}
         print(f'| {m} | {len(own)} / {len(reach[m])} | {" ".join(cues(reach[m], SE)) or "none"} | {" ".join(cues(own, SE)) or "none"} | {" ".join(cues(reach[m], (MUSIC,))) or "none"} | {", ".join(tasks(reach[m])) or "none"} |')
-    un = sorted({f for t, s_, f, a in sites if f not in count and f is not None})
+    g = set(); st = [owner(0x8c018478)]                     # the main loop (pause controller 0x8c01a174, task server 0x8c01909c): runs in every mode
+    while st:
+        f = st.pop()
+        if f in g or f is None: continue
+        g.add(f); st.extend(edges.get(f, ()))
+    gn = {f for f in g if f not in count}
+    print(f'\n## Every mode: the main loop `0x8c018478` ({len(gn)} functions no mode root reaches)\n\nSE {" ".join(cues(gn, SE)) or "none"}; music {" ".join(cues(gn, (MUSIC,))) or "none"}; tasks {", ".join(tasks(gn)) or "none"}')
+    un = sorted({f for t, s_, f, a in sites if f not in count and f not in g and f is not None})
     print(f'\n## Call sites no mode reaches statically ({len(un)} functions)\n\n| Function | SE cues | Music | Tasks / swaps |\n|---|---|---|---|')
     for f in un:
         print(f'| {f:#x} | {" ".join(cues({f}, SE)) or "-"} | {" ".join(cues({f}, (MUSIC,))) or "-"} | {", ".join(tasks({f})) or "-"} |')
