@@ -1842,7 +1842,7 @@
       ],
       "env": {
         "CCR_TICKS": "247",
-        "CCR_GLOBAL_TIME": "1672",
+        "CCR_GLOBAL_TIME": "1676",
         "CCR_MODELS": "1",
         "CCR_KEYS": " ",
         "CCR_KEY_TICK": "108"
@@ -1861,7 +1861,7 @@
           366
         ]
       },
-      "note": "flyhost Puzzle Normal 08 run with no arrows (R2@2300-2310), shot 2440 (local/hole): a mouse spins in the bottom-left hole (update 0x8c01952e, draw 0x8c01946c) while the focus ring closes; the ring is depth-tested against the domes (their tops show through). Tick 247 is the best of 226-261 (full 1.38); the hole crop is 5.4 (spin phase)."
+      "note": "flyhost Puzzle Normal 08 run with no arrows (R2@2300-2310), shot 2440 (local/hole): a mouse spins in the bottom-left hole (update 0x8c01952e, draw 0x8c01946c) while the focus ring closes; the ring is depth-tested against the domes (their tops show through). Tick 247 is the best of 226-261 (full 1.38); the hole crop passes (0.93) with CCR_GLOBAL_TIME 1676 = RAM clock 1877 - 201 and the pose latched one pass before the fall (0x8c019b0c is skipped)."
     },
     {
       "name": "puzzle_hard05",
