@@ -11,7 +11,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 ## Latest gameplay/UI work
 
 - Records controls follow the traced original: L+R+Start deletes (the footer triangle is Start), the delete resets a Chao costume, and A/B/Start leave with cue 3.
-- Results: Puzzle DC navigation is A/Start next, B back, Y ignored; mobile Y retained. First final Challenge clear (all 25) queues Chao staff roll on A/Start (`0x8c02ad1e`); seeded regression checks route, text, and no repeat on replay. Puzzle/Challenge Flycast inputs remain unverified.
+- Results: Puzzle DC navigation is A/Start next, B back, Y ignored; mobile Y retained. Challenge clear sets pending 1 at all-25, else -1 (`0x8c02aa7a–0x8c02aa8a`); final A/B/Start enters Chao roll (`0x8c02ad02–0x8c02ad22`). Regression covers route/text. Puzzle/Challenge Flycast inputs remain unverified.
 - Monaural: traced to sound-driver command 0x8a. The port's final-mix fold differs for panned voices.
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: the full-frame sweep (ages -9..80) passes; only the age -1 dome crops pass per element.

@@ -435,20 +435,31 @@ int main(int argc, char** argv) {
             app.dcChallengeResult.tex = reinterpret_cast<SDL_Texture*>(1);
             challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
             challenge.saveResult(app);
-            check(challenge.chaoRollQueued && app.challengeMask == 0x1ffffff,
-                  "newly completing all 25 Dreamcast Challenge stages queues the Chao unlock roll");
+            check(challenge.finalChallengeComplete && challenge.chaoRollQueued &&
+                  app.challengeMask == 0x1ffffff,
+                  "final Challenge clear sets the complete mask and queues pending value 1");
             SDL_Event confirm{}; confirm.type = SDL_CONTROLLERBUTTONDOWN;
             confirm.cbutton.button = SDL_CONTROLLER_BUTTON_START;
             challenge.event(app, confirm);
             check(std::string(challenge.next()) == "DC_STAFFROLL_CHAO",
-                  "final Challenge A/B/Start result input enters the Chao staff roll");
-            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
-            challenge.saveResult(app); // already complete: do not announce the unlock again
-            check(!challenge.chaoRollQueued,
-                  "replaying the completed final Challenge stage does not requeue the Chao roll");
+                  "final Challenge Start result input enters the Chao staff roll");
             DcStaffRollMode roll(app, true);
             check(roll.lines == (std::vector<std::string>{"You can now select Chao", "in the Options Menu!"}),
-                  "Challenge staff roll displays the Chao unlock text");
+                  "final Challenge staff roll displays the Chao unlock text");
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.finalChallengeComplete = true; challenge.chaoRollQueued = true;
+            SDL_Event confirmA{}; confirmA.type = SDL_CONTROLLERBUTTONDOWN;
+            confirmA.cbutton.button = SDL_CONTROLLER_BUTTON_A;
+            challenge.event(app, confirmA);
+            check(std::string(challenge.next()) == "DC_STAFFROLL_CHAO",
+                  "final Challenge A result input enters the pending-value-1 Chao staff roll");
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.finalChallengeComplete = true; challenge.chaoRollQueued = true;
+            SDL_Event confirmB{}; confirmB.type = SDL_CONTROLLERBUTTONDOWN;
+            confirmB.cbutton.button = SDL_CONTROLLER_BUTTON_B;
+            challenge.event(app, confirmB);
+            check(std::string(challenge.next()) == "DC_STAFFROLL_CHAO",
+                  "final Challenge B result input also enters the pending-value-1 Chao staff roll");
             app.dcLook = oldDcLook; app.testRun = oldTestRun; app.saveDir = oldSaveDir;
             app.challengeMask = oldChallengeMask; app.challengeMaskLoaded = oldChallengeLoaded;
             app.dcStaffRoll.tex = oldStaffRoll; app.dcChallengeResult.tex = oldChallengeResult;

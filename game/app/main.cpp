@@ -4015,7 +4015,7 @@ struct PuzzleMode : Screen {
 
 // ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
 struct ChallengeMode : Screen {
-    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false, rollNext = false, chaoRollQueued = false; int lastDir = 0, cticks = 0, musicTicks_ = 0; bool challengeMusicStarted_ = false, saved_ = false, newBest = false; int bestSeconds = 0;
+    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false, finalChallengeComplete = false, chaoRollQueued = false, rollNext = false; int lastDir = 0, cticks = 0, musicTicks_ = 0; bool challengeMusicStarted_ = false, saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
     SDL_GameController* controller = nullptr;
     PadAim padAim{5.5f * kCell, 3.5f * kCell};
@@ -4045,10 +4045,9 @@ struct ChallengeMode : Screen {
     void logResult(App& a) { char b[160]; snprintf(b, sizeof b, "challenge stage %d: cleared in %d s", cur + 1, battle ? bgame.clearSeconds() : game.clearSeconds()); a.log.write(1, b); }
     void saveResult(App& a) { logResult(a);   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
         Save s = loadSave(a.saveDir); previousTotal = 0; for (uint32_t seconds : s.best) previousTotal += seconds; const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
-        const bool wasFullyCleared = (s.mask & 0x1ffffff) == 0x1ffffff;
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur]; resultTotal = 0; for (uint32_t seconds : s.best) resultTotal += seconds;
-        chaoRollQueued = a.dcLook && a.dcStaffRoll.tex && cur == 24 && !wasFullyCleared &&
-                         (s.mask & 0x1ffffff) == 0x1ffffff; // all 25 cleared -> pending 1, Challenge result 0x8c02ad1e
+        finalChallengeComplete = cur == 24 && (s.mask & 0x1ffffff) == 0x1ffffff;
+        chaoRollQueued = a.dcLook && a.dcStaffRoll.tex && (s.mask & 0x1ffffff) == 0x1ffffff; // pending 1 when all 25 are done (0x8c02aa7a–0x8c02aa8a)
         if (a.testRun) { a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
         else if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
     }
@@ -4056,7 +4055,7 @@ struct ChallengeMode : Screen {
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
         for (int i = 0; i < SDL_NumJoysticks(); ++i) openController(i);
         begin(stage); return true; }
-    void begin(int stage) { paused = false; chaoRollQueued = false; rollNext = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; { float hx, hy; if (const char* pc = getenv("CCR_PAD_AIM"); pc && sscanf(pc, "%f,%f", &hx, &hy) == 2) padAim = PadAim{hx, hy}; }   /* headless test hook (port-only): start the pad cursor on a cell, e.g. to match a Flycast frame taken after pad moves */ mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
+    void begin(int stage) { paused = false; finalChallengeComplete = false; chaoRollQueued = false; rollNext = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; { float hx, hy; if (const char* pc = getenv("CCR_PAD_AIM"); pc && sscanf(pc, "%f,%f", &hx, &hy) == 2) padAim = PadAim{hx, hy}; }   /* headless test hook (port-only): start the pad cursor on a cell, e.g. to match a Flycast frame taken after pad moves */ mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
         if (battle) bgame.start(stages.list[cur].st, cur, (uint32_t)SDL_GetTicks() * 2654435761u + (uint32_t)cur); else game.start(stages.list[cur].st, cur);   // types 3 and 4 run on the battle engine (core/challenge_battle.hpp)
         prev.clear(); }
     int phase() const { return battle ? bgame.phase : game.phase; }
@@ -4076,24 +4075,31 @@ struct ChallengeMode : Screen {
         if (e.type == SDL_CONTROLLERAXISMOTION) mouseCursor = false;
         if (phase() == ChallengeGame::Result && a.dcChallengeResult.tex) {
             if (e.type == SDL_KEYDOWN) {
-                if (chaoRollQueued && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE)) rollNext = true;
-                else if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE) {
-                    if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE) {
+                    if (a.dcLook && finalChallengeComplete) rollNext = true;
+                    else if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
                     else nextStageRequested = true;
-                } else if (e.key.keysym.sym == SDLK_ESCAPE) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                } else if (e.key.keysym.sym == SDLK_ESCAPE) {
+                    if (chaoRollQueued) rollNext = true;
+                    else { a.nextStage = cur; fromStageSelect = true; back = true; }
+                }
             } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
                 const int button = e.cbutton.button;
-                if (chaoRollQueued && (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_START)) rollNext = true;
-                else if (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_START) {
-                    if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                if (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_START) {
+                    if (a.dcLook && finalChallengeComplete) rollNext = true;
+                    else if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
                     else nextStageRequested = true;
-                } else if (button == SDL_CONTROLLER_BUTTON_B) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                } else if (button == SDL_CONTROLLER_BUTTON_B) {
+                    if (chaoRollQueued) rollNext = true;
+                    else { a.nextStage = cur; fromStageSelect = true; back = true; }
+                }
             } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_RenderSetLogicalSize(a.ren, 640, 480);
                 float x, y;
                 ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
                 if (x >= 32 && x < 200 && y >= 382 && y < 446) {
-                    if (y < 414) { if (chaoRollQueued) rollNext = true; else nextStageRequested = true; }
+                    if (y < 414) { if (a.dcLook && finalChallengeComplete) rollNext = true; else nextStageRequested = true; }
+                    else if (chaoRollQueued) rollNext = true;
                     else { a.nextStage = cur; fromStageSelect = true; back = true; }
                 }
             }
