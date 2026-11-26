@@ -1980,9 +1980,10 @@ struct DcEditMode : Screen {
 struct DcStaffRollMode : Screen {
     int offset = 0, after = 0; bool leave = false, ended = false;
     std::vector<std::string> lines;   // the unlock lines (init 0x8c0509c0, printer 0x8c022600): the highest completed group's text, as the original tests groups 3, 2, 1, 0 in order
-    explicit DcStaffRollMode(App& a) {
+    explicit DcStaffRollMode(App& a, bool chaoUnlock = false) {
         auto done = [&](int g) { for (int k = 0; k < 25; ++k) if (!a.isCleared(g * 25 + k)) return false; return true; };
-        if (done(3)) lines = {"You can now select Pians", "in the Options Menu!"};
+        if (chaoUnlock) lines = {"You can now select Chao", "in the Options Menu!"};
+        else if (done(3)) lines = {"You can now select Pians", "in the Options Menu!"};
         else if (done(2)) lines = {"You can now select", " \"Mania\"", "on the Stage Select Screen", "in Puzzle Mode."};
         else if (done(1)) lines = {"You can now select", " \"Special\"", "on the Stage Select Screen", "in Puzzle Mode."};
         else if (done(0)) lines = {"You can now select", " \"Hard\"", "on the Stage Select Screen", "in Puzzle Mode."};
@@ -4014,7 +4015,7 @@ struct PuzzleMode : Screen {
 
 // ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
 struct ChallengeMode : Screen {
-    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false; int lastDir = 0, cticks = 0, musicTicks_ = 0; bool challengeMusicStarted_ = false, saved_ = false, newBest = false; int bestSeconds = 0;
+    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false, rollNext = false, chaoRollQueued = false; int lastDir = 0, cticks = 0, musicTicks_ = 0; bool challengeMusicStarted_ = false, saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
     SDL_GameController* controller = nullptr;
     PadAim padAim{5.5f * kCell, 3.5f * kCell};
@@ -4044,15 +4045,18 @@ struct ChallengeMode : Screen {
     void logResult(App& a) { char b[160]; snprintf(b, sizeof b, "challenge stage %d: cleared in %d s", cur + 1, battle ? bgame.clearSeconds() : game.clearSeconds()); a.log.write(1, b); }
     void saveResult(App& a) { logResult(a);   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
         Save s = loadSave(a.saveDir); previousTotal = 0; for (uint32_t seconds : s.best) previousTotal += seconds; const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
+        const bool wasFullyCleared = (s.mask & 0x1ffffff) == 0x1ffffff;
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur]; resultTotal = 0; for (uint32_t seconds : s.best) resultTotal += seconds;
-        if (a.testRun) { a.challengeMask = s.mask; a.challengeMaskLoaded = true; }   // test runs keep it in memory (App::testRun)
+        chaoRollQueued = a.dcLook && a.dcStaffRoll.tex && cur == 24 && !wasFullyCleared &&
+                         (s.mask & 0x1ffffff) == 0x1ffffff; // all 25 cleared -> pending 1, Challenge result 0x8c02ad1e
+        if (a.testRun) { a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
         else if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
         for (int i = 0; i < SDL_NumJoysticks(); ++i) openController(i);
         begin(stage); return true; }
-    void begin(int stage) { paused = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; { float hx, hy; if (const char* pc = getenv("CCR_PAD_AIM"); pc && sscanf(pc, "%f,%f", &hx, &hy) == 2) padAim = PadAim{hx, hy}; }   /* headless test hook (port-only): start the pad cursor on a cell, e.g. to match a Flycast frame taken after pad moves */ mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
+    void begin(int stage) { paused = false; chaoRollQueued = false; rollNext = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; { float hx, hy; if (const char* pc = getenv("CCR_PAD_AIM"); pc && sscanf(pc, "%f,%f", &hx, &hy) == 2) padAim = PadAim{hx, hy}; }   /* headless test hook (port-only): start the pad cursor on a cell, e.g. to match a Flycast frame taken after pad moves */ mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
         if (battle) bgame.start(stages.list[cur].st, cur, (uint32_t)SDL_GetTicks() * 2654435761u + (uint32_t)cur); else game.start(stages.list[cur].st, cur);   // types 3 and 4 run on the battle engine (core/challenge_battle.hpp)
         prev.clear(); }
     int phase() const { return battle ? bgame.phase : game.phase; }
@@ -4072,17 +4076,24 @@ struct ChallengeMode : Screen {
         if (e.type == SDL_CONTROLLERAXISMOTION) mouseCursor = false;
         if (phase() == ChallengeGame::Result && a.dcChallengeResult.tex) {
             if (e.type == SDL_KEYDOWN) {
-                if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE) nextStageRequested = true;
-                else if (e.key.keysym.sym == SDLK_ESCAPE) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                if (chaoRollQueued && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE)) rollNext = true;
+                else if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE) {
+                    if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                    else nextStageRequested = true;
+                } else if (e.key.keysym.sym == SDLK_ESCAPE) { a.nextStage = cur; fromStageSelect = true; back = true; }
             } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
-                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_START) nextStageRequested = true;
-                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                const int button = e.cbutton.button;
+                if (chaoRollQueued && (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_START)) rollNext = true;
+                else if (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_START) {
+                    if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
+                    else nextStageRequested = true;
+                } else if (button == SDL_CONTROLLER_BUTTON_B) { a.nextStage = cur; fromStageSelect = true; back = true; }
             } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_RenderSetLogicalSize(a.ren, 640, 480);
                 float x, y;
                 ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
                 if (x >= 32 && x < 200 && y >= 382 && y < 446) {
-                    if (y < 414) nextStageRequested = true;
+                    if (y < 414) { if (chaoRollQueued) rollNext = true; else nextStageRequested = true; }
                     else { a.nextStage = cur; fromStageSelect = true; back = true; }
                 }
             }
@@ -4171,7 +4182,7 @@ struct ChallengeMode : Screen {
             }
         }
     }
-    const char* next() override { if (!back) return nullptr; back = false; return fromStageSelect ? "CHALLENGE_SELECT" : "MENU"; }
+    const char* next() override { if (rollNext) { rollNext = false; return "DC_STAFFROLL_CHAO"; } if (!back) return nullptr; back = false; return fromStageSelect ? "CHALLENGE_SELECT" : "MENU"; }
     void finishFailure(App& a) {
         a.playSfx(2);
         if (failureChoice == 0) begin(cur);
@@ -5532,7 +5543,8 @@ int main(int argc, char** argv) {
         else if (name == "HELP" && DcHelpMode::available(app)) mode = std::make_unique<DcHelpMode>();
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
         else if (name == "DC_EDIT" && app.dcEditor.tex) mode = std::make_unique<DcEditMode>();
-        else if (name == "DC_STAFFROLL" && app.dcStaffRoll.tex) mode = std::make_unique<DcStaffRollMode>(app);
+        else if ((name == "DC_STAFFROLL" || name == "DC_STAFFROLL_CHAO") && app.dcStaffRoll.tex)
+            mode = std::make_unique<DcStaffRollMode>(app, name == "DC_STAFFROLL_CHAO");
         else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
         else if (name == "OPTIONS" && app.dcLook && DcOptionsMode::available(app)) mode = std::make_unique<DcOptionsMode>();
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();

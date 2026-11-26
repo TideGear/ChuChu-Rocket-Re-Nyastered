@@ -415,6 +415,45 @@ int main(int argc, char** argv) {
         challenge.begin(24);
         check(challenge.battle && challenge.bgame.game.teamMode,
               "final Challenge battle also enables Team Battle lid pairing");
+        {
+            namespace fs = std::filesystem;
+            const bool oldDcLook = app.dcLook, oldTestRun = app.testRun;
+            const std::string oldSaveDir = app.saveDir;
+            const uint32_t oldChallengeMask = app.challengeMask;
+            const bool oldChallengeLoaded = app.challengeMaskLoaded;
+            SDL_Texture* oldStaffRoll = app.dcStaffRoll.tex;
+            SDL_Texture* oldChallengeResult = app.dcChallengeResult.tex;
+            const fs::path saveDir = fs::temp_directory_path() / "ccr_challenge_unlock_roll_test";
+            std::error_code ec;
+            fs::remove_all(saveDir, ec);
+            fs::create_directories(saveDir, ec);
+            ChallengeMode::Save seed{}; seed.mask = 0x00ffffff;
+            { FILE* f = fopen((saveDir.string() + "/challenge.bin").c_str(), "wb"); check(f != nullptr, "create final Challenge result save"); if (f) { fwrite(&seed, sizeof seed, 1, f); fclose(f); } }
+            app.saveDir = saveDir.string(); app.testRun = false; app.dcLook = true;
+            app.challengeMask = seed.mask; app.challengeMaskLoaded = true;
+            app.dcStaffRoll.tex = reinterpret_cast<SDL_Texture*>(1);
+            app.dcChallengeResult.tex = reinterpret_cast<SDL_Texture*>(1);
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.saveResult(app);
+            check(challenge.chaoRollQueued && app.challengeMask == 0x1ffffff,
+                  "newly completing all 25 Dreamcast Challenge stages queues the Chao unlock roll");
+            SDL_Event confirm{}; confirm.type = SDL_CONTROLLERBUTTONDOWN;
+            confirm.cbutton.button = SDL_CONTROLLER_BUTTON_START;
+            challenge.event(app, confirm);
+            check(std::string(challenge.next()) == "DC_STAFFROLL_CHAO",
+                  "final Challenge A/B/Start result input enters the Chao staff roll");
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.saveResult(app); // already complete: do not announce the unlock again
+            check(!challenge.chaoRollQueued,
+                  "replaying the completed final Challenge stage does not requeue the Chao roll");
+            DcStaffRollMode roll(app, true);
+            check(roll.lines == (std::vector<std::string>{"You can now select Chao", "in the Options Menu!"}),
+                  "Challenge staff roll displays the Chao unlock text");
+            app.dcLook = oldDcLook; app.testRun = oldTestRun; app.saveDir = oldSaveDir;
+            app.challengeMask = oldChallengeMask; app.challengeMaskLoaded = oldChallengeLoaded;
+            app.dcStaffRoll.tex = oldStaffRoll; app.dcChallengeResult.tex = oldChallengeResult;
+            fs::remove_all(saveDir, ec);
+        }
     }
     {
         BattleMode cpuBattle;
