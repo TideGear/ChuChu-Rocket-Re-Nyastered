@@ -128,6 +128,10 @@ The table at `0x8c0b373c` (pointer at `0x8c0190e8`) lists 23 modes (the setter `
 | 18-22 | 0x8c05cfba, 0x8c05d39a, 0x8c05d55a, 0x8c05dc80, 0x8c05df12 | unidentified | open |
 Modes 4, 16 (tutorial per the style variable) and 18-22 are still unidentified (no strings in their init code, none reached by the captures yet). Next: trigger them in Flycast (tutorial, options, help, credits, roulette, results, VMU screens), read `0x8c1af108` for each, then give every screen of every mode its own row. Method: `flyhost` with `FLY_WATCH=1af108:4:<frame>` logs the mode variable every frame while a key script walks the menus; screenshots beside the log name the screen.
 
+## Dreamcast per-mode code inventory (generated, 2026-11-25)
+
+`docs/inventory_dc_modes.md` (from `tools/oracle/mode_inventory.py`): every SE call (333), music call (20), task creation (108) and state swap (7) in 1ST_READ, attributed to the modes whose phase tables reach it statically. 174 functions with such calls are reached by no mode statically (handlers installed through RAM: menus, pause, entity states); each needs a mode from a run-time cross-check (task pool sampling, as done for Puzzle) before the per-mode sound and animation rows count as complete. Puzzle shows the gap: static reach finds cues 2/21/22/28, the run-time-crossed table below also has 0, 1, 6, 7. Open: name every reached task and cue, attribute the 174.
+
 ## Dreamcast Puzzle task inventory (from the code, 2026-11-25)
 
 Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c01f0a0` / `0x8c01f012` and the update swap `0x8c01f220` in 1ST_READ) crossed with the tasks live in the task pool (`0x8c1d9b30`, 88-byte slots, update at +64, draw at +68) of every Puzzle-mode RAM dump on hand (placing, running, pause, failure, clear, launch). The static scan is a lower bound: it misses callbacks passed through tables or registers (live update `0x8c01958e` is not found by it yet). Sound and music calls are not inventoried yet.
