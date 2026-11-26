@@ -1763,8 +1763,6 @@ struct TitleMode : Screen {
 struct DcStaffRollMode : Screen {
     int offset = 0, after = 0; bool leave = false, ended = false;
     std::vector<std::string> lines;   // the unlock lines (init 0x8c0509c0, printer 0x8c022600): the highest completed group's text, as the original tests groups 3, 2, 1, 0 in order
-    static int textDx() { static const int v = getenv("CCR_ROLL_TX") ? atoi(getenv("CCR_ROLL_TX")) : 0; return v; }
-    static int textDy() { static const int v = getenv("CCR_ROLL_TY") ? atoi(getenv("CCR_ROLL_TY")) : 0; return v; }
     explicit DcStaffRollMode(App& a) {
         auto done = [&](int g) { for (int k = 0; k < 25; ++k) if (!a.isCleared(g * 25 + k)) return false; return true; };
         if (done(3)) lines = {"You can now select Pians", "in the Options Menu!"};
@@ -1791,7 +1789,7 @@ struct DcStaffRollMode : Screen {
             if (y > 480.0f || y + 384.0f < 0.0f) continue;
             const SDL_FRect d{-0.01f, y, 384.0f, 384.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[i], &d); }   // x = fr13 = -1.01 (0x8c050f58) plus 1 px measured against Flycast (sprite routine 0x8c0e4268 not read)
         if (ended && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95)   // BIOS 12x24 font; origin measured from Flycast frame 5500 (the layout code is unread)
-            for (size_t l = 0; l < lines.size(); ++l) { int x = 101 + textDx(); const int y = 100 + textDy() + 24 * (int)l; for (unsigned char c : lines[l]) { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; } }
+            for (size_t l = 0; l < lines.size(); ++l) { int x = 100; const int y = 100 + 24 * (int)l; for (unsigned char c : lines[l]) { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; } }
         if (ended && sh.fr.size() > 22) { const SDL_FRect d{192.0f, 196.0f, 256.0f, 256.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[22], &d); }   // the "Thank you!" card: scale and origin measured from Flycast frame 5500 (its code is unread)
     }
 };
