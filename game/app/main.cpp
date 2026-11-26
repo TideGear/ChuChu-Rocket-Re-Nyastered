@@ -1774,7 +1774,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, fileScreen = 0, fileIndex = 0; std::array<DcRocketLid, kCols * kRows> lids{};
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, fileScreen = 0, fileIndex = 0, emptyFileAction = 1; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1837,7 +1837,8 @@ struct DcEditMode : Screen {
         for (const auto& path : paths) { FILE* f = fopen(path.c_str(), "rb"); if (!f) continue; std::vector<uint8_t> bytes; uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n); fclose(f); std::vector<VmsPuzzle> pack; if (vms::readPack(bytes, pack) > 0) for (size_t slot = 0; slot < pack.size(); ++slot) { puzzlePaths.push_back(path); puzzleSlots.push_back((int)slot); savedPuzzles.push_back(pack[slot]); } }
         fileIndex = savedPuzzles.empty() ? 0 : std::min(fileIndex, (int)savedPuzzles.size() - 1);
     }
-    void openFiles(int action) { refreshPuzzleFiles(); fileConfirm = false; fileScreen = savedPuzzles.empty() ? 4 : action; if (gApp && savedPuzzles.empty()) gApp->playSfx(0); }   // no-data screen cue 0 (Flycast file-screen capture)
+    void openFiles(int action) { refreshPuzzleFiles(); fileConfirm = false; emptyFileAction = action; fileScreen = savedPuzzles.empty() ? 4 : action; if (gApp && savedPuzzles.empty()) gApp->playSfx(0); }   // no-data screen cue 0 (Flycast file-screen capture)
+    const char* noDataPrompt() const { return emptyFileAction == 2 ? "Select a file to delete." : "Select a file to load."; }
     void applyPuzzle(const VmsPuzzle& p) {
         memset(&st, 0, sizeof st); memcpy(st.tiles, p.tiles, sizeof st.tiles); arrows.clear();
         for (int r = 0; r < 10; ++r) for (int c = 0; c < kCols; ++c) st.hw[r * kCols + c] = p.walls[25 * r + c];
@@ -1930,7 +1931,7 @@ struct DcEditMode : Screen {
                         if (const uint8_t* glyph = font57mixed(*c)) for (int row = 0; row < 7; ++row) for (int col = 0; col < 5; ++col) if (glyph[row] >> (4 - col) & 1) { SDL_Rect d{x + col * 2, y + row * 3, 2, 3}; SDL_RenderFillRect(a.ren, &d); }
                 }
             };
-            text("Select a file to load.", 188, 50);
+            text(noDataPrompt(), 188, 50);
             text("No puzzle data!", 228, 202);
             SDL_SetTextureColorMod(files.tex, 203, 203, 203);
             const SDL_Rect badge{444, 321, 76, 32};

@@ -46,10 +46,12 @@ int main(int argc, char** argv) {
         app.saveDir = dir.string();
         DcEditMode emptyEditor;
         emptyEditor.openFiles(1);
-        const bool emptyLoad = emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty();
+        const bool emptyLoad = emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty() &&
+            std::string(emptyEditor.noDataPrompt()) == "Select a file to load.";
         emptyEditor.openFiles(2);
-        check(emptyLoad && emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty(),
-              "Dreamcast Puzzle Edit shows no-data state for empty Load and Delete screens");
+        check(emptyLoad && emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty() &&
+              std::string(emptyEditor.noDataPrompt()) == "Select a file to delete.",
+              "Dreamcast Puzzle Edit shows the matching no-data prompt for empty Load and Delete screens");
         VmsPuzzle first, second, third;
         first.title = "FIRST"; second.title = "SECOND"; third.title = "THIRD";
         auto writePack = [&](const fs::path& path, const std::vector<VmsPuzzle>& puzzles) {
