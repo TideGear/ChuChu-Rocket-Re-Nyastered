@@ -325,6 +325,34 @@ int main(int argc, char** argv) {
         puzzle.tick(app);
         check(puzzle.sim.now > afterControllerResume,
               "Puzzle simulation advances after controller resume");
+
+        const bool oldDcLook = app.dcLook;
+        SDL_Texture* oldStart = app.dcPuzzleStart.tex;
+        SDL_Texture* oldCancel = app.dcPuzzleCancel.tex;
+        app.dcLook = true;
+        app.dcPuzzleStart.tex = reinterpret_cast<SDL_Texture*>(1);
+        app.dcPuzzleCancel.tex = reinterpret_cast<SDL_Texture*>(1);
+        puzzle.state = 3;
+        puzzle.running = false;
+        puzzle.failureFrames = 1;
+        puzzle.paused = false;
+        puzzle.pauseState.resume();
+        puzzle.event(app, start);
+        check(puzzle.paused && puzzle.pauseState.freeze,
+              "Dreamcast Start pauses Puzzle during the failure hold");
+        const int failureFrame = puzzle.sim.now;
+        puzzle.tick(app);
+        check(puzzle.sim.now == failureFrame,
+              "failed Puzzle simulation remains frozen while paused");
+        puzzle.event(app, start);
+        check(!puzzle.paused && !puzzle.pauseState.freeze,
+              "Dreamcast Start resumes Puzzle during the failure hold");
+        puzzle.tick(app);
+        check(puzzle.sim.now > failureFrame,
+              "failed Puzzle effects advance again after resume");
+        app.dcLook = oldDcLook;
+        app.dcPuzzleStart.tex = oldStart;
+        app.dcPuzzleCancel.tex = oldCancel;
     }
     {
         ChallengeMode challenge;

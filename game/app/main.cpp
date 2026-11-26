@@ -3672,7 +3672,7 @@ struct PuzzleMode : Screen {
             if (phone ? handset(33, 148, 204, 215) : in(128, 313, 403, 413)) { if (!pconf) { pconf = true; a.playSfx(0); } else { a.playSfx(2); paused = false; pconf = false; pauseState.resume(); } }
             if (phone ? handset(265, 148, 440, 215) : in(590, 314, 881, 414)) { if (!pconf) { a.playSfx(2); paused = false; back = true; } else { pconf = false; a.playSfx(0); } }
             return true; }
-        if (state == 3) return true;   // PuzzleLoop disables pause and ignores HUD input during the failure phase.
+        if (state == 3) return true;   // Failure ignores HUD actions; controller Start pause is handled by the event path.
         if (phone ? handset(0, 295, 60, 320) : ipadPauseAvailable(a) && in(10, 669, 173, 711)) {
             paused = true;
             pauseState.freeze = true;
