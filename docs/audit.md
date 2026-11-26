@@ -166,6 +166,13 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 
 Mouse arrival: Flycast's audio (local/arrsnd, local/arr2) has a burst at every arrival; emulating the entering-rocket state `0x8c0195d4` from local/arr2/a00221.ram (that mouse's task is gone at 222, the burst starts at 223) shows it calls a second SE entry, `0x8c0120d4`, with cue 6 at `0x8c019678` (its only caller; bank select `0x8c012024`). The port's cue 6 is right. Inventory scans must include `0x8c0120d4` as well as `0x8c01203a`.
 
+## Dreamcast task inventory, whole game (2026-11-25)
+
+`tools/oracle/task_inventory.py --call 0x8c01f012 0x8c01f220` finds 80 distinct task update callbacks (creators `0x8c01f0a0` / `0x8c01f012`, update swap `0x8c01f220`, `jsr` and `bsr`); the task pools of every RAM dump under local/ hold 53 of them live (list: local/live_tasks.txt, regenerate with the same scan). This is the whole-game animation list the hand-made coverage table above does not reach. Every task here needs a name and a port status, as the Puzzle table below has.
+
+- Never seen live in any capture (31; each is unexercised by our captures, so its screen or event is untested): `0x8c010380`, `0x8c0126a0`, `0x8c013410`, `0x8c01368a`, `0x8c014156`, `0x8c01952e`, `0x8c019688`, `0x8c01a9b6`, `0x8c01ac72`, `0x8c01ad4c`, `0x8c01d280`, `0x8c01da90`, `0x8c01e53e`, `0x8c01f7e8`, `0x8c0223da`, `0x8c0223e8`, `0x8c027620`, `0x8c02c9e0`, `0x8c050dc0`, `0x8c0510ec`, `0x8c051200`, `0x8c051580`, `0x8c051a60`, `0x8c0541b6`, `0x8c05455c`, `0x8c056ee0`, `0x8c057c3a`, `0x8c057f5e`, `0x8c059420`, `0x8c05cc80`, `0x8c05dde0`.
+- Live but not found by the scan (4; created through a table or register the scan does not follow): `0x8c01958e`, `0x8c01cd60`, `0x8c01d046`, `0x8c01d172`.
+
 ## Dreamcast disc file manifest (2026-11-25)
 
 `tools/oracle/disc_manifest.py` lists all 1,305 disc files and marks those whose name appears in tools/ or game/. Referenced by name: root 2/4, DPETC 4/8, DPFONT 0/9, DPSS 2/68, DPTEX 0/23, DPWWW 4/91 (the DP* folders are the Dream Passport browser used by Network and Homepage), and 74 of about 220 in each language folder. A name match is a first pass (pattern- or index-loaded files show as unreferenced), but it points at content the audit has no row for. Unreferenced ENGLISH groups worth a row each, until the loading code says otherwise:
