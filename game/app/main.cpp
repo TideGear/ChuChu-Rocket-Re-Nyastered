@@ -311,9 +311,11 @@ struct App {
         return dcCharacterChoices(dcCostumeUnlocked(1), dcCostumeUnlocked(2));
     }
     int maxStage() { if (settings.unlockAll) return 3; loadProgress(); for (int i = 0; i < 3; i++) if ((clr[i] & 0x1ffffff) != 0x1ffffff) return i; return 3; }   // VMU::getPuzzleMaxStage 0x372b4
+    bool testRun = false;   // headless captures and tests: progress changes stay in memory, so a test never writes save data into the asset cache it runs from
     bool setCleared(int s) {
         loadProgress(); if (s < 0 || s >= 100) return false;
         clr[s / 25] |= 1u << (s % 25);
+        if (testRun) return true;
         FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb");
         if (!f) return false;
         const bool wrote = fwrite(clr, 4, 4, f) == 4 && fwrite(&tutDone, 4, 1, f) == 1;
@@ -323,6 +325,7 @@ struct App {
     bool isTutorialCleared() { loadProgress(); return tutDone != 0 || settings.unlockAll || getenv("CCR_CLEAR_ALL"); }   // The gate on Puzzle / Challenge / Battle (MenuScreen::handleInput 0xf584); Options > unlock-all bypasses it
     bool setTutorialCleared() {   // VMU::setTutorialCleared 0x3701c
         loadProgress(); tutDone = 1;
+        if (testRun) return true;
         FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb"); if (!f) return false;
         const bool wrote = fwrite(clr, 4, 4, f) == 4 && fwrite(&tutDone, 4, 1, f) == 1;
         return fclose(f) == 0 && wrote; }
@@ -845,7 +848,7 @@ struct App {
         retDir = ret; if (const char* e = getenv("CCR_LANG")) for (int i = 0; i < 6; i++) if (!strcmp(e, langDir(i))) lang = i;
         if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; unsigned char v[2]; if (fread(v, 1, 2, f) == 2) { musicVol = v[0]; sfxVol = v[1]; } fclose(f); }
         if (!langAvailable(lang)) lang = 0; applyLocale(); }
-    void saveOptions() { if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "wb")) { unsigned char c[3] = {(unsigned char)lang, (unsigned char)std::max(0, std::min(255, musicVol)), (unsigned char)std::max(0, std::min(255, sfxVol))}; fwrite(c, 1, 3, f); fclose(f); } }
+    void saveOptions() { if (testRun) return; if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "wb")) { unsigned char c[3] = {(unsigned char)lang, (unsigned char)std::max(0, std::min(255, musicVol)), (unsigned char)std::max(0, std::min(255, sfxVol))}; fwrite(c, 1, 3, f); fclose(f); } }
     void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); saveOptions(); }
     void applyLocale() {
         dropImages();
@@ -1728,8 +1731,9 @@ struct TitleMode : Screen {
         double ang = (angle + (state == 0xC ? alpha : 0.0)); const double rad = 0.0174533; Sheet& rk = pad ? a.procket : a.trocket; const SDL_Rect& rf = rk.fr[0];
         SDL_Rect rd{(int)std::lround(ocx + std::cos(ang * rad) * orad - rf.w / 2.0), (int)std::lround(ocy + std::sin(ang * rad) * orad - rf.h / 2.0), rf.w, rf.h};
         SDL_RenderCopyEx(a.ren, rk.tex, &rf, &rd, ang + 180.0, nullptr, SDL_FLIP_NONE);
-        if (a.dlogoOk) { int lw = pad ? 337 : 190, lx = pad ? 208 : 8, ly = pad ? 208 : 24; SDL_Rect ld{lx, ly, lw, lw * a.dlogo.h / a.dlogo.w}; SDL_RenderCopy(a.ren, a.dlogo.tex, nullptr, &ld); }   // best source: the Dreamcast logo
-        else if (pad) {
+        // The mobile title shows the mobile logo and prompt only: the Dreamcast logo and "PRESS START BUTTON!" belong to the Dreamcast look (look separation 2026-11-24;
+        // tools/look_leak.py --look mobile: with the disc installed they changed this screen by 30,786 px).
+        if (pad) {
             if (const Sheet* logo = a.imgSheet(7)) {
                 const SDL_Rect& frame = logo->fr[0];
                 SDL_Rect dst{208, 208, frame.w, frame.h};
@@ -1740,7 +1744,7 @@ struct TitleMode : Screen {
 #if defined(__ANDROID__)
             const bool dcPrompt = false;   // phones keep "TAP THE SCREEN!"
 #else
-            const bool dcPrompt = a.dpressOk;   // keyboard/pad platforms: the Dreamcast prompt "PRESS START BUTTON!" (ENGLISH/PRESSSTART), centred on the phone prompt's place
+            const bool dcPrompt = false;   // the mobile look keeps the mobile prompt (see the logo above)
 #endif
             if (dcPrompt) { SDL_Rect pd{px + pf.w / 2 - a.dpress.w / 2, py + pf.h / 2 - a.dpress.h / 2, a.dpress.w, a.dpress.h}; SDL_RenderCopy(a.ren, a.dpress.tex, nullptr, &pd); }
             else { SDL_Rect pd{px, py, pf.w, pf.h}; SDL_RenderCopy(a.ren, pr.tex, &pf, &pd); } }
@@ -2757,6 +2761,7 @@ struct DcOptionsMode : Screen {
     }
     bool deleteChallengeRecords(App& a) {
         const uint32_t empty[26] = {}; // challenge.bin: cleared-stage mask and 25 best times
+        if (a.testRun) { a.challengeMask = 0; a.challengeMaskLoaded = true; return true; }
         FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb");
         if (!f) return false;
         const bool wrote = fwrite(empty, sizeof empty, 1, f) == 1;
@@ -3765,7 +3770,8 @@ struct ChallengeMode : Screen {
     void saveResult(App& a) { logResult(a);   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
         Save s = loadSave(a.saveDir); previousTotal = 0; for (uint32_t seconds : s.best) previousTotal += seconds; const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur]; resultTotal = 0; for (uint32_t seconds : s.best) resultTotal += seconds;
-        if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
+        if (a.testRun) { a.challengeMask = s.mask; a.challengeMaskLoaded = true; }   // test runs keep it in memory (App::testRun)
+        else if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
@@ -5135,7 +5141,7 @@ int main(int argc, char** argv) {
     {   // data folder, readable settings and the rotating log (core/userdata.hpp)
         char* bp2 = SDL_GetBasePath(); const std::string programDir = bp2 ? bp2 : "."; if (bp2) SDL_free(bp2);
         const bool quiet = (getenv("CCR_SHOT") || getenv("CCR_HEADLESS") || getenv("CCR_BENCH")) && !getenv("CCR_USERDATA_TEST");   // test runs never create settings or logs (CCR_USERDATA_TEST=1 exercises them headlessly)
-        app.saveDir = quiet ? root : resolveDataDir(programDir, root, portableFlag);
+        app.saveDir = quiet ? root : resolveDataDir(programDir, root, portableFlag); app.testRun = quiet;
         if (const char* cs = getenv("CCR_CHARACTER_STYLE")) { app.settings.characterStyle = atoi(cs); app.settings.unlockAll = true; }   // headless comparison: force the Chao (1) or Pian (2) costume
         if (!quiet) {
             const Settings st = loadOrCreateSettings(app.saveDir); app.settings = st;
