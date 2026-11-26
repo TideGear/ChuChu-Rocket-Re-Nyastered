@@ -1763,7 +1763,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1830,11 +1830,13 @@ struct DcEditMode : Screen {
         else if (tool == 2) {
             uint8_t& w = button == 0 ? st.hw[(cy + 1) * kCols + cx] : button == 1 ? st.vw[cy * 13 + cx + 1] : button == 2 ? st.vw[cy * 13 + cx] : st.hw[cy * kCols + cx];
             w ^= 1; }
+        if (gApp && !scripting) { static const int cueOf[8] = {-1, -1, 1, 6, 27, 1, 11, 11}; if (cueOf[tool] >= 0) gApp->playSfx(cueOf[tool]); }   // one SE per accepted edit: Walls 1, Mice 6, Cats 27, Solution 1, Rockets / Holes 11 (Flycast SE ring local/modecap/snd, sequence field per action)
         sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear();
     }
     void runScript() {   // headless: CCR_EDIT_SCRIPT="tool,x,y,A|B|X|Y;..."
         if (scripted) return; scripted = true;
         const char* c = getenv("CCR_EDIT_SCRIPT"); if (!c) return;
+        scripting = true; struct Done { bool& f; ~Done() { f = false; } } done{scripting};
         std::string str = c; size_t i = 0;
         while (i < str.size()) { size_t j = str.find(';', i); if (j == std::string::npos) j = str.size(); int tl = 0, x = 0, y = 0; char b = 'A';
             if (sscanf(str.substr(i, j - i).c_str(), "%d,%d,%d,%c", &tl, &x, &y, &b) == 4) { tool = tl & 7; cx = x; cy = y; edit(b == 'A' ? 0 : b == 'B' ? 1 : b == 'X' ? 2 : 3); } i = j + 1; }
