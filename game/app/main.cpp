@@ -1422,7 +1422,7 @@ struct App {
         // Exact transform, light and scale read from the real PowerVR vertices (docs/dreamcast_models.md, 2026-11-17): scale 1.0 model unit per world unit, yaw -angle, tilt -45 about X,
         // translate z 3.0 (mouse) or 2.5 (cat), perspective 218 / (218 - height). The cat's phase rule is still provisional (the original blends two head morph frames by the fractional phase).
         const float turn = (float)(ang & 0xffff) * (360.0f / 65536.0f);
-        static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.6f, -0.35f};   // cat: fitted to the Flycast Hard 05 cat (2026-11-25 grid, cat crop 2.59 -> 2.33)
+        static const float mouseLight[3] = {0.00913053f, 0.79143601f, 0.11638579f}, catLight[3] = {0.0f, 0.5f, -0.25f};   // cat parts use the shared Dreamcast light; the cat strip intensities in local/hd5/p_02390.state confirm 0.3 + max(0, 0.5*ny - 0.25*nz)
         float phase = 0.0f; int frame = -1;
         if (!en.mouse) { phase = (i < cphase.size() ? std::max(0.0f, cphase[i]) : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
         else if (en.type == 1) frame = mouseFrame & 7;
