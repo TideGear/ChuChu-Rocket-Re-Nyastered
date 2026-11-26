@@ -1851,6 +1851,7 @@ struct DcEditMode : Screen {
         runScript();
         if (getenv("CCR_EDIT_DIALOG")) dialog = true;   // headless: show the Create dialog
         a.board(st, 2, 2, field);
+        { static const float cp = getenv("CCR_EDIT_CATPHASE") ? (float)atof(getenv("CCR_EDIT_CATPHASE")) : -1.0f; if (cp >= 0.0f) { a.cphase.assign(sim.ents.size(), cp); } else if (!playing && endAge < 0) { a.cphase.assign(sim.ents.size(), 0.0f); } }   // the editor's cats stand still
         for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);   // solution arrows (Puzzle draws them before the objects)
         a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, endAge >= 0 ? &lids : nullptr, endAge >= 0 ? endAge : -1, nullptr, 1.0f);   // rocket domes from the edited stage; the launch after a clear
         if (!playing && !dialog && a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
