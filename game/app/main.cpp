@@ -1763,12 +1763,22 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false, saved = false, ff = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
     int music() override { return -1; }
-    void event(App&, const SDL_Event& e) override {
+    void event(App& a, const SDL_Event& e) override {
+        const bool start = (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_p) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START);
+        if (paused) {   // the Puzzle pause overlay (RESUME / QUIT; Left / Right move, A confirms, Start resumes), Flycast local/modecap/pe frames 2500 / 2560
+            const bool l = (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_LEFT) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+            const bool r = (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_RIGHT) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+            const bool ok = (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_z)) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_A);
+            if (l || r) { pauseQuit = r; a.playSfx(0); }
+            else if (start) { paused = false; pauseQuit = false; a.playSfx(2); }
+            else if (ok) { a.playSfx(2); if (pauseQuit) leave = true; else paused = false; pauseQuit = false; }
+            return; }
+        if (start) { paused = true; a.playSfx(4); return; }
         if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true;
         else if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_c) ff = false;
         else if (e.type == SDL_CONTROLLERBUTTONUP && e.cbutton.button == SDL_CONTROLLER_BUTTON_X) ff = false;
@@ -1786,7 +1796,7 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
-    void tick(App& a) override { runScript(); ++ticks; if (const char* f = getenv("CCR_EDIT_FF")) ff = ticks >= atoi(f);   // headless: F.F. held from this tick
+    void tick(App& a) override { runScript(); ++ticks; if (getenv("CCR_EDIT_PAUSE")) paused = true; if (paused) return; if (const char* f = getenv("CCR_EDIT_FF")) ff = ticks >= atoi(f);   // headless: F.F. held from this tick
         for (int pass = 0; pass < (ff && playing ? 2 : 1); ++pass) tickPass(a); }
     void tickPass(App& a) { if (playing && endAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
             int alive = 0, mice = 0; for (auto& e : sim.ents) if (e.mouse) { ++mice; if (e.alive && !e.done) ++alive; }
@@ -1854,6 +1864,12 @@ struct DcEditMode : Screen {
         quad(strip, 0.0f, 0.6211f, 0.9883f, 0.8711f, 372.5f, 401.5f, 631.9f, 466.5f);    // X Load / Y Save, X F.F., X / Y Facing, (empty)
         SDL_SetTextureColorMod(sh.tex, 255, 255, 255);
         if (saved && sh.fr.size() > 6) { SDL_SetTextureColorMod(sh.tex, 203, 203, 203); const SDL_Rect src{sh.fr[6].x, sh.fr[6].y, 64, 64}; const SDL_FRect d{32.8f, 404.8f, 76.8f, 76.8f}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); SDL_SetTextureColorMod(sh.tex, 255, 255, 255); }   // 'Save OK' from the first clear on (Flycast play2: scale 1.2 fitted, mean 8.3)
+        if (paused) {   // the current tool's row is boxed in red (255, 16, 16), 2 px, x 35..106, y 181 + 30 per tool (two points: File, Play), about 30 px high; solid in both paused Flycast frames, blinking otherwise (phase not read, not drawn)
+            const int y0 = 181 + 30 * tool;   // two measured boxes only: File rows 181..210, Play rows 211..239 (the pitch of the rest is extrapolated)
+            SDL_SetRenderDrawColor(a.ren, 255, 16, 16, 255);
+            const SDL_Rect top{35, y0, 72, 2}, bot{35, y0 + 27, 72, 2}, lef{35, y0, 2, 30}, rig{105, y0, 2, 30};
+            SDL_RenderFillRect(a.ren, &top); SDL_RenderFillRect(a.ren, &bot); SDL_RenderFillRect(a.ren, &lef); SDL_RenderFillRect(a.ren, &rig); }
+        if (paused && a.dcPause.tex) { SDL_RenderSetLogicalSize(a.ren, GW, GH); a.drawDcPause(1.1f, -1.0f, pauseQuit);   /* Puzzle draws it at 0; the editor frames fit 1.1 (scan, overlay error 7.2: edge-level, x offset 0 best) */ SDL_RenderSetLogicalSize(a.ren, 640, 480); }   // over the whole screen, after the dialog's place
         if (dialog) {   // measured from Flycast local/modecap/ed3/m__03250.bmp: white quad (stream) x 154..498, y 160..256; BIOS text in (22, 22, 132), centred on x 326; the gold box fitted at (345, 281) 154 x 84 with the 0.8 HUD intensity (mean error 4.9)
             SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); const SDL_Rect box{154, 160, 344, 96}; SDL_RenderFillRect(a.ren, &box);
             if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95) {
