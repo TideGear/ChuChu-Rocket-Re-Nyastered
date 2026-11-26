@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 567; i++) { unsigned v; sscanf(s, "%2x", &v); e.field[i + 1] = (uint8_t)v; s += 2; }
         s = strchr(s, '|') + 1; int cnt = 0, u; sscanf(s, "%d%n", &cnt, &u); s += u; int q[12]; for (int i = 0; i < 12; i++) { sscanf(s, "%d%n", &q[i], &u); s += u; }
         for (int k = 0; k < 4; k++) { e.curx[k] = 2; e.cury[k] = 2; } e.curx[p] = (uint8_t)px; e.cury[p] = (uint8_t)py; e.flags[p] = (uint8_t)fl; e.phase = (uint8_t)ph;
-        s = strchr(s, '|') + 1; unsigned r0 = 0, l0 = 0, l1 = 0; int a[4] = {0, 0, 0, 0}; sscanf(s, "%u %u %u %d %d %d %d", &r0, &l0, &l1, &a[0], &a[1], &a[2], &a[3]); e.lcg = l0;
+        { char* bar = strchr(s, '|'); s = bar ? bar + 1 : s + strlen(s); }   /* the neighbour cases (gba_nbr.txt) end after the queue: no trailing field */ unsigned r0 = 0, l0 = 0, l1 = 0; int a[4] = {0, 0, 0, 0}; sscanf(s, "%u %u %u %d %d %d %d", &r0, &l0, &l1, &a[0], &a[1], &a[2], &a[3]); e.lcg = l0;
         unsigned initH8 = 0, initHC = 0; std::vector<unsigned> recOut, rankIn, seedOut, misc, objv, taskOut, taskIn, tabs, sIn, aIn, bIn, scn;
         int ret = -1; unsigned rb[4] = {0, 0, 0, 0}, rec2 = 0, rs8 = 0, rsc = 0;
         { std::vector<std::string> fld; { std::string cur; for (char* c = s; *c; c++) { if (*c == '|') { fld.push_back(cur); cur.clear(); } else cur += *c; } fld.push_back(cur); }

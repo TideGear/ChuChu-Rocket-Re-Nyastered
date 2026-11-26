@@ -56,7 +56,7 @@ Other open (outside the milestone): Challenge dim-bracket crop 7.46 (pointer edg
 
 Capture recipes (flyhost): Puzzle `START@1350-1360;START@1510-1520;DOWN@1800-1804;DOWN@1840-1844;DOWN@1880-1884;START@1950-1960;START@2120-2130`; Challenge drops one DOWN and adds `START@2300-2310`; Battle `START@1350/1510/1800/2400/2550`. Keys: X places the north arrow, R2 = R trigger. RAM pokes: style 0x1ae8d0, Puzzle masks 0x22d8a4.., golden 0x1ae8f8. Language: resume `local/star-trace/opt/o03050.state`.
 
-Tests: `py tools/run_tests.py` runs every `build/game/*_test.exe` from game/ with the arguments they need and reports real exit codes (29 of 30 pass on 2026-11-25; `cpu_gba_test` segfaults on its default `gba_nbr.txt` cases with the 2026-11-24 binary: open). Running the exes bare from the repo root fails on paths and usage, which is not a test failure.
+Tests: `py tools/run_tests.py` runs every `build/game/*_test.exe` from game/ with the arguments they need and reports real exit codes (30 of 30 pass on 2026-11-25; `cpu_gba_test` crashed on a missing trailing field in the older `gba_nbr.txt` format, now guarded). Running the exes bare from the repo root fails on paths and usage, which is not a test failure.
 
 Look separation: `py tools/look_leak.py <exe> <one-platform cache> local/e2e-20261124/cfg-both/assets <out> --look dreamcast|mobile` must report 0 differing cases after UI changes.
 
