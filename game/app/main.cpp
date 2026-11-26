@@ -1761,11 +1761,17 @@ struct TitleMode : Screen {
 // 864-px window; the task retires at offset 8928 (22 x 384 + 480) and sets the done state 0x8c2415ec. Partial: the rising rockets (0x8c0510ec), the end card
 // (chu_end), the end cues 6, 6, 6, 8 (0x8c050bd0) and the exit timing after the roll are not ported; not yet compared with Flycast (local/modecap/m17p).
 struct DcStaffRollMode : Screen {
-    int offset = 0; bool leave = false;
+    int offset = 0, after = 0; bool leave = false, ended = false;
     int music() override { return -1; }
-    void event(App&, const SDL_Event&) override {}
-    void tick(App&) override { if (offset < 8928) offset += 2; else leave = true; }
-    const char* next() override { if (!leave) return nullptr; leave = false; return "STAGES"; }
+    void event(App&, const SDL_Event& e) override {   // 0x8c050c70: any of A / B / C / X / Y (pad pressed mask 0x60e) leaves, whether or not the roll has finished
+        if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) leave = true;
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_X || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y)) leave = true; }
+    void tick(App& a) override {
+        if (offset < 8928) { offset += 2; return; }
+        if (!ended) { ended = true; a.playSfx(6); a.playSfx(6); a.playSfx(6); a.playSfx(8); }   // 0x8c050bd0: cues 6, 6, 6, 8 on the first pass after the strips retire
+        if (++after >= 3600) leave = true;   // 0x8c050c96: 0xe10 passes
+    }
+    const char* next() override { if (!leave) return nullptr; leave = false; return "DC_TITLE"; }   // setter 0x8c019088(2) = the title
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
@@ -1774,6 +1780,7 @@ struct DcStaffRollMode : Screen {
             const float y = 384.0f * i - (float)offset + 480.0f;
             if (y > 480.0f || y + 384.0f < 0.0f) continue;
             const SDL_FRect d{-0.01f, y, 384.0f, 384.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[i], &d); }   // x = fr13 = -1.01 (0x8c050f58) plus 1 px measured against Flycast (sprite routine 0x8c0e4268 not read)
+        if (ended && sh.fr.size() > 22) { const SDL_FRect d{192.0f, 196.0f, 256.0f, 256.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[22], &d); }   // the "Thank you!" card: scale and origin measured from Flycast frame 5500 (its code is unread)
     }
 };
 
