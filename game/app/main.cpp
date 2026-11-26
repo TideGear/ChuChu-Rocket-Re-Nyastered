@@ -381,7 +381,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFrame73, hdButton, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcEditor, dcStaffRoll, dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
+    Sheet dcEditor, dcEditorFiles, dcStaffRoll, dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -411,7 +411,7 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
-    static constexpr int kDcAssetsVersion = 10;   // tools/extract_all.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets, 6 the Puzzle focus ring model, 7 the Puzzle background sky model
+    static constexpr int kDcAssetsVersion = 11;   // tools/extract_all.py writes dc_assets_version.txt; 11 adds dc_editor_files for the original empty VMU screen
     bool dcAssetsStale = false;
     // Dreamcast-look sheets; a language's folder dc_loc_<xx> (tools/extract_all.py exports one per disc language folder) replaces the English set.
     std::string dcRoot;   // the main ret_all: BIOS font sheets and per-language stage titles are only there
@@ -432,6 +432,7 @@ struct App {
         freeSheet(dcHelpPages); loadSheet(dir + "dc_help_pages", dcHelpPages);
         freeSheet(dcStaffRoll); loadSheet(dir + "dc_staffroll", dcStaffRoll);
         freeSheet(dcEditor); loadSheet(dir + "dc_editor", dcEditor);
+        freeSheet(dcEditorFiles); loadSheet(dir + "dc_editor_files", dcEditorFiles);
         freeSheet(dcOptions); loadSheet(dir + "dc_options", dcOptions);
         freeSheet(dcSelectClock); loadSheet(dcRoot + "dc_select_clock", dcSelectClock);
         freeSheet(dcBiosAnsi); loadSheet(dcRoot + "dc_bios_ansi", dcBiosAnsi);
@@ -1911,7 +1912,40 @@ struct DcEditMode : Screen {
         while (i < str.size()) { size_t j = str.find(';', i); if (j == std::string::npos) j = str.size(); int tl = 0, x = 0, y = 0; char b = 'A';
             if (sscanf(str.substr(i, j - i).c_str(), "%d,%d,%d,%c", &tl, &x, &y, &b) == 4) { tool = tl & 7; cx = x; cy = y; edit(b == 'A' ? 0 : b == 'B' ? 1 : b == 'X' ? 2 : 3); } i = j + 1; }
     }
+    void drawNoPuzzleData(App& a) {
+        const Sheet& files = a.dcEditorFiles;
+        if (files.tex && files.fr.size() >= 2) {
+            SDL_RenderCopy(a.ren, files.tex, &files.fr[0], nullptr);
+            auto text = [&](const char* value, int x, int y) {
+                const bool hasFont = a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95 &&
+                    ((a.dcBiosAnsi.w == 1140 && a.dcBiosAnsi.h == 24) || (a.dcBiosAnsi.w == 2280 && a.dcBiosAnsi.h == 48));
+                if (hasFont) {
+                    SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 0, 0, 0);
+                    for (const unsigned char* c = (const unsigned char*)value; *c; ++c, x += 12)
+                        if (*c > 0x20 && *c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[*c - 0x20], &d); }
+                    SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
+                } else {
+                    SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255);
+                    for (const unsigned char* c = (const unsigned char*)value; *c; ++c, x += 12)
+                        if (const uint8_t* glyph = font57mixed(*c)) for (int row = 0; row < 7; ++row) for (int col = 0; col < 5; ++col) if (glyph[row] >> (4 - col) & 1) { SDL_Rect d{x + col * 2, y + row * 3, 2, 3}; SDL_RenderFillRect(a.ren, &d); }
+                }
+            };
+            text("Select a file to load.", 188, 50);
+            text("No puzzle data!", 228, 202);
+            SDL_SetTextureColorMod(files.tex, 203, 203, 203);
+            const SDL_Rect badge{444, 321, 76, 32};
+            SDL_RenderCopy(a.ren, files.tex, &files.fr[1], &badge);
+            SDL_SetTextureColorMod(files.tex, 255, 255, 255);
+            return;
+        }
+        SDL_SetRenderDrawColor(a.ren, 30, 34, 48, 255); SDL_RenderClear(a.ren);
+        auto centered = [&](const std::string& s, int y, int h, int gray) { a.text(s, (640 - a.textWidth(s, h)) / 2, y, h, gray); };
+        centered("Select a file to load.", 118, 24, 255);
+        centered("No puzzle data!", 202, 24, 255);
+        centered("ENTER / A: OK", 350, 18, 190);
+    }
     void drawFileOverlay(App& a) {
+        if (fileScreen == 4) { drawNoPuzzleData(a); return; }
         SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 210); SDL_Rect shade{0, 0, 640, 480}; SDL_RenderFillRect(a.ren, &shade);
         SDL_SetRenderDrawColor(a.ren, 30, 34, 48, 255); SDL_Rect panel{90, 52, 460, 376}; SDL_RenderFillRect(a.ren, &panel);
         SDL_SetRenderDrawColor(a.ren, 238, 202, 72, 255); SDL_Rect edge{90, 52, 460, 4}; SDL_RenderFillRect(a.ren, &edge); SDL_SetRenderDrawColor(a.ren, 225, 225, 230, 255); SDL_Rect outline{90, 52, 460, 376}; SDL_RenderDrawRect(a.ren, &outline);

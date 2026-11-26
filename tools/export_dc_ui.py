@@ -402,6 +402,34 @@ def export_dc_staffroll(prs_png, out):
     with open(os.path.join(out, 'dc_staffroll.tex.bin'), 'wb') as f:
         f.write(struct.pack('<2I', atlas.width, atlas.height)); f.write(atlas.tobytes())
 
+def export_dc_editor_files(prs_png, out):
+    """Puzzle Edit's empty VMU file screen: the four-row netbackgray background, the split Enter badge, and its original layout."""
+    names = [f'EDITOR2_netbackgray{i}.png' for i in range(8)]
+    paths = [os.path.join(prs_png, name) for name in names]
+    info = os.path.join(prs_png, 'EDITOR1_pzinfo06k.png')
+    if not all(os.path.isfile(path) for path in paths) or not os.path.isfile(info):
+        return
+    background = Image.new('RGBA', (640, 480))
+    y = 0
+    for row in range(4):
+        left = Image.open(paths[row * 2]).convert('RGBA')
+        right = Image.open(paths[row * 2 + 1]).convert('RGBA')
+        if left.height != right.height or left.width + right.width != 640 or y + left.height > 480:
+            return
+        background.alpha_composite(left, (0, y))
+        background.alpha_composite(right, (left.width, y))
+        y += left.height
+    if y != 480:
+        return
+    # The 64x64 texture is transposed and stores the 64x32 label above a
+    # 20x32 tail; the tail continues at x=56 in the screen-space badge.
+    badge_src = Image.open(info).convert('RGBA').transpose(Image.Transpose.TRANSPOSE)
+    badge = Image.new('RGBA', (76, 32))
+    badge.alpha_composite(badge_src.crop((0, 0, 64, 32)), (0, 0))
+    badge.alpha_composite(badge_src.crop((0, 32, 20, 64)), (56, 0))
+    export_atlas(out, 'dc_editor_files', [background, badge])
+
+
 def export_dc_editor(prs_png, out):
     """Puzzle Edit HUD sheets (mode 8), transposed upright like the staff roll strips (the stream's UVs then index them directly): frames 0-4 = EDITOR1_pzedit01a
     (Create / Delete over Load / Save), 01b (Play / Stop over F.F.), 01d (Facing strips), 01e (Set / Delete) and 02 (left panel: Start Exit, L R Functions, tool list),
@@ -555,6 +583,7 @@ def main(prs_png, out, png=None):
     export_dc_help_pages(prs_png, out)
     export_dc_staffroll(prs_png, out)
     export_dc_editor(prs_png, out)
+    export_dc_editor_files(prs_png, out)
     export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)

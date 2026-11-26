@@ -44,6 +44,12 @@ int main(int argc, char** argv) {
         std::error_code ec;
         fs::remove_all(dir, ec); fs::create_directories(dir / "puzzle_edit", ec);
         app.saveDir = dir.string();
+        DcEditMode emptyEditor;
+        emptyEditor.openFiles(1);
+        const bool emptyLoad = emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty();
+        emptyEditor.openFiles(2);
+        check(emptyLoad && emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty(),
+              "Dreamcast Puzzle Edit shows no-data state for empty Load and Delete screens");
         VmsPuzzle first, second, third;
         first.title = "FIRST"; second.title = "SECOND"; third.title = "THIRD";
         auto writePack = [&](const fs::path& path, const std::vector<VmsPuzzle>& puzzles) {
