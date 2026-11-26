@@ -1868,7 +1868,7 @@ struct DcEditMode : Screen {
         quad(strip, 0.0f, 0.6211f, 0.9883f, 0.8711f, 372.5f, 401.5f, 631.9f, 466.5f);    // X Load / Y Save, X F.F., X / Y Facing, (empty)
         SDL_SetTextureColorMod(sh.tex, 255, 255, 255);
         if (saved && sh.fr.size() > 6) { SDL_SetTextureColorMod(sh.tex, 203, 203, 203); const SDL_Rect src{sh.fr[6].x, sh.fr[6].y, 64, 64}; const SDL_FRect d{32.8f, 404.8f, 76.8f, 76.8f}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); SDL_SetTextureColorMod(sh.tex, 255, 255, 255); }   // 'Save OK' from the first clear on (Flycast play2: scale 1.2 fitted, mean 8.3)
-        if (paused) {   // the current tool's row is boxed in red (255, 16, 16), 2 px, x 35..106, y 181 + 30 per tool (two points: File, Play), about 30 px high; solid in both paused Flycast frames, blinking otherwise (phase not read, not drawn)
+        if (paused || (ticks % 40) < 20) {   // the current tool's row is boxed in red (255, 16, 16), 2 px, x 35..106, y 181 + 30 per tool (two points: File, Play), about 30 px high; solid while paused, otherwise blinking with a period of about 40 frames, 20 on / 20 off (90 Flycast frames 2200-2467, local/modecap/blink; the phase against the editor's entry is not derived, the port starts 'on' at its first tick)
             const int y0 = 181 + 30 * tool;   // two measured boxes only: File rows 181..210, Play rows 211..239 (the pitch of the rest is extrapolated)
             SDL_SetRenderDrawColor(a.ren, 255, 16, 16, 255);
             const SDL_Rect top{35, y0, 72, 2}, bot{35, y0 + 27, 72, 2}, lef{35, y0, 2, 30}, rig{105, y0, 2, 30};
