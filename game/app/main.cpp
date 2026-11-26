@@ -1787,11 +1787,14 @@ struct DcEditMode : Screen {
     void tick(App&) override { ++ticks; }
     // Buttons 0..3 = Dreamcast A, B, X, Y. Rockets (tool 6) and Holes (7): A sets the tile on the cursor cell, B deletes it (Flycast local/modecap/ed3). Walls (2): the four
     // Facing buttons toggle the south, east, west and north wall edge of the cursor cell (local/modecap/wl: RAM lattice words flip 0 <-> 1, a repeat A clears the south wall).
-    // Not yet: Mice, Cats, Solution, edit limits, sounds.
+    // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Not yet: Solution, deleting, edit limits, sounds.
     void edit(int button) {
         uint8_t& t = st.tiles[cy * kCols + cx];
         if (tool == 6) { if (button == 0) t = T_Rocket; else if (button == 1 && t == T_Rocket) t = T_Floor; }
         else if (tool == 7) { if (button == 0) t = T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }
+        else if (tool == 3 || tool == 4) {   // Mice / Cats: the Facing button sets the start direction (RAM cell word 0x3d..0x40 mice, 0x47..0x4a cats = down, left, up, right; stage tile 9 / 13 + offset: 0 down, 1 left, 2 up, 3 right)
+            static const int heading[4] = {0, 3, 1, 2};   // tile offset per button, from the Flycast mc frames: Dreamcast A down (tile 9 faces the camera), B right (+3), X left (+1), Y up (+2)
+            t = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]); }
         else if (tool == 2) {
             uint8_t& w = button == 0 ? st.hw[(cy + 1) * kCols + cx] : button == 1 ? st.vw[cy * 13 + cx + 1] : button == 2 ? st.vw[cy * 13 + cx] : st.hw[cy * kCols + cx];
             w ^= 1; }
