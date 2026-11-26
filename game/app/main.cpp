@@ -3427,12 +3427,13 @@ struct PuzzleMode : Screen {
                                      else if (running) { a.playSfx(3); restartRun(); } return true; }   // running: sound 3, the stage restarts with the arrows kept (phase 1: AR_RestartArrowPzManager)
         return false;
     }
-    int cticks = 0;
+    int cticks = 0, skyPasses = 66;   // skyPasses: sky task passes since the stage load (66 before tick 0, see the draw)
     int mousePose = 0;   // 0x8c019b0c stores global clock (0x8c1ae8d8) & 7 on each unpaused task pass; the Puzzle RAM dumps show the clock is not reset at stage start (2390: 1826, 2500: 1936)
     void tick(App& a) override {
         a.stars.tick(false);
         if (paused && pauseState.freeze) return;
         cticks++;
+        skyPasses += (running && dash) ? 2 : 1;   // the task server runs twice per frame under Dash, so the sky task (0x8c01f272) does too
         if (pauseState.ticks >= 0) {
             const bool held = pad && gApp && SDL_GameControllerGetButton(pad, static_cast<SDL_GameControllerButton>(gApp->padMap.pause));
             pauseState.tick(held);
@@ -3587,6 +3588,11 @@ struct PuzzleMode : Screen {
         SDL_SetRenderDrawColor(a.ren, 0, 0, dcBackdrop ? 8 : 26, 255);
         SDL_RenderClear(a.ren);
         a.stars.draw(a);
+        if (dcBackdrop) if (const Model3D* sky = a.models3d.find("sky")) {   // background sky task 0x8c01f272 / 0x8c01f2a0 (audit.md Puzzle task inventory): angles +8 / +16 / +8 per pass since the task's creation, which the Puzzle table's phases 0/1 (0x8c02baf2 / 0x8c02bba0) do when the stage loads; the Hard 05 run reads 266 passes at the frame matching tick 200, so the stage load is 66 passes before the port's tick 0
+            const int n = skyPasses; const int ang[3] = {8 * n, 16 * n, 8 * n};
+            const FieldLayout field = pf(a);
+            a.models3d.drawDcSky(a.ren, *sky, {field.x(90.0f / 15.0f), field.y(67.5f / 15.0f)}, {GW / 2.0f, GH / 2.0f}, field.cell / 15.0f, ang, 5.0f);
+        }
         // The real opaque TA list shares depth across floor, walls and
         // rockets. Keep it across their separate software draw calls.
         const bool prelaunch = state == 1 && dreamcastPuzzleControls(a) && willClearNextFrame();
