@@ -165,7 +165,7 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 | `0x8c0196fa`, `0x8c019982` | 8 | arrival of a mouse whose task +8 is 1 (Puzzle mice read 0: hd5, tip2, puzzle-clear) | not needed in Puzzle |
 | `0x8c02cdba` | music 4 | leaving to the menu | check |
 
-Open: Flycast's audio (local/arrsnd, resumed Normal 01 clear, no music) has a burst at every mouse arrival (frames 224, 240, 262, 278, 294), but no literal-cue call in the Puzzle code makes it, so it comes from a computed-cue site not yet read. Its cue is unconfirmed (waveform correlation with the cue clips is at most 0.27, cue 22); the port plays cue 6 there, by analogy with Battle.
+Open: Flycast's audio (local/arrsnd, resumed Normal 01 clear, no music) has a burst at every mouse arrival (frames 224, 240, 262, 278, 294), but no literal-cue call in the Puzzle code makes it, and none of the 24 computed-cue sites is in mouse or rocket code, and with `bsr` calls included (the tool now follows them) the dispatcher has no other callers: the arrival sound reaches the driver another way (a queued request or a function pointer), still to be found. Its cue is unconfirmed (waveform correlation with the cue clips is at most 0.27, cue 22); the port plays cue 6 there, by analogy with Battle.
 
 ## Next work
 

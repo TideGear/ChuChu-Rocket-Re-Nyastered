@@ -33,8 +33,9 @@ def scan(d, targets):
             t = pc + 4 + (op & 0xff) * 2; v = u16(t); regs[n] = v - 0x10000 if v & 0x8000 else v
         elif (op & 0xf000) == 0xe000:                                    # mov #imm,Rn
             v = op & 0xff; regs[n] = v - 0x100 if v & 0x80 else v
-        elif (op & 0xf0ff) in (0x400b, 0x402b):                          # jsr/jmp @Rn
-            tgt = regs.get(n)
+        elif (op & 0xf0ff) in (0x400b, 0x402b) or (op & 0xf000) == 0xb000:   # jsr/jmp @Rn, or bsr disp (a direct call within +-4 KB)
+            if (op & 0xf000) == 0xb000: disp = op & 0xfff; tgt = pc + 4 + 2 * (disp - 0x1000 if disp & 0x800 else disp)
+            else: tgt = regs.get(n)
             if tgt in targets:
                 d0 = u16(pc + 2); nd = (d0 >> 8) & 15                    # the delay slot may load an argument
                 args = dict(regs)
