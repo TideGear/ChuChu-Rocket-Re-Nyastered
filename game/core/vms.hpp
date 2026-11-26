@@ -1,9 +1,11 @@
 // Dreamcast ChuChu Rocket puzzle packs (.VMS + .VMI): reader and writer, the C++ twin of tools/vms_pack.py (docs/dlc.md). A pack is a 640-byte header followed by
 // 25 slots of 1,536 bytes: 25x19 lattice (475 bytes), arrow count, 12 arrow cells, a 24-bit direction field, a 21-byte title.
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <ctime>
 #include <string>
 #include <vector>
 namespace ccr {
@@ -15,7 +17,7 @@ struct VmsPuzzle {
     std::string title;           // up to 20 characters
 };
 namespace vms {
-constexpr size_t kHeader = 640, kSlot = 1536;
+constexpr size_t kHeader = 640, kSlot = 1536, kVmiSize = 108;
 inline int latticeToTile(uint8_t v) { switch (v) { case 0x09: return 0; case 0x0a: return 1; case 0x07: return 0x11; case 0x3d: return 9; case 0x3e: return 10; case 0x3f: return 11; case 0x40: return 12; case 0x47: return 13; case 0x48: return 14; case 0x49: return 15; case 0x4a: return 16; default: return -1; } }
 inline int tileToLattice(uint8_t t) { switch (t) { case 0: return 0x09; case 1: return 0x0a; case 0x11: return 0x07; case 9: return 0x3d; case 10: return 0x3e; case 11: return 0x3f; case 12: return 0x40; case 13: return 0x47; case 14: return 0x48; case 15: return 0x49; case 16: return 0x4a; default: return -1; } }
 // Reads one slot (at least 512 bytes). Returns false when a tile code is unknown or the arrow count is above 12.
@@ -59,6 +61,27 @@ inline std::vector<uint8_t> writePack(const std::vector<VmsPuzzle>& puzzles) {
     std::memcpy(v.data(), "CHU_CHU__D01    ", 16); std::memset(v.data() + 16, ' ', 32); std::memcpy(v.data() + 16, "CCR Re-Nyastered puzzles", 24); std::memcpy(v.data() + 48, "ChuChu Rocket!", 14); v[64] = 1;
     for (size_t k = 0; k < puzzles.size() && k < 25; k++) encodeSlot(puzzles[k], v.data() + kHeader + k * kSlot);
     while (v.size() % 512) v.push_back(0);
+    return v;
+}
+inline std::vector<uint8_t> writeVmi(size_t vmsSize, const std::string& resource = "CCRPUZ", const std::string& vmsName = "CHU_CHU__D00") {
+    std::vector<uint8_t> v(kVmiSize, 0);
+    for (size_t i = 0; i < 4; ++i) v[i] = (uint8_t)(i < resource.size() ? resource[i] : 0) & (uint8_t)"SEGA"[i];
+    std::memcpy(v.data() + 4, "CCR puzzles", 11);
+    std::memcpy(v.data() + 36, "Dreamcast Live", 14);
+    const std::time_t now = std::time(nullptr); std::tm stamp{};
+#ifdef _WIN32
+    localtime_s(&stamp, &now);
+#else
+    localtime_r(&now, &stamp);
+#endif
+    auto put16 = [&](size_t at, uint16_t n) { v[at] = (uint8_t)n; v[at + 1] = (uint8_t)(n >> 8); };
+    put16(68, (uint16_t)(stamp.tm_year + 1900)); v[70] = (uint8_t)(stamp.tm_mon + 1); v[71] = (uint8_t)stamp.tm_mday;
+    v[72] = (uint8_t)stamp.tm_hour; v[73] = (uint8_t)stamp.tm_min; v[74] = (uint8_t)stamp.tm_sec; v[75] = (uint8_t)((stamp.tm_wday + 1) % 7);
+    put16(76, 0x0100); put16(78, 1);
+    std::memcpy(v.data() + 80, resource.data(), std::min<size_t>(8, resource.size()));
+    std::memcpy(v.data() + 88, vmsName.data(), std::min<size_t>(12, vmsName.size()));
+    put16(100, 0); put16(102, 0); const uint32_t size = (uint32_t)vmsSize;
+    v[104] = (uint8_t)size; v[105] = (uint8_t)(size >> 8); v[106] = (uint8_t)(size >> 16); v[107] = (uint8_t)(size >> 24);
     return v;
 }
 }  // namespace vms

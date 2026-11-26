@@ -1763,7 +1763,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, fileScreen = 0, fileIndex = 0; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1777,6 +1777,15 @@ struct DcEditMode : Screen {
             if (l || r) { pauseQuit = r; a.playSfx(0); }
             else if (start) { paused = false; pauseQuit = false; a.playSfx(2); }
             else if (ok) { a.playSfx(2); if (pauseQuit) leave = true; else paused = false; pauseQuit = false; }
+            return; }
+        if (fileScreen) {
+            const bool up = (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_UP) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP);
+            const bool down = (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_DOWN) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+            const bool cancel = (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_BACKSPACE || e.key.keysym.sym == SDLK_x)) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_B);
+            const bool ok = (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_z)) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_A);
+            if (up || down) { if (fileScreen == 1 || fileScreen == 2) { fileConfirm = false; const int n = (int)savedPuzzles.size(); if (n) fileIndex = (fileIndex + (up ? n - 1 : 1)) % n; } }
+            else if (cancel) { if (fileConfirm) fileConfirm = false; else fileScreen = 0; a.playSfx(3); }
+            else if (ok) { if (fileScreen == 1) loadSelected(); else if (fileScreen == 2 && !fileConfirm) fileConfirm = true; else if (fileScreen == 2) deleteSelected(); else { if (fileScreen == 4) a.playSfx(3); fileScreen = 0; } }
             return; }
         if (start) { paused = true; a.playSfx(4); return; }
         if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true;
@@ -1809,11 +1818,62 @@ struct DcEditMode : Screen {
     // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Solution (5): the Facing buttons put an arrow. The same facing again removes a mouse, cat or arrow. Not yet: edit limits, sounds.
     void startPlay() { sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: the edited stage runs on the Puzzle simulation (phases 5-8 of mode 8 reuse Puzzle's)
     void stopPlay() { playing = false; endAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
+    void refreshPuzzleFiles() {
+        savedPuzzles.clear(); puzzlePaths.clear(); puzzleSlots.clear(); if (!gApp) return;
+        const std::string dir = gApp->saveDir + "/puzzle_edit"; std::error_code ec; if (!gApp->testRun) std::filesystem::create_directories(dir, ec);
+        std::vector<std::string> paths; if (std::filesystem::is_directory(dir, ec)) for (const auto& e : std::filesystem::directory_iterator(dir, ec)) { std::string ext = e.path().extension().string(); for (char& c : ext) c = (char)tolower((unsigned char)c); if (ext == ".vms") paths.push_back(e.path().string()); }
+        std::sort(paths.begin(), paths.end());
+        for (const auto& path : paths) { FILE* f = fopen(path.c_str(), "rb"); if (!f) continue; std::vector<uint8_t> bytes; uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n); fclose(f); std::vector<VmsPuzzle> pack; if (vms::readPack(bytes, pack) > 0) for (const auto& p : pack) { puzzlePaths.push_back(path); puzzleSlots.push_back((int)savedPuzzles.size()); savedPuzzles.push_back(p); } }
+        fileIndex = savedPuzzles.empty() ? 0 : std::min(fileIndex, (int)savedPuzzles.size() - 1);
+    }
+    void openFiles(int action) { refreshPuzzleFiles(); fileConfirm = false; fileScreen = savedPuzzles.empty() ? 4 : action; if (gApp && savedPuzzles.empty()) gApp->playSfx(0); }   // no-data screen cue 0 (Flycast file-screen capture)
+    void applyPuzzle(const VmsPuzzle& p) {
+        memset(&st, 0, sizeof st); memcpy(st.tiles, p.tiles, sizeof st.tiles); arrows.clear();
+        for (int r = 0; r < 10; ++r) for (int c = 0; c < kCols; ++c) st.hw[r * kCols + c] = p.walls[25 * r + c];
+        for (int r = 0; r < kRows; ++r) for (int c = 0; c < 13; ++c) st.vw[r * 13 + c] = p.walls[25 * r + 12 + c];
+        for (const auto& ar : p.arrows) if (ar.x < kCols && ar.y < kRows) arrows.push_back({ar.x, ar.y, ar.dir});
+        saved = false; playing = false; endAge = -1; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); fileScreen = 0; if (gApp) gApp->playSfx(3);
+    }
+    void loadSelected() { if (fileIndex >= 0 && fileIndex < (int)savedPuzzles.size()) applyPuzzle(savedPuzzles[fileIndex]); }
+    void deleteSelected() {
+        if (fileIndex < 0 || fileIndex >= (int)puzzlePaths.size()) return;
+        const std::string path = puzzlePaths[fileIndex]; const int slot = puzzleSlots[fileIndex]; std::vector<uint8_t> bytes; FILE* f = fopen(path.c_str(), "rb"); if (!f) { fileScreen = 5; return; } uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n); fclose(f);
+        std::vector<VmsPuzzle> pack; if (vms::readPack(bytes, pack) <= 0 || slot >= (int)pack.size()) { fileScreen = 5; return; } pack.erase(pack.begin() + slot);
+        std::error_code ec; if (pack.empty()) { std::filesystem::remove(path, ec); const std::string vmi = path.substr(0, path.size() - 4) + ".VMI"; std::filesystem::remove(vmi, ec); }
+        else { const std::vector<uint8_t> replacement = vms::writePack(pack); f = fopen(path.c_str(), "wb"); if (!f || fwrite(replacement.data(), 1, replacement.size(), f) != replacement.size()) { if (f) fclose(f); fileScreen = 5; return; } fclose(f); }
+        fileScreen = 0; fileConfirm = false; refreshPuzzleFiles(); if (gApp) gApp->playSfx(3);
+    }
+    VmsPuzzle currentPuzzle() const {
+        VmsPuzzle p; memcpy(p.tiles, st.tiles, sizeof p.tiles);
+        for (int r = 0; r < 10; ++r) for (int c = 0; c < kCols; ++c) p.walls[25 * r + c] = st.hw[r * kCols + c];
+        for (int r = 0; r < kRows; ++r) for (int c = 0; c < 13; ++c) p.walls[25 * r + 12 + c] = st.vw[r * 13 + c];
+        for (const auto& ar : arrows) if (ar[0] >= 0 && ar[0] < kCols && ar[1] >= 0 && ar[1] < kRows && ar[2] >= 0 && ar[2] < 4) p.arrows.push_back({(uint8_t)ar[0], (uint8_t)ar[1], (uint8_t)ar[2]});
+        char title[21]; snprintf(title, sizeof title, "Puzzle %02d", (int)savedPuzzles.size() + 1); p.title = title; return p;
+    }
+    void savePuzzle() {
+        refreshPuzzleFiles();
+        int mice = 0; for (int t : st.tiles) if (t >= T_MouseS && t < T_MouseS + 4) ++mice;
+        Sim check; check.load(st); for (auto& ar : arrows) check.placeArrow(ar[0], ar[1], ar[2]);
+        for (int i = 0; i < 3600 && mice && check.saved < mice && check.killed == 0; ++i) check.tick();
+        if (!mice || check.saved != mice || check.killed || check.catsInRocket) { fileScreen = 3; if (gApp) gApp->playSfx(4); return; }
+        if (savedPuzzles.size() >= 25 || arrows.size() > 12 || !gApp || gApp->testRun) { fileScreen = 5; return; }
+        int id = 1; char name[32]; std::string path; do { snprintf(name, sizeof name, "slot-%02d", id++); path = gApp->saveDir + "/puzzle_edit/" + name + ".VMS"; } while (std::filesystem::exists(path) || std::filesystem::exists(path.substr(0, path.size() - 4) + ".VMI"));
+        VmsPuzzle p = currentPuzzle(); std::vector<uint8_t> pack = vms::writePack({p}); FILE* f = fopen(path.c_str(), "wb");
+        if (!f || fwrite(pack.data(), 1, pack.size(), f) != pack.size()) { if (f) fclose(f); fileScreen = 5; return; } fclose(f);
+        std::vector<uint8_t> info = vms::writeVmi(pack.size(), name, "CHU_CHU__D00"); const std::string infoPath = gApp->saveDir + "/puzzle_edit/" + name + ".VMI"; f = fopen(infoPath.c_str(), "wb");
+        if (!f || fwrite(info.data(), 1, info.size(), f) != info.size()) { if (f) fclose(f); std::error_code ec; std::filesystem::remove(path, ec); fileScreen = 5; return; } fclose(f);
+        saved = true; refreshPuzzleFiles(); fileScreen = 0; if (gApp) gApp->playSfx(2);
+    }
     void edit(int button) {
         if (dialog) {   // File > Create: 'The current puzzle will be lost. Are you sure?' A = Yes clears the board, B = No
             if (button == 0) { st = Stage{}; arrows.clear(); saved = false; sim.load(st); prev.clear(); dialog = false; if (gApp && !scripting) gApp->playSfx(2); } else if (button == 1) { dialog = false; if (gApp && !scripting) gApp->playSfx(3); }   // Yes 2, No 3 (Flycast local/modecap/snd2)
             return; }
-        if (tool == 0) { if (button == 0) { dialog = true; if (gApp && !scripting) gApp->playSfx(4); } return; }   // opening Create plays 4   // Delete / Load / Save (buttons 1-3) are not ported
+        if (tool == 0) {
+            if (button == 0) { dialog = true; if (gApp && !scripting) gApp->playSfx(4); }
+            else if (button == 1) openFiles(2);   // Delete: browse the editor's saved VMU-style puzzle slots
+            else if (button == 2) openFiles(1);   // Load: select a saved slot
+            else if (button == 3) savePuzzle();   // Save: only a solved board is accepted
+            return; }
         if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); else if (button == 2) ff = true; return; }   // X = F.F.: two simulation passes per frame while held (Flycast local/modecap/ff)
         if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
@@ -1841,6 +1901,29 @@ struct DcEditMode : Screen {
         while (i < str.size()) { size_t j = str.find(';', i); if (j == std::string::npos) j = str.size(); int tl = 0, x = 0, y = 0; char b = 'A';
             if (sscanf(str.substr(i, j - i).c_str(), "%d,%d,%d,%c", &tl, &x, &y, &b) == 4) { tool = tl & 7; cx = x; cy = y; edit(b == 'A' ? 0 : b == 'B' ? 1 : b == 'X' ? 2 : 3); } i = j + 1; }
     }
+    void drawFileOverlay(App& a) {
+        SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 210); SDL_Rect shade{0, 0, 640, 480}; SDL_RenderFillRect(a.ren, &shade);
+        SDL_SetRenderDrawColor(a.ren, 30, 34, 48, 255); SDL_Rect panel{90, 52, 460, 376}; SDL_RenderFillRect(a.ren, &panel);
+        SDL_SetRenderDrawColor(a.ren, 238, 202, 72, 255); SDL_Rect edge{90, 52, 460, 4}; SDL_RenderFillRect(a.ren, &edge); SDL_SetRenderDrawColor(a.ren, 225, 225, 230, 255); SDL_Rect outline{90, 52, 460, 376}; SDL_RenderDrawRect(a.ren, &outline);
+        auto centered = [&](const std::string& s, int y, int h, int gray) { a.text(s, (640 - a.textWidth(s, h)) / 2, y, h, gray); };
+        if (fileScreen == 1 || fileScreen == 2) {
+            centered(fileScreen == 1 ? "LOAD PUZZLE - PORT STORAGE" : "DELETE PUZZLE - PORT STORAGE", 76, 24, 255);
+            const int first = std::max(0, std::min(fileIndex - 7, (int)savedPuzzles.size() - 8));
+            for (int rowIndex = 0; rowIndex < 8 && first + rowIndex < (int)savedPuzzles.size(); ++rowIndex) { const int i = first + rowIndex, y = 130 + rowIndex * 30; if (i == fileIndex) { SDL_SetRenderDrawColor(a.ren, 70, 86, 120, 255); SDL_Rect row{124, y - 3, 392, 27}; SDL_RenderFillRect(a.ren, &row); } centered(std::to_string(i + 1) + ".  " + (savedPuzzles[i].title.empty() ? "Puzzle" : savedPuzzles[i].title), y, 20, i == fileIndex ? 255 : 205); }
+            if (fileConfirm) { SDL_SetRenderDrawColor(a.ren, 18, 20, 29, 245); SDL_Rect confirm{150, 190, 340, 92}; SDL_RenderFillRect(a.ren, &confirm); centered("DELETE THIS PUZZLE?", 204, 22, 255); centered("A / ENTER YES     B / ESC NO", 242, 16, 210); }
+            else centered("UP/DOWN SELECT     ENTER CONFIRM", 370, 16, 190);
+        } else if (fileScreen == 3) {
+            centered("PUZZLE CANNOT BE SAVED", 126, 26, 255);
+            centered("Before you save, play the puzzle", 200, 18, 230); centered("and make sure all mice can get to a goal.", 228, 18, 230);
+            centered("ENTER / A: OK", 350, 18, 190);
+        } else if (fileScreen == 4) {
+            centered("NO PUZZLE DATA!", 180, 28, 255); centered("ENTER / A: OK", 350, 18, 190);
+        } else {
+            centered("PUZZLE FILE SAVE FAILED", 170, 26, 255); centered("Check writable storage and free slots.", 220, 18, 220); centered("ENTER / A: OK", 350, 18, 190);
+        }
+        centered("PORT STORAGE", 404, 12, 145);
+        SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_NONE);
+    }
     void stepCue() { if (gApp) gApp->playSfx(0); }   // a tool step files cue 0 (Flycast SE ring)
     void move(int dx, int dy) { cx = (cx + dx + 12) % 12; cy = (cy + dy + 9) % 9; }
     const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
@@ -1856,7 +1939,7 @@ struct DcEditMode : Screen {
         a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, endAge >= 0 ? &lids : nullptr, endAge >= 0 ? endAge : -1, nullptr, 1.0f);   // rocket domes from the edited stage; the launch after a clear
         if (!playing && !dialog && a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
-        const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) return;
+        const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) { if (fileScreen) drawFileOverlay(a); return; }
         SDL_SetTextureColorMod(sh.tex, 203, 203, 203);   // the HUD quads carry vertex intensity 0.8 = 203/255 in the PowerVR rule (stream base 0.800)
         auto quad = [&](int sheet, float u0, float v0, float u1, float v1, float x0, float y0, float x1, float y1) {
             const SDL_Rect src{sh.fr[sheet].x + (int)(u0 * 256.0f + 0.5f), sh.fr[sheet].y + (int)(v0 * 256.0f + 0.5f), (int)((u1 - u0) * 256.0f + 0.5f), (int)((v1 - v0) * 256.0f + 0.5f)};
@@ -1882,6 +1965,7 @@ struct DcEditMode : Screen {
                 for (int l = 0; l < 3; ++l) { int x = 327 - 6 * (int)strlen(lines[l]); const int y = 170 + 26 * l;   /* offsets and pitch are the best of a small scan, not read from code */ for (const char* c = lines[l]; *c; ++c, x += 12) if ((unsigned char)*c > 0x20) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[(unsigned char)*c - 0x20], &d); } }
                 SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255); }
             if (sh.fr.size() > 5) { SDL_SetTextureColorMod(sh.tex, 203, 203, 203); const SDL_Rect src{sh.fr[5].x, sh.fr[5].y, 111, 63}; const SDL_FRect d{345.0f, 281.0f, 154.0f, 84.0f}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); SDL_SetTextureColorMod(sh.tex, 255, 255, 255); } }
+        if (fileScreen) drawFileOverlay(a);   // port-only local-storage browser; original VMU stream quads have not been decoded
     }
 };
 
