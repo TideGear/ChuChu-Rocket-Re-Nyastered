@@ -337,19 +337,13 @@ int main(int argc, char** argv) {
         puzzle.failureFrames = 1;
         puzzle.paused = false;
         puzzle.pauseState.resume();
-        puzzle.event(app, start);
-        check(puzzle.paused && puzzle.pauseState.freeze,
-              "Dreamcast Start pauses Puzzle during the failure hold");
         const int failureFrame = puzzle.sim.now;
-        puzzle.tick(app);
-        check(puzzle.sim.now == failureFrame,
-              "failed Puzzle simulation remains frozen while paused");
         puzzle.event(app, start);
         check(!puzzle.paused && !puzzle.pauseState.freeze,
-              "Dreamcast Start resumes Puzzle during the failure hold");
+              "Dreamcast Start is ignored during the failure hold");
         puzzle.tick(app);
         check(puzzle.sim.now > failureFrame,
-              "failed Puzzle effects advance again after resume");
+              "failed Puzzle effects continue during the failure hold");
         app.dcLook = oldDcLook;
         app.dcPuzzleStart.tex = oldStart;
         app.dcPuzzleCancel.tex = oldCancel;

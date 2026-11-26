@@ -11,7 +11,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 ## Latest gameplay/UI work
 
 - Records controls follow the traced original: L+R+Start deletes (the footer triangle is Start), the delete resets a Chao costume, and A/B/Start leave with cue 3.
-- Puzzle pause: the global controller and per-mode handler are traced. The +5/+3 tap/hold timing is still observation-only. A headless regression now confirms Dreamcast Start freezes and resumes failure-hold effects; HUD actions remain ignored in that phase.
+- Puzzle pause: global controller and per-mode handler are traced; +5/+3 tap/hold timing remains observation-only. Failure transition `0x8c02be0a` disables global pause via `0x8c01a298`; the headless regression confirms Dreamcast Start is ignored during failure while effects continue.
 - Monaural: traced to sound-driver command 0x8a. The port's final-mix fold differs for panned voices.
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: the full-frame sweep (ages -9..80) passes; only the age -1 dome crops pass per element.
