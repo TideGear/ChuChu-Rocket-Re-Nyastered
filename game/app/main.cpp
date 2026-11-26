@@ -1764,22 +1764,27 @@ struct TitleMode : Screen {
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
     Stage st{}; bool leave = false; int ticks = 0;
+    int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
     int music() override { return -1; }
     void event(App&, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true;
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT || e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) move(e.key.keysym.sym == SDLK_RIGHT ? 1 : e.key.keysym.sym == SDLK_LEFT ? -1 : 0, e.key.keysym.sym == SDLK_DOWN ? 1 : e.key.keysym.sym == SDLK_UP ? -1 : 0);
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)) move(e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? -1 : 0, e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ? -1 : 0);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_e || e.key.keysym.sym == SDLK_PAGEDOWN)) tool = (tool + 1) & 7;
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
     void tick(App&) override { ++ticks; }
+    void move(int dx, int dy) { cx = (cx + dx + 12) % 12; cy = (cy + dy + 9) % 9; }
     const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        if (const char* c = getenv("CCR_EDIT_CELL")) { int x = 0, y = 0; if (sscanf(c, "%d,%d", &x, &y) == 2) { cx = (x % 12 + 12) % 12; cy = (y % 9 + 9) % 9; } }
         a.board(st, 2, 2, field);
-        if (a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, 137.3f * 1.6f, 42.0f * 1.6f, 0, 42.4f * 1.6f);   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
+        if (a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
         const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) return;
         SDL_SetTextureColorMod(sh.tex, 203, 203, 203);   // the HUD quads carry vertex intensity 0.8 = 203/255 in the PowerVR rule (stream base 0.800)
