@@ -1855,12 +1855,12 @@ struct DcEditMode : Screen {
         else { const std::vector<uint8_t> replacement = vms::writePack(pack); f = fopen(path.c_str(), "wb"); if (!f || fwrite(replacement.data(), 1, replacement.size(), f) != replacement.size()) { if (f) fclose(f); fileScreen = 5; return; } fclose(f); }
         fileScreen = 0; fileConfirm = false; refreshPuzzleFiles(); if (gApp) gApp->playSfx(3);
     }
-    VmsPuzzle currentPuzzle() const {
+    VmsPuzzle currentPuzzle(int titleNumber) const {
         VmsPuzzle p; memcpy(p.tiles, st.tiles, sizeof p.tiles);
         for (int r = 0; r < 10; ++r) for (int c = 0; c < kCols; ++c) p.walls[25 * r + c] = st.hw[r * kCols + c];
         for (int r = 0; r < kRows; ++r) for (int c = 0; c < 13; ++c) p.walls[25 * r + 12 + c] = st.vw[r * 13 + c];
         for (const auto& ar : arrows) if (ar[0] >= 0 && ar[0] < kCols && ar[1] >= 0 && ar[1] < kRows && ar[2] >= 0 && ar[2] < 4) p.arrows.push_back({(uint8_t)ar[0], (uint8_t)ar[1], (uint8_t)ar[2]});
-        char title[21]; snprintf(title, sizeof title, "Puzzle %02d", (int)savedPuzzles.size() + 1); p.title = title; return p;
+        char title[21]; snprintf(title, sizeof title, "Puzzle %02d", titleNumber); p.title = title; return p;
     }
     void savePuzzle() {
         refreshPuzzleFiles();
@@ -1868,12 +1868,30 @@ struct DcEditMode : Screen {
         Sim check; check.load(st); for (auto& ar : arrows) check.placeArrow(ar[0], ar[1], ar[2]);
         for (int i = 0; i < 3600 && mice && check.saved < mice && check.killed == 0; ++i) check.tick();
         if (!mice || check.saved != mice || check.killed || check.catsInRocket) { fileScreen = 3; if (gApp) gApp->playSfx(4); return; }
-        if (savedPuzzles.size() >= 25 || arrows.size() > 12 || !gApp || gApp->testRun) { fileScreen = 5; return; }
-        int id = 1; char name[32]; std::string path; do { snprintf(name, sizeof name, "slot-%02d", id++); path = gApp->saveDir + "/puzzle_edit/" + name + ".VMS"; } while (std::filesystem::exists(path) || std::filesystem::exists(path.substr(0, path.size() - 4) + ".VMI"));
-        VmsPuzzle p = currentPuzzle(); std::vector<uint8_t> pack = vms::writePack({p}); FILE* f = fopen(path.c_str(), "wb");
-        if (!f || fwrite(pack.data(), 1, pack.size(), f) != pack.size()) { if (f) fclose(f); fileScreen = 5; return; } fclose(f);
-        std::vector<uint8_t> info = vms::writeVmi(pack.size(), name, "CHU_CHU__D00"); const std::string infoPath = gApp->saveDir + "/puzzle_edit/" + name + ".VMI"; f = fopen(infoPath.c_str(), "wb");
-        if (!f || fwrite(info.data(), 1, info.size(), f) != info.size()) { if (f) fclose(f); std::error_code ec; std::filesystem::remove(path, ec); fileScreen = 5; return; } fclose(f);
+        if (arrows.size() > 12 || !gApp || gApp->testRun) { fileScreen = 5; return; }
+        const std::string path = gApp->saveDir + "/puzzle_edit/user-puzzles.VMS";
+        std::vector<VmsPuzzle> packPuzzles; std::vector<uint8_t> existing; const bool hadPack = std::filesystem::exists(path);
+        if (hadPack) {
+            FILE* in = fopen(path.c_str(), "rb");
+            if (!in) { fileScreen = 5; return; }
+            uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, in)) > 0) existing.insert(existing.end(), buf, buf + n); fclose(in);
+            if (vms::readPack(existing, packPuzzles) < 0) { fileScreen = 5; return; }
+        }
+        if (packPuzzles.size() >= 25) { fileScreen = 5; return; }
+        packPuzzles.push_back(currentPuzzle((int)packPuzzles.size() + 1));
+        std::vector<uint8_t> pack = vms::writePack(packPuzzles); FILE* f = fopen(path.c_str(), "wb");
+        if (!f || fwrite(pack.data(), 1, pack.size(), f) != pack.size()) {
+            if (f) fclose(f);
+            if (hadPack) { f = fopen(path.c_str(), "wb"); if (f) { fwrite(existing.data(), 1, existing.size(), f); fclose(f); } }
+            fileScreen = 5; return;
+        } fclose(f);
+        std::vector<uint8_t> info = vms::writeVmi(pack.size(), "CCRPUZ", "CHU_CHU__D00"); const std::string infoPath = path.substr(0, path.size() - 4) + ".VMI"; f = fopen(infoPath.c_str(), "wb");
+        if (!f || fwrite(info.data(), 1, info.size(), f) != info.size()) {
+            if (f) fclose(f);
+            if (hadPack) { f = fopen(path.c_str(), "wb"); if (f) { fwrite(existing.data(), 1, existing.size(), f); fclose(f); } }
+            else { std::error_code ec; std::filesystem::remove(path, ec); }
+            fileScreen = 5; return;
+        } fclose(f);
         saved = true; refreshPuzzleFiles(); fileScreen = 0; if (gApp) gApp->playSfx(2);
     }
     void edit(int button) {

@@ -72,6 +72,19 @@ int main(int argc, char** argv) {
         std::vector<VmsPuzzle> remaining;
         check(vms::readPack(bytes, remaining) == 1 && remaining[0].title == "FIRST",
               "Dreamcast Puzzle Edit deletes the selected slot within a multi-puzzle pack");
+        DcEditMode saver; saver.st.tiles[0] = T_MouseS + 3; saver.st.tiles[1] = T_Rocket;
+        saver.savePuzzle(); saver.savePuzzle();
+        std::vector<uint8_t> userBytes; const fs::path userPack = dir / "puzzle_edit" / "user-puzzles.VMS";
+        { FILE* f = fopen(userPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) userBytes.insert(userBytes.end(), buf, buf + n); fclose(f); } }
+        std::vector<VmsPuzzle> userPuzzles;
+        check(vms::readPack(userBytes, userPuzzles) == 2 && userPuzzles[0].title == "Puzzle 01" &&
+              userPuzzles[1].title == "Puzzle 02",
+              "Dreamcast Puzzle Edit appends repeated saves as numbered slots in one VMS pack");
+        fs::remove(dir / "puzzle_edit" / "user-puzzles.VMI", ec);
+        fs::create_directory(dir / "puzzle_edit" / "user-puzzles.VMI", ec);
+        saver.savePuzzle();
+        std::vector<uint8_t> afterFailedSave; { FILE* f = fopen(userPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) afterFailedSave.insert(afterFailedSave.end(), buf, buf + n); fclose(f); } }
+        check(afterFailedSave == userBytes, "failed VMI update preserves the previous user VMS pack");
         app.saveDir = oldSaveDir; fs::remove_all(dir, ec);
     }
     check(dcMouseModelName(0, 3) == "mouse3" &&
