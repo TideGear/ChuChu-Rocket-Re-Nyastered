@@ -1361,17 +1361,19 @@ struct App {
     // Turn animation exactly as the original (Core::adjustAngle/diffAngle, entity fields +0x20 current angle, +0x24 target = heading << 14, +0x28 step = int(speed * 32768 / 12)):
     // the sprite sheets are 32-angle turntables, frame = angle >> 11. Called once per simulation tick.
     std::vector<int> angs, fallPose; std::vector<float> cphase; int gtime = 0;   // cat walk phase (+0.45 per tick, wraps at 20.0: FUN_00028ffc), global tick for the mouse walk frame (TI_GetGlobalTime mod 11: FUN_000353e0)
+    void stepCatWalk(const Sim& sim) {
+        while (cphase.size() < sim.ents.size()) cphase.push_back(useModels3d() ? -0.25f : 0.0f);   // CatControl initialises +0x30, then CatWalkExe 0x8c0113f0 advances it by 0.25
+        for (size_t i = 0; i < sim.ents.size(); i++) {
+            const Entity& e = sim.ents[i];
+            if (e.mouse || !e.alive || e.catRespawned || (e.catWalkScale >= 0.0f && !e.reg)) continue;
+            const bool dcCat = useModels3d();
+            cphase[i] += dcCat ? 0.25f : 0.45f;
+            if (cphase[i] >= (dcCat ? 24.0f : 20.0f)) cphase[i] -= dcCat ? 24.0f : 20.0f;
+        }
+    }
     void stepAngles(const Sim& sim, bool effectsOnly = false) {
         if (!effectsOnly) {
-            gtime++; while (cphase.size() < sim.ents.size()) cphase.push_back(useModels3d() ? -0.25f : 0.0f);   // Dreamcast: the cat task's first update is its initialisation and does not advance +0x30 (Flycast frames 2300..3550: phase = 0.25 x (updates - 1))
-            for (size_t i = 0; i < sim.ents.size(); i++) {
-                const Entity& e = sim.ents[i];
-                if (!e.mouse && getenv("CCR_ENT_TRACE") && (e.catRespawned || e.rocketIn || !e.alive)) printf("cat state now=%d respawned=%d rocketIn=%d alive=%d walkScale=%.2f reg=%d phase=%.2f\n", sim.now, (int)e.catRespawned, (int)e.rocketIn, (int)e.alive, e.catWalkScale, (int)e.reg, cphase[i]);
-                if (e.mouse || !e.alive || e.rocketIn || e.catRespawned || (e.catWalkScale >= 0.0f && !e.reg)) continue;
-                const bool dcCat = useModels3d();   // Dreamcast cat task 0x8c0113f0: phase (+0x30) += 0.25 per update, minus the frame count 24 (table 0x8c088078) when it reaches it
-                cphase[i] += dcCat ? 0.25f : 0.45f;
-                if (cphase[i] >= (dcCat ? 24.0f : 20.0f)) cphase[i] -= dcCat ? 24.0f : 20.0f;
-            }
+            gtime++; stepCatWalk(sim);
         }
         while (angs.size() < sim.ents.size()) angs.push_back(sim.ents[angs.size()].heading << 14);
         for (size_t i = 0; i < sim.ents.size(); i++) {
@@ -3735,8 +3737,9 @@ struct PuzzleMode : Screen {
             // Keep character effects ticking while the result holds the board.
             ++sim.now;
             sim.tickEffects();
+            if (state == 3) a.stepCatWalk(sim);   // Dreamcast cat task keeps morphing during Puzzle failure freeze; cat phase remains live in Flycast RAM after the mouse is eaten (frames 2782..2842).
             a.stepAngles(sim, true);
-            if (dash) { ++sim.now; sim.tickEffects(); a.stepAngles(sim, true); }
+            if (dash) { ++sim.now; sim.tickEffects(); if (state == 3) a.stepCatWalk(sim); a.stepAngles(sim, true); }
             for (int pass = 0; pass < (dash ? 2 : 1); ++pass) domePulse = std::max(1.0f, domePulse - 0.05f);
             return;
         }
