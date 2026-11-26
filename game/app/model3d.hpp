@@ -12,6 +12,7 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <map>
 struct Model3D {
     struct V { float x, y, z, u, v, nx, ny, nz; };
     struct Tri { uint8_t mat; V v[3]; bool alphaStrip = false; bool envMap = false; bool untextured = false; };   // alphaStrip: the Ninja strip chunk's use-alpha flag (0x08), exported in the material byte's top bit
@@ -27,7 +28,9 @@ inline ModelLight& modelLight() {
 }
 struct ModelPack {
     std::vector<SDL_Texture*> textures; std::vector<Model3D> models;
-    std::vector<std::vector<uint8_t>> cpuPixels; std::vector<SDL_Point> cpuSize;   // RGBA bytes of every texture, for the software rasteriser (softRender)
+    std::vector<std::vector<uint8_t>> cpuPixels;
+    mutable std::map<int, std::vector<std::pair<SDL_Point, std::vector<uint8_t>>>> mipCache;   // softRender mip chains (level 0 first), built on first use
+    std::vector<SDL_Point> cpuSize;   // RGBA bytes of every texture, for the software rasteriser (softRender)
     mutable std::vector<float> sceneDepth;
     mutable int sceneWidth = 0, sceneHeight = 0;
     void beginDepthScene(SDL_Renderer* ren) const {
@@ -90,7 +93,7 @@ private:
         return true;
     }
 public:
-    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool additive = false; bool rgb = false; float lightRGB[3][3] = {}; };   // rgb: per-channel vertex light (material colours)   // wrap: repeat the texture (the floor quad's UVs run past 1)
+    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool mip = false; bool additive = false; bool rgb = false; float lightRGB[3][3] = {}; };   // rgb: per-channel vertex light (material colours)   // wrap: repeat the texture (the floor quad's UVs run past 1)
 
     // The Battle draw task builds a dome from two copies of the lid,
     // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
@@ -197,6 +200,29 @@ public:
         if (W <= 0 || H <= 0 || W > 4096 || H > 4096) return;
         static std::vector<uint32_t> color, added; static std::vector<float> depth;
         color.assign((size_t)W * H, 0u); added.assign((size_t)W * H, 0u); bool hasAdditive = false; depth.assign((size_t)W * H, -1.0f);
+        // Mipmapped textures (PowerVR tex word bit 31, e.g. the Puzzle sky 0x880a6800): box-filtered levels built on first use; the level is chosen per pixel
+        // from the screen-space UV step (log2 of the larger texel footprint), then sampled bilinearly like level 0.
+        auto mipLevel = [&](int tex, int level) -> const std::pair<SDL_Point, std::vector<uint8_t>>* {
+            auto& chain = mipCache[tex];
+            if (chain.empty()) chain.push_back({cpuSize[tex], cpuPixels[tex]});
+            while ((int)chain.size() <= level) {
+                const auto& prev = chain.back(); const int pw = prev.first.x, ph = prev.first.y; if (pw <= 1 && ph <= 1) break;
+                const int nw = std::max(1, pw / 2), nh = std::max(1, ph / 2); std::vector<uint8_t> px((size_t)nw * nh * 4);
+                for (int y = 0; y < nh; ++y) for (int x = 0; x < nw; ++x) for (int c = 0; c < 4; ++c) {
+                    int sum = 0; for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx) sum += prev.second[((size_t)std::min(ph - 1, 2 * y + dy) * pw + std::min(pw - 1, 2 * x + dx)) * 4 + c];
+                    px[((size_t)y * nw + x) * 4 + c] = (uint8_t)((sum + 2) / 4); }
+                chain.push_back({SDL_Point{nw, nh}, std::move(px)});
+            }
+            return &chain[std::min(level, (int)chain.size() - 1)];
+        };
+        auto sampleLevel = [&](int tex, int level, float u, float v, bool wrap, float out[4]) {
+            const auto* lv = mipLevel(tex, level); const int tw = lv->first.x, th = lv->first.y; const uint8_t* px = lv->second.data();
+            const float fx = u * tw - 0.5f, fy = v * th - 0.5f; const int ix = (int)std::floor(fx), iy = (int)std::floor(fy); const float ax = fx - ix, ay = fy - iy;
+            for (int c = 0; c < 4; ++c) {
+                auto at = [&](int x, int y) { if (wrap) { x = ((x % tw) + tw) % tw; y = ((y % th) + th) % th; } else { x = std::max(0, std::min(tw - 1, x)); y = std::max(0, std::min(th - 1, y)); } return (float)px[((size_t)y * tw + x) * 4 + c]; };
+                out[c] = (at(ix, iy) * (1 - ax) + at(ix + 1, iy) * ax) * (1 - ay) + (at(ix, iy + 1) * (1 - ax) + at(ix + 1, iy + 1) * ax) * ay;
+            }
+        };
         auto sample = [&](int tex, float u, float v, bool wrap, float out[4]) {
             if (tex == -2) { out[0] = out[1] = out[2] = 255; out[3] = 255; return; }   // untextured strip: white, lit by the vertex intensity
             if (tex < 0 || tex >= (int)cpuPixels.size()) { out[0] = out[1] = out[2] = 0; out[3] = 255; return; }
@@ -227,7 +253,18 @@ public:
                     const float w0 = b0 * t.iw[0], w1 = b1 * t.iw[1], w2 = b2 * t.iw[2], ws = w0 + w1 + w2;
                     const float u = (w0 * t.u[0] + w1 * t.u[1] + w2 * t.u[2]) / ws, v = (w0 * t.v[0] + w1 * t.v[1] + w2 * t.v[2]) / ws;
                     const float lum = b0 * t.light[0] + b1 * t.light[1] + b2 * t.light[2];
-                    float c[4]; sample(t.tex, u, v, t.wrap, c);
+                    float c[4];
+                    if (t.mip && t.tex >= 0 && t.tex < (int)cpuPixels.size()) {
+                        auto uvAt = [&](float qx, float qy, float& ou, float& ov) {
+                            const float c1 = ((qx - X[0]) * (Y[2] - Y[0]) - (X[2] - X[0]) * (qy - Y[0])) / det, c2 = ((X[1] - X[0]) * (qy - Y[0]) - (qx - X[0]) * (Y[1] - Y[0])) / det, c0 = 1.0f - c1 - c2;
+                            const float q0 = c0 * t.iw[0], q1 = c1 * t.iw[1], q2 = c2 * t.iw[2], qs = q0 + q1 + q2;
+                            ou = (q0 * t.u[0] + q1 * t.u[1] + q2 * t.u[2]) / qs; ov = (q0 * t.v[0] + q1 * t.v[1] + q2 * t.v[2]) / qs; };
+                        float ux, vx, uy, vy; uvAt(px + 1.0f, py, ux, vx); uvAt(px, py + 1.0f, uy, vy);
+                        const float tw = (float)cpuSize[t.tex].x, th = (float)cpuSize[t.tex].y;
+                        const float fx = std::hypot((ux - u) * tw, (vx - v) * th), fy = std::hypot((uy - u) * tw, (vy - v) * th);
+                        const int level = std::max(0, (int)std::floor(std::log2(std::max(1.0f, std::max(fx, fy))) + 0.5f));
+                        sampleLevel(t.tex, level, u, v, t.wrap, c);
+                    } else sample(t.tex, u, v, t.wrap, c);
                     uint32_t& dst = color[(size_t)y * W + x];
                     float lr = lum, lg = lum, lb = lum;
                     if (t.rgb) { lr = b0 * t.lightRGB[0][0] + b1 * t.lightRGB[1][0] + b2 * t.lightRGB[2][0]; lg = b0 * t.lightRGB[0][1] + b1 * t.lightRGB[1][1] + b2 * t.lightRGB[2][1]; lb = b0 * t.lightRGB[0][2] + b1 * t.lightRGB[1][2] + b2 * t.lightRGB[2][2]; }
@@ -362,7 +399,7 @@ public:
 
     // Background sky (draw 0x8c01f2a0): njTranslate(centre), njRotateXYZ(ang) (X, then Y, then Z, the order measured for node angles in
     // tools/export_dc_models.py), njScale(scale), drawn with the Puzzle view (straight down from height 218). The sphere surrounds the eye,
-    // so triangles are clipped at the eye plane. Lit like a chunk model, 0.3 + 0.8 max(0, -n.L) (this sign matches Flycast's margin brightness, Normal 03 right 6.7 vs 7.0). Rotation X, then Y, then Z: projecting the export with the real view puts every vertex on the stream's (Hard 05 sky strip at 0x26a310, angles 0x850/0x10a0/0x850: 0.0 px mean). Not called yet: the texture (tex word 0x880a6800, bit 31) is mipmapped and the sky is heavily minified, so the hardware samples small mip levels (dim specks); softRender samples level 0, which turns the stars into bright streaks.
+    // so triangles are clipped at the eye plane. Lit like a chunk model, 0.3 + 0.8 max(0, -n.L) (this sign matches Flycast's margin brightness, Normal 03 right 6.7 vs 7.0). Rotation X, then Y, then Z: projecting the export with the real view puts every vertex on the stream's (Hard 05 sky strip at 0x26a310, angles 0x850/0x10a0/0x850: 0.0 px mean). Mipmapped (tex word 0x880a6800 bit 31): softRender now samples box-filtered levels for these triangles, which gives Flycast's dim specks. Not called yet: the specks land in other places than Flycast's (Puzzle margins about 1.1 against 0.26 with no sky) although the vertices match, so the texture mapping inside the triangles differs (compare with `ta_dump.py render --tex 880a6800`).
     void drawDcSky(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, const int ang[3], float scale) const {
         const float kNear = 1.0f;
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
@@ -391,7 +428,7 @@ public:
             for (int k = 1; k + 1 < n; ++k) {
                 SoftTri o{}; o.tex = (tri.mat < m.matTex.size()) ? (int)m.matTex[tri.mat] : -1;
                 const V* q[3] = {&poly[0], &poly[k], &poly[k + 1]};
-                for (int e = 0; e < 3; ++e) { const float sc = pixelsPerUnit * 218.0f / q[e]->depth; o.p[e] = {camera.x + q[e]->x * sc, camera.y + q[e]->z2 * sc}; o.iw[e] = 1.0f / q[e]->depth; o.light[e] = q[e]->light; o.u[e] = q[e]->u; o.v[e] = q[e]->v; }
+                for (int e = 0; e < 3; ++e) { const float sc = pixelsPerUnit * 218.0f / q[e]->depth; o.p[e] = {camera.x + q[e]->x * sc, camera.y + q[e]->z2 * sc}; o.iw[e] = 1.0f / q[e]->depth; o.light[e] = q[e]->light; o.mip = true; o.u[e] = q[e]->u; o.v[e] = q[e]->v; }
                 out.push_back(o);
             }
         }
