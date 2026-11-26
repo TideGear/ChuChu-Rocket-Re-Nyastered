@@ -411,6 +411,8 @@ def export_dc_editor(prs_png, out):
     if not all(os.path.isfile(q) for q in paths): return
     info = os.path.join(prs_png, 'EDITOR1_pzinfo02.png')   # frame 5: the 'A / Yes, B / No' box, 128 x 128 transposed, in the top-left of its tile
     if os.path.isfile(info): paths.append(info)
+    saveok = os.path.join(prs_png, 'EDITOR1_saveok.png')   # frame 6: the 'Save OK' badge, 64 x 64 transposed
+    if os.path.isfile(info) and os.path.isfile(saveok): paths.append(saveok)
     tiles = []
     for q in paths:
         t = Image.open(q).convert('RGBA').transpose(Image.Transpose.TRANSPOSE)

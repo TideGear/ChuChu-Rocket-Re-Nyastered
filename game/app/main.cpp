@@ -403,7 +403,7 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
-    static constexpr int kDcAssetsVersion = 9;   // tools/extract_all.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets, 6 the Puzzle focus ring model, 7 the Puzzle background sky model
+    static constexpr int kDcAssetsVersion = 10;   // tools/extract_all.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets, 6 the Puzzle focus ring model, 7 the Puzzle background sky model
     bool dcAssetsStale = false;
     // Dreamcast-look sheets; a language's folder dc_loc_<xx> (tools/extract_all.py exports one per disc language folder) replaces the English set.
     std::string dcRoot;   // the main ret_all: BIOS font sheets and per-language stage titles are only there
@@ -1763,7 +1763,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false, saved = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1786,7 +1786,7 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
     void tick(App& a) override { runScript(); ++ticks; if (playing && endAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
             int alive = 0, mice = 0; for (auto& e : sim.ents) if (e.mouse) { ++mice; if (e.alive && !e.done) ++alive; }
-            if (mice && alive == 0 && sim.saved == mice && sim.killed == 0) { endAge = 0; a.playSfx(21); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit clear at play tick %d\n", playTicks); }   // all mice home: the Puzzle launch runs (0x8c01b8a0 / 0x8c01b9a0), then the editor restarts
+            if (mice && alive == 0 && sim.saved == mice && sim.killed == 0) { endAge = 0; saved = true; a.playSfx(21); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit clear at play tick %d\n", playTicks); }   // all mice home: the Puzzle launch runs (0x8c01b8a0 / 0x8c01b9a0), then the editor restarts
         } else if (endAge >= 0) { ++endAge; a.stepAngles(sim, true); for (int c = 0; c < kCols * kRows; ++c) if (st.tiles[c] == T_Rocket) lids[c].tick(a.globalTime, c); if (endAge >= kEndAge()) stopPlay(); } }
     // restart age after the clear: between Flycast frames 3203 and 3207 (local/modecap/play2), i.e. 123-126; the code that ends it is unread
     static int kEndAge() { static const int v = getenv("CCR_EDIT_END") ? atoi(getenv("CCR_EDIT_END")) : 125; return v; }
@@ -1797,7 +1797,7 @@ struct DcEditMode : Screen {
     void stopPlay() { playing = false; endAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
     void edit(int button) {
         if (dialog) {   // File > Create: 'The current puzzle will be lost. Are you sure?' A = Yes clears the board, B = No
-            if (button == 0) { st = Stage{}; arrows.clear(); sim.load(st); prev.clear(); dialog = false; } else if (button == 1) dialog = false;
+            if (button == 0) { st = Stage{}; arrows.clear(); saved = false; sim.load(st); prev.clear(); dialog = false; } else if (button == 1) dialog = false;
             return; }
         if (tool == 0) { if (button == 0) dialog = true; return; }   // Delete / Load / Save (buttons 1-3) are not ported
         if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); return; }
@@ -1848,6 +1848,7 @@ struct DcEditMode : Screen {
         quad(strip, 0.0195f, 0.1211f, 1.0f, 0.3711f, 113.2f, 401.5f, 372.5f, 466.5f);    // A Create / B Delete, A Play / B Stop, A / B Facing, A Set / B Delete
         quad(strip, 0.0f, 0.6211f, 0.9883f, 0.8711f, 372.5f, 401.5f, 631.9f, 466.5f);    // X Load / Y Save, X F.F., X / Y Facing, (empty)
         SDL_SetTextureColorMod(sh.tex, 255, 255, 255);
+        if (saved && sh.fr.size() > 6) { SDL_SetTextureColorMod(sh.tex, 203, 203, 203); const SDL_Rect src{sh.fr[6].x, sh.fr[6].y, 64, 64}; const SDL_FRect d{32.8f, 404.8f, 76.8f, 76.8f}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); SDL_SetTextureColorMod(sh.tex, 255, 255, 255); }   // 'Save OK' from the first clear on (Flycast play2: scale 1.2 fitted, mean 8.3)
         if (dialog) {   // measured from Flycast local/modecap/ed3/m__03250.bmp: white quad (stream) x 154..498, y 160..256; BIOS text in (22, 22, 132), centred on x 326; the gold box fitted at (345, 281) 154 x 84 with the 0.8 HUD intensity (mean error 4.9)
             SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); const SDL_Rect box{154, 160, 344, 96}; SDL_RenderFillRect(a.ren, &box);
             if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95) {
