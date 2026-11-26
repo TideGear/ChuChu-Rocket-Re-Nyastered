@@ -140,6 +140,11 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
 static const int kStageSets = 4;
 static std::string gImportDir;   // <data folder>/imports: Dreamcast puzzle packs (.VMS) the player dropped there become stage set 3
 static const int kImportedSource = 5;
+static std::string puzzleTitleForAsciiUi(const std::string& title, int index) {
+    bool printable = !title.empty();
+    for (unsigned char c : title) if (c < 0x20 || c > 0x7e) printable = false;
+    return printable ? title : "PUZZLE " + std::to_string(index + 1);
+}
 static bool loadImportedPacks(Stages& out) {
     namespace fs = std::filesystem; std::error_code ec; if (gImportDir.empty() || !fs::is_directory(gImportDir, ec)) return false;
     std::vector<std::string> files;
@@ -157,9 +162,9 @@ static bool loadImportedPacks(Stages& out) {
             for (int r = 0; r < 10; r++) for (int c = 0; c < 12; c++) e.st.hw[r * 12 + c] = p.walls[25 * r + c];
             for (int r = 0; r < 9; r++) for (int c = 0; c < 13; c++) e.st.vw[r * 13 + c] = p.walls[25 * r + 12 + c];
             for (const auto& ar : p.arrows) ++e.stock[ar.dir & 3];
-            std::memset(e.title, 0, sizeof e.title); std::strncpy(e.title, p.title.c_str(), 32);
-            bool plain = !p.title.empty(); for (unsigned char ch : p.title) if (ch < 0x20 || ch > 0x7e) plain = false;   // Shift-JIS titles cannot be drawn with the ASCII font: fall back to a number
-            if (!plain) snprintf(e.title, sizeof e.title, "PUZZLE %d", idx + 1);
+            const std::string displayTitle = puzzleTitleForAsciiUi(p.title, idx);   // Shift-JIS titles need the BIOS glyph map; this ASCII-only stage list uses a numbered fallback
+            std::memset(e.title, 0, sizeof e.title);
+            std::strncpy(e.title, displayTitle.c_str(), sizeof e.title - 1);
             e.src = kImportedSource; e.idx = idx++; out.list.push_back(e);
         }
     }
@@ -1914,7 +1919,7 @@ struct DcEditMode : Screen {
         if (fileScreen == 1 || fileScreen == 2) {
             centered(fileScreen == 1 ? "LOAD PUZZLE - PORT STORAGE" : "DELETE PUZZLE - PORT STORAGE", 76, 24, 255);
             const int first = std::max(0, std::min(fileIndex - 7, (int)savedPuzzles.size() - 8));
-            for (int rowIndex = 0; rowIndex < 8 && first + rowIndex < (int)savedPuzzles.size(); ++rowIndex) { const int i = first + rowIndex, y = 130 + rowIndex * 30; if (i == fileIndex) { SDL_SetRenderDrawColor(a.ren, 70, 86, 120, 255); SDL_Rect row{124, y - 3, 392, 27}; SDL_RenderFillRect(a.ren, &row); } centered(std::to_string(i + 1) + ".  " + (savedPuzzles[i].title.empty() ? "Puzzle" : savedPuzzles[i].title), y, 20, i == fileIndex ? 255 : 205); }
+            for (int rowIndex = 0; rowIndex < 8 && first + rowIndex < (int)savedPuzzles.size(); ++rowIndex) { const int i = first + rowIndex, y = 130 + rowIndex * 30; if (i == fileIndex) { SDL_SetRenderDrawColor(a.ren, 70, 86, 120, 255); SDL_Rect row{124, y - 3, 392, 27}; SDL_RenderFillRect(a.ren, &row); } centered(std::to_string(i + 1) + ".  " + puzzleTitleForAsciiUi(savedPuzzles[i].title, i), y, 20, i == fileIndex ? 255 : 205); }
             if (fileConfirm) { SDL_SetRenderDrawColor(a.ren, 18, 20, 29, 245); SDL_Rect confirm{150, 190, 340, 92}; SDL_RenderFillRect(a.ren, &confirm); centered("DELETE THIS PUZZLE?", 204, 22, 255); centered("A / ENTER YES     B / ESC NO", 242, 16, 210); }
             else centered("UP/DOWN SELECT     ENTER CONFIRM", 370, 16, 190);
         } else if (fileScreen == 3) {

@@ -12,6 +12,11 @@ int main(int argc, char** argv) {
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
     SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
     check(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) == 0, "headless SDL initialization");
+    check(puzzleTitleForAsciiUi("ChuChu Challenge", 4) == "ChuChu Challenge" &&
+          puzzleTitleForAsciiUi("", 4) == "PUZZLE 5" &&
+          puzzleTitleForAsciiUi(std::string("JP\x82\xa0", 4), 4) == "PUZZLE 5" &&
+          puzzleTitleForAsciiUi(std::string("bad\x01title", 9), 4) == "PUZZLE 5",
+          "Dreamcast puzzle titles use a numbered fallback when unavailable to the ASCII UI");
     int device = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER,
         SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
     check(device >= 0, "virtual controller attachment");
