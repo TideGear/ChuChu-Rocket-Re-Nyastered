@@ -1773,7 +1773,7 @@ struct DcStaffRollMode : Screen {
         for (int i = 0; i < 22 && i < (int)sh.fr.size(); ++i) {
             const float y = 384.0f * i - (float)offset + 480.0f;
             if (y > 480.0f || y + 384.0f < 0.0f) continue;
-            const SDL_FRect d{-1.01f, y, 384.0f, 384.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[i], &d); }   // x = fr13 = -1.01 (0x8c050f58)
+            const SDL_FRect d{-0.01f, y, 384.0f, 384.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[i], &d); }   // x = fr13 = -1.01 (0x8c050f58) plus 1 px measured against Flycast (sprite routine 0x8c0e4268 not read)
     }
 };
 
