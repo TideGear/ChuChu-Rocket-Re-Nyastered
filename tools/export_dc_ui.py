@@ -409,7 +409,13 @@ def export_dc_editor(prs_png, out):
     names = ['EDITOR1_pzedit01a.png', 'EDITOR1_pzedit01b.png', 'EDITOR1_pzedit01d.png', 'EDITOR1_pzedit01e.png', 'EDITOR1_pzedit02.png']
     paths = [os.path.join(prs_png, n) for n in names]
     if not all(os.path.isfile(q) for q in paths): return
-    tiles = [Image.open(q).convert('RGBA').transpose(Image.Transpose.TRANSPOSE) for q in paths]
+    info = os.path.join(prs_png, 'EDITOR1_pzinfo02.png')   # frame 5: the 'A / Yes, B / No' box, 128 x 128 transposed, in the top-left of its tile
+    if os.path.isfile(info): paths.append(info)
+    tiles = []
+    for q in paths:
+        t = Image.open(q).convert('RGBA').transpose(Image.Transpose.TRANSPOSE)
+        if t.size != (256, 256): c = Image.new('RGBA', (256, 256)); c.paste(t, (0, 0)); t = c
+        tiles.append(t)
     atlas = Image.new('RGBA', (256 * len(tiles), 256))
     with open(os.path.join(out, 'dc_editor.frames.bin'), 'wb') as f:
         f.write(struct.pack('<I', len(tiles)))

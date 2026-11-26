@@ -1763,7 +1763,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false; int ticks = 0, playTicks = 0;
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false; int ticks = 0, playTicks = 0;
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1791,6 +1791,10 @@ struct DcEditMode : Screen {
     void startPlay() { sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: the edited stage runs on the Puzzle simulation (phases 5-8 of mode 8 reuse Puzzle's)
     void stopPlay() { playing = false; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
     void edit(int button) {
+        if (dialog) {   // File > Create: 'The current puzzle will be lost. Are you sure?' A = Yes clears the board, B = No
+            if (button == 0) { st = Stage{}; arrows.clear(); sim.load(st); prev.clear(); dialog = false; } else if (button == 1) dialog = false;
+            return; }
+        if (tool == 0) { if (button == 0) dialog = true; return; }   // Delete / Load / Save (buttons 1-3) are not ported
         if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); return; }
         if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
@@ -1822,10 +1826,11 @@ struct DcEditMode : Screen {
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         if (const char* c = getenv("CCR_EDIT_CELL")) { int x = 0, y = 0; if (sscanf(c, "%d,%d", &x, &y) == 2) { cx = (x % 12 + 12) % 12; cy = (y % 9 + 9) % 9; } }
         runScript();
+        if (getenv("CCR_EDIT_DIALOG")) dialog = true;   // headless: show the Create dialog
         a.board(st, 2, 2, field);
         for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);   // solution arrows (Puzzle draws them before the objects)
         a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, nullptr, -1, nullptr, 1.0f);   // rocket domes from the edited stage
-        if (!playing && a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
+        if (!playing && !dialog && a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
         const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) return;
         SDL_SetTextureColorMod(sh.tex, 203, 203, 203);   // the HUD quads carry vertex intensity 0.8 = 203/255 in the PowerVR rule (stream base 0.800)
@@ -1838,6 +1843,14 @@ struct DcEditMode : Screen {
         quad(strip, 0.0195f, 0.1211f, 1.0f, 0.3711f, 113.2f, 401.5f, 372.5f, 466.5f);    // A Create / B Delete, A Play / B Stop, A / B Facing, A Set / B Delete
         quad(strip, 0.0f, 0.6211f, 0.9883f, 0.8711f, 372.5f, 401.5f, 631.9f, 466.5f);    // X Load / Y Save, X F.F., X / Y Facing, (empty)
         SDL_SetTextureColorMod(sh.tex, 255, 255, 255);
+        if (dialog) {   // measured from Flycast local/modecap/ed3/m__03250.bmp: white quad (stream) x 154..498, y 160..256; BIOS text in (22, 22, 132), centred on x 326; the gold box fitted at (345, 281) 154 x 84 with the 0.8 HUD intensity (mean error 4.9)
+            SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); const SDL_Rect box{154, 160, 344, 96}; SDL_RenderFillRect(a.ren, &box);
+            if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95) {
+                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 22, 22, 132);
+                static const char* lines[3] = {"The current puzzle", "will be lost.", "Are you sure?"};
+                for (int l = 0; l < 3; ++l) { int x = 327 - 6 * (int)strlen(lines[l]); const int y = 170 + 26 * l;   /* offsets and pitch are the best of a small scan, not read from code */ for (const char* c = lines[l]; *c; ++c, x += 12) if ((unsigned char)*c > 0x20) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[(unsigned char)*c - 0x20], &d); } }
+                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255); }
+            if (sh.fr.size() > 5) { SDL_SetTextureColorMod(sh.tex, 203, 203, 203); const SDL_Rect src{sh.fr[5].x, sh.fr[5].y, 111, 63}; const SDL_FRect d{345.0f, 281.0f, 154.0f, 84.0f}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); SDL_SetTextureColorMod(sh.tex, 255, 255, 255); } }
     }
 };
 
