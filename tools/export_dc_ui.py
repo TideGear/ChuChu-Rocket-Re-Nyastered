@@ -383,6 +383,25 @@ def export_dc_help_pages(prs_png, out):
             f.write(struct.pack('<2I', int(name.split('_')[0]), len(pages[name])))
             for q in pages[name]: f.write(struct.pack('<5f', pieces[(q['png'], q['transposed'])], q['x'], q['y'], q['w'], q['h']))
 
+def export_dc_staffroll(prs_png, out):
+    """Dreamcast staff roll (mode 17): STUFFROLL1-3 strips sr01-sr22, the 'Thank you!' card chu_end and the fire frame, transposed upright (the decoder's
+    axes are swapped relative to the Ninja UVs) into dc_staffroll, 8 tiles per row: frames 0-21 = sr01-sr22, 22 = chu_end, 23 = fire."""
+    names = [f'STUFFROLL{1 if i <= 10 else 2 if i <= 19 else 3}_sr{i:02}.png' for i in range(1, 23)] + ['STUFFROLL2_chu_end.png', 'STUFFROLL1_fire.png']
+    paths = [os.path.join(prs_png, n) for n in names]
+    if not all(os.path.isfile(q) for q in paths): return
+    tiles = [Image.open(q).convert('RGBA').transpose(Image.Transpose.TRANSPOSE) for q in paths]
+    cols, cw, ch = 8, 256, 256
+    rows = (len(tiles) + cols - 1) // cols
+    atlas = Image.new('RGBA', (cols * cw, rows * ch))
+    with open(os.path.join(out, 'dc_staffroll.frames.bin'), 'wb') as f:
+        f.write(struct.pack('<I', len(tiles)))
+        for k, t in enumerate(tiles):
+            x, y = (k % cols) * cw, (k // cols) * ch
+            atlas.paste(t, (x, y))
+            f.write(struct.pack('<9f', x / atlas.width, y / atlas.height, (x + t.width) / atlas.width, (y + t.height) / atlas.height, 0, 0, 0, 0, 0))
+    with open(os.path.join(out, 'dc_staffroll.tex.bin'), 'wb') as f:
+        f.write(struct.pack('<2I', atlas.width, atlas.height)); f.write(atlas.tobytes())
+
 def uv_span(tile, sx=255 / 256, sy=255 / 256):
     """Flycast frame 2390 samples every Puzzle HUD sprite over UV 0..0.99609375 (255/256), the bottom panel halves over 95 of 96 rows; resample the tile the same way."""
     return tile.transform(tile.size, Image.Transform.AFFINE, (sx, 0, 0, 0, sy, 0), Image.Resampling.BILINEAR)
@@ -509,6 +528,7 @@ def main(prs_png, out, png=None):
     export_dc_help(prs_png, out)
     export_dc_options(prs_png, out)
     export_dc_help_pages(prs_png, out)
+    export_dc_staffroll(prs_png, out)
     export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)
