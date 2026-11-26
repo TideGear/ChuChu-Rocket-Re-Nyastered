@@ -105,7 +105,7 @@ class DreamcastCacheTest(unittest.TestCase):
             sfx.mkdir(parents=True)
             (sfx / 'cues.json').write_text('{}', encoding='ascii')
             self.assertTrue(extract_all.publish_dc_asset_version(str(assets), entry))
-            self.assertEqual(marker.read_text(encoding='ascii'), '6')
+            self.assertEqual(marker.read_text(encoding='ascii'), '7')
 
 
 if __name__ == '__main__':

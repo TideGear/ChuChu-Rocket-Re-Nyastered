@@ -41,6 +41,9 @@ MODELS += [(name, off, BATTLE_TEX) for name, off in (
 # the rocket (0x8c011998) at height 8.0, njScale(16 - 0.5 * age, 1, same) below age 30, material colour (1, 1, 0.3, 0.3) from 0x8c080528): object 0x8c0bdeb0,
 # 16 outer (r 25.76) and 16 inner (r 22.41) vertices on the board plane, untextured.
 MODELS += [('focus_ring', 0xadeb0, BATTLE_TEX)]
+# Background sky (task update 0x8c01f272 / draw 0x8c01f2a0, always live in Puzzle): sphere object 0x8c0b36f0 (60 triangles, radius 500, material 0 = sphere_tx of
+# texture list 0x8c085c60), drawn at the board centre (90, 0, 67.5) with njRotateXYZ(task+32: +8 / +16 / +8 per pass) and njScale(5) (literal 0x8c01f320).
+MODELS += [('sky', 0xa36f0, BATTLE_TEX)]
 
 # Mouse draw dispatcher 0x8c019e26 part trees (roots 0x8c08e138 kind 2, 0x8c0960ec kind 1, 0x8c096be8 chain); texture slots as MOUSE_TEX
 MODELS += [('mouse_a', 0x7e138, MOUSE_TEX), ('mouse_b', 0x860ec, MOUSE_TEX), ('mouse_c', 0x86be8, MOUSE_TEX), ('ghost', 0x87e44, MOUSE_TEX)]   # ghost: object 0x8c097e44 + motion 0x8c0988a0 (8 frames), drawn by 0x8c0192e0 with texture list 0x8c085d18
