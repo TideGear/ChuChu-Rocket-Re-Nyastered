@@ -26,7 +26,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Costumes: njScale 1.3 on the model only, scaled diffuse, per-strip alpha / untextured / environment flags and material diffuse as face colour (models.bin CCM4). Chao passes per element in both mice crops; Pian left passes.
 - Hard/Special/Mania: floor stays tan/pink, arrow stock in direction-code order S, W, N, E. Puzzle clear masks RAM 0x8c22d8a4 + 4 * group.
 - Golden mouse: crash fix on Dreamcast-only installs, "50" marker no longer mirrored, environment-mapped body.
-- Parity: 132 cases, all within the full-frame limit (with a BIOS in the local test caches). Asset version 6 (re-run setup).
+- Parity: 132 cases, all within the full-frame limit (with a BIOS in the local test caches). Asset version 8 (re-run setup; 7 added the sky model, 8 the staff roll strips).
 
 ## Done 2026-11-25
 
@@ -34,6 +34,9 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Dimmed cursor bracket has no size pulse (`0x8c01480c`); Challenge pad pointer pulse phase `cticks + 2`; pad aim confirmed against RAM `0x8c186cfc` (DcCursor already exact).
 - Count2/count1 banner scales fit `8 - 0.13 t`. New parity cases: `puzzle_normal08` (board passes), `puzzle_hard05`, `challenge_play_a1_dim_bracket` (partial). Headless hook `CCR_PAD_AIM=x,y` (Challenge).
 - goal.md: current milestone (Dreamcast Puzzle end to end), "pass (rounding)" rule, honest-reporting and visible-gaps-first working style.
+- Dreamcast Puzzle pause: Start pauses on the press and plays cue 4 (`0x8c01a174`); sky task ported (`0x8c01f272`); hole fall pose derived (previous pass's clock); launch smoke puffs timed as the task does (frames 0..14 on ages born+1..born+15; sweep 1.05-1.36).
+- Tooling: `tools/oracle/mode_inventory.py --ram` (per-mode SE/music/task inventory -> docs/inventory_dc_modes.md), `tools/run_tests.py` (30/30), `CCR_CLEAR_GROUPS`, Mode Select entry map (below). The e2e test caches have no BIOS, so text crops read worse there than on `local/cache/assets` (real BIOS glyphs via `tools/export_dc_bios_font.py`).
+- Staff roll (mode 17): strips (0.01-0.07 vs Flycast), end card, cues 6/6/6/8, exit to the title and the unlock text for groups 0-3 (0.028) ported; modes 4, 18, 19, 21 unreachable (unreferenced setters), 16 and 22 online-only, 20 a two-frame transition.
 
 ## Next tasks (milestone: Dreamcast Puzzle end to end)
 
