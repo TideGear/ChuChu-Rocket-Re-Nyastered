@@ -21,6 +21,7 @@
 #include "../core/padmap.hpp"
 #include "../core/puzzle_pause.hpp"
 #include "../core/vms.hpp"
+#include "../core/editor.hpp"
 #include "model3d.hpp"
 #include <filesystem>
 #include "rocket_launch.hpp"
@@ -1881,16 +1882,16 @@ struct DcEditMode : Screen {
         if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); else if (button == 2) ff = true; return; }   // X = F.F.: two simulation passes per frame while held (Flycast local/modecap/ff)
         if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
-        if (tool == 6) { if (button == 0) t = T_Rocket; else if (button == 1 && t == T_Rocket) t = T_Floor; }
+        if (tool == 6) { if (button == 0) { if (editorCanPlaceTile(st.tiles, (size_t)cy * kCols + cx, T_Rocket)) t = T_Rocket; } else if (button == 1 && t == T_Rocket) t = T_Floor; }
         else if (tool == 7) { if (button == 0) t = T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }
         else if (tool == 3 || tool == 4) {   // Mice / Cats: the Facing button sets the start direction (RAM cell word 0x3d..0x40 mice, 0x47..0x4a cats = down, left, up, right; stage tile 9 / 13 + offset: 0 down, 1 left, 2 up, 3 right)
             static const int heading[4] = {0, 3, 1, 2};   // tile offset per button, from the Flycast mc frames: Dreamcast A down (tile 9 faces the camera), B right (+3), X left (+1), Y up (+2)
-            const uint8_t nt = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]); t = t == nt ? (uint8_t)T_Floor : nt; }   // the same facing again removes the figure (Flycast local/modecap/del)
+            const uint8_t nt = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]); if (t == nt) t = T_Floor; else if (editorCanPlaceTile(st.tiles, (size_t)cy * kCols + cx, nt)) t = nt; }   // same facing removes; original caps 100 mice / 20 cats (FUN_8c031f0a; error strings 0x8c0bff52/7a)
         else if (tool == 5) {   // Solution: the Facing buttons put an arrow (Dreamcast A down, B right, X left, Y up = arrow codes 0, 3, 1, 2: the same order as the mouse and cat tile offsets); an arrow already on the cell is replaced (Flycast local/modecap/sol)
             static const int dir[4] = {0, 3, 1, 2};
             bool removed = false; int removedDir = -1;
             for (size_t k = 0; k < arrows.size(); ++k) if (arrows[k][0] == cx && arrows[k][1] == cy) { removed = true; removedDir = arrows[k][2]; arrows.erase(arrows.begin() + k); break; }
-            if (!(removed && removedDir == dir[button])) arrows.push_back({cx, cy, dir[button]}); }   // the same direction again removes the arrow
+            if (!(removed && removedDir == dir[button]) && editorCanAddArrow(arrows.size())) arrows.push_back({cx, cy, dir[button]}); }   // same direction removes; original cap is 12 arrows (0x8c0bffc9)
         else if (tool == 2) {
             uint8_t& w = button == 0 ? st.hw[(cy + 1) * kCols + cx] : button == 1 ? st.vw[cy * 13 + cx + 1] : button == 2 ? st.vw[cy * 13 + cx] : st.hw[cy * kCols + cx];
             w ^= 1; }

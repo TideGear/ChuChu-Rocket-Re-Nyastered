@@ -5,11 +5,28 @@
 #pragma once
 #include <cstdint>
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <string>
 #include <vector>
 namespace ccr {
 struct EditorArrow { uint16_t x, y; uint32_t type; };
+// Dreamcast Puzzle Edit limits (error strings at 0x8c0bff52..0x8c0bffc9; input handler FUN_8c031f0a).
+inline int editorObjectKind(uint8_t tile) {
+    if (tile >= 9 && tile <= 12) return 1;   // mice, max 100
+    if (tile >= 13 && tile <= 16) return 2;  // cats, max 20
+    if (tile == 1) return 3;                 // goal rockets, max 30
+    return 0;
+}
+inline bool editorCanPlaceTile(const uint8_t* tiles, size_t cell, uint8_t next) {
+    const int kind = editorObjectKind(next), oldKind = editorObjectKind(tiles[cell]);
+    if (!kind || kind == oldKind) return true;
+    const int limit = kind == 1 ? 100 : kind == 2 ? 20 : 30;
+    int count = 0;
+    for (size_t i = 0; i < 108; ++i) count += editorObjectKind(tiles[i]) == kind;
+    return count < limit;
+}
+inline bool editorCanAddArrow(size_t count) { return count < 12; }
 struct EditorStage {
     uint8_t bytes[0x175] = {};   // tiles 0..0x6b, walls 0x6c..0x158 (row stride 25), stock 0x15c..0x15f, title 0x160..0x174 (bytes 0x159..0x15b are not written)
     std::vector<EditorArrow> arrows;
