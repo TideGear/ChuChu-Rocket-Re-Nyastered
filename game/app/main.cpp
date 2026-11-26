@@ -167,10 +167,12 @@ static bool loadImportedPacks(Stages& out) {
 static bool loadStageSet(const std::string& root, int set, Stages& out) {
     if (set == 3) return loadImportedPacks(out);
     if (set == 2) return loadStages((root + "/gba/dlc_stages.bin").c_str(), out, 3);
-    if (loadStages((root + "/gba/gba_stages.bin").c_str(), out, set)) return true;
-    if (set != 0) return false;
-    return loadStages((root + "/mobile_puzzles.bin").c_str(), out, kMobilePuzzleSource) ||
-           loadStages((root + "/dreamcast_puzzles.bin").c_str(), out, 4);
+    if (set == 0) {
+        // Prefer the Dreamcast's own 100 stages when available. Two GBA main-set records differ from Dreamcast (stage_registry.py); mobile is the fallback when no disc stage export exists.
+        if (loadStages((root + "/dreamcast_puzzles.bin").c_str(), out, 4)) return true;
+        if (loadStages((root + "/mobile_puzzles.bin").c_str(), out, kMobilePuzzleSource)) return true;
+    }
+    return loadStages((root + "/gba/gba_stages.bin").c_str(), out, set);
 }
 
 static bool challengeBoardsAvailable(const std::string& root) { Stages s; return loadStages((root + "/battle_stages.bin").c_str(), s, 3) && s.list.size() >= 25; }
