@@ -1784,6 +1784,36 @@
       "note": "flyhost Puzzle Normal 08 \"Lots of mice\" (RIGHT x2, DOWN x1 before the final START), shot 2390, RAM clock 1826; local/pz8"
     },
     {
+      "name": "puzzle_normal08_hole_2440",
+      "ref": "local/hole/h_02440.bmp",
+      "args": [
+        "puzzle",
+        "7"
+      ],
+      "env": {
+        "CCR_TICKS": "250",
+        "CCR_GLOBAL_TIME": "1675",
+        "CCR_MODELS": "1",
+        "CCR_KEYS": " ",
+        "CCR_KEY_TICK": "108"
+      },
+      "elements": {
+        "hole": [
+          130,
+          320,
+          180,
+          370
+        ],
+        "board": [
+          137,
+          23,
+          595,
+          366
+        ]
+      },
+      "note": "flyhost Puzzle Normal 08 run with no arrows (R2@2300-2310), shot 2440 = tick 250 (local/hole): a mouse spins in the bottom-left hole (update 0x8c01952e, draw 0x8c01946c). Open: the failure (focus ring, zoom) starts about 24 frames after the fall in Flycast but at once in the port, so no tick aligns (best full 7.2 at tick 230-238, hole crop 7.4 at 248)."
+    },
+    {
       "name": "puzzle_hard05",
       "ref": "local/dc_ref/groups/h05_02390.bmp",
       "args": [

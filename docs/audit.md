@@ -139,7 +139,7 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 | `0x8c014054` / `0x8c01406a` | short task spawned by the cursor update (`0x8c014100`); seen at the clear | unidentified |
 | `0x8c0145ee` / `0x8c0146e6` | cursor (pointer and bracket) | ported |
 | `0x8c0191d4` / `0x8c0192e0` | ghost of an eaten mouse: object `0x8c097e44`, motion `0x8c0988a0` | ported (shared `drawFieldObjects` ghost) |
-| `0x8c019880` / `0x8c01944c` (states `0x8c0195d4`, `0x8c01952e`, `0x8c019688`, `0x8c01958e`) | mouse: run, entering a rocket, others | run ported; the other states unchecked |
+| `0x8c019880` / `0x8c01944c` (states `0x8c0195d4`, `0x8c01952e`, `0x8c019688`, `0x8c01958e`) | mouse: run; `0x8c0195d4` entering a rocket (cue 6 via `0x8c0120d4`); `0x8c01952e` hole fall (entered on cell flag 0x400 at `0x8c0199a8`; draw `0x8c01946c` scales the mouse by +44, which loses 0.0333 x 0.2 per pass in Puzzle, while it spins 0x1000 per pass: 150 passes); `0x8c01958e` eaten (creates the ghost `0x8c0191d4`); `0x8c019688` entered when `[r13] != -1` at `0x8c019b1e` (unidentified) | run, rocket entry, ghost ported; hole fall added 2026-11-25 (case `puzzle_normal08_hole_2440`; open: Flycast starts the failure about 24 frames after the fall, the port at once); `0x8c019688` open |
 | `0x8c01b8a0`, `0x8c01b976`, `0x8c01b9a0` | rocket launch body, lid, flame/smoke | ported |
 | `0x8c01c26e` / `0x8c01c31a` | parked dome | ported |
 | `0x8c01c380` | dome pulse decay (with add `0x8c01cbc8`) | ported 2026-11-25 |

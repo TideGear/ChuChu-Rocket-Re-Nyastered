@@ -1395,7 +1395,7 @@ struct App {
     // Dreamcast 3D characters (docs/dreamcast_models.md): the basic mouse plays its eight keyframes by the low three bits of the shared clock (0x8c019b0c writes them, 0x8c019e26 draws the frame
     // directly); the cat plays its 24-frame walk cycle from the walk phase (provisional mapping). Orientation: the heading angle (heading << 14) turns the model about the vertical axis.
     bool draw3dCharacter(const Entity& en, size_t i, int ang, float x, float z,
-                         int mouseFrame, float cell) {
+                         int mouseFrame, float cell, float fallScale = 1.0f) {   // fallScale: the hole-fall draw 0x8c01946c passes the task's +44 to the mouse draw as its scale
         // Mouse dispatcher 0x8c019e26 kind 2: root 0x8c08e138 drawn with c_mouse02->c_mouse04 and c_mouse03->c_mouse05 (material slots 1->4, 2->3 of MOUSE_TEX). Static node pose only; motion routine not decoded.
         static const int kind2Remap[10] = {0, 4, 3, 3, 4, 5, 6, 7, 8, 9};
         const int costume = en.mouse && en.type == 0 ? dcCharacterStyle() : 0;
@@ -1411,7 +1411,7 @@ struct App {
         if (!en.mouse) { phase = (i < cphase.size() ? std::max(0.0f, cphase[i]) : 0.0f); frame = static_cast<int>(phase) % 24; phase -= std::floor(phase); }
         else if (en.type == 1) frame = mouseFrame & 7;
         const bool costumed = en.mouse && costume && m == models3d.find(dcMouseModelName(en.type, mouseFrame, costume));   // dispatcher 0x8c019e26 styles 1 and 2: njScale(1.3, 1.3, 1.3) (vector 0x8c0b4c18) before the Chao/Pian model
-        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, costumed ? (costume == 1 ? 0x30u : 0x51u) : (en.mouse ? 1u : 2u),   /* costume materials whose textures carry alpha are blended: Chao c_chao03/c_chao08 (slots 4, 5), Pian chu_p01/p05/p07 (0, 4, 6); Flycast puzzle01_chao/pian 2.35/3.17 -> 2.08/2.48 */ en.type == 2 && specialMouse ? kind2Remap : nullptr, (en.mouse && !specialMouse) ? 178.0f / 255.0f : 1.0f, 0.0f, costumed ? 1.3f : 1.0f);   // (njScale after the lift: only the model is scaled) second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
+        models3d.drawDcCharacter(ren, *m, {x, z}, {GW / 2.0f, GH / 2.0f}, cell / 15.0f, -turn, en.mouse ? 3.0f : 2.5f, en.mouse ? mouseLight : catLight, frame, phase, en.mouse ? 1 : 0, costumed ? (costume == 1 ? 0x30u : 0x51u) : (en.mouse ? 1u : 2u),   /* costume materials whose textures carry alpha are blended: Chao c_chao03/c_chao08 (slots 4, 5), Pian chu_p01/p05/p07 (0, 4, 6); Flycast puzzle01_chao/pian 2.35/3.17 -> 2.08/2.48 */ en.type == 2 && specialMouse ? kind2Remap : nullptr, (en.mouse && !specialMouse) ? 178.0f / 255.0f : 1.0f, 0.0f, (costumed ? 1.3f : 1.0f) * fallScale);   // (njScale after the lift: only the model is scaled) second list in the real stream: the mouse's eyes (material 0, c_mouse01) and the cat's arms and body (material 1, tex 16385); drawn after everything opaque
 
         // FUN_8c056e1e -> FUN_8c056d00: type 1 (golden) and type 2 (roulette) mice carry a 13.5-unit marker quad (texture 46 + 3 * kind of the CHALLENGECLEAR list: plus50, hatena) at
         // (x, height 9.5, z - 10), RotateY(0x8000); perspective 218 / (218 - 9.5) as for the crown.
@@ -1522,6 +1522,7 @@ struct App {
             const Entity& en = sim.ents[i];
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
             if (headless && getenv("CCR_ENT_TRACE")) printf("ent %zu %s type %d world %.2f %.2f ang %04x frame %d phase %.3f\n", i, en.mouse ? "mouse" : "cat", en.type, object.x / kCell * 15.0f, object.z / kCell * 15.0f, ang & 0xffff, mouseFrame, i < cphase.size() ? cphase[i] : -1.0f);
+            if (useModels3d() && en.mouse && en.drawsHoleFall() && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell, en.rocketCounter)) continue;   // Puzzle hole fall (Flycast Normal 08 frames 2420-2464, local/hole: the mouse spins in the hole)
             if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell)) continue;
             if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter * field.scale(), 255);

@@ -326,7 +326,7 @@ private:
                     e.rocketCounter = e.catWalkScale < 0.0f ? 1.0f : e.catWalkScale;
                 }
                 return; }   // cat lost in a hole: player -1, no score
-            if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; lastKilledMouse = static_cast<int>(&e - ents.data()); endTicks.push_back(now); if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); } else e.catHoleFallTick = now; e.alive = false; return; }
+            if (f & kHole)   { if (e.mouse) { killed++; killedByHole++; lastKilledMouse = static_cast<int>(&e - ents.data()); endTicks.push_back(now); e.catHoleFallTick = now; e.rocketCounter = 1.0f; if (trace) printf("t=%d mouse falls in hole at (%d,%d)\n", now, e.gx, e.gy); }   /* the mouse task swaps to update 0x8c01952e / draw 0x8c01946c (0x8c0199a8): it spins 0x1000 per pass while its scale (+44, from 1) loses 0.0333 x 0.2 per pass in Puzzle (0x8c0194e0), 150 passes */ else e.catHoleFallTick = now; e.alive = false; return; }
             if (!e.mouse && (f & kArrow)) {                      // cat arriving head-on to an arrow strikes it
                 if (((e.heading + 2) & 3) == (int)(f & 3)) strikeArrow(e.gx, e.gy);   // note: the turn below still uses the flags read before the strike (as the original does)
             }
