@@ -130,7 +130,7 @@ Modes 4, 16 (tutorial per the style variable) and 18-22 are still unidentified (
 
 ## Dreamcast per-mode code inventory (generated, 2026-11-25)
 
-`docs/inventory_dc_modes.md` (from `tools/oracle/mode_inventory.py`): every SE call (333), music call (20), task creation (108) and state swap (7) in 1ST_READ, attributed to the modes whose phase tables reach it statically. 174 functions with such calls are reached by no mode statically (handlers installed through RAM: menus, pause, entity states); each needs a mode from a run-time cross-check (task pool sampling, as done for Puzzle) before the per-mode sound and animation rows count as complete. Puzzle shows the gap: static reach finds cues 2/21/22/28, the run-time-crossed table below also has 0, 1, 6, 7. Open: name every reached task and cue, attribute the 174.
+`docs/inventory_dc_modes.md` (from `tools/oracle/mode_inventory.py --ram`): every SE call (333), music call (20), task creation (108) and state swap (7) in 1ST_READ, attributed to modes by reach from each mode's phase table plus the task callbacks live in 559 Flycast RAM dumps (filed by mode variable `0x8c1af108`), with literal-pool, bsr, handler-table and fall-through edges. 26 functions with calls stay unattributed (listed there). Per-mode "all" lists are upper bounds: Puzzle's includes the runtime-crossed table below (0, 1, 2, 6, 7, 21, 22, 27, 28) plus cues from shared helpers. Open: confirm each mode's cues by trigger (as done for Puzzle), name the 26, and capture modes with no dumps (3-6, 8-10, 16-22).
 
 ## Dreamcast Puzzle task inventory (from the code, 2026-11-25)
 
