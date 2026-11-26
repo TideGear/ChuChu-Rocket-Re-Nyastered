@@ -3533,6 +3533,7 @@ struct PuzzleMode : Screen {
     void drawFailureFocus(App& a, bool boardPass = false) const {   // boardPass: the Dreamcast ring is a board-scene model drawn under the HUD (Flycast Hard 05 2780: the HUD panels cover it)
         if (failureFrames <= 0 || failureFrames > kFailureHoldFrames) return;
         const int passes = dash ? 2 : 1;
+        if (a.headless && getenv("CCR_FALL_TRACE") && boardPass) printf("ring age %d (failureFrames %d) sim.now %d\n", failureFrames * passes, failureFrames, sim.now);
         if (failureFrames * passes >= 180) return;   // FocusControll retires the task at age 180.
         const int target = sim.lastKilledMouse >= 0 ? sim.lastKilledMouse : sim.lastCatInRocket;
         if (target < 0) return;
