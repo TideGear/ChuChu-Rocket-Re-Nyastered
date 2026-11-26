@@ -349,6 +349,16 @@ int main(int argc, char** argv) {
         failureStartIgnored(true, keyboardStart, "Dreamcast keyboard pause is ignored during failure");
         failureStartIgnored(false, start, "Mobile controller Start is ignored during failure");
         failureStartIgnored(false, keyboardStart, "Mobile keyboard pause is ignored during failure");
+        app.dcLook = false;
+        puzzle.state = 1; puzzle.running = true; puzzle.paused = false;
+        puzzle.pauseState.press();
+        for (int i = 0; i < 5; ++i) puzzle.pauseState.tick(false);
+        puzzle.paused = puzzle.pauseState.overlay;
+        puzzle.sim.killed = 1;
+        puzzle.tick(app);
+        check(puzzle.state == 3 && !puzzle.paused && !puzzle.pauseState.overlay &&
+              !puzzle.pauseState.freeze && puzzle.pauseState.ticks < 0,
+              "Puzzle failure transition cancels an already-open mobile pause overlay");
         app.dcLook = oldDcLook;
         app.dcPuzzleStart.tex = oldStart;
         app.dcPuzzleCancel.tex = oldCancel;
