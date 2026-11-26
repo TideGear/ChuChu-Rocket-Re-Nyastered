@@ -151,7 +151,7 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 
 ### Puzzle sound and music calls (from the code, 2026-11-25)
 
-`tools/oracle/task_inventory.py --creator 0x8c01203a --call 0x8c012350` lists every call of the SE dispatcher (332 sites, about 24 with a computed cue) and the music queue (19). In the Puzzle code (task callbacks above, the Puzzle screen `0x8c02b000`-`0x8c02cfff`, pause `0x8c01a182`/`0x8c01a316`):
+`tools/oracle/task_inventory.py --creator 0x8c01203a --call 0x8c012350` lists every call of the SE dispatcher (332 sites, about 24 with a computed cue) and the music queue (19). In the Puzzle code (task callbacks above, the Puzzle screen `0x8c02b000`-`0x8c02cd7f`, pause `0x8c01a182`/`0x8c01a316`; music 4 at `0x8c02cdba` belongs to the Help initializer, mode 6):
 
 | Call site | Cue | Meaning | Port |
 | --- | --- | --- | --- |
@@ -163,7 +163,6 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 | `0x8c01a36a`, `0x8c01a32c`/`0x8c01a34c` (computed) | 2, ? | pause menu | partly (computed cues unread) |
 | `0x8c011532` | 7 | cat enters a rocket (reached in every mode once the cat is on a rocket cell and `[0x8c1ae8c0] == 1`, which is 1 in Puzzle) | added 2026-11-25 (`Event::CatRocket` in Puzzle; `puzzle_audio_test`) |
 | `0x8c0196fa`, `0x8c019982` | 8 | arrival of a mouse whose task +8 is 1 (Puzzle mice read 0: hd5, tip2, puzzle-clear) | not needed in Puzzle |
-| `0x8c02cdba` | music 4 | leaving to the menu | check |
 
 Mouse arrival: Flycast's audio (local/arrsnd, local/arr2) has a burst at every arrival; emulating the entering-rocket state `0x8c0195d4` from local/arr2/a00221.ram (that mouse's task is gone at 222, the burst starts at 223) shows it calls a second SE entry, `0x8c0120d4`, with cue 6 at `0x8c019678` (its only caller; bank select `0x8c012024`). The port's cue 6 is right. Inventory scans must include `0x8c0120d4` as well as `0x8c01203a`.
 
