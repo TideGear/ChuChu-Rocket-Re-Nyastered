@@ -3312,7 +3312,8 @@ struct PuzzleMode : Screen {
                 // Dreamcast: Start only pauses (pause controller 0x8c01a174; Flycast pa1 frame 2500 shows the placing board idle under the overlay). The mobile
                 // look keeps the port's Start-runs-the-puzzle convenience for setups without a Start/Dash button.
                 if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; }
-                pauseState.press();
+                if (dreamcastPuzzleControls(a)) { pauseState.pressNow(); paused = true; pauseQuit = false; a.playSfx(4); }   // 0x8c01a174 pauses on the press and requests cue 4 (0x8c01203a(4, 0))
+                else pauseState.press();
             }
             else if (k == SDLK_r) reset(); else if (k == SDLK_ESCAPE) back = true;
             else if (k == SDLK_RIGHTBRACKET) { cur = (cur + 1) % (int)stages.list.size(); reset(); } else if (k == SDLK_LEFTBRACKET) { cur = (cur + (int)stages.list.size() - 1) % (int)stages.list.size(); reset(); }
@@ -3343,7 +3344,8 @@ struct PuzzleMode : Screen {
             { const PadMap& pm = gApp->padMap; int d = -1; for (int k = 0; k < 4; k++) if (b == pm.arrow[k]) d = k; if (d >= 0) { if (state == 0 && putAt(curX, curY, d)) a.playSfx(1); }
             else if (b == pm.pause) {
                 if (state == 0 && !dreamcastPuzzleControls(a)) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; a.playSfx(2); }   // Dreamcast: Start only pauses (see the key path)
-                pauseState.press();
+                if (dreamcastPuzzleControls(a)) { pauseState.pressNow(); paused = true; pauseQuit = false; a.playSfx(4); }   // 0x8c01a174 pauses on the press and requests cue 4 (0x8c01203a(4, 0))
+                else pauseState.press();
             } else if (b == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
                 if (state == 0) { if (!goBlocked()) { state = 1; running = true; tutGo(); } dash = false; a.playSfx(2); }
                 else if (running && !dash) { dash = true; a.playSfx(0xc); }

@@ -13,6 +13,14 @@ struct PuzzlePauseState {
         overlay = false;
     }
 
+    // Dreamcast pause controller 0x8c01a174: Start sets the paused byte at once, and the main loop (0x8c018546) skips the task pass
+    // 0x8c01909c from that frame, so every task (board, sky) stops on the press; there is no hold window.
+    void pressNow() {
+        ticks = -1;
+        freeze = true;
+        overlay = true;
+    }
+
     void tick(bool held) {
         if (ticks < 0) return;
         ++ticks;
