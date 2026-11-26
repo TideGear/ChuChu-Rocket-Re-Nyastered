@@ -166,6 +166,19 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 
 Mouse arrival: Flycast's audio (local/arrsnd, local/arr2) has a burst at every arrival; emulating the entering-rocket state `0x8c0195d4` from local/arr2/a00221.ram (that mouse's task is gone at 222, the burst starts at 223) shows it calls a second SE entry, `0x8c0120d4`, with cue 6 at `0x8c019678` (its only caller; bank select `0x8c012024`). The port's cue 6 is right. Inventory scans must include `0x8c0120d4` as well as `0x8c01203a`.
 
+## Dreamcast disc file manifest (2026-11-25)
+
+`tools/oracle/disc_manifest.py` lists all 1,305 disc files and marks those whose name appears in tools/ or game/. Referenced by name: root 2/4, DPETC 4/8, DPFONT 0/9, DPSS 2/68, DPTEX 0/23, DPWWW 4/91 (the DP* folders are the Dream Passport browser used by Network and Homepage), and 74 of about 220 in each language folder. A name match is a first pass (pattern- or index-loaded files show as unreferenced), but it points at content the audit has no row for. Unreferenced ENGLISH groups worth a row each, until the loading code says otherwise:
+
+- Staff roll: `STUFFROLL1-3.PRS` (credits; no audit row).
+- Puzzle Edit: `EDITOR1/2.PRS`, `PZEDIT01A-E.PVR`, `PZEDIT02.PVR`, `PZINFO01-08.PVR`, `PZLAND.PVR`, `PZLOAD.PVR`, `SAVEOK.PVR`.
+- Menus: `CHALLENGEMENU.PRS`, `PUZZLEMENU_B-F.PRS`, `GMODE.PRS`, `GMODETEST.PRS`, `HELP3.PRS`, `TITLEMENU.PVR`, `TEAMCLEAR.PRS`.
+- Speech balloons and characters: `BALOON*.DAT/PRS`, `BIGCHAO.PRS`, `CAT.PRS`, `GAMEVOICE.PRS`, `SONIC_KAO.PVR`, `AWA01-12.PVR`.
+- Rocket explanation and results: `ROCKETSETUMEI0-2.PVR`, `NEWROCKETMOJI0-2.PVR`, `WINNO1-9.PVR`, `KANMURI.PVR` (crown).
+- Text entry and chat: `KEYBOARD1.PVR`, `KEYADD.PRS`, `A24*/B24*/C24CAPS.PVR`, `CHAT*.PVR`, `MOJI0/1.PVR`.
+- Network: `NET*.PVR/PRS`, `NETWORKSOUSA0.PVR` (not testable offline).
+- Small icons (`MARU`, `PEKE`, `YES`, `NO`, `OK1`, `KEY`, `DOOR`, `PEN`, `ONPU`, `HOSI*/HISI*/KAKU*`, ...): owner unknown.
+
 ## Next work
 
 - Finish the Dreamcast presentation gaps above, beginning with exact Challenge clocks, alternate clear states and sound. Keep capture and Ghidra details in the [handoff](HANDOFF.md).
