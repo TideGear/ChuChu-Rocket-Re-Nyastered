@@ -16,28 +16,13 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: the full-frame sweep (ages -9..80) passes; only the age -1 dome crops pass per element.
 
-## Done 2026-11-24 (evidence in archive/roadmap_2026-11-12_to_11-25.md, "2026-11-24 session notes")
+## Done 2026-11-24
 
-- Mouse pose follows the global clock ((clock - 1) & 7 on unpaused passes; Flycast RAM shows no reset at stage start).
-- Puzzle pause overlay: every element passes (exact float placement). Japanese pause case passes too.
-- Cursor bracket dims and pulses on cells with 0xF00 set in Battle, Puzzle and Challenge (`0x8c0146e6`); Puzzle phase measured (cticks - 53), Challenge phase not measured. Pointers hold their pulse through the intro.
-- Dreamcast Battle START/countdown banners (`0x8c028d90`) and Round panel (`0x8c028fd8`, PLAYERCLEAR winno digits).
-- Options text drawn from the original Shift-JIS lines with BIOS full-width glyphs (`dc_bios_wide`); per-language Dreamcast art (`ret_all/dc_loc_<xx>`), per-language Puzzle hint titles (`dreamcast_titles_<xx>.bin`, `dc_bios_sjis`).
-- Costumes: njScale 1.3 on the model only, scaled diffuse, per-strip alpha / untextured / environment flags and material diffuse as face colour (models.bin CCM4). Chao passes per element in both mice crops; Pian left passes.
-- Hard/Special/Mania: floor stays tan/pink, arrow stock in direction-code order S, W, N, E. Puzzle clear masks RAM 0x8c22d8a4 + 4 * group.
-- Golden mouse: crash fix on Dreamcast-only installs, "50" marker no longer mirrored, environment-mapped body.
-- Parity: 132 cases, all within the full-frame limit (with a BIOS in the local test caches). Asset version 8 (re-run setup; 7 added the sky model, 8 the staff roll strips).
+Moved to docs/archive/roadmap_2026-11-12_to_11-25.md ("2026-11-24 session notes").
 
 ## Done 2026-11-25
 
-- Cat light fitted to the Flycast Hard 05 cat (`catLight` {0, 0.6, -0.35}): crop 2.59 -> 2.33, full-frame and all 142 parity cases otherwise unchanged; 30/30 tests pass.
-- Puzzle cat walks in place during arrow placement (was frozen); start tick 32 measured from a scan, not traced. Hard 05 board 1.24 -> 0.87.
-- Dimmed cursor bracket has no size pulse (`0x8c01480c`); Challenge pad pointer pulse phase `cticks + 2`; pad aim confirmed against RAM `0x8c186cfc` (DcCursor already exact).
-- Count2/count1 banner scales fit `8 - 0.13 t`. New parity cases: `puzzle_normal08` (board passes), `puzzle_hard05`, `challenge_play_a1_dim_bracket` (partial). Headless hook `CCR_PAD_AIM=x,y` (Challenge).
-- goal.md: current milestone (Dreamcast Puzzle end to end), "pass (rounding)" rule, honest-reporting and visible-gaps-first working style.
-- Dreamcast Puzzle pause: Start pauses on the press and plays cue 4 (`0x8c01a174`); sky task ported (`0x8c01f272`); hole fall pose derived (previous pass's clock); launch smoke puffs timed as the task does (frames 0..14 on ages born+1..born+15; sweep 1.05-1.36).
-- Tooling: `tools/oracle/mode_inventory.py --ram` (per-mode SE/music/task inventory -> docs/inventory_dc_modes.md), `tools/run_tests.py` (30/30), `CCR_CLEAR_GROUPS`, Mode Select entry map (below). The e2e test caches have no BIOS, so text crops read worse there than on `local/cache/assets` (real BIOS glyphs via `tools/export_dc_bios_font.py`).
-- Staff roll (mode 17): strips (0.01-0.07 vs Flycast), end card, cues 6/6/6/8, exit to the title and the unlock text for groups 0-3 (0.028) ported; modes 4, 18, 19, 21 unreachable (unreferenced setters), 16 and 22 online-only, 20 a two-frame transition.
+- Cat light fitted to the Flycast Hard 05 cat (`catLight` {0, 0.6, -0.35}): crop 2.59 -> 2.33; parity and 30/30 tests otherwise unchanged. Puzzle cat walks in place during arrow placement; Puzzle pause sky/smoke timing, staff roll and Puzzle Edit file flows. Full notes: docs/archive/roadmap_2026-11-12_to_11-25.md ("2026-11-25 session").
 
 ## Next tasks (milestone: Dreamcast Puzzle end to end; not met, see audit.md for every row's evidence)
 
@@ -49,7 +34,7 @@ State at the end of the 2026-11-25 session (evidence and addresses in docs/audit
 - **Puzzle residue (time-boxed, causes in audit.md):** Hard 05 cat shading (2.33 after the light fit; timing is exact: tick 200 beats 199, 201 (3.8), 190-240 by a wide margin, so the residue is body shading and the right foot pose, not the clock), full parity 2026-11-25: 140 of 142 cases under full-frame 3 (fail frames 2780/2840 at 1.13/1.24; their board crops pass the mean but keep 183/323 off-edge px), launch rocket shading (sweep 1.05-1.36), `list_box` / `hud_left` edges (needs the BIOS font in the cache), Challenge dim bracket's rocket phase, START banner 2.39, golden mouse draw order (a stream-tool limit, not the port).
 - **Modes:** 4, 18, 19, 21 are unreachable (unreferenced setters), 16 and 22 online-only, 20 a two-frame transition; 25 functions with sound or task calls remain unattributed (docs/inventory_dc_modes.md, `py tools/oracle/mode_inventory.py --ram [--mode N]`).
 
-Capture recipes (flyhost; libretro `B` is the Dreamcast A button, `A` is DC B, `Y` is DC X, `X` is DC Y; R2 / L2 step the editor tool): Puzzle Edit = Mode Select DOWN x4 then START (`START@1350-1360;START@1510-1520;DOWN@1800-1804;DOWN@1840-1844;DOWN@1880-1884;DOWN@1920-1924;START@1950-1960`, then the editor keys from frame ~2300). Editor sound attribution = `FLY_WATCH=1869ec:1024:2250` (one SE ring slot per sound, cue in the slot's sequence field). The e2e test caches have no BIOS, so text crops read worse there than on `local/cache/assets` (`tools/export_dc_bios_font.py`).
+Capture recipes (flyhost; libretro `B` = DC A, `A` = DC B, `Y` = DC X, `X` = DC Y): Puzzle Edit = Mode Select DOWN x4 then START (`START@1350-1360;START@1510-1520;DOWN@1800-1804;DOWN@1840-1844;DOWN@1880-1884;DOWN@1920-1924;START@1950-1960`). Editor sound attribution: `FLY_WATCH=1869ec:1024:2250`. The e2e caches have no BIOS (`tools/export_dc_bios_font.py`).
 
 Headless editor hooks (CCR_*): `CCR_EDIT_SCRIPT="tool,x,y,A|B|X|Y;..."`, `CCR_EDIT_CELL=x,y`, `CCR_EDIT_TOOL`, `CCR_EDIT_DIALOG`, `CCR_EDIT_PAUSE=1|2`, `CCR_EDIT_FF=<tick>`, `CCR_EDIT_END`, `CCR_EDIT_CATPHASE`, `CCR_CLEAR_GROUPS=<bitmask>`; launch DC_EDIT directly with `build/game/ccr.exe <assets> DC_EDIT`.
 
