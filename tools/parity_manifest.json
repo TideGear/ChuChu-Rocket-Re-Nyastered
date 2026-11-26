@@ -1791,8 +1791,8 @@
         "7"
       ],
       "env": {
-        "CCR_TICKS": "250",
-        "CCR_GLOBAL_TIME": "1675",
+        "CCR_TICKS": "248",
+        "CCR_GLOBAL_TIME": "1673",
         "CCR_MODELS": "1",
         "CCR_KEYS": " ",
         "CCR_KEY_TICK": "108"
@@ -1811,7 +1811,7 @@
           366
         ]
       },
-      "note": "flyhost Puzzle Normal 08 run with no arrows (R2@2300-2310), shot 2440 = tick 250 (local/hole): a mouse spins in the bottom-left hole (update 0x8c01952e, draw 0x8c01946c). Open: the failure (focus ring, zoom) starts about 24 frames after the fall in Flycast but at once in the port, so no tick aligns (best full 7.2 at tick 230-238, hole crop 7.4 at 248)."
+      "note": "flyhost Puzzle Normal 08 run with no arrows (R2@2300-2310), shot 2440 (local/hole): a mouse spins in the bottom-left hole (update 0x8c01952e, draw 0x8c01946c). Alignment open: tick 248 matches the ring size and the hole (crop 7.4) but the full frame stays near 7: Flycast draws the focus ring over the bottom-right rocket, the port draws that rocket over the ring, and the queued mice are in other walk poses."
     },
     {
       "name": "puzzle_hard05",
