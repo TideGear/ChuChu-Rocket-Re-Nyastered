@@ -37,6 +37,35 @@ int main(int argc, char** argv) {
         editor.startPlay();
         check(editor.playing, "Dreamcast Puzzle Edit starts Play when a mouse exists");
     }
+    {
+        namespace fs = std::filesystem;
+        const std::string oldSaveDir = app.saveDir;
+        const fs::path dir = fs::temp_directory_path() / "ccr_editor_delete_slots_test";
+        std::error_code ec;
+        fs::remove_all(dir, ec); fs::create_directories(dir / "puzzle_edit", ec);
+        app.saveDir = dir.string();
+        VmsPuzzle first, second, third;
+        first.title = "FIRST"; second.title = "SECOND"; third.title = "THIRD";
+        auto writePack = [&](const fs::path& path, const std::vector<VmsPuzzle>& puzzles) {
+            const auto bytes = vms::writePack(puzzles); FILE* f = fopen(path.string().c_str(), "wb");
+            if (f) { fwrite(bytes.data(), 1, bytes.size(), f); fclose(f); }
+        };
+        const fs::path firstPack = dir / "puzzle_edit" / "a.VMS", secondPack = dir / "puzzle_edit" / "b.VMS";
+        writePack(firstPack, {first, second}); writePack(secondPack, {third});
+        { FILE* f = fopen((dir / "puzzle_edit" / "b.VMI").string().c_str(), "wb"); if (f) { fputc(1, f); fclose(f); } }
+        DcEditMode editor; editor.refreshPuzzleFiles();
+        check(editor.savedPuzzles.size() == 3 && editor.puzzleSlots == std::vector<int>({0, 1, 0}),
+              "Dreamcast Puzzle Edit tracks each slot within its own VMS pack");
+        editor.fileIndex = 2; editor.deleteSelected();
+        check(!fs::exists(secondPack) && !fs::exists(dir / "puzzle_edit" / "b.VMI") && editor.savedPuzzles.size() == 2,
+              "Dreamcast Puzzle Edit deletes a puzzle in a later VMS pack");
+        editor.fileIndex = 1; editor.deleteSelected();
+        std::vector<uint8_t> bytes; { FILE* f = fopen(firstPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n); fclose(f); } }
+        std::vector<VmsPuzzle> remaining;
+        check(vms::readPack(bytes, remaining) == 1 && remaining[0].title == "FIRST",
+              "Dreamcast Puzzle Edit deletes the selected slot within a multi-puzzle pack");
+        app.saveDir = oldSaveDir; fs::remove_all(dir, ec);
+    }
     check(dcMouseModelName(0, 3) == "mouse3" &&
           dcMouseModelName(1, 3) == "mouse_b" &&
           dcMouseModelName(2, 3) == "mouse_a" &&
