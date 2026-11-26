@@ -22,6 +22,16 @@ int main(int argc, char** argv) {
     app.win = SDL_CreateWindow("test", 0, 0, GW, GH, SDL_WINDOW_HIDDEN);
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");
+    {
+        DcEditMode editor;
+        editor.startPlay();
+        check(editor.fileScreen == 6 && !editor.playing,
+              "Dreamcast Puzzle Edit refuses Play when there is no mouse");
+        editor.st.tiles[0] = T_MouseS;
+        editor.fileScreen = 0;
+        editor.startPlay();
+        check(editor.playing, "Dreamcast Puzzle Edit starts Play when a mouse exists");
+    }
     check(dcMouseModelName(0, 3) == "mouse3" &&
           dcMouseModelName(1, 3) == "mouse_b" &&
           dcMouseModelName(2, 3) == "mouse_a" &&
