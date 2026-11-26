@@ -1796,7 +1796,7 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7, stepCue();
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7, stepCue();
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7, stepCue(); }
-    void tick(App& a) override { runScript(); ++ticks; if (getenv("CCR_EDIT_PAUSE")) paused = true; if (paused) return; if (const char* f = getenv("CCR_EDIT_FF")) ff = ticks >= atoi(f);   // headless: F.F. held from this tick
+    void tick(App& a) override { runScript(); ++ticks; if (getenv("CCR_EDIT_PAUSE")) { paused = true; pauseQuit = atoi(getenv("CCR_EDIT_PAUSE")) == 2; } if (paused) return; if (const char* f = getenv("CCR_EDIT_FF")) ff = ticks >= atoi(f);   // headless: F.F. held from this tick
         for (int pass = 0; pass < (ff && playing ? 2 : 1); ++pass) tickPass(a); }
     void tickPass(App& a) { if (playing && endAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
             int alive = 0, mice = 0; for (auto& e : sim.ents) if (e.mouse) { ++mice; if (e.alive && !e.done) ++alive; }
