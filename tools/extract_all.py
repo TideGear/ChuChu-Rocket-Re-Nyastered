@@ -234,7 +234,7 @@ def publish_dc_asset_version(assets, entry):
     version = Path(assets, 'ret_all', 'dc_assets_version.txt')
     version.parent.mkdir(parents=True, exist_ok=True)
     temporary = version.with_suffix('.tmp')
-    temporary.write_text('8', encoding='ascii')   # 8: the staff roll sheet (dc_staffroll); 7: sky model; 6: the Puzzle focus ring model (focus_ring) in models.bin
+    temporary.write_text('9', encoding='ascii')   # 9: the Puzzle Edit HUD sheet (dc_editor); 8: the staff roll sheet (dc_staffroll); 7: sky model; 6: the Puzzle focus ring model (focus_ring) in models.bin
     os.replace(temporary, version)
     return True
 

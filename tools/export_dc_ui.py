@@ -402,6 +402,23 @@ def export_dc_staffroll(prs_png, out):
     with open(os.path.join(out, 'dc_staffroll.tex.bin'), 'wb') as f:
         f.write(struct.pack('<2I', atlas.width, atlas.height)); f.write(atlas.tobytes())
 
+def export_dc_editor(prs_png, out):
+    """Puzzle Edit HUD sheets (mode 8), transposed upright like the staff roll strips (the stream's UVs then index them directly): frames 0-4 = EDITOR1_pzedit01a
+    (Create / Delete over Load / Save), 01b (Play / Stop over F.F.), 01d (Facing strips), 01e (Set / Delete) and 02 (left panel: Start Exit, L R Functions, tool list),
+    one 256 x 256 tile each in a single row."""
+    names = ['EDITOR1_pzedit01a.png', 'EDITOR1_pzedit01b.png', 'EDITOR1_pzedit01d.png', 'EDITOR1_pzedit01e.png', 'EDITOR1_pzedit02.png']
+    paths = [os.path.join(prs_png, n) for n in names]
+    if not all(os.path.isfile(q) for q in paths): return
+    tiles = [Image.open(q).convert('RGBA').transpose(Image.Transpose.TRANSPOSE) for q in paths]
+    atlas = Image.new('RGBA', (256 * len(tiles), 256))
+    with open(os.path.join(out, 'dc_editor.frames.bin'), 'wb') as f:
+        f.write(struct.pack('<I', len(tiles)))
+        for k, t in enumerate(tiles):
+            atlas.paste(t, (256 * k, 0))
+            f.write(struct.pack('<9f', 256 * k / atlas.width, 0.0, 256 * (k + 1) / atlas.width, 1.0, 0, 0, 0, 0, 0))
+    with open(os.path.join(out, 'dc_editor.tex.bin'), 'wb') as f:
+        f.write(struct.pack('<2I', atlas.width, atlas.height)); f.write(atlas.tobytes())
+
 def uv_span(tile, sx=255 / 256, sy=255 / 256):
     """Flycast frame 2390 samples every Puzzle HUD sprite over UV 0..0.99609375 (255/256), the bottom panel halves over 95 of 96 rows; resample the tile the same way."""
     return tile.transform(tile.size, Image.Transform.AFFINE, (sx, 0, 0, 0, sy, 0), Image.Resampling.BILINEAR)
@@ -529,6 +546,7 @@ def main(prs_png, out, png=None):
     export_dc_options(prs_png, out)
     export_dc_help_pages(prs_png, out)
     export_dc_staffroll(prs_png, out)
+    export_dc_editor(prs_png, out)
     export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)

@@ -373,7 +373,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFrame73, hdButton, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcStaffRoll, dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
+    Sheet dcEditor, dcStaffRoll, dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -403,7 +403,7 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
-    static constexpr int kDcAssetsVersion = 8;   // tools/extract_all.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets, 6 the Puzzle focus ring model, 7 the Puzzle background sky model
+    static constexpr int kDcAssetsVersion = 9;   // tools/extract_all.py writes dc_assets_version.txt; version 4 adds the Dreamcast Chao/Pian model sets, 5 the Battle banners and the per-language dc_loc_<xx> sheets, 6 the Puzzle focus ring model, 7 the Puzzle background sky model
     bool dcAssetsStale = false;
     // Dreamcast-look sheets; a language's folder dc_loc_<xx> (tools/extract_all.py exports one per disc language folder) replaces the English set.
     std::string dcRoot;   // the main ret_all: BIOS font sheets and per-language stage titles are only there
@@ -423,6 +423,7 @@ struct App {
         freeSheet(dcHelp); loadSheet(dir + "dc_help", dcHelp);
         freeSheet(dcHelpPages); loadSheet(dir + "dc_help_pages", dcHelpPages);
         freeSheet(dcStaffRoll); loadSheet(dir + "dc_staffroll", dcStaffRoll);
+        freeSheet(dcEditor); loadSheet(dir + "dc_editor", dcEditor);
         freeSheet(dcOptions); loadSheet(dir + "dc_options", dcOptions);
         freeSheet(dcSelectClock); loadSheet(dcRoot + "dc_select_clock", dcSelectClock);
         freeSheet(dcBiosAnsi); loadSheet(dcRoot + "dc_bios_ansi", dcBiosAnsi);
@@ -1757,6 +1758,36 @@ struct TitleMode : Screen {
     }
 };
 
+// ---------------------------------------------------------------- Dreamcast Puzzle Edit (mode 8: init 0x8c02dc50); first slice: the Functions screen
+// Layout from the Flycast stream (local/modecap/pe/m_02290.state, 45 polygons): board floor quad x 120.5..619.3, y 25.2..399.4 (cell 41.57); left panel two quads
+// (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
+// 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
+struct DcEditMode : Screen {
+    Stage st{}; bool leave = false; int ticks = 0;
+    static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
+    int music() override { return -1; }
+    void event(App&, const SDL_Event& e) override { if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true; }
+    void tick(App&) override { ++ticks; }
+    const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
+    void draw(App& a, float) override {
+        SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
+        SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
+        a.board(st, 2, 2, field);
+        if (a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, 137.3f * 1.6f, 42.0f * 1.6f, 0, 42.4f * 1.6f);   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
+        SDL_RenderSetLogicalSize(a.ren, 640, 480);
+        const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) return;
+        SDL_SetTextureColorMod(sh.tex, 203, 203, 203);   // the HUD quads carry vertex intensity 0.8 = 203/255 in the PowerVR rule (stream base 0.800)
+        auto quad = [&](int sheet, float u0, float v0, float u1, float v1, float x0, float y0, float x1, float y1) {
+            const SDL_Rect src{sh.fr[sheet].x + (int)(u0 * 256.0f + 0.5f), sh.fr[sheet].y + (int)(v0 * 256.0f + 0.5f), (int)((u1 - u0) * 256.0f + 0.5f), (int)((v1 - v0) * 256.0f + 0.5f)};
+            const SDL_FRect d{x0, y0, x1 - x0, y1 - y0}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); };
+        quad(4, 0.0664f, 0.0f, 0.4414f, 0.9961f, 29.3f, 21.2f, 114.2f, 247.2f);      // left panel, top half
+        quad(4, 0.5664f, 0.0039f, 0.9414f, 0.9961f, 29.3f, 247.2f, 114.2f, 473.3f);  // left panel, bottom half
+        quad(0, 0.0195f, 0.1211f, 1.0f, 0.3711f, 113.2f, 401.5f, 372.5f, 466.5f);    // Functions strip: A Create / B Delete
+        quad(0, 0.0f, 0.6211f, 0.9883f, 0.8711f, 372.5f, 401.5f, 631.9f, 466.5f);    // X Load / Y Save
+        SDL_SetTextureColorMod(sh.tex, 255, 255, 255);
+    }
+};
+
 // ---------------------------------------------------------------- Dreamcast staff roll (mode 17: init 0x8c0507ea, update 0x8c050b80, exit 0x8c050ada)
 // Strip task 0x8c050dc0 / draw 0x8c050de8: offset +2 per pass; strip i (sr01-sr22, 256x256 at njScale 1.5) at (0, 384 * i - offset + 480), drawn while inside the
 // 864-px window; the task retires at offset 8928 (22 x 384 + 480) and sets the done state 0x8c2415ec. Partial: the rising rockets (0x8c0510ec), the end card
@@ -2992,7 +3023,7 @@ struct DcModeSelect : Screen {
     static constexpr int labelY[kCount] = {84, 128, 168, 208, 248, 288, 328, 368, 417};
     static constexpr int descriptions[kCount] = {0, 1, 2, 3, 4, 5, 6, 8, 7};
     static constexpr const char* destinations[kCount] = {
-        "HELP", "BATTLE", "TEAM_BATTLE", "CHALLENGE_SELECT", "STAGES", nullptr, nullptr, nullptr, "OPTIONS"
+        "HELP", "BATTLE", "TEAM_BATTLE", "CHALLENGE_SELECT", "STAGES", "DC_EDIT", nullptr, nullptr, "OPTIONS"
     };
     int selected = 1;
     unsigned frame = 0;
@@ -3015,6 +3046,7 @@ struct DcModeSelect : Screen {
         if (!destinations[selected] ||
             (selected == 0 && !HelpMode::ok(a) && !DcHelpMode::available(a)) ||
             (selected == 3 && !challengeBoardsAvailable(a.root)) ||
+            (selected == 5 && !a.dcEditor.tex) ||   // Puzzle Edit (mode 8, row 5 of 0x8c07f2b4): first slice only, needs the dc_editor sheet
             (selected == 8 && !OptionsMode::ok(a) && !DcOptionsMode::available(a))) {
             a.playSfx(0x13);
             return;
@@ -5280,6 +5312,7 @@ int main(int argc, char** argv) {
         else if (name == "HELP" && HelpMode::ok(app)) mode = std::make_unique<HelpMode>();
         else if (name == "HELP" && DcHelpMode::available(app)) mode = std::make_unique<DcHelpMode>();
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
+        else if (name == "DC_EDIT" && app.dcEditor.tex) mode = std::make_unique<DcEditMode>();
         else if (name == "DC_STAFFROLL" && app.dcStaffRoll.tex) mode = std::make_unique<DcStaffRollMode>(app);
         else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
         else if (name == "OPTIONS" && app.dcLook && DcOptionsMode::available(app)) mode = std::make_unique<DcOptionsMode>();
