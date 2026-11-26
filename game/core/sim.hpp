@@ -63,7 +63,10 @@ struct Result { int mice = 0, saved = 0, killed = 0, cats = 0; bool stuck = fals
 
 struct PuzzleAudioRequests {
     template<class Play> void afterSimulationPass(const std::vector<Event>& events, Play play) const {
-        for (const Event& event : events) if (event.kind == Event::PuzzleRocket) play(6);
+        for (const Event& event : events) {
+            if (event.kind == Event::PuzzleRocket) play(6);   // mouse entering a rocket: state 0x8c0195d4 -> 0x8c0120d4(6) at 0x8c019678 (emulated from local/arr2/a00221.ram; Flycast audio burst at frame 223)
+            else if (event.kind == Event::CatRocket) play(7);   // cat entering a rocket: 0x8c01203a(7) at 0x8c011532, reached in every mode once the cat is on a rocket cell and [0x8c1ae8c0] == 1 (1 in Puzzle)
+        }
     }
 };
 
@@ -314,7 +317,7 @@ private:
                 if (e.mouse) scheduleFree(&e - ents.data(), now + 1, false);       // mouse: removed; cat: rocket-in animation then respawn (FUN_000292c0)
                 return;
             }
-            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); events.push_back({Event::PuzzleRocket, 0, e.type}); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; lastCatInRocket = static_cast<int>(&e - ents.data()); e.rocketIn = true; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
+            if (f & kRocket) { if (e.mouse) { saved++; saveTicks.push_back(now); endTicks.push_back(now); events.push_back({Event::PuzzleRocket, 0, e.type}); if (trace) printf("SAVED t=%d n=%d" "\n", now, saved); } else { catsInRocket++; events.push_back({Event::CatRocket, 0, 0}); lastCatInRocket = static_cast<int>(&e - ents.data()); e.rocketIn = true; if (trace) printf("t=%d cat enters rocket at (%d,%d)\n", now, e.gx, e.gy); } e.done = true; return; }
             if (battle && (f & kHole)) { events.push_back(e.mouse ? Event{Event::MouseHole, 0, e.type} : Event{Event::CatRocket, -1, 0});
                 if (e.mouse || !rnd) e.alive = false;
                 else {

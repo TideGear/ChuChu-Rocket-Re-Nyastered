@@ -161,11 +161,11 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 | `0x8c01bd52` (and three more in `0x8c01bb6a`) | 21 | each rocket's launch | yes |
 | `0x8c01a262` | 4 | pause | yes |
 | `0x8c01a36a`, `0x8c01a32c`/`0x8c01a34c` (computed) | 2, ? | pause menu | partly (computed cues unread) |
-| `0x8c011532` | 7 | cat enters a rocket | check |
+| `0x8c011532` | 7 | cat enters a rocket (reached in every mode once the cat is on a rocket cell and `[0x8c1ae8c0] == 1`, which is 1 in Puzzle) | added 2026-11-25 (`Event::CatRocket` in Puzzle; `puzzle_audio_test`) |
 | `0x8c0196fa`, `0x8c019982` | 8 | arrival of a mouse whose task +8 is 1 (Puzzle mice read 0: hd5, tip2, puzzle-clear) | not needed in Puzzle |
 | `0x8c02cdba` | music 4 | leaving to the menu | check |
 
-Open: Flycast's audio (local/arrsnd, resumed Normal 01 clear, no music) has a burst at every mouse arrival (frames 224, 240, 262, 278, 294), but no literal-cue call in the Puzzle code makes it, and none of the 24 computed-cue sites is in mouse or rocket code, and with `bsr` calls included (the tool now follows them) the dispatcher has no other callers: the arrival sound reaches the driver another way (a queued request or a function pointer), still to be found. Its cue is unconfirmed (waveform correlation with the cue clips is at most 0.27, cue 22); the port plays cue 6 there, by analogy with Battle.
+Mouse arrival: Flycast's audio (local/arrsnd, local/arr2) has a burst at every arrival; emulating the entering-rocket state `0x8c0195d4` from local/arr2/a00221.ram (that mouse's task is gone at 222, the burst starts at 223) shows it calls a second SE entry, `0x8c0120d4`, with cue 6 at `0x8c019678` (its only caller; bank select `0x8c012024`). The port's cue 6 is right. Inventory scans must include `0x8c0120d4` as well as `0x8c01203a`.
 
 ## Next work
 
