@@ -149,6 +149,24 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 | `0x8c02c4e0` / `0x8c02c4f8` | failure focus ring | ported 2026-11-25 |
 | `0x8c02ccc0` / `0x8c02ccd8` | "Save Completed" banner: lives 300 passes, draws sprite list `0x8c0be388` while age mod 60 < 40 (Flycast puzzle-clear s_00320/400/500) | ported (`saveAge`) |
 
+### Puzzle sound and music calls (from the code, 2026-11-25)
+
+`tools/oracle/task_inventory.py --creator 0x8c01203a --call 0x8c012350` lists every call of the SE dispatcher (332 sites, about 24 with a computed cue) and the music queue (19). In the Puzzle code (task callbacks above, the Puzzle screen `0x8c02b000`-`0x8c02cfff`, pause `0x8c01a182`/`0x8c01a316`):
+
+| Call site | Cue | Meaning | Port |
+| --- | --- | --- | --- |
+| `0x8c02b9d8` | music 13 | Puzzle screen | yes (song 9 = track 13) |
+| `0x8c02bd04` | 2 | run start | yes |
+| `0x8c02bd5c`, `0x8c02bd62` | 21, 28 | all mice in | yes |
+| `0x8c01bd52` (and three more in `0x8c01bb6a`) | 21 | each rocket's launch | yes |
+| `0x8c01a262` | 4 | pause | yes |
+| `0x8c01a36a`, `0x8c01a32c`/`0x8c01a34c` (computed) | 2, ? | pause menu | partly (computed cues unread) |
+| `0x8c011532` | 7 | cat enters a rocket | check |
+| `0x8c0196fa`, `0x8c019982` | 8 | arrival of a mouse whose task +8 is 1 (Puzzle mice read 0: hd5, tip2, puzzle-clear) | not needed in Puzzle |
+| `0x8c02cdba` | music 4 | leaving to the menu | check |
+
+Open: Flycast's audio (local/arrsnd, resumed Normal 01 clear, no music) has a burst at every mouse arrival (frames 224, 240, 262, 278, 294), but no literal-cue call in the Puzzle code makes it, so it comes from a computed-cue site not yet read. Its cue is unconfirmed (waveform correlation with the cue clips is at most 0.27, cue 22); the port plays cue 6 there, by analogy with Battle.
+
 ## Next work
 
 - Finish the Dreamcast presentation gaps above, beginning with exact Challenge clocks, alternate clear states and sound. Keep capture and Ghidra details in the [handoff](HANDOFF.md).
