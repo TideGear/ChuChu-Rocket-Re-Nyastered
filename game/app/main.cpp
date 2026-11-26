@@ -1764,9 +1764,15 @@ struct TitleMode : Screen {
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
     Stage st{}; bool leave = false; int ticks = 0;
+    int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
     int music() override { return -1; }
-    void event(App&, const SDL_Event& e) override { if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true; }
+    void event(App&, const SDL_Event& e) override {
+        if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true;
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_e || e.key.keysym.sym == SDLK_PAGEDOWN)) tool = (tool + 1) & 7;
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7;
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
     void tick(App&) override { ++ticks; }
     const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
     void draw(App& a, float) override {
@@ -1782,8 +1788,9 @@ struct DcEditMode : Screen {
             const SDL_FRect d{x0, y0, x1 - x0, y1 - y0}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); };
         quad(4, 0.0664f, 0.0f, 0.4414f, 0.9961f, 29.3f, 21.2f, 114.2f, 247.2f);      // left panel, top half
         quad(4, 0.5664f, 0.0039f, 0.9414f, 0.9961f, 29.3f, 247.2f, 114.2f, 473.3f);  // left panel, bottom half
-        quad(0, 0.0195f, 0.1211f, 1.0f, 0.3711f, 113.2f, 401.5f, 372.5f, 466.5f);    // Functions strip: A Create / B Delete
-        quad(0, 0.0f, 0.6211f, 0.9883f, 0.8711f, 372.5f, 401.5f, 631.9f, 466.5f);    // X Load / Y Save
+        const int strip = tool == 0 ? 0 : tool == 1 ? 1 : tool <= 5 ? 2 : 3;   // pzedit01a / b / d / e: the same two quads, one sheet per tool class (Flycast pr frames)
+        quad(strip, 0.0195f, 0.1211f, 1.0f, 0.3711f, 113.2f, 401.5f, 372.5f, 466.5f);    // A Create / B Delete, A Play / B Stop, A / B Facing, A Set / B Delete
+        quad(strip, 0.0f, 0.6211f, 0.9883f, 0.8711f, 372.5f, 401.5f, 631.9f, 466.5f);    // X Load / Y Save, X F.F., X / Y Facing, (empty)
         SDL_SetTextureColorMod(sh.tex, 255, 255, 255);
     }
 };
