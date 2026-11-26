@@ -172,8 +172,8 @@ public:
             // packet TSP 0x3891a4db uses ONE / DST_ALPHA (additive on the opaque scene).
             emit(flame, launchAge - 7.0f, launchAge * 0x200, 1.0f, false, true, launchAge & 15);
         }
-        if (smokeBirths) for (int born : *smokeBirths)
-            emit(find("smoke" + std::to_string(launchAge - born)), born - 11.0f, 0, 1, false, false, -1, true, true);
+        if (smokeBirths) for (int born : *smokeBirths) if (launchAge != born)
+            emit(find("smoke" + std::to_string((launchAge - born + 15) & 15)), born - 11.0f, 0, 1, false, false, -1, true, true);
         // Flycast ta_util.cpp sortTriangles: translucent triangles sort by
         // their minimum reciprocal depth, far to near, retaining ties.
         std::stable_sort(projected.begin(), projected.end(), [](const SoftTri& a, const SoftTri& b) {
