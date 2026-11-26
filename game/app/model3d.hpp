@@ -361,10 +361,10 @@ public:
     }
 
     // Background sky (draw 0x8c01f2a0): njTranslate(centre), njRotateXYZ(ang) (X, then Y, then Z, the order measured for node angles in
-    // tools/export_dc_models.py), njScale(scale), drawn with the character camera (RotateX(-45), eye 218 units out). The sphere surrounds the eye,
-    // so triangles are clipped at the eye plane. Unlit: intensity 1. Not called yet: with this camera the streaks land in the wrong places (Puzzle 01 margins 0.72 -> 0.92), so the real Puzzle view matrix is needed first.
+    // tools/export_dc_models.py), njScale(scale), drawn with the Puzzle view (straight down from height 218). The sphere surrounds the eye,
+    // so triangles are clipped at the eye plane. Unlit: intensity 1. Not called: drawn as polygons it adds bright streaks Flycast does not show (Puzzle 01 right margin 0.63 -> 1.85), and the Hard 05 stream has no sky polygon; the original draws it through 0x8c0e9b12, not the model draw 0x8c0e0938, which is still to be read.
     void drawDcSky(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, const int ang[3], float scale) const {
-        const float kTilt = -45.0f * 0.017453292f, ct = cosf(kTilt), st = sinf(kTilt), kNear = 1.0f;
+        const float kNear = 1.0f;
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
         float c[3], s[3]; for (int i = 0; i < 3; ++i) { const float t = ang[i] * 6.283185307f / 65536.0f; c[i] = cosf(t); s[i] = sinf(t); }
         struct V { float x, z2, depth, u, v; };
@@ -376,7 +376,7 @@ public:
                 t = y * c[0] - z * s[0]; z = y * s[0] + z * c[0]; y = t;      // X
                 t = x * c[1] + z * s[1]; z = -x * s[1] + z * c[1]; x = t;     // Y
                 t = x * c[2] - y * s[2]; y = x * s[2] + y * c[2]; x = t;      // Z
-                in[k] = {ox + x, oz + (y * st + z * ct), 218.0f - (y * ct - z * st), tri.v[k].u, tri.v[k].v};   // RotateX(-45); depth from the eye
+                in[k] = {ox + x, oz + z, 218.0f - y, tri.v[k].u, tri.v[k].v};   // the Puzzle view matrix (RAM matrix stack at [0x8c2c75d4], local/tip2 2390): rows (1,0,0), (0,0,-1), (0,1,0), translation (-72, -85.5, 218): straight down from height 218, no tilt
             }
             V poly[4]; int n = 0;   // clip against depth >= kNear (Sutherland-Hodgman on one plane)
             for (int k = 0; k < 3; ++k) {
