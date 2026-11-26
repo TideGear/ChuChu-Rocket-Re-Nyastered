@@ -19,7 +19,7 @@ struct DcRocketLid {
         // the stationary smoke task at animation frame 15.
         if (age <= 201 && !(globalTime & 7)) smokeBirths.push_back(age);
         smokeBirths.erase(std::remove_if(smokeBirths.begin(), smokeBirths.end(),
-            [&](int born) { return age - born >= 15; }), smokeBirths.end());
+            [&](int born) { return age - born >= 16; }), smokeBirths.end());
         switch (phase) {
         case 0:
             angle += 0x200;
