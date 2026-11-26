@@ -4638,17 +4638,46 @@ struct StageSelectMode : Screen {
         for (int i = 0; i < 25; ++i) part(i == cur % 25 ? 8 : 7, 36 + 54 * (i % 5), 115 + 34 * (i / 5));
         for (int i = 0; i < 25; ++i) if (a.isCleared(cur / 25 * 25 + i)) part(9, 43 + 54 * (i % 5), 112 + 34 * (i / 5));
         part(6, 32, 112); part(10 + cur / 25, 95, 304);
-        // The original runtime hint uses the BIOS ANSI glyphs, shared with
-        // Puzzle play. Setup supplies the documented font fallback without BIOS.
-        const std::string hint = stages.list[cur].title;
+        // Original hint uses BIOS glyphs. Keep a readable ASCII fallback for disc-only installs without a BIOS.
+        std::string hint = a.dcTitles.size() == 100 ? a.dcTitles[cur] : stages.list[cur].title;
+        while (!hint.empty() && (hint.back() == ' ' || hint.back() == '\0')) hint.pop_back();
+        bool asciiHint = true; for (unsigned char c : hint) if (c < 0x20 || c > 0x7e) asciiHint = false;
+        bool sjisHintReady = a.dcBiosSjis.tex && !a.dcSjisCodes.empty();
+        for (size_t i = 0; sjisHintReady && i < hint.size(); ++i) {
+            const unsigned char c = hint[i];
+            if ((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xef)) {
+                if (i + 1 >= hint.size()) { sjisHintReady = false; break; }
+                const uint16_t code = (uint16_t)(c << 8 | (unsigned char)hint[++i]);
+                const auto it = std::lower_bound(a.dcSjisCodes.begin(), a.dcSjisCodes.end(), code);
+                if (it == a.dcSjisCodes.end() || *it != code || (size_t)(it - a.dcSjisCodes.begin()) >= a.dcBiosSjis.fr.size()) sjisHintReady = false;
+            } else if (c >= 0x80) sjisHintReady = false;
+        }
+        if (!asciiHint && (!a.dcBiosAnsi.tex || !sjisHintReady)) { hint = stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == '\0')) hint.pop_back(); asciiHint = true; }
         if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() >= 95) {
             SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 32, 32, 64);
-            for (size_t i = 0; i < hint.size() && i < 20; ++i) {
-                const unsigned char c = hint[i]; if (c <= 32 || c > 126) continue;
-                const SDL_Rect dst{374 + (int)i * 12, 179, 12, 24};
-                SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 32], &dst);
+            if (a.dcBiosSjis.tex) SDL_SetTextureColorMod(a.dcBiosSjis.tex, 32, 32, 64);
+            int col = 0;
+            for (size_t i = 0; i < hint.size() && col < 20; ++i) {
+                const unsigned char c = hint[i];
+                if ((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xef)) {
+                    if (i + 1 >= hint.size()) break;
+                    const uint16_t code = (uint16_t)(c << 8 | (unsigned char)hint[++i]);
+                    const auto it = std::lower_bound(a.dcSjisCodes.begin(), a.dcSjisCodes.end(), code);
+                    if (a.dcBiosSjis.tex && it != a.dcSjisCodes.end() && *it == code && (size_t)(it - a.dcSjisCodes.begin()) < a.dcBiosSjis.fr.size()) {
+                        const SDL_Rect dst{374 + 12 * col, 179, 24, 24}; SDL_RenderCopy(a.ren, a.dcBiosSjis.tex, &a.dcBiosSjis.fr[it - a.dcSjisCodes.begin()], &dst);
+                    }
+                    col += 2; continue;
+                }
+                const int at = col++;
+                if (c > 32 && c <= 126) { const SDL_Rect dst{374 + 12 * at, 179, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 32], &dst); }
             }
-            SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
+            SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255); if (a.dcBiosSjis.tex) SDL_SetTextureColorMod(a.dcBiosSjis.tex, 255, 255, 255);
+        } else if (asciiHint) {
+            SDL_SetRenderDrawColor(a.ren, 32, 32, 64, 255);
+            for (size_t i = 0; i < hint.size() && i < 20; ++i) if (const uint8_t* glyph = font57mixed((unsigned char)hint[i]))
+                for (int row = 0; row < 7; ++row) for (int bit = 0; bit < 5; ++bit) if (glyph[row] >> (4 - bit) & 1) {
+                    const SDL_Rect dot{375 + (int)i * 12 + bit * 2, 183 + row * 2, 2, 2}; SDL_RenderFillRect(a.ren, &dot);
+                }
         }
         const SDL_Rect aperture{364, 244, 252, 187};
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderFillRect(a.ren, &aperture);
