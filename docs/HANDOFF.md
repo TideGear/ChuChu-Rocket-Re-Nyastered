@@ -11,7 +11,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 ## Latest gameplay/UI work
 
 - Records controls follow the traced original: L+R+Start deletes (the footer triangle is Start), the delete resets a Chao costume, and A/B/Start leave with cue 3.
-- Puzzle pause: global controller and per-mode handler are traced; +5/+3 tap/hold timing remains observation-only. Dreamcast (`0x8c02be0a` → `0x8c01a298`) and mobile (`FUN_0002fb54` → `PA_SetPauseDisable`) disable pause on results; transitions now clear active/pending overlays, covered by a mobile failure regression.
+- Puzzle result: corrected the post-clear shortcut to the original A/B/Start mask (`0x8c02c15e`, bits `0x0e`); queued Dreamcast staff roll now starts on Start, not Y. Puzzle pause disable on results clears overlays; mobile failure regression.
 - Monaural: traced to sound-driver command 0x8a. The port's final-mix fold differs for panned voices.
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: the full-frame sweep (ages -9..80) passes; only the age -1 dome crops pass per element.

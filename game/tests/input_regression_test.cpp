@@ -285,6 +285,14 @@ int main(int argc, char** argv) {
         accept.cbutton.button = SDL_CONTROLLER_BUTTON_A;
         puzzle.event(app, accept);
         check(puzzle.cur == 1, "already-connected controller advances after Puzzle clear");
+        puzzle.state = 2; puzzle.clearFrames = 211; puzzle.staffRoll = true;
+        accept.cbutton.button = SDL_CONTROLLER_BUTTON_Y;
+        puzzle.event(app, accept);
+        check(puzzle.staffRoll, "Dreamcast Y does not replace the original Puzzle result Start shortcut");
+        accept.cbutton.button = SDL_CONTROLLER_BUTTON_START;
+        puzzle.event(app, accept);
+        check(std::string(puzzle.next()) == "DC_STAFFROLL",
+              "Dreamcast Start leaves a queued Puzzle result for the staff roll");
         puzzle.state = 1;
         puzzle.running = true;
         puzzle.pauseState.press();

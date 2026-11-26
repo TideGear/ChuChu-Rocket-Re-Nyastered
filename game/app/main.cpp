@@ -3536,7 +3536,7 @@ struct PuzzleMode : Screen {
     void event(App& a, const SDL_Event& e) override {
         if (state == 2) {
             if (!resultReady()) return;
-            if (staffRoll && ((e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) || (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y)))) { staffRoll = false; rollNext = true; return; }   // any of A/B/C (pressed bits & 14, 0x8c02c15e) leaves to mode 17
+            if (staffRoll) { const bool accept = (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) || (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_START)); if (accept) { staffRoll = false; rollNext = true; } return; }   // pressed mask 0x0e (A, B, Start) at 0x8c02c15e queues mode 17
             if (e.type == SDL_KEYDOWN && !e.key.repeat) {
                 if (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN) nextPuzzle();
                 else if (e.key.keysym.sym == SDLK_ESCAPE) back = true;
