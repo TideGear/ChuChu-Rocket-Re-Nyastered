@@ -108,6 +108,12 @@ def main():
     count = {}
     for s in reach.values():
         for f in s: count[f] = count.get(f, 0) + 1
+    if '--mode' in sys.argv:   # list the functions only this mode reaches (size, pad-word readers) and stop
+        m = int(sys.argv[sys.argv.index('--mode') + 1]); pads = {0x8c1aefd8: 'pressed', 0x8c1aee88: 'pad', 0x8c1aefc8: 'held?', 0x8c1aef98: 'pad+'}
+        for f in sorted(g for g in reach[m] if count[g] == 1):
+            hit = sorted({pads[u32(((pc + 4) & ~3) + (u16(pc) & 0xff) * 4)] for pc in range(f, f + size[f], 2) if (u16(pc) & 0xf000) == 0xd000 and u32(((pc + 4) & ~3) + (u16(pc) & 0xff) * 4) in pads})
+            print(f'{f:#x} {size[f]}', ' '.join(hit))
+        return
     sites = [(t, s_, owner(s_), a) for t, s_, f, a in scan(d, set(SE) | {MUSIC} | set(CREATE) | {SWAP})]
     fmt = lambda v: '-' if v is None else hex(v) if isinstance(v, int) and v > 0xffff else str(v)
     def cues(fs, kinds):
