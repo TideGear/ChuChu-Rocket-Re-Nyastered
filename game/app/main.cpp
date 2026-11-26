@@ -1763,7 +1763,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false; int ticks = 0;
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false; int ticks = 0, playTicks = 0;
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1784,11 +1784,15 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
-    void tick(App&) override { ++ticks; }
+    void tick(App& a) override { runScript(); ++ticks; if (playing) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim); } }
     // Buttons 0..3 = Dreamcast A, B, X, Y. Rockets (tool 6) and Holes (7): A sets the tile on the cursor cell, B deletes it (Flycast local/modecap/ed3). Walls (2): the four
     // Facing buttons toggle the south, east, west and north wall edge of the cursor cell (local/modecap/wl: RAM lattice words flip 0 <-> 1, a repeat A clears the south wall).
     // Mice (3) and Cats (4): the Facing buttons place a start tile in that direction (local/modecap/mc). Solution (5): the Facing buttons put an arrow. Not yet: deleting, edit limits, sounds.
+    void startPlay() { sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: the edited stage runs on the Puzzle simulation (phases 5-8 of mode 8 reuse Puzzle's)
+    void stopPlay() { playing = false; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
     void edit(int button) {
+        if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); return; }
+        if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
         if (tool == 6) { if (button == 0) t = T_Rocket; else if (button == 1 && t == T_Rocket) t = T_Floor; }
         else if (tool == 7) { if (button == 0) t = T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }
@@ -1821,7 +1825,7 @@ struct DcEditMode : Screen {
         a.board(st, 2, 2, field);
         for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);   // solution arrows (Puzzle draws them before the objects)
         a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, nullptr, -1, nullptr, 1.0f);   // rocket domes from the edited stage
-        if (a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
+        if (!playing && a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
         const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) return;
         SDL_SetTextureColorMod(sh.tex, 203, 203, 203);   // the HUD quads carry vertex intensity 0.8 = 203/255 in the PowerVR rule (stream base 0.800)
