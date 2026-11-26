@@ -1770,10 +1770,14 @@ struct DcEditMode : Screen {
     int music() override { return -1; }
     void event(App&, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true;
-        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_z)) edit(true);
-        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_BACKSPACE || e.key.keysym.sym == SDLK_x)) edit(false);
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_A) edit(true);
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_B) edit(false);
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_z)) edit(0);
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_BACKSPACE || e.key.keysym.sym == SDLK_x)) edit(1);
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_c) edit(2);
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_v) edit(3);
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_A) edit(0);
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_B) edit(1);
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_X) edit(2);
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) edit(3);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT || e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) move(e.key.keysym.sym == SDLK_RIGHT ? 1 : e.key.keysym.sym == SDLK_LEFT ? -1 : 0, e.key.keysym.sym == SDLK_DOWN ? 1 : e.key.keysym.sym == SDLK_UP ? -1 : 0);
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)) move(e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? -1 : 0, e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ? -1 : 0);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_e || e.key.keysym.sym == SDLK_PAGEDOWN)) tool = (tool + 1) & 7;
@@ -1781,20 +1785,24 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
     void tick(App&) override { ++ticks; }
-    // A = Set, B = Delete (Dreamcast A / B): Rockets (tool 6) puts the rocket tile, Holes (7) the hole tile on the cursor cell; Flycast local/modecap/ed3 (cells 0xa / 7 in RAM).
-    // Not yet: Walls, Mice, Cats, Solution (their Facing buttons), delete of those, the edit limits.
-    void edit(bool set) {
+    // Buttons 0..3 = Dreamcast A, B, X, Y. Rockets (tool 6) and Holes (7): A sets the tile on the cursor cell, B deletes it (Flycast local/modecap/ed3). Walls (2): the four
+    // Facing buttons toggle the south, east, west and north wall edge of the cursor cell (local/modecap/wl: RAM lattice words flip 0 <-> 1, a repeat A clears the south wall).
+    // Not yet: Mice, Cats, Solution, edit limits, sounds.
+    void edit(int button) {
         uint8_t& t = st.tiles[cy * kCols + cx];
-        if (tool == 6) { if (set) t = T_Rocket; else if (t == T_Rocket) t = T_Floor; }
-        else if (tool == 7) { if (set) t = T_Hole; else if (t == T_Hole) t = T_Floor; }
+        if (tool == 6) { if (button == 0) t = T_Rocket; else if (button == 1 && t == T_Rocket) t = T_Floor; }
+        else if (tool == 7) { if (button == 0) t = T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }
+        else if (tool == 2) {
+            uint8_t& w = button == 0 ? st.hw[(cy + 1) * kCols + cx] : button == 1 ? st.vw[cy * 13 + cx + 1] : button == 2 ? st.vw[cy * 13 + cx] : st.hw[cy * kCols + cx];
+            w ^= 1; }
         sim.load(st); prev.clear();
     }
-    void runScript() {   // headless: CCR_EDIT_SCRIPT="tool,x,y,A|B;..."
+    void runScript() {   // headless: CCR_EDIT_SCRIPT="tool,x,y,A|B|X|Y;..."
         if (scripted) return; scripted = true;
         const char* c = getenv("CCR_EDIT_SCRIPT"); if (!c) return;
         std::string str = c; size_t i = 0;
         while (i < str.size()) { size_t j = str.find(';', i); if (j == std::string::npos) j = str.size(); int tl = 0, x = 0, y = 0; char b = 'A';
-            if (sscanf(str.substr(i, j - i).c_str(), "%d,%d,%d,%c", &tl, &x, &y, &b) == 4) { tool = tl & 7; cx = x; cy = y; edit(b == 'A'); } i = j + 1; }
+            if (sscanf(str.substr(i, j - i).c_str(), "%d,%d,%d,%c", &tl, &x, &y, &b) == 4) { tool = tl & 7; cx = x; cy = y; edit(b == 'A' ? 0 : b == 'B' ? 1 : b == 'X' ? 2 : 3); } i = j + 1; }
     }
     void move(int dx, int dy) { cx = (cx + dx + 12) % 12; cy = (cy + dy + 9) % 9; }
     const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
