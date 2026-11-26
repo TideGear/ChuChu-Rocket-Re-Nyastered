@@ -329,21 +329,26 @@ int main(int argc, char** argv) {
         const bool oldDcLook = app.dcLook;
         SDL_Texture* oldStart = app.dcPuzzleStart.tex;
         SDL_Texture* oldCancel = app.dcPuzzleCancel.tex;
-        app.dcLook = true;
-        app.dcPuzzleStart.tex = reinterpret_cast<SDL_Texture*>(1);
-        app.dcPuzzleCancel.tex = reinterpret_cast<SDL_Texture*>(1);
-        puzzle.state = 3;
-        puzzle.running = false;
-        puzzle.failureFrames = 1;
-        puzzle.paused = false;
-        puzzle.pauseState.resume();
-        const int failureFrame = puzzle.sim.now;
-        puzzle.event(app, start);
-        check(!puzzle.paused && !puzzle.pauseState.freeze,
-              "Dreamcast Start is ignored during the failure hold");
-        puzzle.tick(app);
-        check(puzzle.sim.now > failureFrame,
-              "failed Puzzle effects continue during the failure hold");
+        auto failureStartIgnored = [&](bool dreamcast, SDL_Event input, const char* name) {
+            app.dcLook = dreamcast;
+            app.dcPuzzleStart.tex = dreamcast ? reinterpret_cast<SDL_Texture*>(1) : oldStart;
+            app.dcPuzzleCancel.tex = dreamcast ? reinterpret_cast<SDL_Texture*>(1) : oldCancel;
+            puzzle.state = 3; puzzle.running = false; puzzle.failureFrames = 1;
+            puzzle.paused = false; puzzle.pauseState.resume();
+            const int failureFrame = puzzle.sim.now;
+            puzzle.event(app, input);
+            check(!puzzle.paused && !puzzle.pauseState.freeze, name);
+            puzzle.tick(app);
+            check(puzzle.sim.now > failureFrame,
+                  "failed Puzzle effects continue while pause is disabled");
+        };
+        failureStartIgnored(true, start, "Dreamcast controller Start is ignored during failure");
+        SDL_Event keyboardStart{};
+        keyboardStart.type = SDL_KEYDOWN;
+        keyboardStart.key.keysym.sym = SDLK_p;
+        failureStartIgnored(true, keyboardStart, "Dreamcast keyboard pause is ignored during failure");
+        failureStartIgnored(false, start, "Mobile controller Start is ignored during failure");
+        failureStartIgnored(false, keyboardStart, "Mobile keyboard pause is ignored during failure");
         app.dcLook = oldDcLook;
         app.dcPuzzleStart.tex = oldStart;
         app.dcPuzzleCancel.tex = oldCancel;
