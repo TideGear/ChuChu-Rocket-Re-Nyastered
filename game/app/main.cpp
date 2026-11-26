@@ -1763,13 +1763,17 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; bool leave = false; int ticks = 0;
+    Stage st{}; Sim sim; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false; int ticks = 0;
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
     int music() override { return -1; }
     void event(App&, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true;
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_z)) edit(true);
+        else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_BACKSPACE || e.key.keysym.sym == SDLK_x)) edit(false);
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_A) edit(true);
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_B) edit(false);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT || e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) move(e.key.keysym.sym == SDLK_RIGHT ? 1 : e.key.keysym.sym == SDLK_LEFT ? -1 : 0, e.key.keysym.sym == SDLK_DOWN ? 1 : e.key.keysym.sym == SDLK_UP ? -1 : 0);
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP || e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)) move(e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? -1 : 0, e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? 1 : e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ? -1 : 0);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_e || e.key.keysym.sym == SDLK_PAGEDOWN)) tool = (tool + 1) & 7;
@@ -1777,13 +1781,30 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
     void tick(App&) override { ++ticks; }
+    // A = Set, B = Delete (Dreamcast A / B): Rockets (tool 6) puts the rocket tile, Holes (7) the hole tile on the cursor cell; Flycast local/modecap/ed3 (cells 0xa / 7 in RAM).
+    // Not yet: Walls, Mice, Cats, Solution (their Facing buttons), delete of those, the edit limits.
+    void edit(bool set) {
+        uint8_t& t = st.tiles[cy * kCols + cx];
+        if (tool == 6) { if (set) t = T_Rocket; else if (t == T_Rocket) t = T_Floor; }
+        else if (tool == 7) { if (set) t = T_Hole; else if (t == T_Hole) t = T_Floor; }
+        sim.load(st); prev.clear();
+    }
+    void runScript() {   // headless: CCR_EDIT_SCRIPT="tool,x,y,A|B;..."
+        if (scripted) return; scripted = true;
+        const char* c = getenv("CCR_EDIT_SCRIPT"); if (!c) return;
+        std::string str = c; size_t i = 0;
+        while (i < str.size()) { size_t j = str.find(';', i); if (j == std::string::npos) j = str.size(); int tl = 0, x = 0, y = 0; char b = 'A';
+            if (sscanf(str.substr(i, j - i).c_str(), "%d,%d,%d,%c", &tl, &x, &y, &b) == 4) { tool = tl & 7; cx = x; cy = y; edit(b == 'A'); } i = j + 1; }
+    }
     void move(int dx, int dy) { cx = (cx + dx + 12) % 12; cy = (cy + dy + 9) % 9; }
     const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, GW, GH); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
         if (const char* c = getenv("CCR_EDIT_CELL")) { int x = 0, y = 0; if (sscanf(c, "%d,%d", &x, &y) == 2) { cx = (x % 12 + 12) % 12; cy = (y % 9 + 9) % 9; } }
+        runScript();
         a.board(st, 2, 2, field);
+        a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, nullptr, -1, nullptr, 1.0f);   // rocket domes from the edited stage
         if (a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
         const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) return;
