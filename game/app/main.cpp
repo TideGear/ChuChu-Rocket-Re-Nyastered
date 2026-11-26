@@ -1763,13 +1763,15 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false, saved = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, playing = false, dialog = false, saved = false, ff = false; int ticks = 0, playTicks = 0, endAge = -1; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
     int music() override { return -1; }
     void event(App&, const SDL_Event& e) override {
         if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_ESCAPE) leave = true;
+        else if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_c) ff = false;
+        else if (e.type == SDL_CONTROLLERBUTTONUP && e.cbutton.button == SDL_CONTROLLER_BUTTON_X) ff = false;
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_z)) edit(0);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_BACKSPACE || e.key.keysym.sym == SDLK_x)) edit(1);
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_c) edit(2);
@@ -1784,7 +1786,9 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_q || e.key.keysym.sym == SDLK_PAGEUP)) tool = (tool + 7) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) tool = (tool + 1) & 7;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7; }
-    void tick(App& a) override { runScript(); ++ticks; if (playing && endAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
+    void tick(App& a) override { runScript(); ++ticks; if (const char* f = getenv("CCR_EDIT_FF")) ff = ticks >= atoi(f);   // headless: F.F. held from this tick
+        for (int pass = 0; pass < (ff && playing ? 2 : 1); ++pass) tickPass(a); }
+    void tickPass(App& a) { if (playing && endAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
             int alive = 0, mice = 0; for (auto& e : sim.ents) if (e.mouse) { ++mice; if (e.alive && !e.done) ++alive; }
             if (mice && alive == 0 && sim.saved == mice && sim.killed == 0) { endAge = 0; saved = true; a.playSfx(21); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit clear at play tick %d\n", playTicks); }   // all mice home: the Puzzle launch runs (0x8c01b8a0 / 0x8c01b9a0), then the editor restarts
         } else if (endAge >= 0) { ++endAge; a.stepAngles(sim, true); for (int c = 0; c < kCols * kRows; ++c) if (st.tiles[c] == T_Rocket) lids[c].tick(a.globalTime, c); if (endAge >= kEndAge()) stopPlay(); } }
@@ -1800,7 +1804,7 @@ struct DcEditMode : Screen {
             if (button == 0) { st = Stage{}; arrows.clear(); saved = false; sim.load(st); prev.clear(); dialog = false; } else if (button == 1) dialog = false;
             return; }
         if (tool == 0) { if (button == 0) dialog = true; return; }   // Delete / Load / Save (buttons 1-3) are not ported
-        if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); return; }
+        if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); else if (button == 2) ff = true; return; }   // X = F.F.: two simulation passes per frame while held (Flycast local/modecap/ff)
         if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
         if (tool == 6) { if (button == 0) t = T_Rocket; else if (button == 1 && t == T_Rocket) t = T_Floor; }
