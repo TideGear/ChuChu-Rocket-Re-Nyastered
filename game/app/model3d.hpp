@@ -362,12 +362,13 @@ public:
 
     // Background sky (draw 0x8c01f2a0): njTranslate(centre), njRotateXYZ(ang) (X, then Y, then Z, the order measured for node angles in
     // tools/export_dc_models.py), njScale(scale), drawn with the Puzzle view (straight down from height 218). The sphere surrounds the eye,
-    // so triangles are clipped at the eye plane. Unlit: intensity 1. Not called: drawn as polygons it adds bright streaks Flycast does not show (Puzzle 01 right margin 0.63 -> 1.85), and the Hard 05 stream has no sky polygon; the original draws it through 0x8c0e9b12, not the model draw 0x8c0e0938, which is still to be read.
+    // so triangles are clipped at the eye plane. Lit like a chunk model, 0.3 + 0.8 max(0, -n.L) (this sign matches Flycast's margin brightness, Normal 03 right 6.7 vs 7.0). Not called: the streaks still land in other places than Flycast's (Normal 03 full frame 0.99 -> 1.33): rotation order, phase origin or UVs differ.
     void drawDcSky(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, const int ang[3], float scale) const {
         const float kNear = 1.0f;
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit;
         float c[3], s[3]; for (int i = 0; i < 3; ++i) { const float t = ang[i] * 6.283185307f / 65536.0f; c[i] = cosf(t); s[i] = sinf(t); }
-        struct V { float x, z2, depth, u, v; };
+        static const float kL[3] = {-0.0114f, -0.9893f, -0.1455f};   // the scene light 0x8c018d9c in world axes (view = (x, z, -y))
+        struct V { float x, z2, depth, u, v, light; };
         std::vector<SoftTri> out; out.reserve(m.tris.size() * 2);
         for (const auto& tri : m.tris) {
             V in[3];
@@ -376,18 +377,21 @@ public:
                 t = y * c[0] - z * s[0]; z = y * s[0] + z * c[0]; y = t;      // X
                 t = x * c[1] + z * s[1]; z = -x * s[1] + z * c[1]; x = t;     // Y
                 t = x * c[2] - y * s[2]; y = x * s[2] + y * c[2]; x = t;      // Z
-                in[k] = {ox + x, oz + z, 218.0f - y, tri.v[k].u, tri.v[k].v};   // the Puzzle view matrix (RAM matrix stack at [0x8c2c75d4], local/tip2 2390): rows (1,0,0), (0,0,-1), (0,1,0), translation (-72, -85.5, 218): straight down from height 218, no tilt
+                float nx = tri.v[k].nx, ny = tri.v[k].ny, nz = tri.v[k].nz;
+                t = ny * c[0] - nz * s[0]; nz = ny * s[0] + nz * c[0]; ny = t; t = nx * c[1] + nz * s[1]; nz = -nx * s[1] + nz * c[1]; nx = t; t = nx * c[2] - ny * s[2]; ny = nx * s[2] + ny * c[2]; nx = t;
+                const float lit = std::min(1.0f, 0.3f + 0.8f * std::max(0.0f, -(nx * kL[0] + ny * kL[1] + nz * kL[2])));
+                in[k] = {ox + x, oz + z, 218.0f - y, tri.v[k].u, tri.v[k].v, lit};   // the Puzzle view matrix (RAM matrix stack at [0x8c2c75d4], local/tip2 2390): rows (1,0,0), (0,0,-1), (0,1,0), translation (-72, -85.5, 218): straight down from height 218, no tilt
             }
             V poly[4]; int n = 0;   // clip against depth >= kNear (Sutherland-Hodgman on one plane)
             for (int k = 0; k < 3; ++k) {
                 const V& a = in[k]; const V& b = in[(k + 1) % 3]; const bool ain = a.depth >= kNear, bin = b.depth >= kNear;
                 if (ain) poly[n++] = a;
-                if (ain != bin) { const float t = (kNear - a.depth) / (b.depth - a.depth); poly[n++] = {a.x + (b.x - a.x) * t, a.z2 + (b.z2 - a.z2) * t, kNear, a.u + (b.u - a.u) * t, a.v + (b.v - a.v) * t}; }
+                if (ain != bin) { const float t = (kNear - a.depth) / (b.depth - a.depth); poly[n++] = {a.x + (b.x - a.x) * t, a.z2 + (b.z2 - a.z2) * t, kNear, a.u + (b.u - a.u) * t, a.v + (b.v - a.v) * t, a.light + (b.light - a.light) * t}; }
             }
             for (int k = 1; k + 1 < n; ++k) {
                 SoftTri o{}; o.tex = (tri.mat < m.matTex.size()) ? (int)m.matTex[tri.mat] : -1;
                 const V* q[3] = {&poly[0], &poly[k], &poly[k + 1]};
-                for (int e = 0; e < 3; ++e) { const float sc = pixelsPerUnit * 218.0f / q[e]->depth; o.p[e] = {camera.x + q[e]->x * sc, camera.y + q[e]->z2 * sc}; o.iw[e] = 1.0f / q[e]->depth; o.light[e] = 1.0f; o.u[e] = q[e]->u; o.v[e] = q[e]->v; }
+                for (int e = 0; e < 3; ++e) { const float sc = pixelsPerUnit * 218.0f / q[e]->depth; o.p[e] = {camera.x + q[e]->x * sc, camera.y + q[e]->z2 * sc}; o.iw[e] = 1.0f / q[e]->depth; o.light[e] = q[e]->light; o.u[e] = q[e]->u; o.v[e] = q[e]->v; }
                 out.push_back(o);
             }
         }
