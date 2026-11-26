@@ -467,6 +467,14 @@ int main(int argc, char** argv) {
         }
     }
     {
+        DcStaffRollMode roll(app);
+        SDL_Event start{}; start.type = SDL_CONTROLLERBUTTONDOWN;
+        start.cbutton.button = SDL_CONTROLLER_BUTTON_START;
+        roll.event(app, start);
+        check(std::string(roll.next()) == "DC_TITLE",
+              "Dreamcast Start exits the staff roll to the title as part of input mask 0x60e");
+    }
+    {
         BattleMode cpuBattle;
         cpuBattle.lv[0] = -1;
         cpuBattle.lv[1] = cpuBattle.lv[2] = cpuBattle.lv[3] = 0;

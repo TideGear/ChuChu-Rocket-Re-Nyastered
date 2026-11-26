@@ -1991,7 +1991,7 @@ struct DcStaffRollMode : Screen {
     int music() override { return -1; }
     void event(App&, const SDL_Event& e) override {   // 0x8c050c70: any of A / B / C / X / Y (pad pressed mask 0x60e) leaves, whether or not the roll has finished
         if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) leave = true;
-        else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_X || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y)) leave = true; }
+        else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_X || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y || e.cbutton.button == SDL_CONTROLLER_BUTTON_START)) leave = true; }
     void tick(App& a) override {
         if (offset < 8928) { offset += 2; return; }
         if (!ended) { ended = true; a.playSfx(6); a.playSfx(6); a.playSfx(6); a.playSfx(8); }   // 0x8c050bd0: cues 6, 6, 6, 8 on the first pass after the strips retire
