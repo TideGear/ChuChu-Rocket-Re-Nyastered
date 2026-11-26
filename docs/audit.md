@@ -160,7 +160,7 @@ Source: `tools/oracle/task_inventory.py` (every call of the task creators `0x8c0
 | `0x8c02bd5c`, `0x8c02bd62` | 21, 28 | all mice in | yes |
 | `0x8c01bd52` (and three more in `0x8c01bb6a`) | 21 | each rocket's launch | yes |
 | `0x8c01a262` | 4 | pause | yes |
-| `0x8c01a36a`, `0x8c01a32c`/`0x8c01a34c` (computed) | 2, ? | pause menu | partly (computed cues unread) |
+| `0x8c01a32c`, `0x8c01a34c`, `0x8c01a36a` | 0, 0, 2 | pause menu (`0x8c01a316`): Left +1 and Right -1, both wrapping over the two items, cue 0 on every press; A or Start (pad bits 0x0c) cue 2 | yes (2026-11-25: toggle on every press, cue 2 on RESUME and QUIT) |
 | `0x8c011532` | 7 | cat enters a rocket (reached in every mode once the cat is on a rocket cell and `[0x8c1ae8c0] == 1`, which is 1 in Puzzle) | added 2026-11-25 (`Event::CatRocket` in Puzzle; `puzzle_audio_test`) |
 | `0x8c0196fa`, `0x8c019982` | 8 | arrival of a mouse whose task +8 is 1 (Puzzle mice read 0: hd5, tip2, puzzle-clear) | not needed in Puzzle |
 

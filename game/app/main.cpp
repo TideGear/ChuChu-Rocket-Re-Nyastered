@@ -3294,9 +3294,9 @@ struct PuzzleMode : Screen {
         } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) aim.inside = false;
         if (e.type == SDL_KEYDOWN) { SDL_Keycode k = e.key.keysym.sym;
             if (paused) {
-                if (dreamcastPuzzleControls(a) && (k == SDLK_LEFT || k == SDLK_RIGHT)) { if (pauseQuit != (k == SDLK_RIGHT)) { pauseQuit = k == SDLK_RIGHT; a.playSfx(0); } return; }
-                if ((k == SDLK_RETURN || k == SDLK_SPACE) && pauseQuit && dreamcastPuzzleControls(a)) { back = true; return; }
-                if (k == SDLK_p || k == SDLK_RETURN || k == SDLK_SPACE) { paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }
+                if (dreamcastPuzzleControls(a) && (k == SDLK_LEFT || k == SDLK_RIGHT)) { pauseQuit = !pauseQuit; a.playSfx(0); return; }   // 0x8c01a316: Left (+1) and Right (-1) both wrap over the two items and request cue 0 on every press
+                if ((k == SDLK_RETURN || k == SDLK_SPACE) && pauseQuit && dreamcastPuzzleControls(a)) { a.playSfx(2); back = true; return; }   // A / Start: cue 2
+                if (k == SDLK_p || k == SDLK_RETURN || k == SDLK_SPACE) { if (dreamcastPuzzleControls(a)) a.playSfx(2); paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }   // Dreamcast: A / Start on RESUME request cue 2 (0x8c01a36a)
                 else if (k == SDLK_ESCAPE || k == SDLK_b) back = true;
                 return;
             }
@@ -3327,9 +3327,9 @@ struct PuzzleMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && pad &&
                  SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) == e.cbutton.which) { int b = e.cbutton.button;
             if (paused) {
-                if (dreamcastPuzzleControls(a) && (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT || b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) { if (pauseQuit != (b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) { pauseQuit = b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT; a.playSfx(0); } return; }
-                if (b == SDL_CONTROLLER_BUTTON_A && pauseQuit && dreamcastPuzzleControls(a)) { back = true; return; }
-                if (b == (gApp ? gApp->padMap.pause : 6) || b == SDL_CONTROLLER_BUTTON_A) { paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }
+                if (dreamcastPuzzleControls(a) && (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT || b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) { pauseQuit = !pauseQuit; a.playSfx(0); return; }   // 0x8c01a316 (see the key path)
+                if ((b == SDL_CONTROLLER_BUTTON_A || b == (gApp ? gApp->padMap.pause : 6)) && pauseQuit && dreamcastPuzzleControls(a)) { a.playSfx(2); back = true; return; }
+                if (b == (gApp ? gApp->padMap.pause : 6) || b == SDL_CONTROLLER_BUTTON_A) { if (dreamcastPuzzleControls(a)) a.playSfx(2); paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }
                 else if (b == SDL_CONTROLLER_BUTTON_B) back = true;
                 return;
             }
