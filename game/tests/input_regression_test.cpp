@@ -77,6 +77,10 @@ int main(int argc, char** argv) {
         solution.edit(0); solution.edit(1);
         check(solution.arrows == std::vector<std::array<int, 3>>{{2, 3, 3}},
               "Puzzle Edit Solution replaces a cursor arrow when its direction differs");
+        solution.arrows = {{0, 0, 0}, {2, 3, 3}, {4, 0, 1}};
+        solution.edit(3);
+        check(solution.arrows == std::vector<std::array<int, 3>>{{0, 0, 0}, {2, 3, 2}, {4, 0, 1}},
+              "Puzzle Edit Solution changes direction in place without reordering arrows");
         solution.arrows.clear();
         for (int i = 0; i < 12; ++i) solution.arrows.push_back({i, 0, 0});
         solution.cx = 11; solution.cy = 0;
@@ -87,6 +91,19 @@ int main(int argc, char** argv) {
         solution.edit(0);
         check(solution.arrows.size() == 12,
               "Puzzle Edit Solution cannot add a thirteenth arrow");
+        solution.arrows.clear();
+        solution.cx = 2; solution.cy = 3; solution.st.tiles[3 * kCols + 2] = T_Rocket;
+        solution.edit(0);
+        check(solution.st.tiles[3 * kCols + 2] == T_Floor && solution.arrows.size() == 1,
+              "Puzzle Edit Solution clears a rocket before placing a new arrow");
+        solution.st.tiles[3 * kCols + 2] = T_Hole;
+        solution.edit(1);
+        check(solution.st.tiles[3 * kCols + 2] == T_Hole && solution.arrows[0][2] == 3,
+              "Puzzle Edit Solution direction replacement does not clear the underlying tile");
+        solution.cx = 3; solution.st.tiles[3 * kCols + 3] = T_Hole;
+        solution.edit(0);
+        check(solution.st.tiles[3 * kCols + 3] == T_Floor && solution.arrows.size() == 2,
+              "Puzzle Edit Solution clears a hole before appending a new arrow");
     }
     {
         namespace fs = std::filesystem;
