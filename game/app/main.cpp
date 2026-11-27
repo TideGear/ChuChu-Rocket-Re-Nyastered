@@ -2119,6 +2119,26 @@ struct DcStaffRollMode : Screen {
         else if (done(1)) lines = {"You can now select", " \"Special\"", "on the Stage Select Screen", "in Puzzle Mode."};
         else if (done(0)) lines = {"You can now select", " \"Hard\"", "on the Stage Select Screen", "in Puzzle Mode."};
     }
+    void drawUnlockText(App& a, const std::string& text, int x, int y) const {
+        if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95) {
+            for (unsigned char c : text) {
+                if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); }
+                x += 12;
+            }
+            return;
+        }
+        SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255);
+        for (unsigned char c : text) {
+            if (const uint8_t* glyph = font57mixed(c)) {
+                for (int row = 0; row < 7; ++row) for (int col = 0; col < 5; ++col)
+                    if (glyph[row] >> (4 - col) & 1) { const SDL_Rect d{x + col * 2, y + 5 + row * 2, 2, 2}; SDL_RenderFillRect(a.ren, &d); }
+            } else if (c == '"') {
+                const SDL_Rect left{x + 2, y + 5, 2, 4}, right{x + 6, y + 5, 2, 4};
+                SDL_RenderFillRect(a.ren, &left); SDL_RenderFillRect(a.ren, &right);
+            }
+            x += 12;
+        }
+    }
     int music() override { return 12; }   // init 0x8c050abc queues CD track 16 through 0x8c012350; song index = track - 4
     void event(App&, const SDL_Event& e) override {   // 0x8c050c70: any of A / B / C / X / Y (pad pressed mask 0x60e) leaves, whether or not the roll has finished
         if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) leave = true;
@@ -2185,8 +2205,8 @@ struct DcStaffRollMode : Screen {
             a.models3d.endDepthScene();
             SDL_RenderSetLogicalSize(a.ren, 640, 480);
         }
-        if (ended && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95)   // BIOS 12x24 font; origin measured from Flycast frame 5500 (the layout code is unread)
-            for (size_t l = 0; l < lines.size(); ++l) { int x = 100; const int y = 100 + 24 * (int)l; for (unsigned char c : lines[l]) { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; } }
+        if (ended)   // BIOS 12x24 font; the built-in bitmap font keeps unlock text visible without an optional Dreamcast BIOS.
+            for (size_t l = 0; l < lines.size(); ++l) drawUnlockText(a, lines[l], 100, 100 + 24 * (int)l);
         if (ended && sh.fr.size() > 22) { const SDL_FRect d{192.0f, 196.0f, 256.0f, 256.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[22], &d); }   // the "Thank you!" card: scale and origin measured from Flycast frame 5500 (its code is unread)
     }
 };

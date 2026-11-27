@@ -592,6 +592,18 @@ int main(int argc, char** argv) {
         DcStaffRollMode roll(app);
         check(roll.music() == 12,
               "Dreamcast staff roll requests CD track 16 (song 12) from initializer 0x8c050abc");
+        {
+            const bool oldDcLook = app.dcLook;
+            Sheet oldBiosFont = std::move(app.dcBiosAnsi);
+            app.dcLook = false;
+            SDL_SetRenderDrawColor(app.ren, 0, 0, 0, 255); SDL_RenderClear(app.ren);
+            roll.drawUnlockText(app, "Unlock", 100, 100);
+            SDL_Rect sample{100, 105, 1, 1}; Uint8 pixel[4]{};
+            const bool read = SDL_RenderReadPixels(app.ren, &sample, SDL_PIXELFORMAT_RGBA32, pixel, 4) == 0;
+            check(read && pixel[0] == 255 && pixel[1] == 255 && pixel[2] == 255,
+                  "Dreamcast staff-roll unlock text uses the built-in font when no BIOS font is available");
+            app.dcBiosAnsi = std::move(oldBiosFont); app.dcLook = oldDcLook;
+        }
         if (app.dcStaffRoll.tex) {
             check(roll.mouse.alive, "staff-roll mouse loads its script from the extracted Dreamcast executable");
             int catSpawns = 0;
