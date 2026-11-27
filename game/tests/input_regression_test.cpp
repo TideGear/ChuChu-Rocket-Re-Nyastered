@@ -157,9 +157,24 @@ int main(int argc, char** argv) {
         const fs::path firstPack = dir / "puzzle_edit" / "a.VMS", secondPack = dir / "puzzle_edit" / "b.VMS";
         writePack(firstPack, {first, second}); writePack(secondPack, {third});
         { FILE* f = fopen((dir / "puzzle_edit" / "b.VMI").string().c_str(), "wb"); if (f) { fputc(1, f); fclose(f); } }
+        fs::create_directories(dir / "imports", ec);
+        VmsPuzzle imported; imported.title = "IMPORTED"; imported.tiles[7] = T_MouseS + 2; imported.tiles[19] = T_Rocket; imported.arrows.push_back({4, 2, 3});
+        const fs::path importedPack = dir / "imports" / "DreamcastPack.VMS"; writePack(importedPack, {imported});
         DcEditMode editor; editor.refreshPuzzleFiles();
         check(editor.savedPuzzles.size() == 3 && editor.puzzleSlots == std::vector<int>({0, 1, 0}),
               "Dreamcast Puzzle Edit tracks each slot within its own VMS pack");
+        editor.openFiles(1);
+        auto importedIt = std::find_if(editor.puzzlePaths.begin(), editor.puzzlePaths.end(), [&](const std::string& path) { return fs::path(path).filename() == importedPack.filename(); });
+        const bool importedLoadListed = editor.fileScreen == 1 && importedIt != editor.puzzlePaths.end();
+        if (importedLoadListed) { editor.fileIndex = (int)(importedIt - editor.puzzlePaths.begin()); editor.loadSelected(); }
+        check(importedLoadListed && editor.st.tiles[7] == T_MouseS + 2 && editor.st.tiles[19] == T_Rocket &&
+              editor.arrows == std::vector<std::array<int, 3>>{{4, 2, 3}},
+              "Puzzle Edit Load imports a Dreamcast VMS puzzle with its board and solution arrows");
+        editor.openFiles(2);
+        check(editor.fileScreen == 2 && std::none_of(editor.puzzlePaths.begin(), editor.puzzlePaths.end(), [&](const std::string& path) { return fs::path(path).filename() == importedPack.filename(); }) &&
+              std::filesystem::exists(importedPack),
+              "Puzzle Edit Delete lists local saves only and leaves imported VMS packs untouched");
+        editor.refreshPuzzleFiles();
         editor.fileIndex = 2; editor.deleteSelected();
         check(!fs::exists(secondPack) && !fs::exists(dir / "puzzle_edit" / "b.VMI") && editor.savedPuzzles.size() == 2,
               "Dreamcast Puzzle Edit deletes a puzzle in a later VMS pack");

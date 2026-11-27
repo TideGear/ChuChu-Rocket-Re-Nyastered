@@ -1874,15 +1874,17 @@ struct DcEditMode : Screen {
     // Mice (3) and Cats (4): Facing places a start tile in that direction; Solution (5) places an arrow. Repeating the same facing removes it. Original object caps are enforced (FUN_8c031f0a; error strings 0x8c0bff52..ffc9).
     void startPlay() { if (!editorHasMouse(st.tiles)) { fileScreen = 6; if (gApp) gApp->playSfx(4); if (gApp && gApp->headless && getenv("CCR_EDIT_TRACE")) puts("edit play rejected: no mouse"); return; } sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: original Puzzle Edit rejects Play with no mouse (text 0x8c0bff0c; edit handler FUN_8c031f0a)
     void stopPlay() { playing = false; endAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
-    void refreshPuzzleFiles() {
+    void refreshPuzzleFiles(bool includeImports = false) {
         savedPuzzles.clear(); puzzlePaths.clear(); puzzleSlots.clear(); if (!gApp) return;
         const std::string dir = gApp->saveDir + "/puzzle_edit"; std::error_code ec; if (!gApp->testRun) std::filesystem::create_directories(dir, ec);
-        std::vector<std::string> paths; if (std::filesystem::is_directory(dir, ec)) for (const auto& e : std::filesystem::directory_iterator(dir, ec)) { std::string ext = e.path().extension().string(); for (char& c : ext) c = (char)tolower((unsigned char)c); if (ext == ".vms") paths.push_back(e.path().string()); }
-        std::sort(paths.begin(), paths.end());
+        std::vector<std::string> paths;
+        auto collectPacks = [&](const std::string& folder) { std::error_code scanError; if (std::filesystem::is_directory(folder, scanError)) for (const auto& e : std::filesystem::directory_iterator(folder, scanError)) { std::string ext = e.path().extension().string(); for (char& c : ext) c = (char)tolower((unsigned char)c); if (ext == ".vms") paths.push_back(e.path().string()); } };
+        collectPacks(dir); if (includeImports) collectPacks(gApp->saveDir + "/imports");
+        std::sort(paths.begin(), paths.end()); paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
         for (const auto& path : paths) { FILE* f = fopen(path.c_str(), "rb"); if (!f) continue; std::vector<uint8_t> bytes; uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n); fclose(f); std::vector<VmsPuzzle> pack; if (vms::readPack(bytes, pack) > 0) for (size_t slot = 0; slot < pack.size(); ++slot) { puzzlePaths.push_back(path); puzzleSlots.push_back((int)slot); savedPuzzles.push_back(pack[slot]); } }
         fileIndex = savedPuzzles.empty() ? 0 : std::min(fileIndex, (int)savedPuzzles.size() - 1);
     }
-    void openFiles(int action) { refreshPuzzleFiles(); fileConfirm = false; emptyFileAction = action; fileScreen = savedPuzzles.empty() ? 4 : action; if (gApp && savedPuzzles.empty()) gApp->playSfx(0); }   // no-data screen cue 0 (Flycast file-screen capture)
+    void openFiles(int action) { refreshPuzzleFiles(action == 1); fileConfirm = false; emptyFileAction = action; fileScreen = savedPuzzles.empty() ? 4 : action; if (gApp && savedPuzzles.empty()) gApp->playSfx(0); }   // imported VMS packs are load sources, never Delete targets
     const char* noDataPrompt() const { return emptyFileAction == 2 ? "Select a file to delete." : "Select a file to load."; }
     void applyPuzzle(const VmsPuzzle& p) {
         memset(&st, 0, sizeof st); memcpy(st.tiles, p.tiles, sizeof st.tiles); arrows.clear();
