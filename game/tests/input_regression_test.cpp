@@ -54,6 +54,8 @@ int main(int argc, char** argv) {
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; gridTitle.event(app, padButton);
         check(gridTitle.titleInput == "V", "Puzzle Edit controller grid keeps horizontal navigation on its selected row");
         DcEditMode editor;
+        check(editor.music() == 11,
+              "Dreamcast Puzzle Edit requests CD track 15 from initializer 0x8c02dcc6");
         editor.startPlay();
         check(editor.fileScreen == 6 && !editor.playing,
               "Dreamcast Puzzle Edit refuses Play when there is no mouse");
@@ -61,6 +63,7 @@ int main(int argc, char** argv) {
         editor.fileScreen = 0;
         editor.startPlay();
         check(editor.playing, "Dreamcast Puzzle Edit starts Play when a mouse exists");
+        check(editor.music() == 11, "Puzzle Edit Play retains the editor's original CD track");
     }
     {
         namespace fs = std::filesystem;

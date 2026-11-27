@@ -6,6 +6,7 @@
 // FLYHOST_WAV=<path> records stereo PCM at the core's sample rate, with threaded rendering disabled.
 // FLYHOST_STATE=<path> resumes a raw state from this host/core; frame numbers restart at zero.
 // FLYHOST_SYNC=1 disables the core's threaded rendering for frame-aligned audio captures.
+// FLYHOST_DEBUG=1 includes the core's debug-level log messages (disabled by default: register polling can produce hundreds of MB per capture).
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -112,7 +113,7 @@ static PFNGENFB glGenFramebuffersP; static PFNBINDFB glBindFramebufferP; static 
 #define GL_DEPTH24_STENCIL8_ 0x88F0
 #define GL_READ_FRAMEBUFFER_ 0x8CA8
 
-static void logf_(int, const char* fmt, ...) { va_list a; va_start(a, fmt); char b[1024]; vsnprintf(b, sizeof b, fmt, a); va_end(a); fputs(b, stderr); }
+static void logf_(int level, const char* fmt, ...) { static const bool debug = getenv("FLYHOST_DEBUG") != nullptr; if (level == 0 && !debug) return; va_list a; va_start(a, fmt); char b[1024]; vsnprintf(b, sizeof b, fmt, a); va_end(a); fputs(b, stderr); }
 static uintptr_t getFbo() { return gFbo; }
 static retro_proc_address_t getProc(const char* n) { return (retro_proc_address_t)SDL_GL_GetProcAddress(n); }
 

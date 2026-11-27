@@ -713,10 +713,13 @@ struct App {
         }
         char wp[512]; snprintf(wp, sizeof wp, "%s/dreamcast/audio/track%02d.wav", root.c_str(), n + 4); SDL_AudioSpec sp; Uint8* buf; Uint32 len;
         if (!(mobileSound && !mobile.empty()) && SDL_LoadWAV(wp, &sp, &buf, &len)) {   // sound_source = mobile skips the CD track when the mobile song exists                                  // best source: the lossless Dreamcast CD track
-            // The track WAV begins with its 2.0 s silent pre-gap. The original plays from the track start (index 1, after the pre-gap) and repeats the whole
-            // track from there (measured in Flycast: two exact matches of track 6 content 36.01 s apart = 38.01 s - 2.00 s). The command queue entry built by
-            // 1ST_READ FUN_8c012350 carries repeat 0 (play once) for tracks 0x10, 0x11, 0x12 and 0xb, i.e. songs 12, 13, 14 and 7, and 0xf (forever) otherwise.
+            // The extracted WAV retains its 2 s pre-gap; playback starts at index 1 here. Whole-track loop flags below remain provisional:
+            // the third word of FUN_8c012350's queue record is a priority, not an established repeat count (docs/audio.md).
             if (sp.format == AUDIO_S16LSB && sp.channels == 2 && sp.freq == 44100) { sg.pcm.assign((int16_t*)buf, (int16_t*)(buf + len)); sg.loopStart = (size_t)(2.0 * 44100) * 2;
+                // Original AICA CDDA returns 16/17 are level 15, pan 0x0f/0x1f:
+                // disc L goes right and disc R goes left (live Puzzle Edit RAM;
+                // fresh-boot WAV matches the swapped track sample-for-sample).
+                for (size_t i = 0; i + 1 < sg.pcm.size(); i += 2) std::swap(sg.pcm[i], sg.pcm[i + 1]);
                 sg.loopEnd = sg.pcm.size(); sg.loop = !(n == 7 || n == 12 || n == 13 || n == 14); }
             SDL_FreeWAV(buf); }
         if (sg.pcm.empty() && !mobile.empty()) { sg.pcm = mobile; sg.loopStart = 0; sg.loopEnd = sg.pcm.size(); }   // fallback: the mobile Ogg
@@ -1793,13 +1796,13 @@ struct TitleMode : Screen {
 // ---------------------------------------------------------------- Dreamcast Puzzle Edit (mode 8: init 0x8c02dc50); first slice: the Functions screen
 // Layout from the Flycast stream (local/modecap/pe/m_02290.state, 45 polygons): board floor quad x 120.5..619.3, y 25.2..399.4 (cell 41.57); left panel two quads
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
-// 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
+// 372.5..631.9, y 401.5..466.5. Cursor, tools, Play and local file dialogs are implemented; VMU/title parity remains partial. Wall plane scale: 218/215.
 struct DcEditMode : Screen {
     Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, fileScreen = 0, fileIndex = 0, emptyFileAction = 1; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0, titleKey = 0; std::string titleInput; bool titleEntry = false, titleConfirmed = false, titleLowercase = false;   // 20-byte VMS title; port keyboard is not original BIOS/VMU parity
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
-    int music() override { return -1; }
+    int music() override { return 11; }   // Puzzle Edit init 0x8c02dcc6 queues CD track 15 (song index = track - 4)
     void event(App& a, const SDL_Event& e) override {
         if (titleEntry) {
             static const char* rows[] = {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789.-_ "};
