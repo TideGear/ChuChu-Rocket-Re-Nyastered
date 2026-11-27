@@ -2099,13 +2099,16 @@ struct DcEditMode : Screen {
 // ---------------------------------------------------------------- Dreamcast staff roll (mode 17: init 0x8c0507ea, update 0x8c050b80, exit 0x8c050ada)
 // Strip task 0x8c050dc0 / draw 0x8c050de8: offset +2 per pass; strip i (sr01-sr22, 256x256 at njScale 1.5) at (0, 384 * i - offset + 480), drawn while inside the
 // 864-px window; the task retires at offset 8928 (22 x 384 + 480) and sets the done state 0x8c2415ec. The end card
-// (chu_end), end cues, exit timing and scripted mouse are implemented; cat/flock remain partial (see docs/audit.md for Flycast evidence).
+// (chu_end), end cues, exit timing, mouse, cat and flock are implemented; full pose/costume parity remains partial (see docs/audit.md).
 struct DcStaffRollMode : Screen {
     int offset = 0, after = 0; bool leave = false, ended = false;
     DcStaffMouse mouse;
+    DcStaffCat cat;
+    std::vector<DcStaffFlockMouse> flock;
     std::vector<std::string> lines;   // the unlock lines (init 0x8c0509c0, printer 0x8c022600): the highest completed group's text, as the original tests groups 3, 2, 1, 0 in order
     explicit DcStaffRollMode(App& a, bool chaoUnlock = false) {
         mouse.load((a.root + "/dreamcast/files/1ST_READ.BIN").c_str());
+        cat.load((a.root + "/dreamcast/files/1ST_READ.BIN").c_str());
         auto done = [&](int g) { for (int k = 0; k < 25; ++k) if (!a.isCleared(g * 25 + k)) return false; return true; };
         if (chaoUnlock) lines = {"You can now select Chao", "in the Options Menu!"};
         else if (done(3)) lines = {"You can now select Pians", "in the Options Menu!"};
@@ -2118,15 +2121,39 @@ struct DcStaffRollMode : Screen {
         if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) leave = true;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_X || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y || e.cbutton.button == SDL_CONTROLLER_BUTTON_START)) leave = true; }
     void tick(App& a) override {
-        mouse.tick();
+        // New tasks are first updated on the following scheduler pass.
+        for (auto& m : flock) m.tick();
+        if (cat.tick()) for (int slot = 0; slot < 6; ++slot) flock.push_back({slot, 0, cat.age});
+        if (mouse.tick()) cat.start();
         if (a.headless && getenv("CCR_STAFF_TRACE"))
             printf("staffmouse %d %d %.9g %.9g %.9g %d %d %.9g %d\n", mouse.age, mouse.row,
                    mouse.pos[0], mouse.pos[1], mouse.pos[2], mouse.angle, mouse.walk, mouse.scale, mouse.alive ? 1 : 0);
+        if (a.headless && getenv("CCR_STAFF_TRACE") && cat.age) {
+            printf("staffcat %d %d %.9g %.9g %.9g %d %d %d %d %.9g %d\n", cat.age, cat.row,
+                   cat.pos[0], cat.pos[1], cat.pos[2], cat.angle, cat.roll, cat.wait, cat.walk, cat.scale, cat.alive ? 1 : 0);
+            for (const auto& m : flock) if (m.alive)
+                printf("staffflock %d %d %d %d %.9g %.9g\n", cat.age, m.born, m.slot, m.age, m.x(), m.z());
+        }
         if (offset < 8928) { offset += 2; return; }
         if (!ended) { ended = true; a.playSfx(6); a.playSfx(6); a.playSfx(6); a.playSfx(8); }   // 0x8c050bd0: cues 6, 6, 6, 8 on the first pass after the strips retire
         if (++after >= 3600) leave = true;   // 0x8c050c96: 0xe10 passes
     }
     const char* next() override { if (!leave) return nullptr; leave = false; return "DC_TITLE"; }   // setter 0x8c019088(2) = the title
+    void drawMouse(App& a, float x, float z, float height, int pose, int yaw, float scale) const {
+        const int costume = a.dcCharacterStyle();
+        const Model3D* m = a.models3d.find(dcMouseModelName(0, pose, costume));
+        if (!m) m = a.models3d.find(dcMouseModelName(0, pose));
+        if (!m) return;
+        const bool costumed = costume && m == a.models3d.find(dcMouseModelName(0, pose, costume));
+        const float k = dcBattleField.cell / 15.0f;
+        static const float light[3] = {0.00913053f, 0.79143601f, 0.11638579f};
+        // 0x8c05072a camera = (112,218,85.5); task position is native XYZ.
+        a.models3d.drawDcCharacter(a.ren, *m,
+            {GW / 2.0f + (x - 112.0f) * k, GH / 2.0f + (z - 85.5f) * k},
+            {GW / 2.0f, GH / 2.0f}, k, -yaw * (360.0f / 65536.0f), 3.0f,
+            light, -1, 0.0f, 1, costumed ? (costume == 1 ? 0x30u : 0x51u) : 1u,
+            nullptr, costumed ? 1.0f : 178.0f / 255.0f, height, scale * (costumed ? 1.3f : 1.0f));
+    }
     void draw(App& a, float) override {
         SDL_RenderSetLogicalSize(a.ren, 640, 480); SDL_RenderSetViewport(a.ren, nullptr);
         SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 255); SDL_RenderClear(a.ren);
@@ -2135,24 +2162,25 @@ struct DcStaffRollMode : Screen {
             const float y = 384.0f * i - (float)offset + 480.0f;
             if (y > 480.0f || y + 384.0f < 0.0f) continue;
             const SDL_FRect d{-0.01f, y, 384.0f, 384.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[i], &d); }   // x = fr13 = -1.01 (0x8c050f58) plus 1 px measured against Flycast (sprite routine 0x8c0e4268 not read)
-        if (mouse.alive && a.useModels3d()) {
-            const int costume = a.dcCharacterStyle();
-            const Model3D* m = a.models3d.find(dcMouseModelName(0, mouse.pose(), costume));
-            if (!m) m = a.models3d.find(dcMouseModelName(0, mouse.pose()));
-            if (m) {
-                const bool costumed = costume && m == a.models3d.find(dcMouseModelName(0, mouse.pose(), costume));
-                SDL_RenderSetLogicalSize(a.ren, GW, GH);
-                const float k = dcBattleField.cell / 15.0f;
-                static const float light[3] = {0.00913053f, 0.79143601f, 0.11638579f};
+        if (a.useModels3d()) {
+            SDL_RenderSetLogicalSize(a.ren, GW, GH);
+            a.models3d.beginDepthScene(a.ren);
+            if (mouse.alive) drawMouse(a, mouse.pos[0], mouse.pos[2], mouse.pos[1], mouse.pose(), mouse.yaw(), mouse.scale);
+            if (cat.alive) if (const Model3D* m = a.models3d.find("cat")) {
+                // The animated cat path uses Ninja's screen projection, not
+                // the fast chunk path used by mice: RAM 0x8c2c8294/+4 = 500,
+                // centre +8/+12 = (320,240). Confirmed by the real TA vertices.
+                const float k = (500.0f / 218.0f) * 1.6f, phase = cat.phase();
+                static const float light[3] = {0.0f, 0.5f, -0.25f};
                 a.models3d.drawDcCharacter(a.ren, *m,
-                    // 0x8c05072a camera position = (112, 218, 85.5).
-                    // The task's vector is native Ninja XYZ (Y is height).
-                    {GW / 2.0f + (mouse.pos[0] - 112.0f) * k, GH / 2.0f + (mouse.pos[2] - 85.5f) * k},
-                    {GW / 2.0f, GH / 2.0f}, k, -mouse.yaw() * (360.0f / 65536.0f), 3.0f,
-                    light, -1, 0.0f, 1, costumed ? (costume == 1 ? 0x30u : 0x51u) : 1u,
-                    nullptr, costumed ? 1.0f : 178.0f / 255.0f, mouse.pos[1], mouse.scale * (costumed ? 1.3f : 1.0f));
-                SDL_RenderSetLogicalSize(a.ren, 640, 480);
+                    {GW / 2.0f + (cat.pos[0] - 112.0f) * k, GH / 2.0f + (cat.pos[2] - 85.5f) * k},
+                    {GW / 2.0f, GH / 2.0f}, k, -cat.yaw() * (360.0f / 65536.0f), 2.5f,
+                    light, (int)phase, phase - std::floor(phase), 1, 2u, nullptr, 1.0f, cat.pos[1], cat.scale,
+                    nullptr, -45.0f, -cat.rollUnits() * (360.0f / 65536.0f), true); // original staff cat ISP 0xc8800000: ZWriteDis=0
             }
+            for (const auto& m : flock) if (m.alive) drawMouse(a, m.x(), m.z(), 100.0f, m.pose(), 0, 0.6f);
+            a.models3d.endDepthScene();
+            SDL_RenderSetLogicalSize(a.ren, 640, 480);
         }
         if (ended && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95)   // BIOS 12x24 font; origin measured from Flycast frame 5500 (the layout code is unread)
             for (size_t l = 0; l < lines.size(); ++l) { int x = 100; const int y = 100 + 24 * (int)l; for (unsigned char c : lines[l]) { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; } }
@@ -5611,6 +5639,7 @@ int main(int argc, char** argv) {
         char* bp2 = SDL_GetBasePath(); const std::string programDir = bp2 ? bp2 : "."; if (bp2) SDL_free(bp2);
         const bool quiet = (getenv("CCR_SHOT") || getenv("CCR_HEADLESS") || getenv("CCR_BENCH")) && !getenv("CCR_USERDATA_TEST");   // test runs never create settings or logs (CCR_USERDATA_TEST=1 exercises them headlessly)
         app.saveDir = quiet ? root : resolveDataDir(programDir, root, portableFlag); app.testRun = quiet;
+        if (quiet) if (const char* saves = getenv("CCR_TEST_SAVE_DIR")) app.saveDir = saves; // isolate comparison fixtures from cache-local player progress
         if (const char* cs = getenv("CCR_CHARACTER_STYLE")) { app.settings.characterStyle = atoi(cs); app.settings.unlockAll = true; }   // headless comparison: force the Chao (1) or Pian (2) costume
         if (!quiet) {
             const Settings st = loadOrCreateSettings(app.saveDir); app.settings = st;

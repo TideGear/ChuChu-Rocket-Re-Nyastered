@@ -9,7 +9,7 @@ any screen whose renders differ is a candidate leak; the script writes both fram
 The Dreamcast-only and mobile-only caches come from tools/setup-wizard.ps1 (verification.md, 2026-11-24 end-to-end setup).
 Headless only: it never shows a window or plays sound.
 """
-import os, subprocess, sys
+import os, subprocess, sys, tempfile
 from PIL import Image, ImageChops
 
 CASES = [   # name, ccr args, extra environment
@@ -37,8 +37,8 @@ CASES = [   # name, ccr args, extra environment
 ]
 
 
-def shot(exe, assets, args, env, out, look):
-    e = dict(os.environ, CCR_SIZE='640x480', CCR_SHOT=out, CCR_PRESENTATION=look, **env)
+def shot(exe, assets, args, env, out, look, saves):
+    e = dict(os.environ, CCR_SIZE='640x480', CCR_SHOT=out, CCR_PRESENTATION=look, CCR_TEST_SAVE_DIR=saves, **env)
     if look == 'mobile':
         e['CCR_MODELS'] = '0'   # a mobile-only cache has no model pack; compare the 2D field
     r = subprocess.run([exe, assets] + args, env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
@@ -50,14 +50,27 @@ def main():
     look = 'dreamcast'
     if '--look' in argv:
         i = argv.index('--look'); look = argv[i + 1]; del argv[i:i + 2]
+    only = ''
+    if '--only' in argv:
+        i = argv.index('--only'); only = argv[i + 1]; del argv[i:i + 2]
     exe, single, full, out = argv[:4]
     os.makedirs(out, exist_ok=True)
+    # Both renders must use the same empty save state: cache-local clears and
+    # Challenge records are player data, not art from another release.
+    saves = tempfile.mkdtemp(prefix='empty-save-', dir=os.path.abspath(out))
+    cases = list(CASES)
+    if look == 'dreamcast':
+        cases += [('staff_cat', ['DC_STAFFROLL'], {'CCR_TICKS': '1246'}),
+                  ('staff_flock', ['DC_STAFFROLL'], {'CCR_TICKS': '3046'})]
+    cases = [case for case in cases if only in case[0]]
+    if not cases: raise SystemExit('no look cases matched')
     leaks = 0
-    for name, args, env in CASES:
+    for name, args, env in cases:
         a, b = os.path.join(out, name + '_single.bmp'), os.path.join(out, name + '_full.bmp')
-        ra, la = shot(exe, single, args, env, a, look)
-        rb, lb = shot(exe, full, args, env, b, look)
+        ra, la = shot(exe, single, args, env, a, look, saves)
+        rb, lb = shot(exe, full, args, env, b, look, saves)
         if not (os.path.exists(a) and os.path.exists(b)):
+            leaks += 1
             print(f'{name}: no frame (exit {ra}/{rb}) {la} {lb}'); continue
         ia, ib = Image.open(a).convert('RGB'), Image.open(b).convert('RGB')
         d = ImageChops.difference(ia, ib).convert('L')
@@ -70,7 +83,7 @@ def main():
             sheet = Image.new('RGB', (ia.width * 2, ia.height)); sheet.paste(ia, (0, 0)); sheet.paste(ib, (ia.width, 0))
             sheet.save(os.path.join(out, name + '_pair.png'))
         print(f'{name}: {status} ({big} px > 8 levels, mean {mean:.2f})')
-    print(f'{leaks} of {len(CASES)} cases differ')
+    print(f'{leaks} of {len(cases)} cases differ')
 
 
 if __name__ == '__main__':

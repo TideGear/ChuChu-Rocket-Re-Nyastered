@@ -93,7 +93,7 @@ private:
         return true;
     }
 public:
-    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool mip = false; bool additive = false; bool rgb = false; float lightRGB[3][3] = {}; };   // rgb: per-channel vertex light (material colours)   // wrap: repeat the texture (the floor quad's UVs run past 1)
+    struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool mip = false; bool additive = false; bool rgb = false; bool depthWrite = false; float lightRGB[3][3] = {}; };   // rgb: per-channel vertex light (material colours)   // wrap: repeat the texture (the floor quad's UVs run past 1)
 
     // The Battle draw task builds a dome from two copies of the lid,
     // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
@@ -287,6 +287,7 @@ public:
                              (uint32_t)((ad >> 8 & 255) * (1 - a) + 0.5f) << 8 |
                              (uint32_t)((ad >> 16 & 255) * (1 - a) + 0.5f) << 16 | (ad & 0xff000000u);
                         dst = (uint32_t)(orr + 0.5f) | (uint32_t)(og + 0.5f) << 8 | (uint32_t)(ob + 0.5f) << 16 | (uint32_t)(oa * 255.0f + 0.5f) << 24;
+                        if (t.depthWrite) zb = iw; // ISP.ZWriteDis=0 can also occur in the translucent list
                     }
                 }
             }
@@ -353,9 +354,10 @@ public:
     // sy with Z. Lighting per vertex: 0.3 + max(0, light . R n). `blend` > 0 mixes pose frame `frame` with pose frame `frame + 1` (the cat's head morph and walk pose are interpolated by
     // the fractional part of its phase); basic mice and golden mice select their source-derived frame (the golden mouse's eight poses are sampled from its position/angle motion).
     void drawDcCharacter(SDL_Renderer* ren, const Model3D& m, SDL_FPoint planePos, SDL_FPoint camera, float pixelsPerUnit, float yawDeg, float translateZ,
-                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f, float height = 0.0f, float modelScale = 1.0f, const float* constRGB = nullptr, float tiltDeg = -45.0f) const {   // constRGB: a constant per-channel vertex colour (the focus ring: face (1, 0.3, 0.3) x intensity 0.8 in the stream)
+                         const float (&light)[3], int frame, float blend, int uvMode, uint32_t translucentMaterials = 0, const int* texRemap = nullptr, float run10Diffuse = 1.0f, float height = 0.0f, float modelScale = 1.0f, const float* constRGB = nullptr, float tiltDeg = -45.0f, float rollDeg = 0.0f, bool translucentDepthWrite = false) const {   // constRGB: a constant per-channel vertex colour (the focus ring: face (1, 0.3, 0.3) x intensity 0.8 in the stream)
         if (m.tris.empty()) return;
         const float ya = yawDeg * 0.017453292f, cy = cosf(ya), sy = sinf(ya);
+        const float ra = rollDeg * 0.017453292f, cr = cosf(ra), sr = sinf(ra);
         const float kTilt = tiltDeg * 0.017453292f; const float ct = cosf(kTilt), st = sinf(kTilt);   // characters stand at RotateX(-45); a model drawn flat on the board (the focus ring) passes 0
         const float ox = (planePos.x - camera.x) / pixelsPerUnit, oz = (planePos.y - camera.y) / pixelsPerUnit + translateZ;
         const std::vector<float>* a = (frame >= 0 && !m.frames.empty()) ? &m.frames[frame % (int)m.frames.size()] : nullptr;
@@ -363,6 +365,7 @@ public:
         std::vector<SoftTri> out; out.reserve(m.tris.size());
         for (size_t ti = 0; ti < m.tris.size(); ++ti) {
             const auto& tri = m.tris[ti]; SoftTri o{}; const size_t mat = (texRemap && tri.mat < 10) ? (size_t)texRemap[tri.mat] : (size_t)tri.mat; o.tex = tri.untextured ? -2 : (mat < m.matTex.size()) ? (int)m.matTex[mat] : -1; o.translucent = (m.hasStripAlpha && (m.name.rfind("chao", 0) == 0 || m.name.rfind("pian", 0) == 0)) ? tri.alphaStrip : ((translucentMaterials >> (tri.mat & 31)) & 1u);   /* costumes: per strip (strips without use-alpha are opaque even on alpha textures: the Pian's white piece); the cat and mice keep their verified material masks (the cat's second-list blend is not the strip flag) */
+            o.depthWrite = translucentDepthWrite;
             for (int k = 0; k < 3; ++k) {
                 float vx = tri.v[k].x, vy = tri.v[k].y, vz = tri.v[k].z, nx = tri.v[k].nx, ny = tri.v[k].ny, nz = tri.v[k].nz;
                 if (a) {
@@ -371,6 +374,10 @@ public:
                     if (b) { const float* pb = &(*b)[ti * 18 + k * 6]; const float f = blend; vx += (pb[0] - vx) * f; vy += (pb[1] - vy) * f; vz += (pb[2] - vz) * f; nx += (pb[3] - nx) * f; ny += (pb[4] - ny) * f; nz += (pb[5] - nz) * f; }
                 }
                 vx *= modelScale; vy *= modelScale; vz *= modelScale;                              // Scale (the ghost task shrinks its model at the end of its life)
+                if (rollDeg != 0.0f) { // 0x8c011120 appends RotateZ after RotateY: apply it first to model vertices and normals
+                    const float x = vx * cr - vy * sr; vy = vx * sr + vy * cr; vx = x;
+                    const float n = nx * cr - ny * sr; ny = nx * sr + ny * cr; nx = n;
+                }
                 const float x1 = vx * cy + vz * sy, z1 = -vx * sy + vz * cy;                 // RotateY(yaw)
                 const float y2 = vy * ct - z1 * st + height, z2 = vy * st + z1 * ct;         // RotateX(-45), then the task position's height
 

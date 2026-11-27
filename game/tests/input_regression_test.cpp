@@ -605,6 +605,26 @@ int main(int argc, char** argv) {
             }
             check(!roll.mouse.alive && roll.mouse.pos[0] == 160.0f && roll.mouse.pos[2] == 130.0f && catSpawns == 1,
                   "staff mouse retires at original age 4037 after emitting one cat spawn");
+            DcStaffRollMode actors(app);
+            for (int age = 1; age <= 4099; ++age) {
+                actors.tick(app);
+                if (age == 931) check(actors.cat.alive && actors.cat.age == 0,
+                                      "new staff cat waits until the next task-server pass before updating");
+                if (age == 1246) check(actors.cat.age == 315 && actors.cat.row == 3 && actors.cat.pos[2] == 115.0f && actors.cat.phase() == 6.75f,
+                                       "staff cat matches original task RAM at age 315");
+                if (age == 2646) check(actors.cat.row == 65 && actors.cat.roll == 35,
+                                       "staff cat executes its original Z rotation script");
+                if (age == 2881) check(actors.flock.size() == 6 && actors.flock[0].age == 0 && actors.flock[5].x() == 175.0f,
+                                       "first staff flock contains six newly created, unadvanced tasks");
+                if (age == 2972) check(actors.flock.size() == 84 && actors.flock.back().born == 2041,
+                                       "staff cat creates all fourteen original six-mouse groups");
+                if (age == 3846) check(actors.cat.roll == -90 && actors.cat.wait == 101,
+                                       "staff cat preserves the signed roll and unused wait channel");
+            }
+            check(!actors.cat.alive && actors.cat.age == 3168,
+                  "staff cat retires at original age 3168");
+            check(std::all_of(actors.flock.begin(), actors.flock.end(), [](const DcStaffFlockMouse& m) { return !m.alive && m.age == 501; }),
+                  "all 84 flock tasks retire on the pass after old age 500");
         }
         SDL_Event start{}; start.type = SDL_CONTROLLERBUTTONDOWN;
         start.cbutton.button = SDL_CONTROLLER_BUTTON_START;

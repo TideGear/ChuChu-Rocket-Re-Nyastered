@@ -2179,7 +2179,7 @@
           300
         ]
       },
-      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat/flock now implemented; their dedicated element cases remain separately audited."
     },
     {
       "name": "staff_mouse_1246",
@@ -2198,7 +2198,7 @@
           300
         ]
       },
-      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat/flock now implemented; their dedicated element cases remain separately audited."
     },
     {
       "name": "staff_mouse_1546",
@@ -2217,7 +2217,7 @@
           345
         ]
       },
-      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat/flock now implemented; their dedicated element cases remain separately audited."
     },
     {
       "name": "staff_mouse_2046",
@@ -2236,7 +2236,663 @@
           345
         ]
       },
-      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat/flock now implemented; their dedicated element cases remain separately audited."
+    },
+    {
+      "name": "staff_cat_115",
+      "ref": "local/staff-cat-20261126/r__01000.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "1046"
+      },
+      "elements": {
+        "cat": [
+          490,
+          325,
+          575,
+          415
+        ]
+      },
+      "note": "Original mode 17 scheduler; cat task age = shot - 885, mouse/strip age = shot + 46. Native Ninja projection read from 0x8c2c8294."
+    },
+    {
+      "name": "staff_cat_315",
+      "ref": "local/staff-cat-20261126/r__01200.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "1246"
+      },
+      "elements": {
+        "cat": [
+          490,
+          325,
+          575,
+          415
+        ]
+      },
+      "note": "Original mode 17 scheduler; cat task age = shot - 885, mouse/strip age = shot + 46. Native Ninja projection read from 0x8c2c8294."
+    },
+    {
+      "name": "staff_cat_1715",
+      "ref": "local/staff-cat-20261126/r__02600.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "2646"
+      },
+      "elements": {
+        "cat": [
+          470,
+          260,
+          590,
+          380
+        ]
+      },
+      "note": "Original mode 17 scheduler; cat task age = shot - 885, mouse/strip age = shot + 46. Native Ninja projection read from 0x8c2c8294."
+    },
+    {
+      "name": "staff_cat_2615",
+      "ref": "local/staff-cat-20261126/r__03500.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "3546"
+      },
+      "elements": {
+        "cat": [
+          470,
+          70,
+          590,
+          210
+        ]
+      },
+      "note": "Original mode 17 scheduler; cat task age = shot - 885, mouse/strip age = shot + 46. Native Ninja projection read from 0x8c2c8294."
+    },
+    {
+      "name": "staff_cat_2715",
+      "ref": "local/staff-cat-20261126/r__03600.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "3646"
+      },
+      "elements": {
+        "cat": [
+          470,
+          170,
+          590,
+          300
+        ]
+      },
+      "note": "Original mode 17 scheduler; cat task age = shot - 885, mouse/strip age = shot + 46. Native Ninja projection read from 0x8c2c8294."
+    },
+    {
+      "name": "staff_cat_2915",
+      "ref": "local/staff-cat-20261126/r__03800.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "3846"
+      },
+      "elements": {
+        "cat": [
+          450,
+          250,
+          570,
+          355
+        ]
+      },
+      "note": "Original mode 17 scheduler; cat task age = shot - 885, mouse/strip age = shot + 46. Native Ninja projection read from 0x8c2c8294."
+    },
+    {
+      "name": "staff_cat_3115",
+      "ref": "local/staff-cat-20261126/r__04000.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "4046"
+      },
+      "elements": {
+        "cat": [
+          450,
+          250,
+          570,
+          355
+        ]
+      },
+      "note": "Original mode 17 scheduler; cat task age = shot - 885, mouse/strip age = shot + 46. Native Ninja projection read from 0x8c2c8294."
+    },
+    {
+      "name": "staff_flock_2115",
+      "ref": "local/staff-cat-20261126/r__03000.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "3046"
+      },
+      "elements": {
+        "flock": [
+          405,
+          0,
+          640,
+          460
+        ],
+        "mouse_1950_0": [
+          410,
+          271,
+          450,
+          307
+        ],
+        "mouse_1950_1": [
+          448,
+          271,
+          489,
+          307
+        ],
+        "mouse_1950_2": [
+          487,
+          271,
+          527,
+          307
+        ],
+        "mouse_1950_3": [
+          525,
+          271,
+          566,
+          307
+        ],
+        "mouse_1950_4": [
+          564,
+          271,
+          604,
+          307
+        ],
+        "mouse_1950_5": [
+          602,
+          271,
+          640,
+          307
+        ],
+        "mouse_1957_0": [
+          410,
+          237,
+          452,
+          273
+        ],
+        "mouse_1957_1": [
+          448,
+          237,
+          490,
+          273
+        ],
+        "mouse_1957_2": [
+          487,
+          237,
+          529,
+          273
+        ],
+        "mouse_1957_3": [
+          525,
+          237,
+          567,
+          273
+        ],
+        "mouse_1957_4": [
+          563,
+          237,
+          606,
+          273
+        ],
+        "mouse_1957_5": [
+          602,
+          237,
+          640,
+          273
+        ],
+        "mouse_1964_0": [
+          410,
+          203,
+          452,
+          240
+        ],
+        "mouse_1964_1": [
+          449,
+          203,
+          490,
+          240
+        ],
+        "mouse_1964_2": [
+          487,
+          203,
+          529,
+          240
+        ],
+        "mouse_1964_3": [
+          525,
+          203,
+          567,
+          240
+        ],
+        "mouse_1964_4": [
+          563,
+          203,
+          606,
+          240
+        ],
+        "mouse_1964_5": [
+          602,
+          203,
+          640,
+          240
+        ],
+        "mouse_1971_0": [
+          410,
+          171,
+          451,
+          206
+        ],
+        "mouse_1971_1": [
+          448,
+          171,
+          489,
+          206
+        ],
+        "mouse_1971_2": [
+          487,
+          171,
+          527,
+          206
+        ],
+        "mouse_1971_3": [
+          525,
+          171,
+          566,
+          206
+        ],
+        "mouse_1971_4": [
+          563,
+          171,
+          604,
+          206
+        ],
+        "mouse_1971_5": [
+          602,
+          171,
+          640,
+          206
+        ],
+        "mouse_1978_0": [
+          410,
+          135,
+          450,
+          173
+        ],
+        "mouse_1978_1": [
+          449,
+          135,
+          489,
+          173
+        ],
+        "mouse_1978_2": [
+          487,
+          135,
+          527,
+          173
+        ],
+        "mouse_1978_3": [
+          526,
+          135,
+          565,
+          173
+        ],
+        "mouse_1978_4": [
+          564,
+          135,
+          604,
+          173
+        ],
+        "mouse_1978_5": [
+          602,
+          135,
+          640,
+          173
+        ],
+        "mouse_1985_0": [
+          410,
+          103,
+          451,
+          139
+        ],
+        "mouse_1985_1": [
+          448,
+          103,
+          489,
+          139
+        ],
+        "mouse_1985_2": [
+          487,
+          103,
+          527,
+          139
+        ],
+        "mouse_1985_3": [
+          525,
+          103,
+          566,
+          139
+        ],
+        "mouse_1985_4": [
+          563,
+          103,
+          604,
+          139
+        ],
+        "mouse_1985_5": [
+          602,
+          103,
+          640,
+          139
+        ],
+        "mouse_1992_0": [
+          411,
+          67,
+          452,
+          105
+        ],
+        "mouse_1992_1": [
+          449,
+          67,
+          491,
+          105
+        ],
+        "mouse_1992_2": [
+          487,
+          67,
+          530,
+          105
+        ],
+        "mouse_1992_3": [
+          525,
+          67,
+          568,
+          105
+        ],
+        "mouse_1992_4": [
+          564,
+          67,
+          607,
+          105
+        ],
+        "mouse_1992_5": [
+          602,
+          67,
+          640,
+          105
+        ],
+        "mouse_1999_0": [
+          410,
+          34,
+          452,
+          73
+        ],
+        "mouse_1999_1": [
+          449,
+          34,
+          490,
+          73
+        ],
+        "mouse_1999_2": [
+          487,
+          34,
+          529,
+          73
+        ],
+        "mouse_1999_3": [
+          525,
+          34,
+          567,
+          73
+        ],
+        "mouse_1999_4": [
+          563,
+          34,
+          606,
+          73
+        ],
+        "mouse_1999_5": [
+          602,
+          34,
+          640,
+          73
+        ],
+        "mouse_2006_0": [
+          410,
+          1,
+          450,
+          39
+        ],
+        "mouse_2006_1": [
+          448,
+          1,
+          489,
+          39
+        ],
+        "mouse_2006_2": [
+          487,
+          1,
+          527,
+          39
+        ],
+        "mouse_2006_3": [
+          525,
+          1,
+          565,
+          39
+        ],
+        "mouse_2006_4": [
+          564,
+          1,
+          604,
+          39
+        ],
+        "mouse_2006_5": [
+          602,
+          1,
+          640,
+          39
+        ],
+        "mouse_2013_0": [
+          410,
+          0,
+          450,
+          6
+        ],
+        "mouse_2013_1": [
+          448,
+          0,
+          489,
+          6
+        ],
+        "mouse_2013_2": [
+          487,
+          0,
+          527,
+          6
+        ],
+        "mouse_2013_3": [
+          525,
+          0,
+          566,
+          6
+        ],
+        "mouse_2013_4": [
+          564,
+          0,
+          604,
+          6
+        ],
+        "mouse_2013_5": [
+          602,
+          0,
+          640,
+          6
+        ],
+        "mouse_2020_0": [
+          410,
+          415,
+          452,
+          450
+        ],
+        "mouse_2020_1": [
+          448,
+          415,
+          490,
+          450
+        ],
+        "mouse_2020_2": [
+          487,
+          415,
+          529,
+          450
+        ],
+        "mouse_2020_3": [
+          525,
+          415,
+          567,
+          450
+        ],
+        "mouse_2020_4": [
+          563,
+          415,
+          606,
+          450
+        ],
+        "mouse_2020_5": [
+          602,
+          415,
+          640,
+          450
+        ],
+        "mouse_2027_0": [
+          411,
+          381,
+          452,
+          418
+        ],
+        "mouse_2027_1": [
+          449,
+          381,
+          491,
+          418
+        ],
+        "mouse_2027_2": [
+          487,
+          381,
+          530,
+          418
+        ],
+        "mouse_2027_3": [
+          525,
+          381,
+          568,
+          418
+        ],
+        "mouse_2027_4": [
+          564,
+          381,
+          607,
+          418
+        ],
+        "mouse_2027_5": [
+          602,
+          381,
+          640,
+          418
+        ],
+        "mouse_2034_0": [
+          410,
+          349,
+          451,
+          382
+        ],
+        "mouse_2034_1": [
+          448,
+          349,
+          489,
+          382
+        ],
+        "mouse_2034_2": [
+          487,
+          349,
+          527,
+          382
+        ],
+        "mouse_2034_3": [
+          525,
+          349,
+          566,
+          382
+        ],
+        "mouse_2034_4": [
+          563,
+          349,
+          604,
+          382
+        ],
+        "mouse_2034_5": [
+          602,
+          349,
+          640,
+          382
+        ],
+        "mouse_2041_0": [
+          410,
+          314,
+          450,
+          351
+        ],
+        "mouse_2041_1": [
+          449,
+          314,
+          489,
+          351
+        ],
+        "mouse_2041_2": [
+          487,
+          314,
+          527,
+          351
+        ],
+        "mouse_2041_3": [
+          526,
+          314,
+          565,
+          351
+        ],
+        "mouse_2041_4": [
+          564,
+          314,
+          604,
+          351
+        ],
+        "mouse_2041_5": [
+          602,
+          314,
+          640,
+          351
+        ]
+      },
+      "note": "Original live 84-mouse flock, cat age 2115; tasks born at 1950..2041. Individual mouse boxes project the executable meshes at each live task pose/position, clipped to the viewport (1-pixel border)."
     }
   ]
 }
