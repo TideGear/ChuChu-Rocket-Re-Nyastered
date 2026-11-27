@@ -67,8 +67,21 @@ int main(int argc, char** argv) {
     }
     {
         check(DcEditMode::editCue(5, false) == 1 && DcEditMode::editCue(5, true) == 4 &&
+              DcEditMode::editCue(3, true) == 4 && DcEditMode::editCue(4, true) == 4 &&
               DcEditMode::editCue(2, false) == 1,
-              "Puzzle Edit Solution uses placement cue on success and error cue at the arrow cap");
+              "Puzzle Edit object and arrow caps use the original error cue");
+        DcEditMode cappedMice; cappedMice.tool = 3; cappedMice.cx = 11; cappedMice.cy = 8;
+        for (int i = 0; i < 100; ++i) cappedMice.st.tiles[i] = T_MouseS;
+        const auto fullMouseBoard = cappedMice.st.tiles;
+        cappedMice.edit(0);
+        check(cappedMice.st.tiles == fullMouseBoard && DcEditMode::editCue(3, true) == 4,
+              "Puzzle Edit rejects a 101st mouse without changing the board and selects cue 4");
+        DcEditMode cappedCats; cappedCats.tool = 4; cappedCats.cx = 11; cappedCats.cy = 8;
+        for (int i = 0; i < 20; ++i) cappedCats.st.tiles[i] = T_CatS;
+        const auto fullCatBoard = cappedCats.st.tiles;
+        cappedCats.edit(0);
+        check(cappedCats.st.tiles == fullCatBoard && DcEditMode::editCue(4, true) == 4,
+              "Puzzle Edit rejects a 21st cat without changing the board and selects cue 4");
         DcEditMode solution;
         solution.tool = 5; solution.cx = 2; solution.cy = 3;
         solution.edit(0);  // A: down (0)
