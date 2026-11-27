@@ -34,6 +34,8 @@ int main(int argc, char** argv) {
     std::vector<VmsPuzzle> fullPack(25, p); fullPack.back().title = "Puzzle 25";
     const auto retailSizePack = vms::writePack(fullPack); std::vector<VmsPuzzle> fullOut;
     CHECK(retailSizePack.size() == 38400 && vms::readPack(retailSizePack, fullOut) == 25 && fullOut.back().title == "Puzzle 25");
+    auto damaged = vms::writePack({p, p, p}); damaged[vms::kHeader + vms::kSlot + 26] = 0xff;
+    CHECK(vms::readPack(damaged, out) == -1 && out.empty());
     CHECK(vms::readPack(std::vector<uint8_t>(40000, 0), out) == -1);
     printf("vms test: %s\n", fails ? "FAILED" : "ok"); return fails;
 }

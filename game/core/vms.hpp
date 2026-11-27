@@ -52,7 +52,12 @@ inline int readPack(const std::vector<uint8_t>& data, std::vector<VmsPuzzle>& ou
     out.clear();
     if (data.size() < kHeader + 512 || std::memcmp(data.data(), "CHU_CHU__D", 10) != 0) return -1;   // puzzle packs are 'CHU_CHU__D01'; character packs are 'CHU_CHU__C00'
     for (size_t k = 0; kHeader + k * kSlot + 512 <= data.size() && k < 25; k++) {
-        VmsPuzzle p; if (decodeSlot(data.data() + kHeader + k * kSlot, data.size() - (kHeader + k * kSlot), p)) out.push_back(p); else break;
+        const size_t offset = kHeader + k * kSlot;
+        VmsPuzzle p;
+        if (decodeSlot(data.data() + offset, data.size() - offset, p)) { out.push_back(p); continue; }
+        // Zero-filled unused slots are the pack terminator; a damaged populated slot must not be treated as a shorter pack.
+        if (std::any_of(data.begin() + offset, data.end(), [](uint8_t b) { return b != 0; })) { out.clear(); return -1; }
+        break;
     }
     return (int)out.size();
 }

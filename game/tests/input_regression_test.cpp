@@ -100,6 +100,12 @@ int main(int argc, char** argv) {
         saver.savePuzzle();
         std::vector<uint8_t> afterFailedSave; { FILE* f = fopen(userPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) afterFailedSave.insert(afterFailedSave.end(), buf, buf + n); fclose(f); } }
         check(afterFailedSave == userBytes, "failed VMI update preserves the previous user VMS pack");
+        auto corruptPack = vms::writePack({first, second, third}); corruptPack[vms::kHeader + vms::kSlot + 26] = 0xff;
+        { FILE* f = fopen(userPack.string().c_str(), "wb"); if (f) { fwrite(corruptPack.data(), 1, corruptPack.size(), f); fclose(f); } }
+        saver.savePuzzle(); std::vector<uint8_t> afterCorruptSave;
+        { FILE* f = fopen(userPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) afterCorruptSave.insert(afterCorruptSave.end(), buf, buf + n); fclose(f); } }
+        check(saver.fileScreen == 5 && afterCorruptSave == corruptPack,
+              "Dreamcast Puzzle Edit refuses to overwrite a damaged multi-slot VMS pack");
         app.saveDir = oldSaveDir; fs::remove_all(dir, ec);
     }
     check(dcMouseModelName(0, 3) == "mouse3" &&
