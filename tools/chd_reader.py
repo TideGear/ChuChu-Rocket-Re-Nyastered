@@ -149,12 +149,11 @@ def inflate(data, size):
 
 
 def lzma_decode(data, size):
-    # CHD stores a bare LZMA1 stream (lc=3, lp=0, pb=2) with no end marker; the
-    # .lzma container with a known size decodes exactly that. A dictionary at least
-    # as large as the encoder's is always valid; hunks are far below 16 MiB.
-    header = bytes([93]) + struct.pack('<I', 1 << 24) + struct.pack('<Q', size)
+    # CHD stores a bare LZMA1 stream (lc=3, lp=0, pb=2) without an end marker.
     try:
-        out = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE).decompress(header + data, size)
+        decoder = lzma.LZMADecompressor(format=lzma.FORMAT_RAW, filters=[
+            {'id': lzma.FILTER_LZMA1, 'dict_size': 1 << 24, 'lc': 3, 'lp': 0, 'pb': 2}])
+        out = decoder.decompress(data, size)
     except lzma.LZMAError as error:
         raise ChdError('LZMA hunk is damaged: %s' % error) from error
     if len(out) != size:

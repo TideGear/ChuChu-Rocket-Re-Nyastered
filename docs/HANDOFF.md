@@ -4,6 +4,8 @@
 
 Branch `main`; check `git log` for latest. Untracked `.vscode/` is user-owned; do not commit it. The USA Dreamcast image is in `Original Game Files/Dreamcast/` (zip of the 19-track CUE/BIN set), with the mobile and GBA releases beside it.
 
+CHD setup: corrected bare LZMA1 decoding in `tools/chd_reader.py` (raw stream, `lc=3,lp=0,pb=2`); the previous `.lzma` wrapper failed on the synthetic cdlz regression under Windows Python. Updated the asset-marker regression for current version 11. Extraction suite 25/25 and game suite 30/30 pass. Real-USA-CHD file/audio parity remains unverified. Latest change is not yet committed/pushed.
+
 Look and sound choice (2026-11-24): settings `presentation` and `sound_source` (`auto`/`dreamcast`/`mobile`) pick the screens/HUDs and the music/effects. `models_3d` now only affects the mobile look. Rows are in mobile Options > Settings (2x5 grid) and Dreamcast Options > Re-Nyastered Settings (a port-only row). RecompLauncher passes `--presentation=`/`--sound=`. Details are in roadmap.md.
 
 End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches under `local/e2e-20261124/cfg-*`): Dreamcast image only, mobile releases only, and all files together. See verification.md.
