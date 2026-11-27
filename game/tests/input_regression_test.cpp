@@ -663,6 +663,40 @@ int main(int argc, char** argv) {
     }
     {
         BattleMode battle;
+        check(battle.load(app.root, 0, 1), "Team Battle result rocket load");
+        battle.game.teamMode = true;
+        battle.game.score.team[0] = 12;
+        battle.game.score.team[1] = 30;
+        battle.endRound();
+        const float expectedX = app.layF(0x3e8) + app.layF(0x3e4) +
+            app.layF(0x30c + battle.winPoint * 0x14 + 0x64);
+        check(battle.mode == 4 && battle.roundWinner == 1 && battle.rockets_.size() == 1 &&
+              battle.rockets_[0].player == 5 && std::fabs(battle.rockets_[0].x - expectedX) < 0.001f &&
+              battle.rockets_[0].y == 620.0f && battle.rockets_[0].tx == 361.0f,
+              "Team Battle winner gets a result rocket in its team-colored icon lane");
+        battle.intro = 120;
+        for (int i = 0; i < 180; ++i) battle.tickBattle(app);
+        check(battle.rockets_[0].state == 2,
+              "Team Battle result rocket rises, pulses, then settles like the original result effect");
+        BattleMode teamZero;
+        check(teamZero.load(app.root, 0, 1), "Team Battle team-0 result load");
+        teamZero.game.teamMode = true;
+        teamZero.game.score.team[0] = 30;
+        teamZero.game.score.team[1] = 12;
+        teamZero.endRound();
+        check(teamZero.rockets_.size() == 1 && teamZero.rockets_[0].player == 4 &&
+              std::fabs(teamZero.rockets_[0].x - (app.layF(0x3e4) + app.layF(0x30c + teamZero.winPoint * 0x14))) < 0.001f,
+              "Team Battle team-0 rocket uses its corresponding icon lane");
+        BattleMode tie;
+        check(tie.load(app.root, 0, 1), "Team Battle draw result load");
+        tie.game.teamMode = true;
+        tie.game.score.team[0] = tie.game.score.team[1] = 30;
+        tie.endRound();
+        check(tie.drawFlag == 1 && tie.rockets_.empty(),
+              "Team Battle draw does not launch a winner rocket");
+    }
+    {
+        BattleMode battle;
         app.settings.battleTime = 2;
         ccrSetEnv("CCR_MINUTES", "1", 1);
         check(battle.load(app.root, 0, 1), "Battle load with timer override");

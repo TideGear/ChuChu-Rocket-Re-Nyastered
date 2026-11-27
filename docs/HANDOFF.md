@@ -10,8 +10,9 @@ Look and sound choice (2026-11-24): settings `presentation` and `sound_source` (
 
 End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches under `local/e2e-20261124/cfg-*`): Dreamcast image only, mobile releases only, and all files together. See verification.md.
 
-## Latest gameplay/UI work
+## Latest gameplay/UI work (2026-11-27)
 
+- Team Battle round winners now launch the team-colored result rocket using HD 1.0 `ResultRocketCons` layout offsets (`0x3e4`, `0x3e8`, `0x30c` icon table); regression checks team-1 lane/frame and the shared rise/pulse/settle sequence. Windows build and full game suite pass (30/30). This is source-derived/harness-tested; Dreamcast Flycast result capture and pixel/timing parity remain open. Details in `docs/ui_art.md` and `docs/roadmap.md`.
 - Records controls follow the traced original: L+R+Start deletes (the footer triangle is Start), the delete resets a Chao costume, and A/B/Start leave with cue 3.
 - Results: Puzzle DC navigation is A/Start next, B back, Y ignored; mobile Y retained. Challenge clear sets pending 1 at all-25, else -1 (`0x8c02aa7a–0x8c02aa8a`); final A/B/Start enters Chao roll (`0x8c02ad02–0x8c02ad22`). Regression covers route/text. Puzzle/Challenge Flycast inputs remain unverified.
 - Monaural: traced to sound-driver command 0x8a. The port's final-mix fold differs for panned voices.

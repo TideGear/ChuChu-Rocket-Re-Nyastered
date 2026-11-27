@@ -4,6 +4,10 @@ Dated evidence for work in progress: the frame, address and measured error behin
 
 The full log from 2026-11-12 to 2026-11-25, which holds every capture recipe, address trace and measurement, is in [archive/roadmap_2026-11-12_to_11-25.md](archive/roadmap_2026-11-12_to_11-25.md). Search it before re-deriving anything.
 
+## 2026-11-27
+
+- Battle Team result effect: the existing port added the winner-result rocket only for free-for-all, omitting Team Battle. Restored Team Battle launch from HD 1.0 `ResultRocketCons` (`analysis/decomp/ios_hd10/CCR_ios_hd10.c:31876`): use layout base/step at `0x3e4`/`0x3e8`, then `0x30c + team*0x64 + winPoint*0x14 + winIndex*4` for the icon lane; frames 4/5 and team draw anchors (`0x40c`/`0x410` rather than FFA `0x22c`/`0x230`) are selected by team. Reuses existing rise/pulse/smoke/flash tasks. `input_regression_test` checks team-1 lane/frame and settlement; Windows build and full game suite pass (30/30). This is source-derived HD behavior and harness coverage only; Dreamcast result-task parity/capture remains open.
+
 ## 2026-11-26
 
 - Dreamcast setup CHD LZMA path: `lzma_decode` now decodes the bare CHD LZMA1 stream as raw LZMA1 (`lc=3,lp=0,pb=2`) rather than prepending a `.lzma` header; the existing `FORMAT_ALONE` path rejected valid raw streams under Windows Python. Synthetic compressed CHD extraction now passes for cdlz, cdzl and cdfl; corrected the cache-version test to expect current asset marker 11. Extraction suites: 25/25; game suite: 30/30. Real USA CHD output/file/audio parity remains open; no disc-specific result claimed.
