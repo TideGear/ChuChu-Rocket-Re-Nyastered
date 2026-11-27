@@ -1961,7 +1961,7 @@ struct DcEditMode : Screen {
         else if (tool == 3 || tool == 4) {   // Mice / Cats: the Facing button sets the start direction (RAM cell word 0x3d..0x40 mice, 0x47..0x4a cats = down, left, up, right; stage tile 9 / 13 + offset: 0 down, 1 left, 2 up, 3 right)
             static const int heading[4] = {0, 3, 1, 2};   // tile offset per button, from the Flycast mc frames: Dreamcast A down (tile 9 faces the camera), B right (+3), X left (+1), Y up (+2)
             const uint8_t nt = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]); if (t == nt) t = T_Floor; else if (editorCanPlaceTile(st.tiles, (size_t)cy * kCols + cx, nt)) t = nt; }   // same facing removes; original caps 100 mice / 20 cats (FUN_8c031f0a; error strings 0x8c0bff52/7a)
-        else if (tool == 5) {   // Solution: the Facing buttons put an arrow (Dreamcast A down, B right, X left, Y up = arrow codes 0, 3, 1, 2: the same order as the mouse and cat tile offsets); an arrow already on the cell is replaced (Flycast local/modecap/sol)
+        else if (tool == 5) {   // Solution: A/B/X/Y map to down/right/left/up (codes 0, 3, 1, 2); FUN_8c02eca0 removes a same-direction arrow at this cell, replaces a different one, or appends up to 12.
             static const int dir[4] = {0, 3, 1, 2};
             bool removed = false; int removedDir = -1;
             for (size_t k = 0; k < arrows.size(); ++k) if (arrows[k][0] == cx && arrows[k][1] == cy) { removed = true; removedDir = arrows[k][2]; arrows.erase(arrows.begin() + k); break; }

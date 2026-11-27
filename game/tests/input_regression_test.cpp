@@ -66,6 +66,29 @@ int main(int argc, char** argv) {
         check(editor.music() == 11, "Puzzle Edit Play retains the editor's original CD track");
     }
     {
+        DcEditMode solution;
+        solution.tool = 5; solution.cx = 2; solution.cy = 3;
+        solution.edit(0);  // A: down (0)
+        check(solution.arrows == std::vector<std::array<int, 3>>{{2, 3, 0}},
+              "Puzzle Edit Solution A places a down arrow at the cursor");
+        solution.edit(0);
+        check(solution.arrows.empty(),
+              "Puzzle Edit Solution repeats remove a same-direction arrow (original FUN_8c02eca0)");
+        solution.edit(0); solution.edit(1);
+        check(solution.arrows == std::vector<std::array<int, 3>>{{2, 3, 3}},
+              "Puzzle Edit Solution replaces a cursor arrow when its direction differs");
+        solution.arrows.clear();
+        for (int i = 0; i < 12; ++i) solution.arrows.push_back({i, 0, 0});
+        solution.cx = 11; solution.cy = 0;
+        solution.edit(1);
+        check(solution.arrows.size() == 12 && solution.arrows.back() == std::array<int, 3>{11, 0, 3},
+              "Puzzle Edit Solution replaces at the 12-arrow limit without increasing the count");
+        solution.cx = 11; solution.cy = 1;
+        solution.edit(0);
+        check(solution.arrows.size() == 12,
+              "Puzzle Edit Solution cannot add a thirteenth arrow");
+    }
+    {
         namespace fs = std::filesystem;
         const std::string oldSaveDir = app.saveDir;
         const fs::path dir = fs::temp_directory_path() / "ccr_editor_delete_slots_test";
