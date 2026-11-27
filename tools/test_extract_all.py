@@ -57,13 +57,16 @@ class DreamcastCacheTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             assets = pathlib.Path(temporary) / 'assets'
             assets.mkdir()
-            for name in ('battle_stages.bin', 'dreamcast_puzzles.bin', 'mobile_puzzles.bin'):
-                (assets / name).write_bytes(b'stale pack')
+            for name in ('battle_stages.bin', 'dreamcast_puzzles.bin', 'mobile_puzzles.bin', 'gba/dlc_stages.bin'):
+                path = assets / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'stale pack')
             (assets / 'challenge.bin').write_bytes(b'user save')
             extract_all.clear_derived_stage_packs(str(assets))
             self.assertFalse((assets / 'battle_stages.bin').exists())
             self.assertFalse((assets / 'dreamcast_puzzles.bin').exists())
             self.assertFalse((assets / 'mobile_puzzles.bin').exists())
+            self.assertFalse((assets / 'gba' / 'dlc_stages.bin').exists())
             self.assertEqual((assets / 'challenge.bin').read_bytes(), b'user save')
 
     def test_clears_stale_dreamcast_outputs_and_preserves_other_assets(self):

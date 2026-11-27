@@ -19,6 +19,16 @@ int main(int argc, char** argv) {
             if (memcmp(e, s, 476) || memcmp(e + 476, s + 476, an) || ((e[488] | e[489] << 8 | e[490] << 16) & ((1 << (2 * an)) - 1)) != ((s[488] | s[489] << 8 | s[490] << 16) & ((1 << (2 * an)) - 1)) || strncmp((const char*)e + 491, (const char*)s + 491, 21)) bad++;
         }
         printf("%s: %d puzzles, %d differ after re-encoding\n", name, n, bad); CHECK(bad == 0);
+        if (!strcmp(name, "PuzzleP")) for (int k = 0; k < n; ++k) {
+            const auto& puzzle = ps[k];
+            const uint8_t* slot = d.data() + vms::kHeader + k * vms::kSlot;
+            const uint32_t dirs = slot[488] | slot[489] << 8 | slot[490] << 16;
+            CHECK(slot[475] >= 1 && slot[475] <= 12 && puzzle.arrows.size() == slot[475]);
+            for (size_t i = 0; i < puzzle.arrows.size(); ++i) {
+                CHECK(puzzle.arrows[i].x == 0 && puzzle.arrows[i].y == 0);
+                CHECK(puzzle.arrows[i].dir == ((dirs >> (2 * i)) & 3));
+            }
+        }
     }
     VmsPuzzle p; for (int i = 0; i < 108; i++) p.tiles[i] = (i % 7 == 0) ? 1 : (i % 11 == 0 ? 0x11 : 0); for (int i = 0; i < 237; i++) p.walls[i] = (i % 5 == 0);
     p.arrows = {{1, 2, 0}, {3, 4, 1}, {5, 6, 2}, {11, 8, 3}}; p.title = "Test Puzzle";

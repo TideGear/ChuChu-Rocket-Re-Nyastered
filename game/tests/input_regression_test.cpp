@@ -24,6 +24,24 @@ int main(int argc, char** argv) {
     app.headless = true;
     app.root = argv[1];
     gApp = &app;
+    {
+        const std::string dlcStagesPath = app.root + "/gba/dlc_stages.bin";
+        if (std::filesystem::exists(dlcStagesPath)) {
+            if (std::filesystem::exists(app.root + "/dlc/PuzzleP.VMS")) {
+                Stages puzzleP;
+                const bool loaded = loadStageSet(app.root, 4, puzzleP);
+                check(loaded && puzzleP.list.size() == 25 && std::string(puzzleP.list[0].title) == "PuzzleP 01" &&
+                      puzzleP.list[0].stock == std::array<uint8_t, 4>{0, 0, 1, 1} &&
+                      puzzleP.list[4].stock == std::array<uint8_t, 4>{0, 9, 0, 0},
+                      "PuzzleP retail slots export all 25 boards with stock decoded from count/direction fields");
+            }
+            if (std::filesystem::exists(app.root + "/dlc/DEPuzzle.VMS")) {
+                Stages dePuzzle;
+                check(loadStageSet(app.root, 2, dePuzzle) && dePuzzle.list.size() == 25,
+                      "Dreamcast Express remains selectable alongside optional PuzzleP");
+            }
+        }
+    }
     app.win = SDL_CreateWindow("test", 0, 0, GW, GH, SDL_WINDOW_HIDDEN);
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");

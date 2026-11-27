@@ -196,7 +196,7 @@ def clear_dreamcast_cache(assets):
 
 def clear_derived_stage_packs(assets):
     """Discard generated stage packs so the final export reflects the current extracted sources."""
-    for name in ('battle_stages.bin', 'dreamcast_puzzles.bin', 'mobile_puzzles.bin'):
+    for name in ('battle_stages.bin', 'dreamcast_puzzles.bin', 'mobile_puzzles.bin', 'gba/dlc_stages.bin'):
         path = Path(assets, name)
         if path.exists():
             path.unlink()
@@ -590,7 +590,7 @@ def main():
         except OSError:
             continue
     dlc = Path(assets, 'dlc')
-    if dlc.is_dir() and any(path.name.lower() == 'depuzzle.vms' for path in dlc.iterdir()):
+    if dlc.is_dir() and any(path.name.lower() in ('depuzzle.vms', 'puzzlep.vms') for path in dlc.iterdir()):
         output = Path(assets, 'gba', 'dlc_stages.bin')
         output.parent.mkdir(exist_ok=True)
         try:

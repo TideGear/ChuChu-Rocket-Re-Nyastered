@@ -157,8 +157,8 @@ static bool loadStages(const char* path, Stages& out, int onlySrc) {
     fclose(f); return !out.list.empty();
 }
 
-// Puzzle stage sets: 0 = the 100 main stages, 1 = the 2,466 further GBA stages, 2 = the Dreamcast Express DLC pack "DEPuzzle" (25 puzzles with the arrow stock decoded from the slot, docs/dlc.md; PuzzleP is left out until its stock is verified)
-static const int kStageSets = 4;
+// Puzzle stage sets: 0 main, 1 GBA extras, 2 Dreamcast Express, 3 imported packs, 4 PuzzleP DLC.
+static const int kStageSets = 5;
 static std::string gImportDir;   // <data folder>/imports: Dreamcast puzzle packs (.VMS) the player dropped there become stage set 3
 static const int kImportedSource = 5;
 static std::string puzzleTitleForAsciiUi(const std::string& title, int index) {
@@ -194,6 +194,7 @@ static bool loadImportedPacks(Stages& out) {
 static bool loadStageSet(const std::string& root, int set, Stages& out) {
     if (set == 3) return loadImportedPacks(out);
     if (set == 2) return loadStages((root + "/gba/dlc_stages.bin").c_str(), out, 3);
+    if (set == 4) return loadStages((root + "/gba/dlc_stages.bin").c_str(), out, 2);
     if (set == 0) {
         // Prefer the Dreamcast's own 100 stages when available. Two GBA main-set records differ from Dreamcast (stage_registry.py); mobile is the fallback when no disc stage export exists.
         if (loadStages((root + "/dreamcast_puzzles.bin").c_str(), out, 4)) return true;
@@ -5003,7 +5004,7 @@ struct StageSelectMode : Screen {
         if (orig()) { origDraw(a); return; }
         SDL_RenderSetLogicalSize(a.ren, W, H);
         SDL_SetRenderDrawColor(a.ren, 24, 24, 40, 255); SDL_RenderClear(a.ren);
-        a.text(gApp && gApp->stageSet == 3 ? "PUZZLE  IMPORTED PACKS" : gApp && gApp->stageSet == 2 ? "PUZZLE  DREAMCAST EXPRESS" : gApp && gApp->stageSet ? "PUZZLE  MORE STAGES" : "PUZZLE  STAGE SELECT", 24, 14, 34);
+        a.text(gApp && gApp->stageSet == 3 ? "PUZZLE  IMPORTED PACKS" : gApp && gApp->stageSet == 2 ? "PUZZLE  DREAMCAST EXPRESS" : gApp && gApp->stageSet == 4 ? "PUZZLE  PUZZLEP DLC" : gApp && gApp->stageSet ? "PUZZLE  MORE STAGES" : "PUZZLE  STAGE SELECT", 24, 14, 34);
         const int cw = 140, ch = 78, x0 = (W - COLS * cw) / 2, y0 = 80;
         for (int i = 0; i < PER; i++) { int idx = page * PER + i; if (idx >= (int)stages.list.size()) break;
             SDL_Rect r{x0 + (i % COLS) * cw + 4, y0 + (i / COLS) * ch + 4, cw - 8, ch - 8}; bool sel = idx == cur;

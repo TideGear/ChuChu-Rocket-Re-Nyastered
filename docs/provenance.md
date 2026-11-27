@@ -46,7 +46,7 @@ Measured: the Dreamcast logo (`TITLE_newtitle0`, ChuChu Rocket! speech-bubble lo
 ## Additions 2026-11-14
 - **Playfield art** (floor tiles, pits, generator rings, rocket bases, wall bars, arrows, cursors, closed rocket spheres, digits): iPad HD pack sheets `r0930`, `r0645`, `r0732`, `r0651/r0663/r0675/r0687`, `r0729`, chosen because the iPad pack is the largest source for these records ([asset_quality.md](asset_quality.md)); placement and colours from the Android/iOS draw code ([ui_art.md](ui_art.md)).
 - **Title prompt**: Dreamcast `ENGLISH/PRESSSTART` on keyboard/pad platforms, phone/iPad "TAP THE SCREEN!" on Android.
-- **Puzzle sets**: main 100 and extra stages from the GBA ROM and mobile packs; Dreamcast Express (`DEPuzzle`) with the arrow stock decoded from the Dreamcast slot format ([dlc.md](dlc.md)). PuzzleP is not offered (stock unverified).
+- **Puzzle sets**: main 100 and extra stages from the GBA ROM and mobile packs; Dreamcast Express (`DEPuzzle`) with the arrow stock decoded from the Dreamcast slot format ([dlc.md](dlc.md)). PuzzleP is selectable with stock derived from its VMS count/direction fields; verify live stock behavior against the original game.
 - **Dreamcast sound effects**: decoded (4-bit AICA ADPCM) but not used in play: the sample rate is unknown ([audio.md](audio.md)); the mobile effect files are used.
 - **GBA**: stages (2,566 boards) and the CPU player (transcribed from the ROM, diff-tested per routine) only; GBA art and sound are not used yet.
 
