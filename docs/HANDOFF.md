@@ -15,8 +15,9 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Monaural: traced to sound-driver command 0x8a. The port's final-mix fold differs for panned voices.
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: ages -9..80 full-frame sweep passes; only age -1 dome crops pass per element.
-- Stage Select: BIOS glyphs with ASCII fallback; Japanese parity open.
-- Challenge 24: seed 1000 natural failure matches at f1377. Seed 3000 matches 132 CPU arrows through f4200; heat transition is f2780 in both. Seeded 1000/2000 checks remain alignment-sensitive.
+- Stage Select: Japanese glyph parity remains open.
+- Taunts: `0x8c027d68` routes L/R press codes `0x20000`/`0x10000` to IDs 125/126 via `FUN_8c01203a`. L/R timed captures show “You’re weak!”/“I’m sorry!”, pairing them with 125/126. Held-trigger cycling remains unverified; pad records are neutral.
+- Challenge 24: seed 1000 failure and 132 seed-3000 arrows match; other seeds remain unresolved.
 
 ## Done 2026-11-24
 
@@ -28,7 +29,7 @@ Moved to docs/archive/roadmap_2026-11-12_to_11-25.md ("2026-11-24 session notes"
 
 ## Next tasks (milestone: Dreamcast Puzzle end to end; not met, see audit.md for every row's evidence)
 
-State at the end of the 2026-11-25 session (evidence in docs/audit.md; tests 30/30 via `py tools/run_tests.py`):
+State (tests 30/30; evidence in docs/audit.md):
 
 - **Puzzle Edit (mode 8), ported in `DcEditMode`** (Mode Select row 5): Functions screen, eight tool strips (R / L), grid cursor (d-pad, 42.4 px pitch, no pulse), blinking tool-row box (period ~40 frames, phase not derived), editing for Walls, Mice, Cats, Solution, Rockets, Holes with their sounds (1, 6, 27, 1, 11, 11; tool step 0; Create dialog 4 / 2 / 3), repeat-to-remove, Play + F.F. + launch ending + Save OK badge, Create dialog (white box exact, text placement scanned), pause overlay incl. QUIT frame.
 - **Puzzle Edit (partial):** Local Load/Delete/Save uses `.VMS`/`.VMI`; Save appends solvable puzzles to one 25-slot, 38,400-byte pack. Rewrites preserve the header; VMS/VMI replacement failure is tested. New-pack header is unverified. Damaged packs, multi-pack deletion, object caps and no-mouse Play gate are regression-tested. Empty Load/Delete uses original background, Enter badge and distinct prompts (frame 2390 compared). Without BIOS, fallback text differs. Empty/non-ASCII titles show `PUZZLE n`. Port title UI: SDL text/pad grid (20 ASCII chars, Y toggles case, Start saves); row navigation and named-slot regressions pass. Original keyboard/card semantics and game acceptance remain open; local storage is not VMU parity. See audit.md.
@@ -45,7 +46,7 @@ Headless editor hooks (CCR_*): `CCR_EDIT_SCRIPT="tool,x,y,A|B|X|Y;..."`, `CCR_ED
 - **Languages:** French Help plate/footer need a non-USA dump.
 - **The Basics:** needs mobile-original frames to diff (port is port-vs-port only).
 - **Banner pixel diff (3-2-1, time-left):** needs a clean background; the board moves behind every Flycast banner frame (geometry already fits).
-- **Battle captures:** flyhost Battle runs differ between invocations; dump (`FLY_DUMP`) in the same run as the shot you need.
+- **Battle captures:** runs vary; dump (`FLY_DUMP`) with the shot. Taunt RAM pad records are neutral.
 
 Capture recipes (flyhost): Puzzle `START@1350-1360;START@1510-1520;DOWN@1800-1804;DOWN@1840-1844;DOWN@1880-1884;START@1950-1960;START@2120-2130`; Challenge drops one DOWN and adds `START@2300-2310`; Battle `START@1350/1510/1800/2400/2550`. Mode Select entries (DOWN count from the top, then START): 3 Puzzle (15), 4 Puzzle Edit (8), 5 network (9), 6 network setup (10; the mode read was invalid), 7 Options (11), 8 wraps to Help (6); Mode Select row table `0x8c07f2b4` has a hidden row 9 = mode 16. Keys: X places the north arrow, R2 = R trigger. RAM pokes: style 0x1ae8d0, Puzzle masks 0x22d8a4.., golden 0x1ae8f8. Language: resume `local/star-trace/opt/o03050.state`.
 
@@ -65,3 +66,7 @@ Look separation: `py tools/look_leak.py <exe> <one-platform cache> local/e2e-202
 ## Constraints
 
 Read the decompile before any behavioural change and record addresses; distinguish harness coverage from verification. Do not use the user's screen or audio. Keep caches and disc assets out of commits; build and capture outputs go under `local/` (`build`, `dist`, `analysis` are junctions to D:). Commits use the repo's git identity (TideGear) with no AI attribution, and fixes get a one-line "why" in the message body.
+
+## Latest audio step (2026-11-26, partial)
+
+Staff roll now requests CD track 16/song 12, traced at 0x8c050abc; current-cache headless audio pump confirms tick-0 selection. Build and 30/30 tests pass. Flycast WAV comparison remains open. The November 24 Dreamcast-only cache is outdated (7 versus 11) and lacks the staff-roll atlas: refresh before further isolated-cache checks. System py launcher fails here; use C:/Users/Tideg/AppData/Local/Programs/Python/Python312/python.exe for capstone tools. Drifting actors still open. See audio.md.

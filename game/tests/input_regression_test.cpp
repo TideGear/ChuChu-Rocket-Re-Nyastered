@@ -587,6 +587,8 @@ int main(int argc, char** argv) {
     }
     {
         DcStaffRollMode roll(app);
+        check(roll.music() == 12,
+              "Dreamcast staff roll requests CD track 16 (song 12) from initializer 0x8c050abc");
         SDL_Event start{}; start.type = SDL_CONTROLLERBUTTONDOWN;
         start.cbutton.button = SDL_CONTROLLER_BUTTON_START;
         roll.event(app, start);

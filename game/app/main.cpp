@@ -2097,8 +2097,8 @@ struct DcEditMode : Screen {
 
 // ---------------------------------------------------------------- Dreamcast staff roll (mode 17: init 0x8c0507ea, update 0x8c050b80, exit 0x8c050ada)
 // Strip task 0x8c050dc0 / draw 0x8c050de8: offset +2 per pass; strip i (sr01-sr22, 256x256 at njScale 1.5) at (0, 384 * i - offset + 480), drawn while inside the
-// 864-px window; the task retires at offset 8928 (22 x 384 + 480) and sets the done state 0x8c2415ec. Partial: the rising rockets (0x8c0510ec), the end card
-// (chu_end), the end cues 6, 6, 6, 8 (0x8c050bd0) and the exit timing after the roll are not ported; not yet compared with Flycast (local/modecap/m17p).
+// 864-px window; the task retires at offset 8928 (22 x 384 + 480) and sets the done state 0x8c2415ec. The end card
+// (chu_end), end cues and exit timing are implemented; rising rockets and drifting actors remain partial (see docs/audit.md for Flycast evidence).
 struct DcStaffRollMode : Screen {
     int offset = 0, after = 0; bool leave = false, ended = false;
     std::vector<std::string> lines;   // the unlock lines (init 0x8c0509c0, printer 0x8c022600): the highest completed group's text, as the original tests groups 3, 2, 1, 0 in order
@@ -2110,7 +2110,7 @@ struct DcStaffRollMode : Screen {
         else if (done(1)) lines = {"You can now select", " \"Special\"", "on the Stage Select Screen", "in Puzzle Mode."};
         else if (done(0)) lines = {"You can now select", " \"Hard\"", "on the Stage Select Screen", "in Puzzle Mode."};
     }
-    int music() override { return -1; }
+    int music() override { return 12; }   // init 0x8c050abc queues CD track 16 through 0x8c012350; song index = track - 4
     void event(App&, const SDL_Event& e) override {   // 0x8c050c70: any of A / B / C / X / Y (pad pressed mask 0x60e) leaves, whether or not the roll has finished
         if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) leave = true;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_X || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y || e.cbutton.button == SDL_CONTROLLER_BUTTON_START)) leave = true; }
