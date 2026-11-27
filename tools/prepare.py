@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Windowless asset extraction for launchers (RecompLauncher "prepare" step) on Linux and macOS (tools/prepare.ps1 does the same on Windows).
 Extracts assets from YOUR original game files into the data folder; never changes your original files.
-usage: prepare.py --game-files <folder with your original files, loose or ZIP (or one file in it)> [--cache <folder>] [--download-python]
+usage: prepare.py --game-files <folder, ZIP archive, disc descriptor, or one file in a folder> [--cache <folder>] [--download-python]
 --download-python: when Pillow is missing, create a private virtual environment in the data folder and install Pillow into it (needs python3-venv and internet).
 Prints "progress <0..1> <text>" lines; exits 0 when the cache holds playable stage data, 1 otherwise.
 Needs Python 3.10+ and Pillow (python3 -m pip install pillow, or your distribution's python3-pil / python-pillow package)."""
@@ -30,10 +30,10 @@ def main():
     ap.add_argument('--download-python', action='store_true')
     a = ap.parse_args()
     gf = Path(a.game_files) if a.game_files else None
-    if gf is not None and gf.is_file() and gf.suffix.lower() not in ('.gdi', '.cue', '.chd'):
-        gf = gf.parent   # selected packages/ROMs use their containing folder; preserve selected disc descriptors
-    if gf is None or not gf.exists() or (not gf.is_dir() and gf.suffix.lower() not in ('.gdi', '.cue', '.chd')):
-        say('Your game folder or supported disc descriptor was not found: %s' % a.game_files); return 1
+    if gf is not None and gf.is_file() and gf.suffix.lower() not in ('.gdi', '.cue', '.chd', '.zip'):
+        gf = gf.parent   # selected packages/ROMs use their containing folder; preserve selected disc descriptors and ZIP archives
+    if gf is None or not gf.exists() or (not gf.is_dir() and gf.suffix.lower() not in ('.gdi', '.cue', '.chd', '.zip')):
+        say('Your game folder, supported disc descriptor or ZIP archive was not found: %s' % a.game_files); return 1
     game = gf.resolve()
     cache = Path(a.cache).resolve() if a.cache else default_cache()
     old = cache.parent / 'ReNyastered'   # the folder name used before the rename: move it once if the new one does not exist

@@ -1,6 +1,6 @@
 # Windowless asset extraction for launchers (RecompLauncher "prepare" step): extracts assets from YOUR original game files into the cache.
 # Same extraction as setup.cmd (tools\extract_all.py), without the questions and without building the game. Never changes your original files.
-# usage: prepare.ps1 -GameFiles <folder with your original files, or one file inside it> [-Cache <folder>] [-DownloadPython]
+# usage: prepare.ps1 -GameFiles <folder, ZIP archive, disc descriptor, or one file inside a folder> [-Cache <folder>] [-DownloadPython]
 # Prints "progress <0..1> <text>" lines; exits 0 when the cache holds playable stage data, 1 otherwise.
 param([string]$GameFiles = $env:CCR_SETUP_GAME_FILES, [string]$Cache = "", [switch]$DownloadPython)
 $ErrorActionPreference = "Stop"
@@ -9,10 +9,10 @@ $staging = $null
 $lock = $null
 $published = $false
 try {
-    if (-not $GameFiles -or -not (Test-Path -LiteralPath $GameFiles)) { Write-Output "Your game folder or image was not found: $GameFiles"; exit 1 }
+    if (-not $GameFiles -or -not (Test-Path -LiteralPath $GameFiles)) { Write-Output "Your game folder, disc image or ZIP archive was not found: $GameFiles"; exit 1 }
     $resolvedGameFiles = (Resolve-Path -LiteralPath $GameFiles).ProviderPath
     if (Test-Path -LiteralPath $resolvedGameFiles -PathType Leaf) {
-        if ([IO.Path]::GetExtension($resolvedGameFiles).ToLowerInvariant() -notin @('.gdi', '.cue', '.chd')) { $GameFiles = Split-Path -Parent $resolvedGameFiles }
+        if ([IO.Path]::GetExtension($resolvedGameFiles).ToLowerInvariant() -notin @('.gdi', '.cue', '.chd', '.zip')) { $GameFiles = Split-Path -Parent $resolvedGameFiles }
         else { $GameFiles = $resolvedGameFiles }
     } else { $GameFiles = $resolvedGameFiles }
     if (-not $Cache) {

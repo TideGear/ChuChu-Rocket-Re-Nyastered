@@ -9,12 +9,12 @@ Write-Host ""
 if (-not $GameFiles) {
     $guess = Join-Path $root "Original Game Files"
     if (Test-Path $guess) { $GameFiles = $guess }
-    else { $GameFiles = Read-Host "Folder containing your original files, or a Dreamcast image file" }
+    else { $GameFiles = Read-Host "Folder, Dreamcast image file, or ZIP archive containing your original files" }
 }
 if (-not (Test-Path -LiteralPath $GameFiles)) { throw "Game files folder or image not found: $GameFiles" }
 $resolvedGameFiles = (Resolve-Path -LiteralPath $GameFiles).ProviderPath
 if (Test-Path -LiteralPath $resolvedGameFiles -PathType Leaf) {
-    if ([IO.Path]::GetExtension($resolvedGameFiles).ToLowerInvariant() -notin @('.gdi', '.cue', '.chd')) { $GameFiles = Split-Path -Parent $resolvedGameFiles }
+    if ([IO.Path]::GetExtension($resolvedGameFiles).ToLowerInvariant() -notin @('.gdi', '.cue', '.chd', '.zip')) { $GameFiles = Split-Path -Parent $resolvedGameFiles }
     else { $GameFiles = $resolvedGameFiles }
 } else { $GameFiles = $resolvedGameFiles }
 if (-not $Cache) {
