@@ -21,7 +21,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: ages -9..80 full-frame sweep passes; only age -1 dome crops pass per element.
 - Stage Select: Japanese glyph parity remains open.
-- Battle taunt cues are now wired for joined human controllers: a rising left/right trigger requests original `FUN_8c01203a` cue 125/126 (`0x8c027d68`), and a held trigger does not retrigger until released. Regression covers both sides and re-press. This verifies port event/cue dispatch only; no Flycast input/effect comparison yet. The visible gloat bubbles and manual-described held-trigger cycling are still unimplemented/unverified.
+- Battle L/R trigger behavior is source-traced: new press codes `0x20000` / `0x10000` at `0x8c027d68` create `ATO2` / `ATO1` banners (2 minutes / 1 minute) through `0x8c028ea0`, for 120 ticks, and request cues 125/126 via `FUN_8c01203a`. The port now renders those banners and requests the cues on rising edges for joined human pads; regression covers banner mode/lifetime, cue mapping, held suppression and repress. The Dreamcast banner sprites and task geometry are reused; Flycast input/banner parity remains unverified. Whether/how this relates to the manual's gloat phrases (`GAMEVOICE_vw01..22`) and held-trigger cycling remains unresolved.
 - Challenge 24: seed 1000 failure and 132 seed-3000 arrows match; other seeds remain unresolved.
 
 ## Done 2026-11-24

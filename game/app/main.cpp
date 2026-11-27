@@ -5066,8 +5066,10 @@ struct BattleMode : Screen {
         const bool down = value > SDL_JOYSTICK_AXIS_MAX / 2;
         const bool pressed = down && !tauntTriggerHeld[p][side];
         tauntTriggerHeld[p][side] = down;
-        if (pressed && lv[p] < 0 && !paused && (mode == 2 || mode == 3) && gApp)
-            gApp->playSfx(side == 0 ? 125 : 126);   // Dreamcast Battle input 0x8c027d68 -> FUN_8c01203a; new L/R press codes 0x20000/0x10000
+        if (pressed && lv[p] < 0 && !paused && (mode == 2 || mode == 3) && gApp) {
+            banners.push_back({0, side == 0 ? 5 : 4, 0, 120});   // 0x8c027d68 -> 0x8c028ea0: L shows ATO2, R ATO1; 120-tick lifetime
+            gApp->playSfx(side == 0 ? 125 : 126);   // original voice cues via FUN_8c01203a; rising L/R press codes 0x20000/0x10000
+        }
     }
     bool load(const std::string& root, int stage, uint32_t sd,
               const SettingsPaneItems::PadRules* rules = nullptr, int localTeam = -1) {

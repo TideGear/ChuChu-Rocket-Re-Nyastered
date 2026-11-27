@@ -732,20 +732,23 @@ int main(int argc, char** argv) {
             const size_t oldSfxSize = app.sfx.size();
             app.sfx.resize(128);
             const auto old125 = app.sfx[125], old126 = app.sfx[126];
-            app.sfx[125] = {100, 100}; app.sfx[126] = {200, 200}; app.voices.clear();
+            app.sfx[125] = {100, 100}; app.sfx[126] = {200, 200}; app.voices.clear(); battle.banners.clear();
             SDL_Event trigger{}; trigger.type = SDL_CONTROLLERAXISMOTION; trigger.caxis.which = instance;
             trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERLEFT; trigger.caxis.value = 20000; battle.event(app, trigger);
-            check(app.voices.size() == 1 && app.voices.back().d == &app.sfx[125],
-                  "Dreamcast Battle L trigger press requests taunt cue 125");
+            check(app.voices.size() == 1 && app.voices.back().d == &app.sfx[125] &&
+                  battle.banners.size() == 1 && battle.banners.back().mode == 5 && battle.banners.back().life == 120,
+                  "Dreamcast Battle L trigger shows the 2-minute banner and requests cue 125");
             battle.event(app, trigger);
-            check(app.voices.size() == 1, "held Battle L trigger does not retrigger its press cue");
+            check(app.voices.size() == 1 && battle.banners.size() == 1,
+                  "held Battle L trigger does not retrigger its banner or cue");
             trigger.caxis.value = 0; battle.event(app, trigger);
             trigger.caxis.value = 20000; battle.event(app, trigger);
-            check(app.voices.size() == 2 && app.voices.back().d == &app.sfx[125],
-                  "Battle L trigger can request cue 125 again after release");
+            check(app.voices.size() == 2 && app.voices.back().d == &app.sfx[125] && battle.banners.size() == 2,
+                  "Battle L trigger can show its banner and request cue 125 again after release");
             trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERRIGHT; battle.event(app, trigger);
-            check(app.voices.size() == 3 && app.voices.back().d == &app.sfx[126],
-                  "Dreamcast Battle R trigger press requests taunt cue 126");
+            check(app.voices.size() == 3 && app.voices.back().d == &app.sfx[126] &&
+                  battle.banners.size() == 3 && battle.banners.back().mode == 4 && battle.banners.back().life == 120,
+                  "Dreamcast Battle R trigger shows the 1-minute banner and requests cue 126");
             app.voices.clear(); SDL_CloseAudioDevice(app.adev); app.adev = 0;
             app.sfx[125] = old125; app.sfx[126] = old126; app.sfx.resize(oldSfxSize);
         }
