@@ -1943,6 +1943,11 @@ struct DcEditMode : Screen {
         }
         saved = true; refreshPuzzleFiles(); fileScreen = 0; if (gApp) gApp->playSfx(2);
     }
+    static int editCue(int selectedTool, bool arrowLimit) {
+        if (selectedTool == 5 && arrowLimit) return 4;   // FUN_8c02eca0 cap branch reports the limit with cue 4.
+        static constexpr int cueOf[8] = {-1, -1, 1, 6, 27, 1, 11, 11};
+        return cueOf[selectedTool];
+    }
     void edit(int button) {
         if (dialog) {   // File > Create: 'The current puzzle will be lost. Are you sure?' A = Yes clears the board, B = No
             if (button == 0) { st = Stage{}; arrows.clear(); saved = false; sim.load(st); prev.clear(); dialog = false; if (gApp && !scripting) gApp->playSfx(2); } else if (button == 1) { dialog = false; if (gApp && !scripting) gApp->playSfx(3); }   // Yes 2, No 3 (Flycast local/modecap/snd2)
@@ -1956,6 +1961,7 @@ struct DcEditMode : Screen {
         if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); else if (button == 2) ff = true; return; }   // X = F.F.: two simulation passes per frame while held (Flycast local/modecap/ff)
         if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
+        bool arrowLimit = false;
         if (tool == 6) { if (button == 0) { if (editorCanPlaceTile(st.tiles, (size_t)cy * kCols + cx, T_Rocket)) t = T_Rocket; } else if (button == 1 && t == T_Rocket) t = T_Floor; }
         else if (tool == 7) { if (button == 0) t = T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }
         else if (tool == 3 || tool == 4) {   // Mice / Cats: the Facing button sets the start direction (RAM cell word 0x3d..0x40 mice, 0x47..0x4a cats = down, left, up, right; stage tile 9 / 13 + offset: 0 down, 1 left, 2 up, 3 right)
@@ -1971,11 +1977,11 @@ struct DcEditMode : Screen {
             } else if (editorCanAddArrow(arrows.size())) {
                 if (t == T_Rocket || t == T_Hole) t = T_Floor;
                 arrows.push_back({cx, cy, dir[button]});
-            } }   // same direction removes; original cap is 12 arrows (0x8c0bffc9)
+            } else arrowLimit = true; }   // cap branch requests cue 4 (0x8c02eca0); success requests cue 1.
         else if (tool == 2) {
             uint8_t& w = button == 0 ? st.hw[(cy + 1) * kCols + cx] : button == 1 ? st.vw[cy * 13 + cx + 1] : button == 2 ? st.vw[cy * 13 + cx] : st.hw[cy * kCols + cx];
             w ^= 1; }
-        if (gApp && !scripting) { static const int cueOf[8] = {-1, -1, 1, 6, 27, 1, 11, 11}; if (cueOf[tool] >= 0) gApp->playSfx(cueOf[tool]); }   // one SE per accepted edit: Walls 1, Mice 6, Cats 27, Solution 1, Rockets / Holes 11 (Flycast SE ring local/modecap/snd, sequence field per action)
+        if (gApp && !scripting) { const int cue = editCue(tool, arrowLimit); if (cue >= 0) gApp->playSfx(cue); }   // accepted edits: Walls 1, Mice 6, Cats 27, Solution 1, Rockets / Holes 11 (Flycast SE ring local/modecap/snd). Solution cap: cue 4 (FUN_8c02eca0).
         sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear();
     }
     void runScript() {   // headless: CCR_EDIT_SCRIPT="tool,x,y,A|B|X|Y;..."

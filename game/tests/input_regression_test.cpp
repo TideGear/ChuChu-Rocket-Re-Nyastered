@@ -66,6 +66,9 @@ int main(int argc, char** argv) {
         check(editor.music() == 11, "Puzzle Edit Play retains the editor's original CD track");
     }
     {
+        check(DcEditMode::editCue(5, false) == 1 && DcEditMode::editCue(5, true) == 4 &&
+              DcEditMode::editCue(2, false) == 1,
+              "Puzzle Edit Solution uses placement cue on success and error cue at the arrow cap");
         DcEditMode solution;
         solution.tool = 5; solution.cx = 2; solution.cy = 3;
         solution.edit(0);  // A: down (0)
@@ -88,9 +91,12 @@ int main(int argc, char** argv) {
         check(solution.arrows.size() == 12 && solution.arrows.back() == std::array<int, 3>{11, 0, 3},
               "Puzzle Edit Solution replaces at the 12-arrow limit without increasing the count");
         solution.cx = 11; solution.cy = 1;
+        solution.st.tiles[solution.cy * kCols + solution.cx] = T_Rocket;
+        const auto fullArrowList = solution.arrows;
         solution.edit(0);
-        check(solution.arrows.size() == 12,
-              "Puzzle Edit Solution cannot add a thirteenth arrow");
+        check(solution.arrows == fullArrowList && solution.st.tiles[solution.cy * kCols + solution.cx] == T_Rocket &&
+              DcEditMode::editCue(5, true) == 4,
+              "Puzzle Edit Solution rejects a thirteenth arrow without changing the board and selects error cue 4");
         solution.arrows.clear();
         solution.cx = 2; solution.cy = 3; solution.st.tiles[3 * kCols + 2] = T_Rocket;
         solution.edit(0);
