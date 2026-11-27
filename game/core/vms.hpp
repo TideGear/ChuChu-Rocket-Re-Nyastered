@@ -56,10 +56,13 @@ inline int readPack(const std::vector<uint8_t>& data, std::vector<VmsPuzzle>& ou
     }
     return (int)out.size();
 }
-inline std::vector<uint8_t> writePack(const std::vector<VmsPuzzle>& puzzles) {
+inline std::vector<uint8_t> writePack(const std::vector<VmsPuzzle>& puzzles, const uint8_t* header = nullptr) {
     if (puzzles.empty() || puzzles.size() > 25) return {};
     std::vector<uint8_t> v(kPackSize, 0);
-    std::memcpy(v.data(), "CHU_CHU__D01    ", 16); std::memset(v.data() + 16, ' ', 32); std::memcpy(v.data() + 16, "CCR Re-Nyastered puzzles", 24); std::memcpy(v.data() + 48, "ChuChu Rocket!", 14); v[64] = 1;
+    if (header) std::memcpy(v.data(), header, kHeader);
+    else {
+        std::memcpy(v.data(), "CHU_CHU__D01    ", 16); std::memset(v.data() + 16, ' ', 32); std::memcpy(v.data() + 16, "CCR Re-Nyastered puzzles", 24); std::memcpy(v.data() + 48, "ChuChu Rocket!", 14); v[64] = 1;
+    }
     for (size_t k = 0; k < puzzles.size() && k < 25; k++) {
         std::array<uint8_t, kSlot> slot{}; if (!encodeSlot(puzzles[k], slot.data())) return {};
         const size_t offset = kHeader + k * kSlot;

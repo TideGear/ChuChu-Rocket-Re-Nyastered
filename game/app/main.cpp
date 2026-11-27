@@ -1852,7 +1852,7 @@ struct DcEditMode : Screen {
         const std::string path = puzzlePaths[fileIndex]; const int slot = puzzleSlots[fileIndex]; std::vector<uint8_t> bytes; FILE* f = fopen(path.c_str(), "rb"); if (!f) { fileScreen = 5; return; } uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n); fclose(f);
         std::vector<VmsPuzzle> pack; if (vms::readPack(bytes, pack) <= 0 || slot >= (int)pack.size()) { fileScreen = 5; return; } pack.erase(pack.begin() + slot);
         std::error_code ec; if (pack.empty()) { std::filesystem::remove(path, ec); const std::string vmi = path.substr(0, path.size() - 4) + ".VMI"; std::filesystem::remove(vmi, ec); }
-        else { const std::vector<uint8_t> replacement = vms::writePack(pack); f = fopen(path.c_str(), "wb"); if (!f || fwrite(replacement.data(), 1, replacement.size(), f) != replacement.size()) { if (f) fclose(f); fileScreen = 5; return; } fclose(f); }
+        else { const std::vector<uint8_t> replacement = vms::writePack(pack, bytes.data()); f = fopen(path.c_str(), "wb"); if (!f || fwrite(replacement.data(), 1, replacement.size(), f) != replacement.size()) { if (f) fclose(f); fileScreen = 5; return; } fclose(f); }
         fileScreen = 0; fileConfirm = false; refreshPuzzleFiles(); if (gApp) gApp->playSfx(3);
     }
     VmsPuzzle currentPuzzle(int titleNumber) const {
@@ -1879,7 +1879,7 @@ struct DcEditMode : Screen {
         }
         if (packPuzzles.size() >= 25) { fileScreen = 5; return; }
         packPuzzles.push_back(currentPuzzle((int)packPuzzles.size() + 1));
-        std::vector<uint8_t> pack = vms::writePack(packPuzzles); if (pack.empty()) { fileScreen = 5; return; } FILE* f = fopen(path.c_str(), "wb");
+        std::vector<uint8_t> pack = vms::writePack(packPuzzles, hadPack ? existing.data() : nullptr); if (pack.empty()) { fileScreen = 5; return; } FILE* f = fopen(path.c_str(), "wb");
         if (!f || fwrite(pack.data(), 1, pack.size(), f) != pack.size()) {
             if (f) fclose(f);
             if (hadPack) { f = fopen(path.c_str(), "wb"); if (f) { fwrite(existing.data(), 1, existing.size(), f); fclose(f); } }

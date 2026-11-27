@@ -72,14 +72,20 @@ int main(int argc, char** argv) {
         std::vector<VmsPuzzle> remaining;
         check(vms::readPack(bytes, remaining) == 1 && remaining[0].title == "FIRST",
               "Dreamcast Puzzle Edit deletes the selected slot within a multi-puzzle pack");
+        std::array<uint8_t, vms::kHeader> existingHeader{}; for (size_t i = 0; i < existingHeader.size(); ++i) existingHeader[i] = (uint8_t)(i * 19 + 7);
+        memcpy(existingHeader.data(), "CHU_CHU__D01    ", 16);
+        const fs::path userPack = dir / "puzzle_edit" / "user-puzzles.VMS";
+        const auto seedPack = vms::writePack({first}, existingHeader.data());
+        { FILE* f = fopen(userPack.string().c_str(), "wb"); if (f) { fwrite(seedPack.data(), 1, seedPack.size(), f); fclose(f); } }
         DcEditMode saver; saver.st.tiles[0] = T_MouseS + 3; saver.st.tiles[1] = T_Rocket;
         saver.savePuzzle(); saver.savePuzzle();
-        std::vector<uint8_t> userBytes; const fs::path userPack = dir / "puzzle_edit" / "user-puzzles.VMS";
+        std::vector<uint8_t> userBytes;
         { FILE* f = fopen(userPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) userBytes.insert(userBytes.end(), buf, buf + n); fclose(f); } }
         std::vector<VmsPuzzle> userPuzzles;
-        check(vms::readPack(userBytes, userPuzzles) == 2 && userPuzzles[0].title == "Puzzle 01" &&
-              userPuzzles[1].title == "Puzzle 02",
-              "Dreamcast Puzzle Edit appends repeated saves as numbered slots in one VMS pack");
+        check(vms::readPack(userBytes, userPuzzles) == 3 && userPuzzles[0].title == "FIRST" &&
+              userPuzzles[1].title == "Puzzle 02" && userPuzzles[2].title == "Puzzle 03" &&
+              !memcmp(userBytes.data(), existingHeader.data(), existingHeader.size()),
+              "Dreamcast Puzzle Edit appends slots and preserves an existing VMS header");
         fs::remove(dir / "puzzle_edit" / "user-puzzles.VMI", ec);
         fs::create_directory(dir / "puzzle_edit" / "user-puzzles.VMI", ec);
         saver.savePuzzle();
