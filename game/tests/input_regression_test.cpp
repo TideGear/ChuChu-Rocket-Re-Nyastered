@@ -44,6 +44,15 @@ int main(int argc, char** argv) {
         std::error_code ec;
         fs::remove_all(dir, ec); fs::create_directories(dir / "puzzle_edit", ec);
         app.saveDir = dir.string();
+        const fs::path atomicPath = dir / "atomic.vms", invalidChild = atomicPath / "child.vms";
+        { FILE* f = fopen(atomicPath.string().c_str(), "wb"); if (f) { fwrite("old", 1, 3, f); fclose(f); } }
+        check(writeFileAtomic(atomicPath.string(), std::vector<uint8_t>{'n', 'e', 'w'}), "atomic file replacement succeeds");
+        std::vector<uint8_t> atomicBytes; { FILE* f = fopen(atomicPath.string().c_str(), "rb"); if (f) { uint8_t b[8]; size_t n; while ((n = fread(b, 1, sizeof b, f)) > 0) atomicBytes.insert(atomicBytes.end(), b, b + n); fclose(f); } }
+        check(atomicBytes == std::vector<uint8_t>({'n', 'e', 'w'}), "atomic replacement writes the complete new file");
+        { FILE* f = fopen(atomicPath.string().c_str(), "wb"); if (f) { fwrite("safe", 1, 4, f); fclose(f); } }
+        check(!writeFileAtomic(invalidChild.string(), std::vector<uint8_t>{'b', 'a', 'd'}), "atomic write failure is reported");
+        atomicBytes.clear(); { FILE* f = fopen(atomicPath.string().c_str(), "rb"); if (f) { uint8_t b[8]; size_t n; while ((n = fread(b, 1, sizeof b, f)) > 0) atomicBytes.insert(atomicBytes.end(), b, b + n); fclose(f); } }
+        check(atomicBytes == std::vector<uint8_t>({'s', 'a', 'f', 'e'}), "atomic write failure preserves the previous file");
         DcEditMode emptyEditor;
         emptyEditor.openFiles(1);
         const bool emptyLoad = emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty() &&

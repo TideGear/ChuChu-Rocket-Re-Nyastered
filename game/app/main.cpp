@@ -24,6 +24,9 @@
 #include "../core/editor.hpp"
 #include "model3d.hpp"
 #include <filesystem>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "rocket_launch.hpp"
 #include "startup.hpp"
 #include <array>
@@ -49,6 +52,23 @@ static void ccrSetEnv(const char* k, const char* v, int overwrite) {
 #else
     setenv(k, v, overwrite);
 #endif
+}
+static bool writeFileAtomic(const std::string& path, const std::vector<uint8_t>& data) {
+    const std::string temp = path + ".tmp";
+    FILE* f = fopen(temp.c_str(), "wb"); if (!f) return false;
+    const bool written = data.empty() || fwrite(data.data(), 1, data.size(), f) == data.size();
+    const bool flushed = written && fflush(f) == 0;
+    const bool closed = fclose(f) == 0;
+    if (!written || !flushed || !closed) { std::error_code ec; std::filesystem::remove(temp, ec); return false; }
+#ifdef _WIN32
+    if (!MoveFileExA(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        std::error_code ec; std::filesystem::remove(temp, ec); return false;
+    }
+#else
+    std::error_code ec; std::filesystem::rename(temp, path, ec);
+    if (ec) { std::filesystem::remove(temp, ec); return false; }
+#endif
+    return true;
 }
 #ifdef _WIN32
 #include "launcher_setup.hpp"
@@ -1852,7 +1872,7 @@ struct DcEditMode : Screen {
         const std::string path = puzzlePaths[fileIndex]; const int slot = puzzleSlots[fileIndex]; std::vector<uint8_t> bytes; FILE* f = fopen(path.c_str(), "rb"); if (!f) { fileScreen = 5; return; } uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) bytes.insert(bytes.end(), buf, buf + n); fclose(f);
         std::vector<VmsPuzzle> pack; if (vms::readPack(bytes, pack) <= 0 || slot >= (int)pack.size()) { fileScreen = 5; return; } pack.erase(pack.begin() + slot);
         std::error_code ec; if (pack.empty()) { std::filesystem::remove(path, ec); const std::string vmi = path.substr(0, path.size() - 4) + ".VMI"; std::filesystem::remove(vmi, ec); }
-        else { const std::vector<uint8_t> replacement = vms::writePack(pack, bytes.data()); f = fopen(path.c_str(), "wb"); if (!f || fwrite(replacement.data(), 1, replacement.size(), f) != replacement.size()) { if (f) fclose(f); fileScreen = 5; return; } fclose(f); }
+        else { const std::vector<uint8_t> replacement = vms::writePack(pack, bytes.data()); if (!writeFileAtomic(path, replacement)) { fileScreen = 5; return; } }
         fileScreen = 0; fileConfirm = false; refreshPuzzleFiles(); if (gApp) gApp->playSfx(3);
     }
     VmsPuzzle currentPuzzle(int titleNumber) const {
@@ -1879,19 +1899,14 @@ struct DcEditMode : Screen {
         }
         if (packPuzzles.size() >= 25) { fileScreen = 5; return; }
         packPuzzles.push_back(currentPuzzle((int)packPuzzles.size() + 1));
-        std::vector<uint8_t> pack = vms::writePack(packPuzzles, hadPack ? existing.data() : nullptr); if (pack.empty()) { fileScreen = 5; return; } FILE* f = fopen(path.c_str(), "wb");
-        if (!f || fwrite(pack.data(), 1, pack.size(), f) != pack.size()) {
-            if (f) fclose(f);
-            if (hadPack) { f = fopen(path.c_str(), "wb"); if (f) { fwrite(existing.data(), 1, existing.size(), f); fclose(f); } }
-            fileScreen = 5; return;
-        } fclose(f);
-        std::vector<uint8_t> info = vms::writeVmi(pack.size(), "CCRPUZ", "CHU_CHU__D00"); const std::string infoPath = path.substr(0, path.size() - 4) + ".VMI"; f = fopen(infoPath.c_str(), "wb");
-        if (!f || fwrite(info.data(), 1, info.size(), f) != info.size()) {
-            if (f) fclose(f);
-            if (hadPack) { f = fopen(path.c_str(), "wb"); if (f) { fwrite(existing.data(), 1, existing.size(), f); fclose(f); } }
+        std::vector<uint8_t> pack = vms::writePack(packPuzzles, hadPack ? existing.data() : nullptr); if (pack.empty()) { fileScreen = 5; return; }
+        if (!writeFileAtomic(path, pack)) { fileScreen = 5; return; }
+        std::vector<uint8_t> info = vms::writeVmi(pack.size(), "CCRPUZ", "CHU_CHU__D00"); const std::string infoPath = path.substr(0, path.size() - 4) + ".VMI";
+        if (!writeFileAtomic(infoPath, info)) {
+            if (hadPack) writeFileAtomic(path, existing);
             else { std::error_code ec; std::filesystem::remove(path, ec); }
             fileScreen = 5; return;
-        } fclose(f);
+        }
         saved = true; refreshPuzzleFiles(); fileScreen = 0; if (gApp) gApp->playSfx(2);
     }
     void edit(int button) {
