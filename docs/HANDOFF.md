@@ -20,7 +20,7 @@ End-to-end setup on 2026-11-24 (`tools/setup-wizard.ps1` with throwaway caches u
 - Character selector, Options pages, Music/SE Test, Battle arrow reset: implemented with regressions; per-element Flycast parity is open.
 - Puzzle launch: ages -9..80 full-frame sweep passes; only age -1 dome crops pass per element.
 - Stage Select: Japanese glyph parity remains open.
-- Taunts: `0x8c027d68` routes L/R press codes `0x20000`/`0x10000` to IDs 125/126 via `FUN_8c01203a`. L/R timed captures show “You’re weak!”/“I’m sorry!”, pairing them with 125/126. Held-trigger cycling remains unverified; pad records are neutral.
+- Battle taunt cues are now wired for joined human controllers: a rising left/right trigger requests original `FUN_8c01203a` cue 125/126 (`0x8c027d68`), and a held trigger does not retrigger until released. Regression covers both sides and re-press. This verifies port event/cue dispatch only; no Flycast input/effect comparison yet. The visible gloat bubbles and manual-described held-trigger cycling are still unimplemented/unverified.
 - Challenge 24: seed 1000 failure and 132 seed-3000 arrows match; other seeds remain unresolved.
 
 ## Done 2026-11-24

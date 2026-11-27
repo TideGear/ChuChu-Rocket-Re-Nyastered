@@ -5016,6 +5016,7 @@ struct BattleMode : Screen {
     struct Rocket { int player, state; float x, y, tx, scale, dscale; }; std::vector<Rocket> rockets_; struct Smoke { float x, y; int n; }; std::vector<Smoke> smokes_; struct Flash { float x, y, scale, delta; }; std::vector<Flash> flashes_;
     int intro = 0, roundNo = 1; struct Banner { int kind, mode, tick, life; }; std::vector<Banner> banners;
     DragGesture drag; int curX[4] = {2, 9, 2, 9}, curY[4] = {2, 2, 6, 6}; SDL_GameController* pads[4] = {nullptr, nullptr, nullptr, nullptr};
+    bool tauntTriggerHeld[4][2]{};
     std::vector<SDL_GameController*> unassignedPads;
     ~BattleMode() override {
         if (gApp) gApp->stopSong();
@@ -5059,6 +5060,14 @@ struct BattleMode : Screen {
         if (p < 0 || p > 3 || lv[p] >= 0) return;
         if (p == 0) mouseCursor = false;
         for (int d = 0; d < 4; d++) if (button == gApp->padMap.arrow[d]) { place(p, curX[p], curY[p], d); break; }
+    }
+    void padTrigger(int p, int side, int value) {
+        if (p < 0 || p > 3 || side < 0 || side > 1) return;
+        const bool down = value > SDL_JOYSTICK_AXIS_MAX / 2;
+        const bool pressed = down && !tauntTriggerHeld[p][side];
+        tauntTriggerHeld[p][side] = down;
+        if (pressed && lv[p] < 0 && !paused && (mode == 2 || mode == 3) && gApp)
+            gApp->playSfx(side == 0 ? 125 : 126);   // Dreamcast Battle input 0x8c027d68 -> FUN_8c01203a; new L/R press codes 0x20000/0x10000
     }
     bool load(const std::string& root, int stage, uint32_t sd,
               const SettingsPaneItems::PadRules* rules = nullptr, int localTeam = -1) {
@@ -5148,9 +5157,10 @@ struct BattleMode : Screen {
             if (auto* pad = SDL_GameControllerOpen(e.cdevice.which)) unassignedPads.push_back(pad);
         }
         else if (e.type == SDL_CONTROLLERDEVICEREMOVED) {
-            for (auto& pad : pads) if (padMatches(pad, e.cdevice.which)) {
-                SDL_GameControllerClose(pad);
-                pad = nullptr;
+            for (int p = 0; p < 4; ++p) if (padMatches(pads[p], e.cdevice.which)) {
+                SDL_GameControllerClose(pads[p]);
+                pads[p] = nullptr;
+                tauntTriggerHeld[p][0] = tauntTriggerHeld[p][1] = false;
             }
             const auto unassigned = findUnassignedPad(e.cdevice.which);
             if (unassigned != unassignedPads.end()) {
@@ -5175,6 +5185,13 @@ struct BattleMode : Screen {
                     if (p == 0) mouseCursor = false;
                     return;
                 }
+            }
+        }
+        else if (e.type == SDL_CONTROLLERAXISMOTION &&
+                 (e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)) {
+            for (int p = 0; p < 4; ++p) if (padMatches(pads[p], e.caxis.which)) {
+                padTrigger(p, e.caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT ? 0 : 1, e.caxis.value);
+                return;
             }
         }
         else if (e.type == SDL_KEYDOWN && arrowKey(e.key.keysym.sym) >= 0) {

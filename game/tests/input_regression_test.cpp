@@ -724,6 +724,31 @@ int main(int argc, char** argv) {
         check(battle.pads[0] != nullptr,
               "Battle assigns an adopted controller on press-to-join");
         battle.intro = 120;
+        {
+            SDL_AudioSpec want{}; want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 256;
+            app.adev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
+            check(app.adev != 0, "dummy audio device for Battle trigger taunts");
+            SDL_PauseAudioDevice(app.adev, 1);
+            const size_t oldSfxSize = app.sfx.size();
+            app.sfx.resize(128);
+            const auto old125 = app.sfx[125], old126 = app.sfx[126];
+            app.sfx[125] = {100, 100}; app.sfx[126] = {200, 200}; app.voices.clear();
+            SDL_Event trigger{}; trigger.type = SDL_CONTROLLERAXISMOTION; trigger.caxis.which = instance;
+            trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERLEFT; trigger.caxis.value = 20000; battle.event(app, trigger);
+            check(app.voices.size() == 1 && app.voices.back().d == &app.sfx[125],
+                  "Dreamcast Battle L trigger press requests taunt cue 125");
+            battle.event(app, trigger);
+            check(app.voices.size() == 1, "held Battle L trigger does not retrigger its press cue");
+            trigger.caxis.value = 0; battle.event(app, trigger);
+            trigger.caxis.value = 20000; battle.event(app, trigger);
+            check(app.voices.size() == 2 && app.voices.back().d == &app.sfx[125],
+                  "Battle L trigger can request cue 125 again after release");
+            trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERRIGHT; battle.event(app, trigger);
+            check(app.voices.size() == 3 && app.voices.back().d == &app.sfx[126],
+                  "Dreamcast Battle R trigger press requests taunt cue 126");
+            app.voices.clear(); SDL_CloseAudioDevice(app.adev); app.adev = 0;
+            app.sfx[125] = old125; app.sfx[126] = old126; app.sfx.resize(oldSfxSize);
+        }
         bool freeCellFound = false;
         for (int y = 0; y < kRows && !freeCellFound; ++y) for (int x = 0; x < kCols; ++x) {
             if (!(battle.game.sim.coll[y][x] & (kRocket | kHole | kArrow | kGenerator))) {
