@@ -224,7 +224,7 @@ The mobile counterpart of the Dreamcast table. Reference: the iPad HD 1.0 binary
 | Battle HUD (scores, timer, crowns, blink) | screen | verified | `battle_hud_diff`: 1,384 calls / 64 frames |
 | Round banners, 3-2-1 count tasks | animation | verified | `banner_diff`: 48 cases |
 | Battle result, free-for-all | screen | verified | `judge_diff`: 30 cases |
-| Battle result, Team | screen | verified | `judge_team_diff`: 27 cases |
+| Battle result, Team | screen | partial | HD reference `judge_team_diff`: 27 draw-call cases; Dreamcast reference still not parity-checked. Genuine Flycast Team Battle result from `local/dc_ref/tb1/t_03600.state` continued through 15-second timeout: result begins around capture tick 1,140 and is fully visible at 1,250; exact VRAM data matches establish `TEAMCLEAR_wintitle` title and `TEAMCLEAR_player2/4` team-label textures. The 3D `BATTLEMODELS_kabetx01`/`ins` matches are board/wall and board-insert textures, not the score panels. The screenshot's panels resemble `TEAMCLEAR_teamwinbox5..8`, but their packet mapping and draw path remain unresolved. Port still uses HD-derived `judgeWinTeam`; compare panel construction, result layout and timing before claiming Dreamcast completion. Trace notes and frames: `docs/HANDOFF.md`, `local/battle-result-probe/`. |
 | Speech bubbles | screen | verified | `bubble_diff`: 11 traces |
 | Battle preview boards | screen | verified | `battle_preview_diff`: 50 uploads byte for byte |
 | Mouse ghost (overhead draw) | animation | verified | `mouse_ghost_diff`: 564 draws |
