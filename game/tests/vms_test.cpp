@@ -21,13 +21,16 @@ int main(int argc, char** argv) {
     }
     VmsPuzzle p; for (int i = 0; i < 108; i++) p.tiles[i] = (i % 7 == 0) ? 1 : (i % 11 == 0 ? 0x11 : 0); for (int i = 0; i < 237; i++) p.walls[i] = (i % 5 == 0);
     p.arrows = {{1, 2, 0}, {3, 4, 1}, {5, 6, 2}, {11, 8, 3}}; p.title = "Test Puzzle";
-    std::vector<VmsPuzzle> in{p, p}; auto v = vms::writePack(in); CHECK(v.size() % 512 == 0);
+    std::vector<VmsPuzzle> in{p, p}; auto v = vms::writePack(in); CHECK(v.size() == 38400 && v.size() == vms::kPackSize);
     std::vector<VmsPuzzle> out; vms::readPack(v, out); CHECK(out.size() == 2);
     auto vmi = vms::writeVmi(v.size(), "CCRPUZ", "CHU_CHU__D00"); CHECK(vmi.size() == vms::kVmiSize);
     const uint8_t checksum[4] = {0x43, 0x41, 0x42, 0x40}; CHECK(!memcmp(vmi.data(), checksum, sizeof checksum));
     CHECK(!memcmp(vmi.data() + 80, "CCRPUZ", 6) && !memcmp(vmi.data() + 88, "CHU_CHU__D00", 12));
     CHECK((uint32_t)vmi[104] + ((uint32_t)vmi[105] << 8) + ((uint32_t)vmi[106] << 16) + ((uint32_t)vmi[107] << 24) == v.size());
     CHECK(out[0].title == "Test Puzzle" && out[0].arrows.size() == 4 && out[0].arrows[3].dir == 3 && out[0].arrows[3].x == 11 && !memcmp(out[0].tiles, p.tiles, 108));
+    std::vector<VmsPuzzle> fullPack(25, p); fullPack.back().title = "Puzzle 25";
+    const auto retailSizePack = vms::writePack(fullPack); std::vector<VmsPuzzle> fullOut;
+    CHECK(retailSizePack.size() == 38400 && vms::readPack(retailSizePack, fullOut) == 25 && fullOut.back().title == "Puzzle 25");
     CHECK(vms::readPack(std::vector<uint8_t>(40000, 0), out) == -1);
     printf("vms test: %s\n", fails ? "FAILED" : "ok"); return fails;
 }

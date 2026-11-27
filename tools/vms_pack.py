@@ -1,6 +1,5 @@
 """Write Dreamcast ChuChu Rocket puzzle packs: 25 puzzles as a .VMS (VMU save image) plus its .VMI (file info), the format the game's DLC puzzle packs (PuzzleP, DEPuzzle) use.
-Layout (docs/dlc.md, docs/stages.md): the .VMS is 38,400 bytes = 640-byte header (description 'CHU_CHU__D01', Japanese long description, application id, icon) + 25 slots of 1,536 bytes
-(the 25th is shortened in the real packs; here every slot is full size and the file is padded to a multiple of 512 bytes as a VMU requires). A slot is: 25x19 lattice (475 bytes: tile
+Layout (docs/dlc.md, docs/stages.md): the .VMS is 38,400 bytes = 640-byte header (description 'CHU_CHU__D01', Japanese long description, application id, icon) + 24 full 1,536-byte slots + an 896-byte final slot. The final slot's 512-byte board-and-title payload is intact; unused padding is omitted. A slot is: 25x19 lattice (475 bytes: tile
 codes at odd/odd positions, wall bytes 0/1 between them, border corner posts 1), then +0 = number n of solution arrows (<= 12), +1..+12 their cells (high nibble x, low nibble y),
 +13..+15 a 24-bit little-endian field of 2-bit directions (0 south, 1 west, 2 north, 3 east), +16 the title (21 bytes, ASCII or Shift-JIS, zero padded).
 The .VMI is 108 bytes: checksum (first four resource-name characters ANDed with 'SEGA'), description, copyright, timestamp, version, file number, resource name, file name, mode, size.
@@ -87,6 +86,5 @@ def pack_puzzles(boards, resource='CCRPUZ', title_prefix=b''):
     if not 1 <= len(boards) <= 25: raise ValueError('a pack holds 1-25 puzzles')
     body = b''.join(encode_slot(b['tiles'], b['walls'], b.get('arrows', []), b.get('title', b'')) for b in boards)
     body += b'\0' * (SLOT * (25 - len(boards)))
-    vms = build_header() + body
-    vms += b'\0' * (-len(vms) % 512)
+    vms = build_header() + body[:24 * SLOT + 896]  # retail packs omit 640 bytes of final-slot padding
     return vms, build_vmi(resource, b'CHU_CHU__D00', len(vms))

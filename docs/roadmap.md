@@ -16,7 +16,7 @@ The full log from 2026-11-12 to 2026-11-25, which holds every capture recipe, ad
 
 Puzzle Edit save files:
 - The original mode-8 file-handler code at `0x8c038ba0` / `0x8c03ac...` distinguishes no puzzle data, selected-card save, and overwrite prompts; strings identify the no-data and invalid-puzzle routes. The stream tool still cannot read the file-screen draw lists, so screen parity remains open.
-- Implemented usable local Load/Delete/Save in `DcEditMode`: per-user `puzzle_edit/` directory, load/delete of slots from VMS packs, standard `.VMS`/`.VMI` export, delete confirmation, and a 3,600-tick simulation check before saving. Save now appends numbered puzzles to one 25-slot `user-puzzles.VMS`; regression saves twice and decodes both slots. The file browser is marked port storage; VMU behavior, real-game acceptance, title editing and exact visuals are not claimed.
+- Implemented usable local Load/Delete/Save in `DcEditMode`: per-user `puzzle_edit/` directory, load/delete of slots from VMS packs, standard `.VMS`/`.VMI` export, delete confirmation, and a 3,600-tick simulation check before saving. Save appends numbered puzzles to one 25-slot `user-puzzles.VMS`. Writers now match retail's exact 38,400-byte layout (24 full slots + 896-byte final slot); regression decodes slot 25. The file browser is marked port storage; VMU behavior, real-game acceptance, title editing and exact visuals are not claimed.
 - Build via pinned Windows Zig toolchain passed (`ccr`, `vms_test`); VMS test confirmed the two real packs each decode 25 puzzles with 0 re-encode differences; full suite 30/30 passed. Cleaned temporary captures/data after inspection.
 
 Puzzle:

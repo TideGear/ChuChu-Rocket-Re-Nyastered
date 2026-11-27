@@ -1879,7 +1879,7 @@ struct DcEditMode : Screen {
         }
         if (packPuzzles.size() >= 25) { fileScreen = 5; return; }
         packPuzzles.push_back(currentPuzzle((int)packPuzzles.size() + 1));
-        std::vector<uint8_t> pack = vms::writePack(packPuzzles); FILE* f = fopen(path.c_str(), "wb");
+        std::vector<uint8_t> pack = vms::writePack(packPuzzles); if (pack.empty()) { fileScreen = 5; return; } FILE* f = fopen(path.c_str(), "wb");
         if (!f || fwrite(pack.data(), 1, pack.size(), f) != pack.size()) {
             if (f) fclose(f);
             if (hadPack) { f = fopen(path.c_str(), "wb"); if (f) { fwrite(existing.data(), 1, existing.size(), f); fclose(f); } }
