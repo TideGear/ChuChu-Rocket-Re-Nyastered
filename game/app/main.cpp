@@ -578,10 +578,10 @@ struct App {
         }
         for (auto& v : a->voices) {
             if (v.slot >= 0 && v.generation != a->sfxSlotGeneration[v.slot]) continue;
-            for (int i = 0; i < n * 2 && v.pos < v.d->size(); i++) { int s2 = out[i] + (int)((*v.d)[v.pos++] * ((float)a->sfxVol / 255.0f));   // playSFX: +0x58 / 255 (the per-sound base volume of the original is not applied)
-                out[i] = (int16_t)std::max(-32768, std::min(32767, s2)); }
+            const size_t frames = std::min(static_cast<size_t>(n), (v.d->size() - v.pos) / 2);
+            ccr::mixSoundVoice(out, v.d->data() + v.pos, frames, a->sfxVol, a->soundOutput == 0);   // playSFX: +0x58 / 255 (the per-sound base volume of the original is not applied)
+            v.pos += frames * 2;
         }
-        ccr::applySoundOutput(out, static_cast<size_t>(n), a->soundOutput == 0);
         if (a->audioCapture) { fwrite(out, 4, n, a->audioCapture); fflush(a->audioCapture); }   // CCR_AUDIO_CAPTURE: headless record of the mix
         a->voices.erase(std::remove_if(a->voices.begin(), a->voices.end(), [a](const Voice& v) { return (v.slot >= 0 && v.generation != a->sfxSlotGeneration[v.slot]) || v.pos >= v.d->size(); }), a->voices.end());
     }
