@@ -37,6 +37,22 @@ int main(int argc, char** argv) {
         SDL_Event titleDone{}; titleDone.type = SDL_KEYDOWN; titleDone.key.keysym.sym = SDLK_RETURN; titleEditor.event(app, titleDone);
         check(titleEditor.titleConfirmed && !titleEditor.titleEntry, "Puzzle Edit title entry confirms on Enter");
         check(titleEditor.currentPuzzle(1).title == titleEditor.titleInput, "Puzzle Edit exports the entered title bytes unchanged");
+        DcEditMode padTitle; padTitle.titleEntry = true;
+        SDL_Event padButton{}; padButton.type = SDL_CONTROLLERBUTTONDOWN; padButton.cbutton.button = SDL_CONTROLLER_BUTTON_Y; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_B; padTitle.event(app, padButton);
+        check(padTitle.titleLowercase && padTitle.titleInput.empty(), "Puzzle Edit controller title grid toggles case and deletes characters");
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_START; padTitle.event(app, padButton);
+        check(padTitle.titleConfirmed && !padTitle.titleEntry && padTitle.currentPuzzle(1).title == "b",
+              "Puzzle Edit controller grid enters lowercase and Start confirms the title");
+        DcEditMode gridTitle; gridTitle.titleEntry = true;
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_DOWN; gridTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_DOWN; gridTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; gridTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; gridTitle.event(app, padButton);
+        check(gridTitle.titleInput == "V", "Puzzle Edit controller grid keeps horizontal navigation on its selected row");
         DcEditMode editor;
         editor.startPlay();
         check(editor.fileScreen == 6 && !editor.playing,
