@@ -1795,11 +1795,31 @@ struct TitleMode : Screen {
 // 372.5..631.9, y 401.5..466.5. Not yet: the grid cursor, tools, Play, File dialogs; the wall plane scale is taken from the Puzzle board (218/215).
 struct DcEditMode : Screen {
     Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, fileScreen = 0, fileIndex = 0, emptyFileAction = 1; std::array<DcRocketLid, kCols * kRows> lids{};
-    int cx = 0, cy = 0;   // grid cursor cell (12 x 9); the d-pad steps one cell per press and wraps (Flycast local/modecap/pt)
+    int cx = 0, cy = 0, titleKey = 0; std::string titleInput; bool titleEntry = false, titleConfirmed = false;   // 20-byte VMS title; port keyboard is not original BIOS/VMU parity
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
     int music() override { return -1; }
     void event(App& a, const SDL_Event& e) override {
+        if (titleEntry) {
+            static const char* rows[] = {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789.-_ "};
+            auto append = [&](const char* text) { for (const unsigned char* p = (const unsigned char*)text; *p && titleInput.size() < 20; ++p) if (*p >= 0x20 && *p <= 0x7e) titleInput.push_back((char)*p); };
+            if (e.type == SDL_TEXTINPUT) append(e.text.text);
+            else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
+                if (e.key.keysym.sym == SDLK_RETURN) { titleConfirmed = true; titleEntry = false; SDL_StopTextInput(); savePuzzle(); }
+                else if (e.key.keysym.sym == SDLK_ESCAPE) { titleEntry = false; SDL_StopTextInput(); }
+                else if (e.key.keysym.sym == SDLK_BACKSPACE && !titleInput.empty()) titleInput.pop_back();
+            } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) titleKey = (titleKey + 9) % 10;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) titleKey = (titleKey + 1) % 10;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) titleKey = (titleKey + 30) % 40;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) titleKey = (titleKey + 10) % 40;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A) { const char c = rows[titleKey / 10][titleKey % 10]; if (titleInput.size() < 20) titleInput.push_back(c); }
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B) { if (!titleInput.empty()) titleInput.pop_back(); }
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_START || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) { titleConfirmed = true; titleEntry = false; SDL_StopTextInput(); savePuzzle(); }
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_X) { titleEntry = false; SDL_StopTextInput(); }
+            }
+            return;
+        }
         const bool start = (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_p) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START);
         if (paused) {   // the Puzzle pause overlay (RESUME / QUIT; Left / Right move, A confirms, Start resumes), Flycast local/modecap/pe frames 2500 / 2560
             const bool l = (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_LEFT) || (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT);
@@ -1875,20 +1895,29 @@ struct DcEditMode : Screen {
         else { const std::vector<uint8_t> replacement = vms::writePack(pack, bytes.data()); if (!writeFileAtomic(path, replacement)) { fileScreen = 5; return; } }
         fileScreen = 0; fileConfirm = false; refreshPuzzleFiles(); if (gApp) gApp->playSfx(3);
     }
+    bool puzzleCanSave() const {
+        int mice = 0; for (int t : st.tiles) if (t >= T_MouseS && t < T_MouseS + 4) ++mice;
+        Sim check; check.load(st); for (const auto& ar : arrows) check.placeArrow(ar[0], ar[1], ar[2]);
+        for (int i = 0; i < 3600 && mice && check.saved < mice && check.killed == 0; ++i) check.tick();
+        return mice && check.saved == mice && !check.killed && !check.catsInRocket && arrows.size() <= 12;
+    }
+    void beginTitleEntry() {
+        refreshPuzzleFiles();
+        if (!puzzleCanSave()) { fileScreen = 3; if (gApp) gApp->playSfx(4); return; }
+        if (!gApp || gApp->testRun) { fileScreen = 5; return; }
+        titleInput.clear(); titleKey = 0; titleConfirmed = false; titleEntry = true; SDL_StartTextInput();
+    }
     VmsPuzzle currentPuzzle(int titleNumber) const {
         VmsPuzzle p; memcpy(p.tiles, st.tiles, sizeof p.tiles);
         for (int r = 0; r < 10; ++r) for (int c = 0; c < kCols; ++c) p.walls[25 * r + c] = st.hw[r * kCols + c];
         for (int r = 0; r < kRows; ++r) for (int c = 0; c < 13; ++c) p.walls[25 * r + 12 + c] = st.vw[r * 13 + c];
         for (const auto& ar : arrows) if (ar[0] >= 0 && ar[0] < kCols && ar[1] >= 0 && ar[1] < kRows && ar[2] >= 0 && ar[2] < 4) p.arrows.push_back({(uint8_t)ar[0], (uint8_t)ar[1], (uint8_t)ar[2]});
-        char title[21]; snprintf(title, sizeof title, "Puzzle %02d", titleNumber); p.title = title; return p;
+        if (titleConfirmed) p.title = titleInput; else { char title[21]; snprintf(title, sizeof title, "Puzzle %02d", titleNumber); p.title = title; } return p;
     }
     void savePuzzle() {
         refreshPuzzleFiles();
-        int mice = 0; for (int t : st.tiles) if (t >= T_MouseS && t < T_MouseS + 4) ++mice;
-        Sim check; check.load(st); for (auto& ar : arrows) check.placeArrow(ar[0], ar[1], ar[2]);
-        for (int i = 0; i < 3600 && mice && check.saved < mice && check.killed == 0; ++i) check.tick();
-        if (!mice || check.saved != mice || check.killed || check.catsInRocket) { fileScreen = 3; if (gApp) gApp->playSfx(4); return; }
-        if (arrows.size() > 12 || !gApp || gApp->testRun) { fileScreen = 5; return; }
+        if (!puzzleCanSave()) { fileScreen = 3; if (gApp) gApp->playSfx(4); return; }
+        if (!gApp || gApp->testRun) { fileScreen = 5; return; }
         const std::string path = gApp->saveDir + "/puzzle_edit/user-puzzles.VMS";
         std::vector<VmsPuzzle> packPuzzles; std::vector<uint8_t> existing; const bool hadPack = std::filesystem::exists(path);
         if (hadPack) {
@@ -1917,7 +1946,7 @@ struct DcEditMode : Screen {
             if (button == 0) { dialog = true; if (gApp && !scripting) gApp->playSfx(4); }
             else if (button == 1) openFiles(2);   // Delete: browse the editor's saved VMU-style puzzle slots
             else if (button == 2) openFiles(1);   // Load: select a saved slot
-            else if (button == 3) savePuzzle();   // Save: only a solved board is accepted
+            else if (button == 3) beginTitleEntry();   // Save: validate, then enter a title before writing the VMS slot
             return; }
         if (tool == 1) { if (button == 0) startPlay(); else if (button == 1) stopPlay(); else if (button == 2) ff = true; return; }   // X = F.F.: two simulation passes per frame while held (Flycast local/modecap/ff)
         if (playing) return;
@@ -2004,6 +2033,21 @@ struct DcEditMode : Screen {
         if (fileScreen >= 1 && fileScreen <= 5) centered("PORT STORAGE", 404, 12, 145);
         SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_NONE);
     }
+    void drawTitleEntry(App& a) const {
+        if (!titleEntry) return;
+        SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 220); SDL_Rect shade{0, 0, 640, 480}; SDL_RenderFillRect(a.ren, &shade);
+        SDL_SetRenderDrawColor(a.ren, 30, 34, 48, 255); SDL_Rect panel{90, 100, 460, 282}; SDL_RenderFillRect(a.ren, &panel);
+        SDL_SetRenderDrawColor(a.ren, 238, 202, 72, 255); SDL_Rect edge{90, 100, 460, 4}; SDL_RenderFillRect(a.ren, &edge); SDL_SetRenderDrawColor(a.ren, 225, 225, 230, 255); SDL_RenderDrawRect(a.ren, &panel);
+        auto centered = [&](const std::string& s, int y, int h, int gray) { a.text(s, (640 - a.textWidth(s, h)) / 2, y, h, gray); };
+        centered("NAME PUZZLE - PORT KEYBOARD", 118, 24, 255);
+        SDL_SetRenderDrawColor(a.ren, 12, 14, 22, 255); SDL_Rect input{126, 164, 388, 40}; SDL_RenderFillRect(a.ren, &input);
+        a.text(titleInput + (ticks % 60 < 30 ? "_" : ""), 138, 173, 22, 255);
+        static const char* rows[] = {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789.-_ "};
+        for (int i = 0; i < 40; ++i) { const int x = 132 + (i % 10) * 37, y = 220 + (i / 10) * 30; if (i == titleKey) { SDL_SetRenderDrawColor(a.ren, 70, 86, 120, 255); SDL_Rect sel{x - 3, y - 2, 32, 27}; SDL_RenderFillRect(a.ren, &sel); } const char c = rows[i / 10][i % 10]; a.text(c == ' ' ? "SP" : std::string(1, c), x, y, 16, 230); }
+        centered("TYPE TEXT OR DPAD + A     B / BACKSPACE: DELETE", 348, 12, 195);
+        centered("START / ENTER: SAVE     X / ESC: CANCEL", 366, 12, 195);
+        SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_NONE);
+    }
     void stepCue() { if (gApp) gApp->playSfx(0); }   // a tool step files cue 0 (Flycast SE ring)
     void move(int dx, int dy) { cx = (cx + dx + 12) % 12; cy = (cy + dy + 9) % 9; }
     const char* next() override { if (!leave) return nullptr; leave = false; return "MENU"; }
@@ -2019,7 +2063,7 @@ struct DcEditMode : Screen {
         a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, endAge >= 0 ? &lids : nullptr, endAge >= 0 ? endAge : -1, nullptr, 1.0f);   // rocket domes from the edited stage; the launch after a clear
         if (!playing && !dialog && a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
-        const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) { if (fileScreen) drawFileOverlay(a); return; }
+        const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) { if (fileScreen) drawFileOverlay(a); drawTitleEntry(a); return; }
         SDL_SetTextureColorMod(sh.tex, 203, 203, 203);   // the HUD quads carry vertex intensity 0.8 = 203/255 in the PowerVR rule (stream base 0.800)
         auto quad = [&](int sheet, float u0, float v0, float u1, float v1, float x0, float y0, float x1, float y1) {
             const SDL_Rect src{sh.fr[sheet].x + (int)(u0 * 256.0f + 0.5f), sh.fr[sheet].y + (int)(v0 * 256.0f + 0.5f), (int)((u1 - u0) * 256.0f + 0.5f), (int)((v1 - v0) * 256.0f + 0.5f)};
@@ -2046,6 +2090,7 @@ struct DcEditMode : Screen {
                 SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255); }
             if (sh.fr.size() > 5) { SDL_SetTextureColorMod(sh.tex, 203, 203, 203); const SDL_Rect src{sh.fr[5].x, sh.fr[5].y, 111, 63}; const SDL_FRect d{345.0f, 281.0f, 154.0f, 84.0f}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); SDL_SetTextureColorMod(sh.tex, 255, 255, 255); } }
         if (fileScreen) drawFileOverlay(a);   // port-only local-storage browser; original VMU stream quads have not been decoded
+        drawTitleEntry(a);
     }
 };
 

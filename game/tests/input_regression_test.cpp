@@ -28,6 +28,15 @@ int main(int argc, char** argv) {
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");
     {
+        DcEditMode titleEditor;
+        titleEditor.titleEntry = true; SDL_StartTextInput();
+        SDL_Event typed{}; typed.type = SDL_TEXTINPUT; SDL_strlcpy(typed.text.text, "A title ", sizeof typed.text.text); titleEditor.event(app, typed);
+        typed = SDL_Event{}; typed.type = SDL_TEXTINPUT; SDL_strlcpy(typed.text.text, "with extras beyond twenty", sizeof typed.text.text); titleEditor.event(app, typed);
+        check(titleEditor.titleInput == "A title with extras " && titleEditor.titleInput.size() == 20,
+              "Puzzle Edit title entry accepts printable ASCII and enforces the VMS 20-character limit");
+        SDL_Event titleDone{}; titleDone.type = SDL_KEYDOWN; titleDone.key.keysym.sym = SDLK_RETURN; titleEditor.event(app, titleDone);
+        check(titleEditor.titleConfirmed && !titleEditor.titleEntry, "Puzzle Edit title entry confirms on Enter");
+        check(titleEditor.currentPuzzle(1).title == titleEditor.titleInput, "Puzzle Edit exports the entered title bytes unchanged");
         DcEditMode editor;
         editor.startPlay();
         check(editor.fileScreen == 6 && !editor.playing,
@@ -100,6 +109,14 @@ int main(int argc, char** argv) {
         saver.savePuzzle();
         std::vector<uint8_t> afterFailedSave; { FILE* f = fopen(userPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) afterFailedSave.insert(afterFailedSave.end(), buf, buf + n); fclose(f); } }
         check(afterFailedSave == userBytes, "failed VMI update preserves the previous user VMS pack");
+        fs::remove_all(dir / "puzzle_edit" / "user-puzzles.VMI", ec);
+        DcEditMode namedSaver; namedSaver.st.tiles[0] = T_MouseS + 3; namedSaver.st.tiles[1] = T_Rocket; namedSaver.beginTitleEntry();
+        SDL_Event nameText{}; nameText.type = SDL_TEXTINPUT; SDL_strlcpy(nameText.text.text, "Named Puzzle", sizeof nameText.text.text); namedSaver.event(app, nameText);
+        SDL_Event nameDone{}; nameDone.type = SDL_KEYDOWN; nameDone.key.keysym.sym = SDLK_RETURN; namedSaver.event(app, nameDone);
+        std::vector<uint8_t> namedBytes; { FILE* f = fopen(userPack.string().c_str(), "rb"); if (f) { uint8_t buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) namedBytes.insert(namedBytes.end(), buf, buf + n); fclose(f); } }
+        std::vector<VmsPuzzle> namedPuzzles;
+        check(!namedSaver.titleEntry && vms::readPack(namedBytes, namedPuzzles) == 4 && namedPuzzles.back().title == "Named Puzzle",
+              "Dreamcast Puzzle Edit title entry saves the entered name into a VMS slot");
         auto corruptPack = vms::writePack({first, second, third}); corruptPack[vms::kHeader + vms::kSlot + 26] = 0xff;
         { FILE* f = fopen(userPack.string().c_str(), "wb"); if (f) { fwrite(corruptPack.data(), 1, corruptPack.size(), f); fclose(f); } }
         saver.savePuzzle(); std::vector<uint8_t> afterCorruptSave;
