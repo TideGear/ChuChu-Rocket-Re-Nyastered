@@ -589,6 +589,23 @@ int main(int argc, char** argv) {
         DcStaffRollMode roll(app);
         check(roll.music() == 12,
               "Dreamcast staff roll requests CD track 16 (song 12) from initializer 0x8c050abc");
+        if (app.dcStaffRoll.tex) {
+            check(roll.mouse.alive, "staff-roll mouse loads its script from the extracted Dreamcast executable");
+            int catSpawns = 0;
+            // Original frame-loop RAM, local/staff-mouse-20261126/i_watch.bin.
+            // Full 4037-age comparison is tools/oracle/staff_mouse_compare.py.
+            for (int age = 1; age <= 4037; ++age) {
+                catSpawns += roll.mouse.tick() ? 1 : 0;
+                if (age == 361) check(roll.mouse.row == 1 && roll.mouse.angle == 0 && roll.mouse.pos[2] == 30.5f,
+                                      "staff mouse starts translating on the pass after its 360-degree turn");
+                if (age == 1246) check(roll.mouse.row == 8 && roll.mouse.angle == 180 && roll.mouse.pos[2] == 90.0f && roll.mouse.pose() == 7 && roll.mouse.yaw() == 32768,
+                                       "staff mouse matches the original walk pose and position at age 1246");
+                if (age == 2046) check(roll.mouse.row == 46 && roll.mouse.angle == 90 && roll.mouse.pos[0] == 162.0f,
+                                       "staff mouse follows the original repeated square path");
+            }
+            check(!roll.mouse.alive && roll.mouse.pos[0] == 160.0f && roll.mouse.pos[2] == 130.0f && catSpawns == 1,
+                  "staff mouse retires at original age 4037 after emitting one cat spawn");
+        }
         SDL_Event start{}; start.type = SDL_CONTROLLERBUTTONDOWN;
         start.cbutton.button = SDL_CONTROLLER_BUTTON_START;
         roll.event(app, start);

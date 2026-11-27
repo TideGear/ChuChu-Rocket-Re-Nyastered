@@ -9,6 +9,7 @@
 #include "../core/dc_cursor.hpp"
 #include "../core/audio_mix.hpp"
 #include "../core/dc_demo.hpp"
+#include "../core/dc_staffroll.hpp"
 #include "../core/angle.hpp"
 #include "battle_preview.hpp"
 #include "roulette_pose.hpp"
@@ -2098,11 +2099,13 @@ struct DcEditMode : Screen {
 // ---------------------------------------------------------------- Dreamcast staff roll (mode 17: init 0x8c0507ea, update 0x8c050b80, exit 0x8c050ada)
 // Strip task 0x8c050dc0 / draw 0x8c050de8: offset +2 per pass; strip i (sr01-sr22, 256x256 at njScale 1.5) at (0, 384 * i - offset + 480), drawn while inside the
 // 864-px window; the task retires at offset 8928 (22 x 384 + 480) and sets the done state 0x8c2415ec. The end card
-// (chu_end), end cues and exit timing are implemented; rising rockets and drifting actors remain partial (see docs/audit.md for Flycast evidence).
+// (chu_end), end cues, exit timing and scripted mouse are implemented; cat/flock remain partial (see docs/audit.md for Flycast evidence).
 struct DcStaffRollMode : Screen {
     int offset = 0, after = 0; bool leave = false, ended = false;
+    DcStaffMouse mouse;
     std::vector<std::string> lines;   // the unlock lines (init 0x8c0509c0, printer 0x8c022600): the highest completed group's text, as the original tests groups 3, 2, 1, 0 in order
     explicit DcStaffRollMode(App& a, bool chaoUnlock = false) {
+        mouse.load((a.root + "/dreamcast/files/1ST_READ.BIN").c_str());
         auto done = [&](int g) { for (int k = 0; k < 25; ++k) if (!a.isCleared(g * 25 + k)) return false; return true; };
         if (chaoUnlock) lines = {"You can now select Chao", "in the Options Menu!"};
         else if (done(3)) lines = {"You can now select Pians", "in the Options Menu!"};
@@ -2115,6 +2118,10 @@ struct DcStaffRollMode : Screen {
         if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_SPACE || e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_ESCAPE)) leave = true;
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_X || e.cbutton.button == SDL_CONTROLLER_BUTTON_Y || e.cbutton.button == SDL_CONTROLLER_BUTTON_START)) leave = true; }
     void tick(App& a) override {
+        mouse.tick();
+        if (a.headless && getenv("CCR_STAFF_TRACE"))
+            printf("staffmouse %d %d %.9g %.9g %.9g %d %d %.9g %d\n", mouse.age, mouse.row,
+                   mouse.pos[0], mouse.pos[1], mouse.pos[2], mouse.angle, mouse.walk, mouse.scale, mouse.alive ? 1 : 0);
         if (offset < 8928) { offset += 2; return; }
         if (!ended) { ended = true; a.playSfx(6); a.playSfx(6); a.playSfx(6); a.playSfx(8); }   // 0x8c050bd0: cues 6, 6, 6, 8 on the first pass after the strips retire
         if (++after >= 3600) leave = true;   // 0x8c050c96: 0xe10 passes
@@ -2128,6 +2135,25 @@ struct DcStaffRollMode : Screen {
             const float y = 384.0f * i - (float)offset + 480.0f;
             if (y > 480.0f || y + 384.0f < 0.0f) continue;
             const SDL_FRect d{-0.01f, y, 384.0f, 384.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[i], &d); }   // x = fr13 = -1.01 (0x8c050f58) plus 1 px measured against Flycast (sprite routine 0x8c0e4268 not read)
+        if (mouse.alive && a.useModels3d()) {
+            const int costume = a.dcCharacterStyle();
+            const Model3D* m = a.models3d.find(dcMouseModelName(0, mouse.pose(), costume));
+            if (!m) m = a.models3d.find(dcMouseModelName(0, mouse.pose()));
+            if (m) {
+                const bool costumed = costume && m == a.models3d.find(dcMouseModelName(0, mouse.pose(), costume));
+                SDL_RenderSetLogicalSize(a.ren, GW, GH);
+                const float k = dcBattleField.cell / 15.0f;
+                static const float light[3] = {0.00913053f, 0.79143601f, 0.11638579f};
+                a.models3d.drawDcCharacter(a.ren, *m,
+                    // 0x8c05072a camera position = (112, 218, 85.5).
+                    // The task's vector is native Ninja XYZ (Y is height).
+                    {GW / 2.0f + (mouse.pos[0] - 112.0f) * k, GH / 2.0f + (mouse.pos[2] - 85.5f) * k},
+                    {GW / 2.0f, GH / 2.0f}, k, -mouse.yaw() * (360.0f / 65536.0f), 3.0f,
+                    light, -1, 0.0f, 1, costumed ? (costume == 1 ? 0x30u : 0x51u) : 1u,
+                    nullptr, costumed ? 1.0f : 178.0f / 255.0f, mouse.pos[1], mouse.scale * (costumed ? 1.3f : 1.0f));
+                SDL_RenderSetLogicalSize(a.ren, 640, 480);
+            }
+        }
         if (ended && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95)   // BIOS 12x24 font; origin measured from Flycast frame 5500 (the layout code is unread)
             for (size_t l = 0; l < lines.size(); ++l) { int x = 100; const int y = 100 + 24 * (int)l; for (unsigned char c : lines[l]) { if (c > 0x20 && c <= 0x7e) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &d); } x += 12; } }
         if (ended && sh.fr.size() > 22) { const SDL_FRect d{192.0f, 196.0f, 256.0f, 256.0f}; SDL_RenderCopyF(a.ren, sh.tex, &sh.fr[22], &d); }   // the "Thank you!" card: scale and origin measured from Flycast frame 5500 (its code is unread)

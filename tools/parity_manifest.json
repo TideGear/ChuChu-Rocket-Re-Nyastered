@@ -2161,6 +2161,82 @@
         ]
       },
       "note": "flyhost Puzzle Hard 05 run with no arrows (R2@2300-2310), shot 2840 = tick 647 (this run: frame 2720 matches tick 527, offset 2193); a cat eats a mouse and the Dreamcast focus ring (task 0x8c02c600) closes in; local/sweep2"
+    },
+    {
+      "name": "staff_mouse_1046",
+      "ref": "local/staff-mouse-20261126/f__01000.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "1046"
+      },
+      "elements": {
+        "mouse": [
+          500,
+          250,
+          550,
+          300
+        ]
+      },
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
+    },
+    {
+      "name": "staff_mouse_1246",
+      "ref": "local/staff-mouse-20261126/f__01200.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "1246"
+      },
+      "elements": {
+        "mouse": [
+          500,
+          250,
+          550,
+          300
+        ]
+      },
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
+    },
+    {
+      "name": "staff_mouse_1546",
+      "ref": "local/staff-mouse-20261126/f__01500.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "1546"
+      },
+      "elements": {
+        "mouse": [
+          450,
+          290,
+          515,
+          345
+        ]
+      },
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
+    },
+    {
+      "name": "staff_mouse_2046",
+      "ref": "local/staff-mouse-20261126/f__02000.bmp",
+      "args": [
+        "DC_STAFFROLL"
+      ],
+      "env": {
+        "CCR_TICKS": "2046"
+      },
+      "elements": {
+        "mouse": [
+          535,
+          290,
+          585,
+          345
+        ]
+      },
+      "note": "Original mode 17 frame loop resumed from m17p/m_00300.state; matching task age read at payload 0x1d9b88. Cat and later flock remain unported."
     }
   ]
 }
