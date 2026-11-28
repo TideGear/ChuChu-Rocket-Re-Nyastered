@@ -196,6 +196,17 @@ int main(int argc, char** argv) {
         check(!writeFileAtomic(invalidChild.string(), std::vector<uint8_t>{'b', 'a', 'd'}), "atomic write failure is reported");
         atomicBytes.clear(); { FILE* f = fopen(atomicPath.string().c_str(), "rb"); if (f) { uint8_t b[8]; size_t n; while ((n = fread(b, 1, sizeof b, f)) > 0) atomicBytes.insert(atomicBytes.end(), b, b + n); fclose(f); } }
         check(atomicBytes == std::vector<uint8_t>({'s', 'a', 'f', 'e'}), "atomic write failure preserves the previous file");
+        uint32_t oldClear[4]; memcpy(oldClear, app.clr, sizeof oldClear); const uint32_t oldTutorial = app.tutDone; const bool oldClrLoaded = app.clrLoaded;
+        const bool oldTestRun = app.testRun;
+        app.clrLoaded = true; memset(app.clr, 0, sizeof app.clr); app.tutDone = 0; app.testRun = false;
+        const fs::path progressPath = dir / "progress.bin";
+        { FILE* f = fopen(progressPath.string().c_str(), "wb"); if (f) { fwrite("prior-progress", 1, 14, f); fclose(f); } }
+        fs::create_directory(progressPath.string() + ".tmp", ec);
+        check(!app.setCleared(0), "progress save reports atomic temp-file failure");
+        std::string priorProgress; check(readFile(progressPath.string(), priorProgress) && priorProgress == "prior-progress",
+              "failed clear save preserves the existing progress file");
+        fs::remove_all(progressPath.string() + ".tmp", ec);
+        memcpy(app.clr, oldClear, sizeof oldClear); app.tutDone = oldTutorial; app.clrLoaded = oldClrLoaded; app.testRun = oldTestRun;
         DcEditMode emptyEditor;
         emptyEditor.openFiles(1);
         const bool emptyLoad = emptyEditor.fileScreen == 4 && emptyEditor.savedPuzzles.empty() &&
@@ -490,6 +501,15 @@ int main(int argc, char** argv) {
         std::string preserved;
         check(readFile((app.saveDir + "/progress.bin").c_str(), preserved) && preserved == std::string(unrelated, sizeof unrelated),
               "Records delete preserves unrelated progress save");
+        const std::string challengePath = app.saveDir + "/challenge.bin";
+        const fs::path challengeTemp = challengePath + ".tmp";
+        { FILE* f = fopen(challengePath.c_str(), "wb"); if (f) { fwrite(&seed, sizeof seed, 1, f); fclose(f); } }
+        fs::create_directory(challengeTemp, ec);
+        check(!options.deleteChallengeRecords(app), "Challenge record deletion reports atomic temp-file failure");
+        const auto stillSeeded = ChallengeMode::loadSave(app.saveDir);
+        check(stillSeeded.mask == seed.mask && stillSeeded.best[0] == seed.best[0] && stillSeeded.best[24] == seed.best[24],
+              "failed Challenge record deletion preserves the existing mask and times");
+        fs::remove_all(challengeTemp, ec);
         trigger.caxis.value = 0;
         trigger.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERLEFT;
         options.event(app, trigger);
