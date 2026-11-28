@@ -154,11 +154,12 @@ int main(int argc, char** argv) {
         const int failureTick = failedPlay.sim.now;
         const float deathScale = failedPlay.sim.ents[0].rocketCounter;
         const float deathX = failedPlay.sim.ents[0].x;
+        const int deathAngle = app.angs[0];
         for (int i = 0; i < 10; ++i) failedPlay.tickPass(app);
         check(failedPlay.playing && failedPlay.failureAge == 10 && failedPlay.sim.now == failureTick + 10 &&
               failedPlay.sim.ents[0].rocketCounter < deathScale && failedPlay.sim.ents[0].rocketCounter > 0.0f &&
-              failedPlay.sim.ents[0].x == deathX,
-              "Puzzle Edit failure freezes movement but continues the original shrinking mouse death animation");
+              failedPlay.sim.ents[0].x == deathX && app.angs[0] == ((deathAngle + 10 * 0x1000) & 0xffff),
+              "Puzzle Edit failure freezes movement but continues the original shrinking and spinning mouse death animation");
         for (int i = 10; i < 119; ++i) failedPlay.tickPass(app);
         check(failedPlay.playing && failedPlay.failureAge == 119 && failedPlay.sim.now == failureTick + 119 &&
               failedPlay.sim.ents[0].rocketCounter > 0.0f && failedPlay.sim.ents[0].rocketCounter < 0.3f,
@@ -175,6 +176,13 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 100 && catRocketFailure.failureAge < 0; ++i) catRocketFailure.tickPass(app);
         check(catRocketFailure.playing && catRocketFailure.failureAge == 0 && catRocketFailure.sim.catsInRocket == 1,
               "Puzzle Edit cat entering a rocket starts the shared failure result phase");
+        const float catEntryScale = catRocketFailure.sim.ents[1].rocketCounter;
+        const float catEntryX = catRocketFailure.sim.ents[1].x;
+        const int catEntryAngle = app.angs[1];
+        for (int i = 0; i < 10; ++i) catRocketFailure.tickPass(app);
+        check(catRocketFailure.failureAge == 10 && catRocketFailure.sim.ents[1].rocketCounter < catEntryScale &&
+              catRocketFailure.sim.ents[1].x == catEntryX && app.angs[1] != catEntryAngle,
+              "Puzzle Edit failure hold continues the cat's shrinking, spinning rocket-entry animation");
     }
     {
         check(DcEditMode::editCue(5, false) == 1 && DcEditMode::editCue(5, true) == 4 &&
