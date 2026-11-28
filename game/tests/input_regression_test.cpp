@@ -45,6 +45,16 @@ int main(int argc, char** argv) {
     app.win = SDL_CreateWindow("test", 0, 0, GW, GH, SDL_WINDOW_HIDDEN);
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");
+    const std::string keyboardSheet = app.root + "/ret_all/dc_editor_keyboard";
+    if (std::filesystem::exists(keyboardSheet + ".tex.bin")) {
+        check(app.loadSheet(keyboardSheet, app.dcEditorKeyboard) && app.dcEditorKeyboard.w == 512 &&
+              app.dcEditorKeyboard.h == 256 && app.dcEditorKeyboard.fr.size() == 1,
+              "Dreamcast Puzzle Edit keyboard sheet exports and loads its 512x256 key bed");
+    }
+    std::array<bool, 95> titleAscii{};
+    for (int key = 0; key < 95; ++key) { const char c = DcEditMode::titleGridChar(key); if (c >= 0x20 && c <= 0x7e) titleAscii[(unsigned char)c - 0x20] = true; }
+    check(std::all_of(titleAscii.begin(), titleAscii.end(), [](bool present) { return present; }),
+          "Puzzle Edit controller keyboard contains every printable ASCII character exactly once");
     check(app.dcTitleForUi("Normal 01", "NORMAL 01") == "Normal 01",
           "Dreamcast hint keeps ASCII text with the generated no-BIOS font");
     if (!app.dcBiosSjis.tex)
@@ -91,21 +101,40 @@ int main(int argc, char** argv) {
         check(titleEditor.titleConfirmed && !titleEditor.titleEntry, "Puzzle Edit title entry confirms on Enter");
         check(titleEditor.currentPuzzle(1).title == titleEditor.titleInput, "Puzzle Edit exports the entered title bytes unchanged");
         DcEditMode padTitle; padTitle.titleEntry = true;
-        SDL_Event padButton{}; padButton.type = SDL_CONTROLLERBUTTONDOWN; padButton.cbutton.button = SDL_CONTROLLER_BUTTON_Y; padTitle.event(app, padButton);
+        SDL_Event padButton{}; padButton.type = SDL_CONTROLLERBUTTONDOWN; padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; padTitle.event(app, padButton);
+        check(padTitle.titleInput == "B", "Puzzle Edit controller keyboard selects a complete ASCII key sequence");
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_B; padTitle.event(app, padButton);
+        check(padTitle.titleInput.empty(), "Puzzle Edit B deletes the previous title character");
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_DOWN; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; padTitle.event(app, padButton);
+        check(padTitle.titleInput == "BR", "Puzzle Edit controller keyboard moves down by one 16-key row");
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_B; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_B; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_DOWN; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_DOWN; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; padTitle.event(app, padButton);
+        padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; padTitle.event(app, padButton);
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; padTitle.event(app, padButton);
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; padTitle.event(app, padButton);
+        check(padTitle.titleInput == "0", "Puzzle Edit controller keyboard reaches digits on the fourth row");
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_B; padTitle.event(app, padButton);
-        check(padTitle.titleLowercase && padTitle.titleInput.empty(), "Puzzle Edit controller title grid toggles case and deletes characters");
+        padTitle.titleKey = 95;
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; padTitle.event(app, padButton);
+        check(padTitle.titleInput.empty(), "Puzzle Edit final controller key deletes from the title");
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_START; padTitle.event(app, padButton);
-        check(padTitle.titleConfirmed && !padTitle.titleEntry && padTitle.currentPuzzle(1).title == "b",
-              "Puzzle Edit controller grid enters lowercase and Start confirms the title");
+        check(padTitle.titleConfirmed && !padTitle.titleEntry && padTitle.currentPuzzle(1).title.empty(),
+              "Puzzle Edit controller keyboard Start confirms an empty title");
         DcEditMode gridTitle; gridTitle.titleEntry = true;
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_DOWN; gridTitle.event(app, padButton);
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_DOWN; gridTitle.event(app, padButton);
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; gridTitle.event(app, padButton);
         padButton.cbutton.button = SDL_CONTROLLER_BUTTON_A; gridTitle.event(app, padButton);
-        check(gridTitle.titleInput == "V", "Puzzle Edit controller grid keeps horizontal navigation on its selected row");
+        check(gridTitle.titleInput == "h", "Puzzle Edit controller keyboard moves vertically by one 16-key row");
+        DcEditMode mouseTitle; mouseTitle.titleEntry = true;
+        SDL_Event mouseKey{}; mouseKey.type = SDL_MOUSEBUTTONDOWN; mouseKey.button.button = SDL_BUTTON_LEFT; mouseKey.button.x = 68 + 5 * 28 + 14; mouseKey.button.y = 194 + 3 * 28 + 14; mouseTitle.event(app, mouseKey);
+        check(mouseTitle.titleInput == "1", "Puzzle Edit title keyboard supports clicking its displayed key");
         DcEditMode editor;
         check(editor.music() == 11,
               "Dreamcast Puzzle Edit requests CD track 15 from initializer 0x8c02dcc6");

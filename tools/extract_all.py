@@ -234,7 +234,7 @@ def publish_dc_asset_version(assets, entry):
     version = Path(assets, 'ret_all', 'dc_assets_version.txt')
     version.parent.mkdir(parents=True, exist_ok=True)
     temporary = version.with_suffix('.tmp')
-    temporary.write_text('11', encoding='ascii')   # 11: Puzzle Edit's empty file-screen background, Enter badge and Save OK badge; 10: editor HUD; 9: staff roll sheet; 8: sky model; 7: Puzzle focus ring model
+    temporary.write_text('12', encoding='ascii')   # 12: Puzzle Edit's original 16 x 6 keyboard art; 11: empty file-screen background and badges; 10: editor HUD; 9: staff roll sheet
     os.replace(temporary, version)
     return True
 

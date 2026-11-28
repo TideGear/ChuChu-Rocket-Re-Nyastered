@@ -417,7 +417,7 @@ struct App {
     Sheet arw, cur, rk[4], hdTime, hdHud65, hdHud68, hdPhud, hdStageNum, hdFrame78, hdFrame73, hdButton, hdFont, hdFont1, hdPause, ssBg, ssBubble, ssCells, ssTab, ssPanel, ssArrows, ssHdr, hdBub9, hdBubTail, mnBg, mnBars, mnMasc, mnDeco, opBg, opHdr, langJa, opSnd, opSld, hlHdr, hlTab, hlFrm, hlDia, plPanels, plLabels, plBottom, plTiles; std::vector<std::string>* bubbleLog = nullptr; SDL_Texture* ssPrev = nullptr; int ssPrevKey = -1; std::vector<uint8_t> hdFontW, hdFontW1; std::map<int, std::string> hdText; std::map<int, int> hdTextMap; bool gameArtOk = false;   // original in-play art: arrows (r0645, frame = owner), cursors (r0732: frames 0..3 = players, 4 = square bracket), closed rocket sphere = frame 0 of r0651/r0663/r0675/r0687
     Sheet catV[3], mouseV[3], goldV[3]; bool walkOk = false;   // walk cycles per view (0 side, 1 back, 2 front): cat r0420/r0429/r0438 (20 frames), mouse r0491/r0495/r0499 and gold mouse r0472/r0476/r0480 (11 frames)
     Sheet tbg, tprompt, trocket, tlogo, mbg, mbtn, mdeco, dlogo, dpress; bool dlogoOk = false, dpressOk = false;
-    Sheet dcEditor, dcEditorFiles, dcStaffRoll, dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
+    Sheet dcEditor, dcEditorFiles, dcEditorKeyboard, dcStaffRoll, dcHelpPages, dcOptions, dcHelp, dcBattleSetup, dcStartup, dcSelectClock, dcBiosAnsi, dcModeSelect, dcChallengeSelect, dcChallengeIntro, dcChallengeFailure, dcChallengeResult, dcArrows, dcPuzzleStart, dcPuzzleCancel, dcPuzzlePanel, dcPuzzleStage, dcPuzzleDigits, dcPuzzlePlate, dcPuzzleLabels, dcPause, dcPauseBoxes, dcPauseTeam, dcPauseMarks, dcCursorBracket, dcCursors, dcCursorTrail, dcBattleHud, dcBattleCount, dcBattleRound, dcBiosWide, dcBiosSjis;
     Sheet pbg, pprompt, procket, pdeco, pbtn, pmbg; bool padOk = false; bool titleOk = false, menuOk = false;   // iPad HD layout: the highest-resolution mobile art (tools/export_tilemaps.py, tools/export_pad_ui.py)
     Sheet phonePuzzleHud, phonePauseButton, phonePauseTitle, phonePausePanel;
     std::map<int, std::string> strs;   // localized UI strings (Android resources, tools/export_strings.py), text as single-byte codes of the glyph sheet
@@ -447,7 +447,7 @@ struct App {
         s.fit.assign(s.fr.size(), 1.0f);
         for (uint32_t i = 0; i < n && i < s.fr.size(); i++) { int16_t w; memcpy(&w, &b[36 * i + 16], 2); if (s.fr[i].w > 0) s.fit[i] = (float)w / (float)s.fr[i].w; }
     }
-    static constexpr int kDcAssetsVersion = 11;   // tools/extract_all.py writes dc_assets_version.txt; 11 adds dc_editor_files for the original empty VMU screen
+    static constexpr int kDcAssetsVersion = 12;   // tools/extract_all.py writes dc_assets_version.txt; 12 adds the original Puzzle Edit keyboard key art
     bool dcAssetsStale = false;
     // Dreamcast-look sheets; a language's folder dc_loc_<xx> (tools/extract_all.py exports one per disc language folder) replaces the English set.
     std::string dcRoot;   // the main ret_all: BIOS font sheets and per-language stage titles are only there
@@ -484,6 +484,7 @@ struct App {
         freeSheet(dcStaffRoll); loadSheet(dir + "dc_staffroll", dcStaffRoll);
         freeSheet(dcEditor); loadSheet(dir + "dc_editor", dcEditor);
         freeSheet(dcEditorFiles); loadSheet(dir + "dc_editor_files", dcEditorFiles);
+        freeSheet(dcEditorKeyboard); loadSheet(dir + "dc_editor_keyboard", dcEditorKeyboard);
         freeSheet(dcOptions); loadSheet(dir + "dc_options", dcOptions);
         freeSheet(dcSelectClock); loadSheet(dcRoot + "dc_select_clock", dcSelectClock);
         freeSheet(dcBiosAnsi); loadSheet(dcRoot + "dc_bios_ansi", dcBiosAnsi);
@@ -1829,29 +1830,43 @@ struct TitleMode : Screen {
 // 372.5..631.9, y 401.5..466.5. Cursor, tools, Play and local file dialogs are implemented; VMU/title parity remains partial. Wall plane scale: 218/215.
 struct DcEditMode : Screen {
     Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, fileScreen = 0, fileIndex = 0, emptyFileAction = 1; std::array<DcRocketLid, kCols * kRows> lids{};
-    int cx = 0, cy = 0, titleKey = 0; std::string titleInput; bool titleEntry = false, titleConfirmed = false, titleLowercase = false;   // 20-byte VMS title; port keyboard is not original BIOS/VMU parity
+    int cx = 0, cy = 0, titleKey = 0; std::string titleInput; bool titleEntry = false, titleConfirmed = false;   // ASCII controller grid follows the original 16 x 6 key bed; VMS titles are capped at 20 bytes
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
+    static char titleGridChar(int key) {
+        static constexpr char keys[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+        return key >= 0 && key < (int)sizeof(keys) - 1 ? keys[key] : 0;   // 95 printable ASCII keys + one Delete key in the 16 x 6 layout
+    }
+    void acceptTitleKey() {
+        if (titleKey == 95) { if (!titleInput.empty()) titleInput.pop_back(); return; }
+        const char c = titleGridChar(titleKey);
+        if (c && titleInput.size() < 20) titleInput.push_back(c);
+    }
     int music() override { return 11; }   // Puzzle Edit init 0x8c02dcc6 queues CD track 15 (song index = track - 4)
     void event(App& a, const SDL_Event& e) override {
         if (titleEntry) {
-            static const char* rows[] = {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789.-_ "};
             auto append = [&](const char* text) { for (const unsigned char* p = (const unsigned char*)text; *p && titleInput.size() < 20; ++p) if (*p >= 0x20 && *p <= 0x7e) titleInput.push_back((char)*p); };
+            auto activate = [&]() { acceptTitleKey(); };
             if (e.type == SDL_TEXTINPUT) append(e.text.text);
             else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
                 if (e.key.keysym.sym == SDLK_RETURN) { titleConfirmed = true; titleEntry = false; SDL_StopTextInput(); savePuzzle(); }
                 else if (e.key.keysym.sym == SDLK_ESCAPE) { titleEntry = false; SDL_StopTextInput(); }
                 else if (e.key.keysym.sym == SDLK_BACKSPACE && !titleInput.empty()) titleInput.pop_back();
             } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
-                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) titleKey = titleKey / 10 * 10 + (titleKey % 10 + 9) % 10;
-                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) titleKey = titleKey / 10 * 10 + (titleKey % 10 + 1) % 10;
-                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) titleKey = (titleKey + 30) % 40;
-                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) titleKey = (titleKey + 10) % 40;
-                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A) { char c = rows[titleKey / 10][titleKey % 10]; if (titleLowercase && c >= 'A' && c <= 'Z') c = (char)(c + ('a' - 'A')); if (titleInput.size() < 20) titleInput.push_back(c); }
+                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) titleKey = titleKey / 16 * 16 + (titleKey % 16 + 15) % 16;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) titleKey = titleKey / 16 * 16 + (titleKey % 16 + 1) % 16;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) titleKey = (titleKey + 80) % 96;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) titleKey = (titleKey + 16) % 96;
+                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A) activate();
                 else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B) { if (!titleInput.empty()) titleInput.pop_back(); }
-                else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) titleLowercase = !titleLowercase;
                 else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_START) { titleConfirmed = true; titleEntry = false; SDL_StopTextInput(); savePuzzle(); }
                 else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_X) { titleEntry = false; SDL_StopTextInput(); }
+            } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                const int dx = e.button.x - 68, dy = e.button.y - 194;
+                if (dx >= 0 && dy >= 0 && dx < 448 && dy < 168) {
+                    const int col = std::clamp(dx / 28, 0, 15), row = std::clamp(dy / 28, 0, 5);
+                    titleKey = row * 16 + col; activate();
+                }
             }
             return;
         }
@@ -1977,7 +1992,7 @@ struct DcEditMode : Screen {
         refreshPuzzleFiles();
         if (!puzzleCanSave()) { fileScreen = 3; if (gApp) gApp->playSfx(4); return; }
         if (!gApp || gApp->testRun) { fileScreen = 5; return; }
-        titleInput.clear(); titleKey = 0; titleConfirmed = false; titleLowercase = false; titleEntry = true; SDL_StartTextInput();
+        titleInput.clear(); titleKey = 0; titleConfirmed = false; titleEntry = true; SDL_StartTextInput();
     }
     VmsPuzzle currentPuzzle(int titleNumber) const {
         VmsPuzzle p; memcpy(p.tiles, st.tiles, sizeof p.tiles);
@@ -2124,16 +2139,24 @@ struct DcEditMode : Screen {
     void drawTitleEntry(App& a) const {
         if (!titleEntry) return;
         SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_BLEND); SDL_SetRenderDrawColor(a.ren, 0, 0, 0, 220); SDL_Rect shade{0, 0, 640, 480}; SDL_RenderFillRect(a.ren, &shade);
-        SDL_SetRenderDrawColor(a.ren, 30, 34, 48, 255); SDL_Rect panel{90, 100, 460, 282}; SDL_RenderFillRect(a.ren, &panel);
-        SDL_SetRenderDrawColor(a.ren, 238, 202, 72, 255); SDL_Rect edge{90, 100, 460, 4}; SDL_RenderFillRect(a.ren, &edge); SDL_SetRenderDrawColor(a.ren, 225, 225, 230, 255); SDL_RenderDrawRect(a.ren, &panel);
+        SDL_SetRenderDrawColor(a.ren, 30, 34, 48, 255); SDL_Rect panel{64, 92, 512, 364}; SDL_RenderFillRect(a.ren, &panel);
+        SDL_SetRenderDrawColor(a.ren, 238, 202, 72, 255); SDL_Rect edge{64, 92, 512, 4}; SDL_RenderFillRect(a.ren, &edge); SDL_SetRenderDrawColor(a.ren, 225, 225, 230, 255); SDL_RenderDrawRect(a.ren, &panel);
         auto centered = [&](const std::string& s, int y, int h, int gray) { a.text(s, (640 - a.textWidth(s, h)) / 2, y, h, gray); };
-        centered("NAME PUZZLE - PORT KEYBOARD", 118, 24, 255);
-        SDL_SetRenderDrawColor(a.ren, 12, 14, 22, 255); SDL_Rect input{126, 164, 388, 40}; SDL_RenderFillRect(a.ren, &input);
-        a.text(titleInput + (ticks % 60 < 30 ? "_" : ""), 138, 173, 22, 255);
-        static const char* rows[] = {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789.-_ "};
-        for (int i = 0; i < 40; ++i) { const int x = 132 + (i % 10) * 37, y = 220 + (i / 10) * 30; if (i == titleKey) { SDL_SetRenderDrawColor(a.ren, 70, 86, 120, 255); SDL_Rect sel{x - 3, y - 2, 32, 27}; SDL_RenderFillRect(a.ren, &sel); } char c = rows[i / 10][i % 10]; if (titleLowercase && c >= 'A' && c <= 'Z') c = (char)(c + ('a' - 'A')); a.text(c == ' ' ? "SP" : std::string(1, c), x, y, 16, 230); }
-        centered("TYPE TEXT OR DPAD + A     B / BACKSPACE: DELETE", 348, 12, 195);
-        centered("Y: CASE     START / ENTER: SAVE     X / ESC: CANCEL", 366, 12, 195);
+        centered("NAME PUZZLE", 105, 22, 255);
+        SDL_SetRenderDrawColor(a.ren, 12, 14, 22, 255); SDL_Rect input{94, 140, 452, 38}; SDL_RenderFillRect(a.ren, &input);
+        a.text(titleInput + (ticks % 60 < 30 ? "_" : ""), 104, 149, 20, 255);
+        if (a.dcEditorKeyboard.tex && !a.dcEditorKeyboard.fr.empty()) {
+            const SDL_Rect src = a.dcEditorKeyboard.fr[0]; const SDL_Rect dst{64, 190, 512, 256};
+            SDL_RenderCopy(a.ren, a.dcEditorKeyboard.tex, &src, &dst);
+        }
+        for (int i = 0; i < 96; ++i) {
+            const int x = 68 + (i % 16) * 28, y = 194 + (i / 16) * 28;
+            if (i == titleKey) { SDL_SetRenderDrawColor(a.ren, 30, 90, 190, 190); SDL_Rect sel{x, y, 27, 27}; SDL_RenderFillRect(a.ren, &sel); }
+            const char c = titleGridChar(i);
+            const std::string key = i == 95 ? "DEL" : c == ' ' ? "SP" : c ? std::string(1, c) : std::string();
+            if (!key.empty()) a.text(key, x + (key.size() == 1 ? 8 : 3), y + 7, key.size() == 3 ? 10 : 13, 30);
+        }
+        centered("DPAD + A: TYPE     B: DELETE     START: SAVE     X: CANCEL", 432, 12, 220);
         SDL_SetRenderDrawBlendMode(a.ren, SDL_BLENDMODE_NONE);
     }
     void stepCue() { if (gApp) gApp->playSfx(0); }   // a tool step files cue 0 (Flycast SE ring)

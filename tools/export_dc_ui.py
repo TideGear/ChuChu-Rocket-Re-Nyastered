@@ -429,6 +429,14 @@ def export_dc_editor_files(prs_png, out):
     badge.alpha_composite(badge_src.crop((0, 32, 20, 64)), (56, 0))
     export_atlas(out, 'dc_editor_files', [background, badge])
 
+def export_dc_editor_keyboard(prs_png, out):
+    """The Dreamcast editor's 16 x 6 key bed (the English labels are drawn by the app)."""
+    path = os.path.join(prs_png, 'EDITOR2_keyboard1.png')
+    if not os.path.isfile(path): return
+    keyboard = Image.open(path).convert('RGBA')
+    if keyboard.size != (512, 256): return
+    export_atlas(out, 'dc_editor_keyboard', [keyboard])
+
 
 def export_dc_editor(prs_png, out):
     """Puzzle Edit HUD sheets (mode 8), transposed upright like the staff roll strips (the stream's UVs then index them directly): frames 0-4 = EDITOR1_pzedit01a
@@ -584,6 +592,7 @@ def main(prs_png, out, png=None):
     export_dc_staffroll(prs_png, out)
     export_dc_editor(prs_png, out)
     export_dc_editor_files(prs_png, out)
+    export_dc_editor_keyboard(prs_png, out)
     export_dc_fallback_fonts(out)
     export_challenge_intro(prs_png, out)
     export_challenge_failure(prs_png, out)
