@@ -4574,6 +4574,8 @@ struct ChallengeMode : Screen {
         for (size_t i = 0; i < sm.ents.size(); i++) prev[i] = {sm.ents[i].x, sm.ents[i].z};
         const int before = phase();
         const int beforeFrame = battle ? bgame.phaseFrame : game.phaseFrame;
+        const bool battleClock = battle && bgame.type == 5;
+        const int beforePlayClock = battle ? (battleClock ? bgame.game.clock : bgame.playTick) : game.playTick;
         if (introCuePending_) { introCuePending_ = false; playCue(a, 16); }
         if (before == ChallengeGame::Countdown) {
             const int countdownFrame = beforeFrame + 1;
@@ -4586,6 +4588,14 @@ struct ChallengeMode : Screen {
             bgame.tick();
         } else game.tick();
         if (before == ChallengeGame::Intro && phase() == ChallengeGame::Countdown) playCue(a, 16);
+        if (before == ChallengeGame::Play && !battleClock) {
+            const int playClock = battle ? bgame.playTick : game.playTick;
+            const int limit = ChallengeGame::kLimitTicks;
+            if (playClock > beforePlayClock && playClock <= limit && playClock % 60 == 0) {
+                const int secondsLeft = (limit - playClock) / 60;
+                if (secondsLeft <= 5) playCue(a, 0x13 - secondsLeft);
+            }
+        }
         if (phase() == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
         if (phase() != before) {
             if (phase() == ChallengeGame::Success) { playCue(a, 21); playCue(a, 28); }

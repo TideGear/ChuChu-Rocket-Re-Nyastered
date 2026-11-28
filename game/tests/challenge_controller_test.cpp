@@ -118,6 +118,53 @@ int main(int argc, char** argv) {
               challenge.phase() == ChallengeGame::Failure,
               "final Challenge dispatches its failure cue after the timed-out battle");
     }
+    {
+        ChallengeMode puzzle;
+        check(puzzle.load(app.root, 0), "puzzle Challenge countdown load");
+        std::vector<int> cues;
+        puzzle.sfx = [&](int id) { cues.push_back(id); };
+        puzzle.game.phase = ChallengeGame::Play;
+        for (int seconds = 5; seconds >= 0; --seconds) {
+            puzzle.game.playTick = ChallengeGame::kLimitTicks - seconds * 60 - 1;
+            puzzle.tick(app);
+        }
+        check(cues == (std::vector<int>{14, 15, 16, 17, 18, 19}) &&
+              puzzle.phase() == ChallengeGame::Play,
+              "puzzle Challenge routes 5-to-0-second play-clock cues at exact boundaries");
+        puzzle.tick(app);
+        check(cues == (std::vector<int>{14, 15, 16, 17, 18, 19, 27}) &&
+              puzzle.phase() == ChallengeGame::Failure,
+              "puzzle Challenge dispatches failure after the final countdown cue");
+    }
+    {
+        ChallengeMode generator;
+        check(generator.load(app.root, 3), "generator Challenge countdown load");
+        std::vector<int> cues;
+        generator.sfx = [&](int id) { cues.push_back(id); };
+        check(generator.battle && generator.bgame.type == 3, "generator Challenge uses BattleGame");
+        generator.bgame.phase = ChallengeGame::Play;
+        for (int seconds = 5; seconds >= 0; --seconds) {
+            generator.bgame.playTick = ChallengeGame::kLimitTicks - seconds * 60 - 1;
+            generator.tick(app);
+        }
+        check(cues == (std::vector<int>{14, 15, 16, 17, 18, 19}),
+              "Battle-backed 30-second Challenge routes play-clock cues at exact boundaries");
+    }
+    {
+        ChallengeMode timed;
+        check(timed.load(app.root, 0), "timed Challenge load");
+        std::vector<int> cues;
+        timed.sfx = [&](int id) { cues.push_back(id); };
+        for (int i = 0; i < 119; ++i) timed.tick(app);
+        check(timed.music() == -2 && cues.empty(), "Challenge delays its music and intro cue before their original ticks");
+        timed.tick(app);
+        check(timed.music() == 8 && cues.empty(), "Challenge starts song 8 on task tick 120");
+        for (int i = 120; i < ChallengeGame::kIntroFrames - 1; ++i) timed.tick(app);
+        check(timed.phase() == ChallengeGame::Intro && cues.empty(), "timed Challenge intro remains active through frame 361");
+        timed.tick(app);
+        check(timed.phase() == ChallengeGame::Countdown && cues == std::vector<int>{16},
+              "timed intro expiry enters countdown and requests cue 16 once at frame 362");
+    }
     SDL_JoystickDetachVirtual(device);
     SDL_Quit();
 }
