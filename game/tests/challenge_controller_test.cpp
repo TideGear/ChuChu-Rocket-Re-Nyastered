@@ -151,6 +151,30 @@ int main(int argc, char** argv) {
               "Battle-backed 30-second Challenge routes play-clock cues at exact boundaries");
     }
     {
+        ChallengeMode battleArrow;
+        check(battleArrow.load(app.root, 3), "Battle-backed Challenge arrow-audio load");
+        std::vector<int> cues;
+        battleArrow.sfx = [&](int id) { cues.push_back(id); };
+        check(battleArrow.battle && battleArrow.bgame.type == 3, "arrow-audio case uses the Battle engine");
+        battleArrow.bgame.phase = ChallengeGame::Play;
+        battleArrow.tick(app);   // installs BattleGame's normal Challenge sound hook
+        cues.clear();
+        const FieldLayout field{};
+        int openX = -1, openY = -1;
+        for (int y = 0; y < kRows && openX < 0; ++y)
+            for (int x = 0; x < kCols; ++x)
+                if (battleArrow.bgame.game.sim.fieldCollision(x, y) == 0) { openX = x; openY = y; break; }
+        check(openX >= 0, "arrow-audio case finds an open board cell");
+        battleArrow.aim = {field.x(openX + 0.5f), field.y(openY + 0.5f), true, field};
+        battleArrow.place(app, 0);
+        check(cues == std::vector<int>{1}, "accepted Battle-backed Challenge arrow requests cue 1 exactly once");
+        cues.clear();
+        const auto rocket = battleArrow.bgame.game.sim.rocketPos[0];
+        battleArrow.aim = {field.x(rocket[0] + 0.5f), field.y(rocket[1] + 0.5f), true, field};
+        battleArrow.place(app, 0);
+        check(cues == std::vector<int>{0x13}, "rejected Battle-backed Challenge arrow requests cue 19 exactly once");
+    }
+    {
         ChallengeMode timed;
         check(timed.load(app.root, 0), "timed Challenge load");
         std::vector<int> cues;

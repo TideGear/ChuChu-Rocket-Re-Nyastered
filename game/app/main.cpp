@@ -4451,7 +4451,15 @@ struct ChallengeMode : Screen {
     }
     void playCue(App& a, int cue) { if (sfx) sfx(cue); else a.playSfx(cue); }
     int music() override { return challengeMusicStarted_ ? 8 : -2; }   // ChallengeLoop calls BGM_Play(0xc) after 0x78 (120) loop ticks
-    void place(App& a, int dir) { if (paused || phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
+    void place(App& a, int dir) {
+        if (paused || phase() != ChallengeGame::Play || !aim.inside) return;
+        lastDir = dir;
+        if (battle) {
+            bgame.placeArrow(aim.cellX(), aim.cellY(), dir);   // BattleGame's source-routed sound hook emits accept/reject cues.
+        } else {
+            playCue(a, game.placeArrow(aim.cellX(), aim.cellY(), dir) ? 1 : 0x13);
+        }
+    }
     void confirmResult(App& a) {
         if (a.dcLook && finalChallengeComplete) rollNext = true;
         else if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
