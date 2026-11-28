@@ -30,7 +30,11 @@ inline bool decodeSlot(const uint8_t* s, size_t size, VmsPuzzle& out) {
     const int n = s[475]; if (n > 12) return false;
     const uint32_t dirs = s[488] | s[489] << 8 | s[490] << 16;
     out.arrows.clear();
-    for (int k = 0; k < n; k++) out.arrows.push_back({(uint8_t)(s[476 + k] >> 4), (uint8_t)(s[476 + k] & 15), (uint8_t)((dirs >> (2 * k)) & 3)});
+    for (int k = 0; k < n; k++) {
+        const uint8_t x = s[476 + k] >> 4, y = s[476 + k] & 15;
+        if (x >= 12 || y >= 9) return false;
+        out.arrows.push_back({x, y, (uint8_t)((dirs >> (2 * k)) & 3)});
+    }
     out.title.assign((const char*)s + 491, strnlen((const char*)s + 491, 21));
     return true;
 }

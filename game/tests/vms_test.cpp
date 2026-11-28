@@ -41,6 +41,9 @@ int main(int argc, char** argv) {
     CHECK(!memcmp(vmi.data() + 80, "CCRPUZ", 6) && !memcmp(vmi.data() + 88, "CHU_CHU__D00", 12));
     CHECK((uint32_t)vmi[104] + ((uint32_t)vmi[105] << 8) + ((uint32_t)vmi[106] << 16) + ((uint32_t)vmi[107] << 24) == v.size());
     CHECK(out[0].title == "Test Puzzle" && out[0].arrows.size() == 4 && out[0].arrows[3].dir == 3 && out[0].arrows[3].x == 11 && !memcmp(out[0].tiles, p.tiles, 108));
+    auto malformed = v;
+    malformed[640 + 476] = 0xc0; // x=12 is outside the 12-column board
+    CHECK(vms::readPack(malformed, out) == -1 && out.empty());
     std::vector<VmsPuzzle> fullPack(25, p); fullPack.back().title = "Puzzle 25";
     const auto retailSizePack = vms::writePack(fullPack); std::vector<VmsPuzzle> fullOut;
     CHECK(retailSizePack.size() == 38400 && vms::readPack(retailSizePack, fullOut) == 25 && fullOut.back().title == "Puzzle 25");
