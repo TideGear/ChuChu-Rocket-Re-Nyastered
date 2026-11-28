@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
     {
         check(DcEditMode::editCue(5, false) == 1 && DcEditMode::editCue(5, true) == 4 &&
               DcEditMode::editCue(3, true) == 4 && DcEditMode::editCue(4, true) == 4 &&
-              DcEditMode::editCue(2, false) == 1,
+              DcEditMode::editCue(6, true) == 4 && DcEditMode::editCue(2, false) == 1,
               "Puzzle Edit object and arrow caps use the original error cue");
         DcEditMode cappedMice; cappedMice.tool = 3; cappedMice.cx = 11; cappedMice.cy = 8;
         for (int i = 0; i < 100; ++i) cappedMice.st.tiles[i] = T_MouseS;
@@ -100,6 +100,23 @@ int main(int argc, char** argv) {
         cappedCats.edit(0);
         check(cappedCats.st.tiles == fullCatBoard && DcEditMode::editCue(4, true) == 4,
               "Puzzle Edit rejects a 21st cat without changing the board and selects cue 4");
+        DcEditMode cappedRockets; cappedRockets.tool = 6; cappedRockets.cx = 11; cappedRockets.cy = 8;
+        for (int i = 0; i < 30; ++i) cappedRockets.st.tiles[i] = T_Rocket;
+        const auto fullRocketBoard = cappedRockets.st.tiles;
+        cappedRockets.edit(0);
+        check(cappedRockets.st.tiles == fullRocketBoard && DcEditMode::editCue(6, true) == 4,
+              "Puzzle Edit rejects a 31st rocket without changing the board and selects cue 4");
+        cappedRockets.cx = 0; cappedRockets.cy = 0;
+        cappedRockets.edit(0);
+        check(cappedRockets.st.tiles[0] == T_Floor,
+              "Puzzle Edit Set toggles an existing rocket off, even at the 30-rocket limit");
+        cappedRockets.edit(0);
+        check(cappedRockets.st.tiles[0] == T_Rocket,
+              "Puzzle Edit Set adds a rocket back after its toggle frees a slot");
+        DcEditMode holeToggle; holeToggle.tool = 7; holeToggle.cx = 3; holeToggle.cy = 2;
+        holeToggle.edit(0); holeToggle.edit(0);
+        check(holeToggle.st.tiles[2 * kCols + 3] == T_Floor,
+              "Puzzle Edit Hole Set toggles an existing hole back to floor");
         DcEditMode solution;
         solution.tool = 5; solution.cx = 2; solution.cy = 3;
         solution.edit(0);  // A: down (0)

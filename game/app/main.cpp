@@ -1947,7 +1947,7 @@ struct DcEditMode : Screen {
         saved = true; refreshPuzzleFiles(); fileScreen = 0; if (gApp) gApp->playSfx(2);
     }
     static int editCue(int selectedTool, bool limitError) {
-        if (limitError && (selectedTool == 3 || selectedTool == 4 || selectedTool == 5)) return 4;   // original object/arrow limit branches report cue 4.
+        if (limitError && (selectedTool == 3 || selectedTool == 4 || selectedTool == 5 || selectedTool == 6)) return 4;   // original object/arrow limit branches report cue 4.
         static constexpr int cueOf[8] = {-1, -1, 1, 6, 27, 1, 11, 11};
         return cueOf[selectedTool];
     }
@@ -1965,8 +1965,8 @@ struct DcEditMode : Screen {
         if (playing) return;
         uint8_t& t = st.tiles[cy * kCols + cx];
         bool limitError = false;
-        if (tool == 6) { if (button == 0) { if (editorCanPlaceTile(st.tiles, (size_t)cy * kCols + cx, T_Rocket)) t = T_Rocket; } else if (button == 1 && t == T_Rocket) t = T_Floor; }
-        else if (tool == 7) { if (button == 0) t = T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }
+        if (tool == 6) { if (button == 0) { if (t == T_Rocket) t = T_Floor; else if (editorCanPlaceTile(st.tiles, (size_t)cy * kCols + cx, T_Rocket)) t = T_Rocket; else limitError = true; } else if (button == 1 && t == T_Rocket) t = T_Floor; }   // FUN_8c031f0a: Set on an existing rocket clears it; the 30-rocket check applies only to additions.
+        else if (tool == 7) { if (button == 0) t = t == T_Hole ? T_Floor : T_Hole; else if (button == 1 && t == T_Hole) t = T_Floor; }   // the Hole Set handler toggles tile 7 / floor 9.
         else if (tool == 3 || tool == 4) {   // Mice / Cats: the Facing button sets the start direction (RAM cell word 0x3d..0x40 mice, 0x47..0x4a cats = down, left, up, right; stage tile 9 / 13 + offset: 0 down, 1 left, 2 up, 3 right)
             static const int heading[4] = {0, 3, 1, 2};   // tile offset per button, from the Flycast mc frames: Dreamcast A down (tile 9 faces the camera), B right (+3), X left (+1), Y up (+2)
             const uint8_t nt = (uint8_t)((tool == 3 ? T_MouseS : T_CatS) + heading[button]);
