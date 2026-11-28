@@ -17,6 +17,10 @@ def encode_slot(tiles, walls, arrows, title=b'', filler=0):
     arrows: up to 12 (x, y, dir) solution arrows (also the arrow stock the game offers); returns the 1,536-byte slot."""
     if len(tiles) != 108 or len(walls) != 237: raise ValueError('board size')
     if len(arrows) > 12: raise ValueError('at most 12 solution arrows')
+    if any(not 0 <= x < 12 or not 0 <= y < 9 or not 0 <= d < 4 for x, y, d in arrows):
+        raise ValueError('arrow must be on the 12x9 board with direction 0..3')
+    title_bytes = title if isinstance(title, bytes) else title.encode('ascii', 'replace')
+    if len(title_bytes) > 20: raise ValueError('title is at most 20 bytes')
     s = bytearray([filler]) * SLOT
     L = bytearray(475)
     for r in range(9):
@@ -38,8 +42,7 @@ def encode_slot(tiles, walls, arrows, title=b'', filler=0):
         s[476 + k] = (arrows[k][0] << 4 | arrows[k][1]) if k < len(arrows) else 0
         if k < len(arrows): dirs |= (arrows[k][2] & 3) << (2 * k)
     s[488:491] = struct.pack('<I', dirs)[:3]
-    t = title[:20] if isinstance(title, bytes) else title.encode('ascii', 'replace')[:20]
-    s[491:491 + 21] = t.ljust(21, b'\0')
+    s[491:491 + 21] = title_bytes.ljust(21, b'\0')
     return bytes(s)
 
 def decode_slot(slot):
