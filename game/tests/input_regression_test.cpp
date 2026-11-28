@@ -159,6 +159,14 @@ int main(int argc, char** argv) {
         check(!failedPlay.playing && failedPlay.failureAge == -1 && failedPlay.sim.killed == 0 &&
               failedPlay.st.tiles[0] == T_MouseS + 3 && failedPlay.st.tiles[1] == T_Hole,
               "Puzzle Edit failure returns to the edited board after the original 120-frame phase");
+        DcEditMode catRocketFailure; catRocketFailure.tool = 1;
+        catRocketFailure.st.tiles[0] = T_MouseS;
+        catRocketFailure.st.tiles[1] = T_CatS + 3;
+        catRocketFailure.st.tiles[2] = T_Rocket;
+        catRocketFailure.startPlay();
+        for (int i = 0; i < 100 && catRocketFailure.failureAge < 0; ++i) catRocketFailure.tickPass(app);
+        check(catRocketFailure.playing && catRocketFailure.failureAge == 0 && catRocketFailure.sim.catsInRocket == 1,
+              "Puzzle Edit cat entering a rocket starts the shared failure result phase");
     }
     {
         check(DcEditMode::editCue(5, false) == 1 && DcEditMode::editCue(5, true) == 4 &&
