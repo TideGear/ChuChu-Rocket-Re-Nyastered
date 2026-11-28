@@ -2,14 +2,16 @@
 
 ## Current state
 
-- Branch `main`; latest change: source-backed Challenge result progression gate and consistent mouse confirmation (partial; follows `f801647`).
+- Branch `main`; latest work: Challenge repeat-clear credits routing (follows pushed `933fd32` progression gate).
 - Keep user-owned untracked `.vscode/` untouched. Do not stage caches, disc data, captures, or generated files.
 - Goal and working rules: `docs/goal.md`. Audit owns coverage (`docs/audit.md`); evidence/log in `docs/roadmap.md`; setup results in `docs/verification.md`.
 - Clean image-only setup rechecked 2026-11-27 from a new folder containing only the selected USA Dreamcast ZIP (no BIOS, mobile, DLC, or GBA files). `tools/setup-wizard.ps1` completed extraction and pinned Zig build. Manifest: one error-free ZIP/CUE input, Dreamcast graphics, Puzzle/Battle/Stage Challenge, no DLC stage pack. Direct headless captures for DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, PUZZLE, CHALLENGE, BATTLE, TEAM_BATTLE, DC_DEMO were all nonblack (90 ticks; smoke/reachability only). Scratch: `local/fresh-dc-only-20261127/`. Final-code game suite: 30/30 on the fresh Dreamcast-only assets; `git diff --check` clean. No parity claim.
 
 ## Recent code
 
-- Challenge result progression (partial): stage 25 now requires first-24 clear mask 0x00ffffff when advancing from stage 24 (`0x8c02ace0..acf2`, predicate `0x8c02b508`); incomplete masks wrap to stage 1. Mouse Next shares final-stage A/Start routing. Source/harness evidence; original-loop inputs and pending-value lifecycle remain open. Built ccr/input regression with pinned Zig; all 30 game tests pass on fresh Dreamcast-only assets (29 in the full run, input suite rerun after isolating renderer state).
+- Challenge repeat-clear (partial overall): six original-loop injected clear fixtures confirm pre-save pending 1/-1 and first/repeat A/B/Start destinations. Port repeat clears no longer show Chao unlock text; repeat A enters plain credits and B returns to Stage Select. Oracle: `tools/oracle/dc_challenge_result_routes.py`; artifacts/recipe in roadmap.md. Pinned Zig ccr/input regression build and all 30 tests pass on the fresh Dreamcast-only assets. Natural final-stage gameplay, end-of-roll text pixels and full pending lifecycle remain open.
+
+- Challenge result progression (partial): stage 25 now requires first-24 clear mask 0x00ffffff when advancing from stage 24 (`0x8c02ace0..acf2`, predicate `0x8c02b508`); incomplete masks wrap to stage 1. Mouse Next shares final-stage A/Start routing. Progression gate is source/harness evidence; A/B/Start repeat-clear branch fixtures are now traced in the original loop, while natural gameplay and full pending lifecycle remain open. Built ccr/input regression with pinned Zig; all 30 game tests pass on fresh Dreamcast-only assets (29 in the full run, input suite rerun after isolating renderer state).
 
 - Dreamcast Puzzle Edit (commit `f801647`): Set on an existing rocket toggles it to floor; a new rocket is rejected at 30 with cue 4; Set on a hole toggles it to floor. Source addresses `0x8c032412` / `0x8c032708`, with focused cap/toggle regressions. This is source/harness evidence, not a Flycast parity claim.
 - PuzzleP DLC (commit `8e78e61`): exports 25 boards using first n directions as stock, with zero placeholder cells and `PuzzleP NN` titles. Separate stage set from DEPuzzle and imported packs. Regressions compare each source slot's count and direction bits. Evidence is slot-format-derived; original live stock/gameplay behavior remains open.
@@ -39,5 +41,5 @@
 - Puzzle/DLC: `game/core/vms.hpp`, `tools/export_dlc_stages.py`, `tools/stage_registry.py`, `tools/vms_pack_check.py`; real packs `Original Game Files/Dreamcast/DLC/`.
 - Clean setup: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/setup-wizard.ps1 -GameFiles <owned image or folder> -Cache <fresh cache>`; this runs the same wizard and build as `setup.cmd` without interactive pause.
 - Headless route: `CCR_HEADLESS=1 CCR_TICKS=90 CCR_SHOT=local/<route>.bmp build/game/ccr.exe <cache>/assets <MODE> 0`.
-- SH-4 disassembly helper: `C:/Windows/py.exe -3 tools/shdis.py <start> <end>` (Capstone required). Flycast reference: use `local/dc_ref/disc/Chu Chu Rocket! (USA) (En,Ja,Fr,De,Es).cue`, not its ZIP.
+- SH-4 disassembly helper: `C:/Windows/py.exe -3 tools/shdis.py <start> <end>` (Capstone required). Flycast reference: use `local/dc_ref/disc/ChuChu Rocket! (USA) (En,Ja,Fr,De,Es).cue`, not its ZIP.
 - Use `C:/Users/Tideg/AppData/Local/Programs/Python/Python312/python.exe tools/run_tests.py`; test executables have cwd/argument requirements handled there. MSVC build tree lacks `stddef.h`; use `build/game-zig`.

@@ -2127,9 +2127,11 @@ struct DcStaffRollMode : Screen {
     DcStaffCat cat;
     std::vector<DcStaffFlockMouse> flock;
     std::vector<std::string> lines;   // the unlock lines (init 0x8c0509c0, printer 0x8c022600): the highest completed group's text, as the original tests groups 3, 2, 1, 0 in order
-    explicit DcStaffRollMode(App& a, bool chaoUnlock = false) {
+    explicit DcStaffRollMode(App& a, bool chaoUnlock = false, bool showUnlockText = true) {
         mouse.load((a.root + "/dreamcast/files/1ST_READ.BIN").c_str());
         cat.load((a.root + "/dreamcast/files/1ST_READ.BIN").c_str());
+        // 0x8c0509da..09e0: pending -1 skips every unlock-text branch.
+        if (!showUnlockText) return;
         auto done = [&](int g) { for (int k = 0; k < 25; ++k) if (!a.isCleared(g * 25 + k)) return false; return true; };
         if (chaoUnlock) lines = {"You can now select Chao", "in the Options Menu!"};
         else if (done(3)) lines = {"You can now select Pians", "in the Options Menu!"};
@@ -4262,9 +4264,10 @@ struct ChallengeMode : Screen {
     void logResult(App& a) { char b[160]; snprintf(b, sizeof b, "challenge stage %d: cleared in %d s", cur + 1, battle ? bgame.clearSeconds() : game.clearSeconds()); a.log.write(1, b); }
     void saveResult(App& a) { logResult(a);   // Data::clearChallenge: mark the stage cleared, keep the smaller non-zero time
         Save s = loadSave(a.saveDir); previousTotal = 0; for (uint32_t seconds : s.best) previousTotal += seconds; const int t = battle ? bgame.clearSeconds() : game.clearSeconds(); newBest = s.best[cur] == 0 || (uint32_t)t < s.best[cur];
+        const bool wasComplete = (s.mask & 0x1ffffff) == 0x1ffffff;
         s.mask |= 1u << cur; if (newBest) s.best[cur] = (uint32_t)t; bestSeconds = (int)s.best[cur]; resultTotal = 0; for (uint32_t seconds : s.best) resultTotal += seconds;
         finalChallengeComplete = cur == 24 && (s.mask & 0x1ffffff) == 0x1ffffff;
-        chaoRollQueued = a.dcLook && a.dcStaffRoll.tex && (s.mask & 0x1ffffff) == 0x1ffffff; // pending 1 when all 25 are done (0x8c02aa7a–0x8c02aa8a)
+        chaoRollQueued = a.dcLook && a.dcStaffRoll.tex && cur == 24 && !wasComplete; // 0x8c02aa7a..aa8c tests the pre-save mask: 1 for first clear, -1 for repeat
         if (a.testRun) { a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
         else if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
     }
@@ -4413,7 +4416,7 @@ struct ChallengeMode : Screen {
             }
         }
     }
-    const char* next() override { if (rollNext) { rollNext = false; return "DC_STAFFROLL_CHAO"; } if (!back) return nullptr; back = false; return fromStageSelect ? "CHALLENGE_SELECT" : "MENU"; }
+    const char* next() override { if (rollNext) { rollNext = false; return chaoRollQueued ? "DC_STAFFROLL_CHAO" : "DC_STAFFROLL_PLAIN"; } if (!back) return nullptr; back = false; return fromStageSelect ? "CHALLENGE_SELECT" : "MENU"; }
     void finishFailure(App& a) {
         a.playSfx(2);
         if (failureChoice == 0) begin(cur);
@@ -5794,8 +5797,8 @@ int main(int argc, char** argv) {
         else if (name == "HELP" && DcHelpMode::available(app)) mode = std::make_unique<DcHelpMode>();
         else if (name == "CREDITS" && CreditsMode::ok(app)) mode = std::make_unique<CreditsMode>(app);
         else if (name == "DC_EDIT" && app.dcEditor.tex) mode = std::make_unique<DcEditMode>();
-        else if ((name == "DC_STAFFROLL" || name == "DC_STAFFROLL_CHAO") && app.dcStaffRoll.tex)
-            mode = std::make_unique<DcStaffRollMode>(app, name == "DC_STAFFROLL_CHAO");
+        else if ((name == "DC_STAFFROLL" || name == "DC_STAFFROLL_CHAO" || name == "DC_STAFFROLL_PLAIN") && app.dcStaffRoll.tex)
+            mode = std::make_unique<DcStaffRollMode>(app, name == "DC_STAFFROLL_CHAO", name != "DC_STAFFROLL_PLAIN");
         else if (name == "MODELS" || name == "models") { auto m = std::make_unique<ModelViewerMode>(); if (!m->load(app)) { printf("cannot load dreamcast/models.bin (run tools/export_dc_models.py)\n"); return false; } mode = std::move(m); }
         else if (name == "OPTIONS" && app.dcLook && DcOptionsMode::available(app)) mode = std::make_unique<DcOptionsMode>();
         else if (name == "OPTIONS" && OptionsMode::ok(app)) mode = std::make_unique<OptionsMode>();

@@ -692,6 +692,19 @@ int main(int argc, char** argv) {
             check(std::string(challenge.next()) == "DC_STAFFROLL_CHAO",
                   "final Challenge B result input also enters the pending-value-1 Chao staff roll");
             challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.saveResult(app); // the first clear above already wrote the complete save
+            check(challenge.finalChallengeComplete && !challenge.chaoRollQueued,
+                  "repeat final Challenge clear does not queue the Chao unlock message");
+            challenge.event(app, confirmA);
+            check(std::string(challenge.next()) == "DC_STAFFROLL_PLAIN",
+                  "repeat final Challenge A enters credits without unlock text");
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.saveResult(app); challenge.event(app, confirmB);
+            check(std::string(challenge.next()) == "CHALLENGE_SELECT",
+                  "repeat final Challenge B returns to stage selection");
+            DcStaffRollMode plainRoll(app, false, false);
+            check(plainRoll.lines.empty(), "pending minus one suppresses all staff-roll unlock text");
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
             int oldLogicalWidth = 0, oldLogicalHeight = 0;
             SDL_RenderGetLogicalSize(app.ren, &oldLogicalWidth, &oldLogicalHeight);
             SDL_Event click{}; click.type = SDL_MOUSEBUTTONDOWN;
