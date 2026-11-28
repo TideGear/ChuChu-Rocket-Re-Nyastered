@@ -1921,7 +1921,12 @@ struct DcEditMode : Screen {
             int alive = 0, mice = 0; for (auto& e : sim.ents) if (e.mouse) { ++mice; if (e.alive && !e.done) ++alive; }
             if (mice && alive == 0 && sim.saved == mice && sim.killed == 0) { endAge = 0; saved = true; a.playSfx(21); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit clear at play tick %d\n", playTicks); }   // all mice home: the Puzzle launch runs (0x8c01b8a0 / 0x8c01b9a0), then the editor restarts
             else if (sim.killed > 0 || sim.catsInRocket > 0) { failureAge = 0; a.playSfx(27); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit failure at play tick %d\n", playTicks); }   // mode-8 failure branch 0x8c02de98: mouse/cat failure creates focus ring (0x8c02c600), cue 27
-        } else if (failureAge >= 0) { if (++failureAge >= kFailureEndAge()) stopPlay(); }
+        } else if (failureAge >= 0) {
+            ++sim.now;
+            sim.tickEffects();   // the original task server keeps the death/entry animation alive while Puzzle Edit holds the failure phase
+            a.stepAngles(sim, true);   // death spin/held pose continues without advancing gameplay or the global character clock
+            if (++failureAge >= kFailureEndAge()) stopPlay();
+        }
         else if (endAge >= 0) { ++endAge; a.stepAngles(sim, true); for (int c = 0; c < kCols * kRows; ++c) if (st.tiles[c] == T_Rocket) lids[c].tick(a.globalTime, c); if (endAge >= kEndAge()) stopPlay(); } }
     static int kFailureEndAge() { static const int v = getenv("CCR_EDIT_FAILURE_END") ? atoi(getenv("CCR_EDIT_FAILURE_END")) : 120; return v; }
     // restart age after the clear: between Flycast frames 3203 and 3207 (local/modecap/play2), i.e. 123-126; the code that ends it is unread

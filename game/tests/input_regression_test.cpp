@@ -152,9 +152,17 @@ int main(int argc, char** argv) {
         check(failedPlay.playing && failedPlay.failureAge == 0 && failedPlay.sim.killed == 1,
               "Puzzle Edit hole failure enters its result phase on the killing simulation pass");
         const int failureTick = failedPlay.sim.now;
-        for (int i = 0; i < 119; ++i) failedPlay.tickPass(app);
-        check(failedPlay.playing && failedPlay.failureAge == 119 && failedPlay.sim.now == failureTick,
-              "Puzzle Edit failure result holds for 120 frames without advancing the simulation");
+        const float deathScale = failedPlay.sim.ents[0].rocketCounter;
+        const float deathX = failedPlay.sim.ents[0].x;
+        for (int i = 0; i < 10; ++i) failedPlay.tickPass(app);
+        check(failedPlay.playing && failedPlay.failureAge == 10 && failedPlay.sim.now == failureTick + 10 &&
+              failedPlay.sim.ents[0].rocketCounter < deathScale && failedPlay.sim.ents[0].rocketCounter > 0.0f &&
+              failedPlay.sim.ents[0].x == deathX,
+              "Puzzle Edit failure freezes movement but continues the original shrinking mouse death animation");
+        for (int i = 10; i < 119; ++i) failedPlay.tickPass(app);
+        check(failedPlay.playing && failedPlay.failureAge == 119 && failedPlay.sim.now == failureTick + 119 &&
+              failedPlay.sim.ents[0].rocketCounter > 0.0f && failedPlay.sim.ents[0].rocketCounter < 0.3f,
+              "Puzzle Edit failure result holds while the task server continues the 150-pass death animation");
         failedPlay.tickPass(app);
         check(!failedPlay.playing && failedPlay.failureAge == -1 && failedPlay.sim.killed == 0 &&
               failedPlay.st.tiles[0] == T_MouseS + 3 && failedPlay.st.tiles[1] == T_Hole,
