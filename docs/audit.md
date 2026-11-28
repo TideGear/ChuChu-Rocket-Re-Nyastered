@@ -264,7 +264,7 @@ Dated trace notes that used to follow these tables are in [archive/audit_notes_2
 |---|---|
 | Screens in only one version | Dreamcast look: Credits, Costumes and the Tutorial are mobile-only and unreachable (Dreamcast Mode Select has no entries for them). Puzzle Edit, Network and Homepage have no port screen (cue 0x13, untraced). Mobile look: Dreamcast Records, General and 4P Settings have no mobile screen. |
 | Screen shape | Both looks are 4:3 (Dreamcast 640x480, iPad 1024x768) and letterboxed by SDL's logical size. Phone art (480x320) is fitted at integer scale inside the iPad canvas. No change needed. |
-| Language in the Dreamcast look | open. Setup exports only the `ENGLISH__` disc art, so every language shows English Dreamcast art. Rule: show the disc's own art for its five languages (en, ja, fr, de, es) and English disc art for mobile-only ones (it), never mobile text. |
+| Language in the Dreamcast look | partial. Setup exports per-disc French, German, Spanish and Japanese UI sheets (`ret_all/dc_loc_fr`, `_de`, `_es`, `_ja`); `App::loadDcSheets` selects them by configured language, and Italian falls back to English. Clean image-only extraction has 38 texture sheets per locale including `dc_pause.tex.bin`. Original-loop per-language frame parity remains open. |
 | GBA look | open. The GBA ROM supplies puzzles and rules only; there is no GBA presentation. |
 
 Mode 17 audio update (2026-11-26): **partial** — initializer 0x8c050abc requests CD track 16 through 0x8c012350. Port restored song 12; current-cache real headless audio pump selects track 16 at tick 0, 30/30 tests pass. Flycast WAV comparison and loop/fade timing remain open (audio.md). No verified totals changed.
