@@ -71,6 +71,9 @@ static bool writeFileAtomic(const std::string& path, const std::vector<uint8_t>&
 #endif
     return true;
 }
+static bool writeTextAtomic(const std::string& path, const std::string& data) {
+    return writeFileAtomic(path, std::vector<uint8_t>(data.begin(), data.end()));
+}
 #ifdef _WIN32
 #include "launcher_setup.hpp"
 #elif !defined(__EMSCRIPTEN__)
@@ -325,13 +328,13 @@ struct App {
         }
         saveSettings(); log.write(1, ("setting changed: " + portSettingLabel(i)).c_str());
     }
-    void saveSettings() { writeFile(saveDir + "/settings.ini", settingsText(settings)); }
+    void saveSettings() { writeTextAtomic(saveDir + "/settings.ini", settingsText(settings)); }
     void setSoundOutput(int output) {
         if (adev) SDL_LockAudioDevice(adev);
         soundOutput = output;
         if (adev) SDL_UnlockAudioDevice(adev);
     }
-    void savePadMap() { writeFile(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true; FILE* audioCapture = nullptr;
+    void savePadMap() { writeTextAtomic(saveDir + "/controls.ini", padMapText(padMap)); } bool headless = false, quit = false, vsync = true; FILE* audioCapture = nullptr;
     int stageSet = 0;     // puzzle stage group: 0 = the 100 main stages, 1 = the 2,466 further GBA stages
     uint32_t clr[4] = {0, 0, 0, 0}, tutDone = 0; bool clrLoaded = false;   // VMU puzzle-cleared bits: word = stage / 25, bit = stage % 25 (VMU::isPuzzleCleared 0x37154); persisted in <assets>/progress.bin
     uint32_t challengeMask = 0; bool challengeMaskLoaded = false;
@@ -896,7 +899,7 @@ struct App {
         retDir = ret; if (const char* e = getenv("CCR_LANG")) for (int i = 0; i < 6; i++) if (!strcmp(e, langDir(i))) lang = i;
         if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "rb")) { unsigned char c = 0; if (fread(&c, 1, 1, f) == 1 && c < 6 && !getenv("CCR_LANG")) lang = c; unsigned char v[2]; if (fread(v, 1, 2, f) == 2) { musicVol = v[0]; sfxVol = v[1]; } fclose(f); }
         if (!langAvailable(lang)) lang = 0; applyLocale(); }
-    void saveOptions() { if (testRun) return; if (FILE* f = fopen((saveDir + "/options.bin").c_str(), "wb")) { unsigned char c[3] = {(unsigned char)lang, (unsigned char)std::max(0, std::min(255, musicVol)), (unsigned char)std::max(0, std::min(255, sfxVol))}; fwrite(c, 1, 3, f); fclose(f); } }
+    void saveOptions() { if (testRun) return; const uint8_t c[3] = {(uint8_t)lang, (uint8_t)std::max(0, std::min(255, musicVol)), (uint8_t)std::max(0, std::min(255, sfxVol))}; writeFileAtomic(saveDir + "/options.bin", std::vector<uint8_t>(c, c + sizeof c)); }
     void setLanguage(int l) { if (!langAvailable(l)) return; lang = l; applyLocale(); saveOptions(); }
     void applyLocale() {
         dropImages();
