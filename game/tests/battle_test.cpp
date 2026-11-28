@@ -7,6 +7,23 @@ int main(int argc, char** argv) {
     FILE* f = fopen(argc > 1 ? argv[1] : "../local/cache/assets/battle_stages.bin", "rb"); if (!f) { printf("cannot open stages\n"); return 2; }
     uint32_t n; if (fread(&n, 4, 1, f) != 1) return 2;
     int bad = 0, total = 0; long spawns = 0, roulettes = 0;
+    {
+        Stage empty{};
+        BattleGame countdown;
+        countdown.rouletteManager = false;
+        countdown.roundFrames = 600;
+        countdown.start(empty, 0);
+        std::vector<std::pair<int, int>> cues;
+        countdown.sfx = [&](int id) { cues.push_back({countdown.frame, id}); };
+        for (int i = 0; i < 600; ++i) countdown.tick();
+        const std::vector<std::pair<int, int>> expected = {
+            {300, 14}, {360, 15}, {420, 16}, {480, 17}, {540, 18}, {600, 19}
+        };
+        if (cues != expected) {
+            printf("battle countdown cues mismatch (%zu cues)\n", cues.size());
+            bad++;
+        }
+    }
     if (!battleArrowVisible(-1) || !battleArrowVisible(600) || !battleArrowVisible(61) ||
         !battleArrowVisible(59) || battleArrowVisible(60) || battleArrowVisible(0) ||
         battleArrowVisible(58)) {

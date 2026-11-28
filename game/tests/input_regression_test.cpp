@@ -183,6 +183,15 @@ int main(int argc, char** argv) {
         check(catRocketFailure.failureAge == 10 && catRocketFailure.sim.ents[1].rocketCounter < catEntryScale &&
               catRocketFailure.sim.ents[1].x == catEntryX && app.angs[1] != catEntryAngle,
               "Puzzle Edit failure hold continues the cat's shrinking, spinning rocket-entry animation");
+        DcEditMode catHoleFailure; catHoleFailure.tool = 1;
+        catHoleFailure.st.tiles[0] = T_CatS + 3;
+        catHoleFailure.st.tiles[1] = T_Hole;
+        catHoleFailure.st.tiles[8 * kCols + 11] = T_MouseS;
+        catHoleFailure.startPlay();
+        for (int i = 0; i < 40 && catHoleFailure.failureAge < 0; ++i) catHoleFailure.tickPass(app);
+        check(catHoleFailure.playing && catHoleFailure.failureAge == 0 && catHoleFailure.sim.catLostInHole() &&
+              catHoleFailure.sim.killed == 0 && catHoleFailure.sim.catsInRocket == 0,
+              "Puzzle Edit cat-hole loss triggers its 120-frame failure result without a mouse death");
     }
     {
         check(DcEditMode::editCue(5, false) == 1 && DcEditMode::editCue(5, true) == 4 &&
@@ -614,6 +623,21 @@ int main(int argc, char** argv) {
         PuzzleMode puzzle;
         check(puzzle.load(app.root, 0), "Puzzle load");
         check(puzzle.pad != nullptr, "Puzzle adopts an already-connected controller");
+        {
+            PuzzleMode catHolePuzzle;
+            check(catHolePuzzle.load(app.root, 0), "Puzzle cat-hole failure stage load");
+            Stage stage{};
+            stage.tiles[0] = T_CatS + 3;
+            stage.tiles[1] = T_Hole;
+            stage.tiles[8 * kCols + 11] = T_MouseS;
+            catHolePuzzle.stages.list[0].st = stage;
+            catHolePuzzle.reset();
+            catHolePuzzle.state = 1; catHolePuzzle.running = true;
+            for (int i = 0; i < 40 && catHolePuzzle.state == 1; ++i) catHolePuzzle.tick(app);
+            check(catHolePuzzle.state == 3 && catHolePuzzle.sim.catLostInHole() &&
+                  catHolePuzzle.sim.killed == 0 && catHolePuzzle.sim.catsInRocket == 0,
+                  "Puzzle cat-hole loss triggers failure independently of mouse deaths and cat rocket entry");
+        }
         puzzle.curX = 4; puzzle.curY = 4;
         puzzle.sim.removeArrow(4, 4);
         puzzle.stock[0] = 100;

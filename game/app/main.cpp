@@ -1919,8 +1919,8 @@ struct DcEditMode : Screen {
         for (int pass = 0; pass < (ff && playing ? 2 : 1); ++pass) tickPass(a); }
     void tickPass(App& a) { if (playing && endAge < 0 && failureAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
             int alive = 0, mice = 0; for (auto& e : sim.ents) if (e.mouse) { ++mice; if (e.alive && !e.done) ++alive; }
-            if (mice && alive == 0 && sim.saved == mice && sim.killed == 0) { endAge = 0; saved = true; a.playSfx(21); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit clear at play tick %d\n", playTicks); }   // all mice home: the Puzzle launch runs (0x8c01b8a0 / 0x8c01b9a0), then the editor restarts
-            else if (sim.killed > 0 || sim.catsInRocket > 0) { failureAge = 0; a.playSfx(27); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit failure at play tick %d\n", playTicks); }   // mode-8 failure branch 0x8c02de98: mouse/cat failure creates focus ring (0x8c02c600), cue 27
+            if (mice && alive == 0 && sim.saved == mice && sim.killed == 0 && !sim.catLostInHole()) { endAge = 0; saved = true; a.playSfx(21); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit clear at play tick %d\n", playTicks); }   // all mice home: the Puzzle launch runs (0x8c01b8a0 / 0x8c01b9a0), then the editor restarts
+            else if (sim.killed > 0 || sim.catsInRocket > 0 || sim.catLostInHole()) { failureAge = 0; a.playSfx(27); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit failure at play tick %d\n", playTicks); }   // mode-8 failure branch 0x8c02de98: mouse/cat failure creates focus ring (0x8c02c600), cue 27
         } else if (failureAge >= 0) {
             ++sim.now;
             sim.tickEffects();   // the original task server keeps the death/entry animation alive while Puzzle Edit holds the failure phase
@@ -3842,7 +3842,7 @@ struct PuzzleMode : Screen {
     // Original Puzzle phase 4 (0x8c02bf00): 210 ticks, or 105 with Dash.
     bool resultReady() const { return state == 2 && clearFrames > (dash ? 105 : 210); }
     bool willClearNextFrame() const {
-        if (!running || sim.saved != totalMice - 1 || sim.killed || sim.catsInRocket) return false;
+        if (!running || sim.saved != totalMice - 1 || sim.killed || sim.catsInRocket || sim.catLostInHole()) return false;
         Sim preview = sim;
         preview.trace = false;
         for (int pass = 0; pass < (dash ? 2 : 1); ++pass) preview.tick();
@@ -4138,7 +4138,7 @@ struct PuzzleMode : Screen {
         tickPuzzleSimulation();
         if (dash) tickPuzzleSimulation();   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
-        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; paused = false; pconf = false; pauseState.resume(); } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; paused = false; pconf = false; pauseState.resume(); clearFrames = 0; a.playSfx(21); a.playSfx(28); recordClear(a);
+        if (sim.killed > 0 || sim.catsInRocket > 0 || sim.catLostInHole()) { state = 3; running = false; paused = false; pconf = false; pauseState.resume(); } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; paused = false; pconf = false; pauseState.resume(); clearFrames = 0; a.playSfx(21); a.playSfx(28); recordClear(a);
             if (a.headless && getenv("CCR_PUZZLE_CLEAR_TRACE")) printf("puzzle clear stage %d tick %d saved %d\n", cur, cticks, sim.saved);
         }
     }

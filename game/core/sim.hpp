@@ -143,6 +143,9 @@ public:
     std::vector<Arrow> arrows;
     uint32_t coll[kRows][kCols];
     int saved = 0, killed = 0, killedByCat = 0, killedByHole = 0, catsInRocket = 0, arrowsBroken = 0;
+    bool catLostInHole() const {
+        return std::any_of(ents.begin(), ents.end(), [](const Entity& e) { return !e.mouse && e.catHoleFallTick >= 0; });
+    }
 
     void load(const Stage& s) {
         ents.clear(); endTicks.clear(); resetPool(); pendingFree.clear(); effects.clear(); poolModel = battle; arrows.clear(); gens.clear(); events.clear(); saveTicks.clear(); now = 0; saved = killed = killedByCat = killedByHole = catsInRocket = arrowsBroken = 0;

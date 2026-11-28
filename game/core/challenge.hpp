@@ -55,7 +55,7 @@ private:
         const char* why = nullptr;
         if (type <= 1 && sim.killed > 0) why = "mouse killed";
         if (type <= 1 && !why && sim.catsInRocket > 0) why = "cat in rocket";
-        if (type == 2) { if (sim.killedByHole > 0) why = "mouse in hole"; for (const auto& e : sim.ents) if (!e.mouse && e.catHoleFallTick >= 0) why = "cat in hole"; }
+        if (type == 2) { if (sim.killedByHole > 0) why = "mouse in hole"; if (sim.catLostInHole()) why = "cat in hole"; }
         if (why) { failReason = why; decided_ = true; decidedPhase_ = Failure; return; }
         if (counter() == target && target > 0) { decided_ = true; decidedPhase_ = type == 2 ? Result : Success; return; }   // type 2 goes straight to the result (measured: no 210 frame display)
         if (playTick >= kLimitTicks) { failReason = "time out"; decided_ = true; decidedPhase_ = Failure; }
