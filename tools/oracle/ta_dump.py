@@ -9,6 +9,7 @@ usage:
   ta_dump.py <file.state> render <out.png> [--box ...] [--tex hex] [--shot file.bmp] [--face 1|header]
                                                        rasterise the selected polygons (perspective-correct UV, texture x clamp(face x base intensity))
                                                        into a 640x480 RGBA image; with --shot, also writes <out>_cmp.png (shot | render over shot | diff) and prints the mean error over covered pixels
+  --models <models.bin>                                 use this texture pack for VRAM matching instead of scanning local caches
 
 Why it exists: the opaque list does not start at a fixed offset (0x253e10 in recent states, earlier states differed), vertices can sit 16 bytes off
 the state's 32-byte grid, and the VRAM base differs per run. The list start is found by scanning for a polygon header followed by a plausible vertex;
@@ -49,8 +50,8 @@ def find_list(st, lo=0x200000, hi=None):
     return None, None
 
 
-def models_textures():
-    cands = sorted(glob.glob(os.path.join(ROOT, 'local', '**', 'dreamcast', 'models.bin'), recursive=True), key=os.path.getmtime, reverse=True)
+def models_textures(path=None):
+    cands = [path] if path else sorted(glob.glob(os.path.join(ROOT, 'local', '**', 'dreamcast', 'models.bin'), recursive=True), key=os.path.getmtime, reverse=True)
     if not cands: return []
     d = open(cands[0], 'rb').read(); n = struct.unpack('<I', d[4:8])[0]; p = 8; out = []
     for _ in range(n):
@@ -59,8 +60,8 @@ def models_textures():
     return out
 
 
-def find_vram_base(st, polys):
-    texs = models_textures(); votes = {}; seen = set()
+def find_vram_base(st, polys, models_path=None):
+    texs = models_textures(models_path); votes = {}; seen = set()
     for q in polys:
         tex, tsp = q['tex'], q['tsp']; fmt = (tex >> 27) & 7; plain = (tex >> 26) & 1
         if (tex, tsp) in seen or fmt > 2: continue
@@ -94,7 +95,15 @@ def select(polys, box, tex):
     for p in polys:
         vs = [v for s in p['strips'] for v in s]
         if not vs or (tex is not None and p['tex'] != tex): continue
-        if box and not any(box[0] <= v[1] <= box[2] and box[1] <= v[2] <= box[3] and 0 < v[3] < 100 for v in vs): continue
+        if box:
+            # A font canvas can enclose the crop without any corner inside it.
+            # Keep intersecting polygon bounds, not only vertices in the crop.
+            visible = [v for v in vs if 0 < v[3] < 100]
+            if (not visible or max(v[1] for v in visible) < box[0]
+                    or min(v[1] for v in visible) > box[2]
+                    or max(v[2] for v in visible) < box[1]
+                    or min(v[2] for v in visible) > box[3]):
+                continue
         out.append(p)
     return out
 
@@ -135,12 +144,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('state'); ap.add_argument('cmd'); ap.add_argument('args', nargs='*')
     ap.add_argument('--box'); ap.add_argument('--tex'); ap.add_argument('--shot'); ap.add_argument('--face', default='header'); ap.add_argument('--swapuv', action='store_true', help='sample texture with u and v exchanged (mouse/marker textures are stored transposed)'); ap.add_argument('--measure', help='hex texture word: report the error over the pixels it wins')
+    ap.add_argument('--models', help='explicit models.bin for VRAM matching; avoids scanning all local caches')
     a = ap.parse_args()
     box = [float(x) for x in a.box.split(',')] if a.box else None
     tex = int(a.tex, 16) if a.tex else None
     st, lo, hi, polys = load(a.state)
     if a.cmd == 'info':
-        b, n = find_vram_base(st, polys)
+        b, n = find_vram_base(st, polys, a.models)
         print(f'list {lo:#x}..{hi:#x}  polygons {len(polys)}  vram base {b if b is None else hex(b)} ({n} votes)'); return
     if a.cmd == 'list':
         for p in select(polys, box, tex):
@@ -149,7 +159,7 @@ def main():
                   f"n {len(vs)} x {min(v[1] for v in vs):.0f}..{max(v[1] for v in vs):.0f} y {min(v[2] for v in vs):.0f}..{max(v[2] for v in vs):.0f} "
                   f"base {min(v[6] for v in vs):.3f}..{max(v[6] for v in vs):.3f}")
         return
-    b, n = find_vram_base(st, polys)
+    b, n = find_vram_base(st, polys, a.models)
     if b is None: sys.exit('VRAM base not found')
     if a.cmd == 'tex':
         t = D.decode(st, b, int(a.args[0], 16), int(a.args[1], 16)); Image.fromarray(t).save(a.args[2]); print(a.args[2], t.shape); return

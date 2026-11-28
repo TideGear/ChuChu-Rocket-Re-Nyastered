@@ -45,6 +45,27 @@ int main(int argc, char** argv) {
     app.win = SDL_CreateWindow("test", 0, 0, GW, GH, SDL_WINDOW_HIDDEN);
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");
+    if (std::filesystem::exists(app.root + "/ret_all/dc_editor.tex.bin")) {
+        Sheet oldEditor = std::move(app.dcEditor), oldBios = std::move(app.dcBiosAnsi);
+        app.dcEditor = Sheet{}; app.dcBiosAnsi = Sheet{};
+        check(app.loadSheet(app.root + "/ret_all/dc_editor", app.dcEditor), "editor confirmation art loads");
+        int logicalW = 0, logicalH = 0; SDL_RenderGetLogicalSize(app.ren, &logicalW, &logicalH);
+        DcEditMode editor; editor.dialog = true; editor.draw(app, 0.0f);
+        int outputW = 0, outputH = 0; SDL_GetRendererOutputSize(app.ren, &outputW, &outputH);
+        for (int line = 0; line < 3; ++line) {
+            SDL_Rect area{210 * outputW / 640, (line == 0 ? 170 : line == 1 ? 194 : 221) * outputH / 480,
+                          232 * outputW / 640, 24 * outputH / 480};
+            std::vector<Uint8> pixels(area.w * area.h * 4);
+            check(SDL_RenderReadPixels(app.ren, &area, SDL_PIXELFORMAT_RGBA32, pixels.data(), area.w * 4) == 0,
+                  "read editor confirmation text line");
+            int ink = 0;
+            for (size_t i = 0; i < pixels.size(); i += 4)
+                ink += pixels[i] == 8 && pixels[i + 1] == 8 && pixels[i + 2] == 132;
+            check(ink > 30, "all three editor confirmation lines remain readable when the font atlas is missing");
+        }
+        SDL_RenderSetLogicalSize(app.ren, logicalW, logicalH);
+        app.freeSheet(app.dcEditor); app.dcEditor = std::move(oldEditor); app.dcBiosAnsi = std::move(oldBios);
+    }
     {
         DcEditMode titleEditor;
         titleEditor.titleEntry = true; SDL_StartTextInput();

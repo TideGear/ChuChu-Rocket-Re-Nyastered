@@ -128,6 +128,19 @@ static const uint8_t kFont57Lower[26][7] = {
     {0,0x1e,0x11,0x11,0x1e,0x10,0x10},{0,0x0f,0x11,0x11,0x0f,0x01,0x01},{0,0,0x16,0x19,0x10,0x10,0x10},{0,0,0x0f,0x10,0x0e,0x01,0x1e},{0x08,0x08,0x1c,0x08,0x08,0x09,0x06},
     {0,0,0x11,0x11,0x11,0x13,0x0d},{0,0,0x11,0x11,0x11,0x0a,0x04},{0,0,0x11,0x11,0x15,0x15,0x0a},{0,0,0x11,0x0a,0x04,0x0a,0x11},{0,0x11,0x11,0x11,0x0f,0x01,0x0e},{0,0,0x1f,0x02,0x04,0x08,0x1f}};
 static const uint8_t* font57mixed(unsigned char c) { if (c >= 'a' && c <= 'z') return kFont57Lower[c - 'a']; return font57(c); }
+// Last-resort text when neither a generated font atlas nor a user BIOS atlas loaded.
+static void drawBitmapFallbackText(SDL_Renderer* renderer, const char* text, int x, int y) {
+    for (const unsigned char* c = (const unsigned char*)text; *c; ++c, x += 12) {
+        if (const uint8_t* glyph = font57mixed(*c)) {
+            for (int row = 0; row < 7; ++row) for (int col = 0; col < 5; ++col)
+                if (glyph[row] >> (4 - col) & 1) { const SDL_Rect d{x + col * 2, y + 5 + row * 2, 2, 2}; SDL_RenderFillRect(renderer, &d); }
+        } else if (*c == '"') {
+            const SDL_Rect left{x + 2, y + 5, 2, 4}, right{x + 6, y + 5, 2, 4};
+            SDL_RenderFillRect(renderer, &left); SDL_RenderFillRect(renderer, &right);
+        }
+    }
+}
+
 struct Sheet { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<SDL_Rect> fr; std::vector<SDL_Point> off; std::vector<float> fit; std::vector<SDL_Point> box; std::vector<SDL_Point> sz; };   // sz = frame record shorts 0, 1 (the size the panel calls use), box = shorts 2, 3   // box = frame record shorts 2, 3 (the draw box BHLib_RenderTexture callers use, minus 2)   // fit: per-frame scale to the original iPad (HD 1.0) frame width   // off = the frame record's draw offset (xoff, yoff) from the anchor, in sheet pixels
 
 static constexpr int kMobilePuzzleSource = 5;
@@ -2104,14 +2117,40 @@ struct DcEditMode : Screen {
             const SDL_Rect top{35, y0, 72, 2}, bot{35, y0 + 27, 72, 2}, lef{35, y0, 2, 30}, rig{105, y0, 2, 30};
             SDL_RenderFillRect(a.ren, &top); SDL_RenderFillRect(a.ren, &bot); SDL_RenderFillRect(a.ren, &lef); SDL_RenderFillRect(a.ren, &rig); }
         if (paused && a.dcPause.tex) { SDL_RenderSetLogicalSize(a.ren, GW, GH); a.drawDcPause(1.1f, -1.0f, pauseQuit);   /* Puzzle draws it at 0; the editor frames fit 1.1 (scan, overlay error 7.2: edge-level, x offset 0 best) */ SDL_RenderSetLogicalSize(a.ren, 640, 480); }   // over the whole screen, after the dialog's place
-        if (dialog) {   // measured from Flycast local/modecap/ed3/m__03250.bmp: white quad (stream) x 154..498, y 160..256; BIOS text in (22, 22, 132), centred on x 326; the gold box fitted at (345, 281) 154 x 84 with the 0.8 HUD intensity (mean error 4.9)
+        if (dialog) {
             SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255); const SDL_Rect box{154, 160, 344, 96}; SDL_RenderFillRect(a.ren, &box);
+            // 0x8c0321d0..2206: packed (y << 9) | x coordinates. The
+            // text canvas colour 0x8430 is ARGB1555 (8,8,132).
+            static const char* lines[3] = {"The current puzzle", "will be lost.", "Are you sure?"};
+            static constexpr SDL_Point origins[3] = {{218, 170}, {248, 194}, {248, 221}};
             if (a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95) {
-                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 22, 22, 132);
-                static const char* lines[3] = {"The current puzzle", "will be lost.", "Are you sure?"};
-                for (int l = 0; l < 3; ++l) { int x = 327 - 6 * (int)strlen(lines[l]); const int y = 170 + 26 * l;   /* offsets and pitch are the best of a small scan, not read from code */ for (const char* c = lines[l]; *c; ++c, x += 12) if ((unsigned char)*c > 0x20) { const SDL_Rect d{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[(unsigned char)*c - 0x20], &d); } }
-                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255); }
-            if (sh.fr.size() > 5) { SDL_SetTextureColorMod(sh.tex, 203, 203, 203); const SDL_Rect src{sh.fr[5].x, sh.fr[5].y, 111, 63}; const SDL_FRect d{345.0f, 281.0f, 154.0f, 84.0f}; SDL_RenderCopyF(a.ren, sh.tex, &src, &d); SDL_SetTextureColorMod(sh.tex, 255, 255, 255); } }
+                // This atlas is normally generated Roboto Mono on no-BIOS setups.
+                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 8, 8, 132);
+                for (int l = 0; l < 3; ++l) {
+                    int x = origins[l].x;
+                    for (const unsigned char* c = (const unsigned char*)lines[l]; *c; ++c, x += 12)
+                        if (*c > 0x20) { const SDL_Rect d{x, origins[l].y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[*c - 0x20], &d); }
+                }
+                SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
+            } else {
+                SDL_SetRenderDrawColor(a.ren, 8, 8, 132, 255);
+                for (int l = 0; l < 3; ++l) drawBitmapFallbackText(a.ren, lines[l], origins[l].x, origins[l].y);
+            }
+            if (sh.fr.size() > 5) {
+                // Complete original TA at dialog frame 3250: two triangles,
+                // including the half-texel skew on the lower-left UV.
+                const SDL_Color colour{203, 203, 203, 255};
+                auto vertex = [&](float x, float y, float u, float v) {
+                    return SDL_Vertex{{x, y}, colour, {(sh.fr[5].x + u * 128.0f) / sh.w, (sh.fr[5].y + v * 128.0f) / sh.h}};
+                };
+                const SDL_Vertex tl = vertex(345.86722f, 280.57455f, 1.0f / 256, 0),
+                                 bl = vertex(345.86722f, 365.71460f, 0, 126.0f / 256),
+                                 br = vertex(501.07043f, 365.71460f, 225.0f / 256, 126.0f / 256),
+                                 tr = vertex(501.07043f, 280.57455f, 225.0f / 256, 0);
+                const SDL_Vertex vertices[] = {tl, bl, br, tl, br, tr};
+                SDL_RenderGeometry(a.ren, sh.tex, vertices, 6, nullptr, 0);
+            }
+        }
         if (fileScreen) drawFileOverlay(a);   // port-only local-storage browser; original VMU stream quads have not been decoded
         drawTitleEntry(a);
     }
@@ -2148,16 +2187,7 @@ struct DcStaffRollMode : Screen {
             return;
         }
         SDL_SetRenderDrawColor(a.ren, 255, 255, 255, 255);
-        for (unsigned char c : text) {
-            if (const uint8_t* glyph = font57mixed(c)) {
-                for (int row = 0; row < 7; ++row) for (int col = 0; col < 5; ++col)
-                    if (glyph[row] >> (4 - col) & 1) { const SDL_Rect d{x + col * 2, y + 5 + row * 2, 2, 2}; SDL_RenderFillRect(a.ren, &d); }
-            } else if (c == '"') {
-                const SDL_Rect left{x + 2, y + 5, 2, 4}, right{x + 6, y + 5, 2, 4};
-                SDL_RenderFillRect(a.ren, &left); SDL_RenderFillRect(a.ren, &right);
-            }
-            x += 12;
-        }
+        drawBitmapFallbackText(a.ren, text.c_str(), x, y);
     }
     int music() override { return 12; }   // init 0x8c050abc queues CD track 16 through 0x8c012350; song index = track - 4
     void event(App&, const SDL_Event& e) override {   // 0x8c050c70: any of A / B / C / X / Y (pad pressed mask 0x60e) leaves, whether or not the roll has finished

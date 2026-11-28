@@ -9,6 +9,8 @@
 
 ## Renderer evidence and next work
 
+- Font provenance: `dc_bios_ansi` is also the normal **no-BIOS generated fallback** (Roboto Mono, `export_dc_ui.export_dc_fallback_fonts`); the filename does not prove a BIOS was supplied. `extract_all.py` overwrites it only when a user BIOS is found. Check `manifest.json` field `dreamcast_bios_font` and atlas dimensions/provenance before attributing a text gap to BIOS absence. Missing atlas is a separate error path. The earlier statement that a normal image-only Create dialog was blank was incorrect.
+
 - Preview centre is global (320,240), not inferred from the translated floor corner. Original wall vertices match within 0.00002009 px (old 1.081233 px); checker `tools/oracle/dc_preview_projection.py`.
 - Puzzle preview lid halves use yaw 0/180 (`0x8c015fac..15fd6`), Battle/Challenge 90/270 (`0x8c015f60`). New Puzzle-only path matches all 12 original raw TA halves within 0.000035153 world units and light within 4.17232513e-08. Two-half Challenge control passes. Source/stream evidence; no fitted orientation.
 - Combined preview fixes: full Puzzle selector error 1.9605 -> 1.5472 -> 1.5344; preview crop 4.8114 -> 2.7205 -> 2.6557; off-edge >8 count 184 -> 10 -> 0, shift (0,0). Six source-bounded dome crops still fail mean/residual thresholds (means 1.2231..3.0805), so sampling/edge residue remains partial. Other 17 Puzzle BMPs and Challenge selector are pixel-identical after the orientation fix.
@@ -31,7 +33,7 @@
 
 ## Open evidence / cautions
 
-- Puzzle Edit Create dialog: local/modecap/ed3/m__03250.bmp full error 5.5, dialog 10.5. Text source and gold-box residual unresolved. Earlier font texture decodes were inconclusive; use complete TA capture before attributing textures.
+- Puzzle Edit Create dialog: text origins and ARGB1555 colour now come from 0x8c0321d0..2206; gold-box vertices/UVs come from complete original TA (raw offsets 0xe0a0/0xe180, local/editor-dialog-20261127/). Missing-atlas fallback shares the staff-roll bitmap helper. All 30 game tests and four TA tooling tests pass; normal no-BIOS capture has readable generated-font text. Exact glyph stamping and element parity remain partial; old 5.5 full/10.5 dialog errors predate this fix and are not current measurements.
 - Team Battle result packets appear by tick 1200 and persist through 1890; creation/transition/order still open (`local/battle-result-probe/`). Phrase task caller 0x8c027a6c, predicate 0x8c025592, ctor 0x8c056a64, updater 0x8c0565e0; full text/voice mapping/lifetime/rendering remain open (`local/phrase-probe/`).
 - The Basics intro skip has only mobile flag-4 evidence, not Dreamcast pad evidence. Real-USA-CHD file/audio parity, native MANATEE mono semantics, staff-roll residues, other regions, Android runtime and BIOS fallback edge cases remain open. BIOS stays optional and user-supplied.
 - Never infer Dreamcast parity from port-vs-port tests or static assets alone. Whole-mode totals remain unchanged; scope every claim to its evidence.
