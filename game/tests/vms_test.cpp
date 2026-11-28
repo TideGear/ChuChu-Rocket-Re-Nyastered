@@ -44,6 +44,7 @@ int main(int argc, char** argv) {
     VmsPuzzle badArrow = p; badArrow.arrows[0].x = 12; uint8_t badSlot[vms::kSlot];
     CHECK(!vms::encodeSlot(badArrow, badSlot));
     badArrow = p; badArrow.arrows[0].dir = 4; CHECK(!vms::encodeSlot(badArrow, badSlot));
+    VmsPuzzle longTitle = p; longTitle.title.assign(21, 'x'); CHECK(!vms::encodeSlot(longTitle, badSlot));
     auto malformed = v;
     malformed[640 + 476] = 0xc0; // x=12 is outside the 12-column board
     CHECK(vms::readPack(malformed, out) == -1 && out.empty());

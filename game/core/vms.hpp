@@ -39,7 +39,7 @@ inline bool decodeSlot(const uint8_t* s, size_t size, VmsPuzzle& out) {
     return true;
 }
 inline bool encodeSlot(const VmsPuzzle& p, uint8_t* s /* kSlot bytes */) {
-    if (p.arrows.size() > 12) return false;
+    if (p.arrows.size() > 12 || p.title.size() > 20) return false;
     for (const auto& arrow : p.arrows) if (arrow.x >= 12 || arrow.y >= 9 || arrow.dir >= 4) return false;
     std::memset(s, 0, kSlot);
     for (int r = 0; r < 9; r++) for (int c = 0; c < 12; c++) { int v = tileToLattice(p.tiles[r * 12 + c]); if (v < 0) return false; s[(2 * r + 1) * 25 + 2 * c + 1] = (uint8_t)v; }
