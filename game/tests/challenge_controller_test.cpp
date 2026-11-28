@@ -32,6 +32,8 @@ int main(int argc, char** argv) {
         SDL_GameControllerClose(challenge.controller);
         challenge.controller = SDL_GameControllerOpen(device);
         check(challenge.controller != nullptr, "virtual controller opened for regression");
+        std::vector<int> cues;
+        challenge.sfx = [&](int id) { cues.push_back(id); };
         auto button = [&](int id) {
             SDL_Event event{};
             event.type = SDL_CONTROLLERBUTTONDOWN;
@@ -41,9 +43,19 @@ int main(int argc, char** argv) {
             challenge.event(app, event);
         };
         button(SDL_CONTROLLER_BUTTON_A);
-        check(challenge.phase() == ChallengeGame::Countdown, "controller skips intro");
-        for (int i = 0; i < 108; ++i) challenge.tick(app);
-        check(challenge.phase() == ChallengeGame::Play, "countdown reaches play");
+        check(challenge.phase() == ChallengeGame::Countdown && cues.empty(),
+              "controller skip enters Challenge countdown before its task pass");
+        challenge.tick(app);
+        check(cues == std::vector<int>{16}, "Challenge intro transition requests original cue 16");
+        for (int i = 0; i < 34; ++i) challenge.tick(app);
+        check(cues == std::vector<int>{16}, "Challenge ready cue waits until countdown frame 36");
+        challenge.tick(app);
+        check(cues == (std::vector<int>{16, 17}), "Challenge countdown frame 36 requests cue 17");
+        for (int i = 0; i < 36; ++i) challenge.tick(app);
+        check(cues == (std::vector<int>{16, 17, 18}), "Challenge countdown frame 72 requests cue 18");
+        for (int i = 0; i < 36; ++i) challenge.tick(app);
+        check(challenge.phase() == ChallengeGame::Play && cues == (std::vector<int>{16, 17, 18, 19}),
+              "Challenge countdown frame 108 requests cue 19 before gameplay");
         float initialX = challenge.padAim.x;
         SDL_JoystickSetVirtualButton(stick, SDL_CONTROLLER_BUTTON_DPAD_RIGHT, 1);
         SDL_JoystickUpdate();

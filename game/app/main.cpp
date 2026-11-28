@@ -4392,9 +4392,10 @@ struct PuzzleMode : Screen {
 
 // ---------------------------------------------------------------- Stage Challenge (puzzle-based types 0 to 2; core/challenge.hpp, verified against the original's ChallengeLoop)
 struct ChallengeMode : Screen {
-    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false, finalChallengeComplete = false, chaoRollQueued = false, rollNext = false; int lastDir = 0, cticks = 0, musicTicks_ = 0; bool challengeMusicStarted_ = false, saved_ = false, newBest = false; int bestSeconds = 0;
+    Stages stages; int cur = 0; ChallengeGame game; ChallengeBattleGame bgame; bool battle = false; MouseAim aim; bool mouseCursor = false, back = false, nextStageRequested = false, finalChallengeComplete = false, chaoRollQueued = false, rollNext = false; int lastDir = 0, cticks = 0, musicTicks_ = 0; bool challengeMusicStarted_ = false, introCuePending_ = false, saved_ = false, newBest = false; int bestSeconds = 0;
     std::vector<std::pair<float, float>> prev;
     SDL_GameController* controller = nullptr;
+    std::function<void(int)> sfx;
     PadAim padAim{5.5f * kCell, 3.5f * kCell};
 
     ~ChallengeMode() override {
@@ -4437,13 +4438,18 @@ struct ChallengeMode : Screen {
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
         for (int i = 0; i < SDL_NumJoysticks(); ++i) openController(i);
         begin(stage); return true; }
-    void begin(int stage) { paused = false; finalChallengeComplete = false; chaoRollQueued = false; rollNext = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; { float hx, hy; if (const char* pc = getenv("CCR_PAD_AIM"); pc && sscanf(pc, "%f,%f", &hx, &hy) == 2) padAim = PadAim{hx, hy}; }   /* headless test hook (port-only): start the pad cursor on a cell, e.g. to match a Flycast frame taken after pad moves */ mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
+    void begin(int stage) { paused = false; introCuePending_ = false; finalChallengeComplete = false; chaoRollQueued = false; rollNext = false; padAim = PadAim{5.5f * kCell, 3.5f * kCell}; { float hx, hy; if (const char* pc = getenv("CCR_PAD_AIM"); pc && sscanf(pc, "%f,%f", &hx, &hy) == 2) padAim = PadAim{hx, hy}; }   /* headless test hook (port-only): start the pad cursor on a cell, e.g. to match a Flycast frame taken after pad moves */ mouseCursor = false; failureChoice = 0; saved_ = false; cur = ((stage % (int)stages.list.size()) + (int)stages.list.size()) % (int)stages.list.size(); battle = ChallengeBattleGame::supports(cur);
         if (battle) bgame.start(stages.list[cur].st, cur, (uint32_t)SDL_GetTicks() * 2654435761u + (uint32_t)cur); else game.start(stages.list[cur].st, cur);   // types 3 and 4 run on the battle engine (core/challenge_battle.hpp)
         prev.clear(); }
     int phase() const { return battle ? bgame.phase : game.phase; }
     bool supportedNow() const { return battle || game.supported(); }
     Sim& simRef() { return battle ? bgame.game.sim : game.sim; }
-    void skipIntro() { if (battle) bgame.skipIntro(); else game.skipIntro(); }
+    void skipIntro(App& a) {
+        if (phase() != ChallengeGame::Intro) return;
+        if (battle) bgame.skipIntro(); else game.skipIntro();
+        introCuePending_ = true;
+    }
+    void playCue(App& a, int cue) { if (sfx) sfx(cue); else a.playSfx(cue); }
     int music() override { return challengeMusicStarted_ ? 8 : -2; }   // ChallengeLoop calls BGM_Play(0xc) after 0x78 (120) loop ticks
     void place(App& a, int dir) { if (paused || phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
     void confirmResult(App& a) {
@@ -4517,7 +4523,7 @@ struct ChallengeMode : Screen {
             if (button == a.padMap.pause && phase() == ChallengeGame::Play) { paused = !paused; return; }
             if (paused) return;
             if (phase() == ChallengeGame::Intro &&
-                (button == SDL_CONTROLLER_BUTTON_A || button == a.padMap.pause)) { skipIntro(); return; }
+                (button == SDL_CONTROLLER_BUTTON_A || button == a.padMap.pause)) { skipIntro(a); return; }
             if (phase() == ChallengeGame::Play) {
                 aim.x = padAim.logicalX(1.0f, pf(a));
                 aim.y = padAim.logicalY(1.0f, pf(a));
@@ -4530,7 +4536,7 @@ struct ChallengeMode : Screen {
         }
         if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN) { aim.update(a, e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x, e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y, pf(a)); mouseCursor = true; }
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-            if (phase() == ChallengeGame::Intro) skipIntro();                                   // flag 1: a tap skips the intro
+            if (phase() == ChallengeGame::Intro) skipIntro(a);                                 // flag 1: a tap skips the intro
             else if (phase() == ChallengeGame::Failure) { begin(cur); a.playSfx(2); }                   // flag 8: restart the stage
             else if (phase() == ChallengeGame::Result) nextStageRequested = true;
             else if (!supportedNow()) back = true;
@@ -4541,7 +4547,7 @@ struct ChallengeMode : Screen {
             if (k == SDLK_p && supportedNow() && phase() == ChallengeGame::Play) { paused = !paused; return; }
             if (paused) return;
             if (k == SDLK_ESCAPE) { if (fromStageSelect) a.nextStage = cur; back = true; return; }      // flag 2: quit
-            if (phase() == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) skipIntro();
+            if (phase() == ChallengeGame::Intro && (k == SDLK_RETURN || k == SDLK_SPACE)) skipIntro(a);
             else if (phase() == ChallengeGame::Failure && (k == SDLK_RETURN || k == SDLK_r)) { begin(cur); a.playSfx(2); }
             else if (phase() == ChallengeGame::Result && (k == SDLK_RETURN || k == SDLK_SPACE)) nextStageRequested = true;
             else if (arrowKey(k) >= 0) { if (!a.headless) aim.update(a, 0, 0, pf(a)); place(a, arrowKey(k)); }
@@ -4567,7 +4573,19 @@ struct ChallengeMode : Screen {
         prev.resize(sm.ents.size());
         for (size_t i = 0; i < sm.ents.size(); i++) prev[i] = {sm.ents[i].x, sm.ents[i].z};
         const int before = phase();
-        if (battle) bgame.tick(); else game.tick();
+        const int beforeFrame = battle ? bgame.phaseFrame : game.phaseFrame;
+        if (introCuePending_) { introCuePending_ = false; playCue(a, 16); }
+        if (before == ChallengeGame::Countdown) {
+            const int countdownFrame = beforeFrame + 1;
+            if (countdownFrame == 36) playCue(a, 17);
+            else if (countdownFrame == 72) playCue(a, 18);
+            else if (countdownFrame == 108) playCue(a, 19);
+        }
+        if (battle) {
+            bgame.game.sfx = [this, &a](int cue) { playCue(a, cue); };
+            bgame.tick();
+        } else game.tick();
+        if (before == ChallengeGame::Intro && phase() == ChallengeGame::Countdown) playCue(a, 16);
         if (phase() == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
         if (phase() != before) {
             if (phase() == ChallengeGame::Success) { a.playSfx(21); a.playSfx(28); }
