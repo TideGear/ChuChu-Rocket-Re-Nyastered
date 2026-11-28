@@ -2,12 +2,14 @@
 
 ## Current state
 
-- Branch `main`; latest work: Challenge repeat-clear credits routing (follows pushed `933fd32` progression gate).
+- Branch `main`; latest work: Puzzle completed-group replay credits gate (follows pushed `633eb5b` Challenge repeat-clear routes).
 - Keep user-owned untracked `.vscode/` untouched. Do not stage caches, disc data, captures, or generated files.
 - Goal and working rules: `docs/goal.md`. Audit owns coverage (`docs/audit.md`); evidence/log in `docs/roadmap.md`; setup results in `docs/verification.md`.
 - Clean image-only setup rechecked 2026-11-27 from a new folder containing only the selected USA Dreamcast ZIP (no BIOS, mobile, DLC, or GBA files). `tools/setup-wizard.ps1` completed extraction and pinned Zig build. Manifest: one error-free ZIP/CUE input, Dreamcast graphics, Puzzle/Battle/Stage Challenge, no DLC stage pack. Direct headless captures for DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, PUZZLE, CHALLENGE, BATTLE, TEAM_BATTLE, DC_DEMO were all nonblack (90 ticks; smoke/reachability only). Scratch: `local/fresh-dc-only-20261127/`. Final-code game suite: 30/30 on the fresh Dreamcast-only assets; `git diff --check` clean. No parity claim.
 
 ## Recent code
+
+- Puzzle replay result (partial overall): predicate `0x8c02c93e` gates stage-25 A/Start -> plain credits when all four retail groups are complete; B returns to selection. Twelve original-loop fixtures pass across Normal-only/all-four progress, pending -2/-1 and A/B/Start. Pinned Zig ccr/input regression build and all 30 game tests pass on fresh Dreamcast-only assets; natural final-stage clear, noncontiguous progress masks and end-of-roll text parity remain open. Tool: `tools/oracle/dc_puzzle_result_routes.py`; recipe in roadmap.md.
 
 - Challenge repeat-clear (partial overall): six original-loop injected clear fixtures confirm pre-save pending 1/-1 and first/repeat A/B/Start destinations. Port repeat clears no longer show Chao unlock text; repeat A enters plain credits and B returns to Stage Select. Oracle: `tools/oracle/dc_challenge_result_routes.py`; artifacts/recipe in roadmap.md. Pinned Zig ccr/input regression build and all 30 tests pass on the fresh Dreamcast-only assets. Natural final-stage gameplay, end-of-roll text pixels and full pending lifecycle remain open.
 
@@ -21,7 +23,7 @@
 ## Next code priorities
 
 1. Continue source-backed Puzzle/Challenge/Battle functional gaps from `docs/audit.md`; prefer a gameplay fix with a regression over documentation-only work. Dreamcast Puzzle Edit tile toggles and the 30-rocket rejection are now covered.
-2. Pursue a measured Dreamcast Puzzle/Challenge gap next (the known Puzzle hole-fall crop and mode-specific Challenge result routes remain incomplete); read the relevant decompile and capture route before editing.
+2. Continue Puzzle result/unlock lifecycle and measured presentation gaps. Replay result routes now have original-loop fixture coverage; natural final-stage clears and end-of-roll text remain open. Hole-fall crop already measured 0.93 (audit has an older unresolved note); do not repeat that solved pose/scale investigation. Read the relevant decompile before captures.
 3. The Basics intro skip: iOS/HD decompile `PuzzleStageControll @ 0x3c108` ends after 120 ticks or `Input::getFlag(4)` once age >4; it consumes flag 4 and sets tutorial tap flag 0x20. HD Puzzle touch handler `0x13050` creates flags from hit rectangles. This is not Dreamcast controller evidence; do not map it to a pad button without original Dreamcast input trace.
 4. For PuzzleP, seek original Dreamcast runtime evidence for stock before claiming parity; current regression proves only retail VMS fields map through our format decoder.
 5. Battle phrase graphics/selection and Team Battle result scene remain open; use source/runtime evidence before changing behavior. Do not attribute callbacks or texture matches to draw tasks without proof.

@@ -542,6 +542,24 @@ int main(int argc, char** argv) {
             accept.cbutton.button = SDL_CONTROLLER_BUTTON_B;
             puzzle.event(app, accept);
             check(puzzle.back, "Dreamcast B leaves an ordinary Puzzle result");
+            app.loadProgress();
+            const std::array<uint32_t, 4> oldClears = {app.clr[0], app.clr[1], app.clr[2], app.clr[3]};
+            const int oldStageSet = app.stageSet;
+            app.stageSet = 0;
+            for (bool allGroups : {false, true}) {
+                for (int group = 0; group < 4; ++group) app.clr[group] = allGroups || group == 0 ? 0x1ffffff : 0;
+                puzzle.cur = 24; puzzle.back = false; puzzle.staffRoll = false;
+                puzzle.state = 2; puzzle.clearFrames = 211;
+                accept.cbutton.button = SDL_CONTROLLER_BUTTON_START;
+                puzzle.event(app, accept);
+                const char* destination = puzzle.next();
+                check(destination && std::string(destination) == (allGroups ? "DC_STAFFROLL_PLAIN" : "STAGES"),
+                      "Dreamcast replayed Puzzle group uses the original progress gate for credits");
+            }
+            puzzle.cur = 24; puzzle.back = false; puzzle.state = 2; puzzle.clearFrames = 211;
+            accept.cbutton.button = SDL_CONTROLLER_BUTTON_B; puzzle.event(app, accept);
+            check(std::string(puzzle.next()) == "STAGES", "Dreamcast B leaves a fully completed replay group");
+            std::copy(oldClears.begin(), oldClears.end(), app.clr); app.stageSet = oldStageSet;
             app.dcLook = false;
             puzzle.cur = 0; puzzle.back = false; puzzle.state = 2; puzzle.clearFrames = 211;
             accept.cbutton.button = SDL_CONTROLLER_BUTTON_Y;

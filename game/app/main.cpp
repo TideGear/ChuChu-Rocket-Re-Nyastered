@@ -3722,8 +3722,21 @@ struct PuzzleMode : Screen {
         return preview.killed == 0 && preview.catsInRocket == 0 &&
                alive == 0 && preview.saved == totalMice;
     }
+    bool dcCompletedReplayGroup() const {
+        if (!gApp || basics || gApp->stageSet != 0 || !dreamcastPuzzleControls(*gApp)) return false;
+        gApp->loadProgress();
+        // 0x8c02c93e: count completed groups 0..2, then test the group at
+        // that count (the ordinary sequential save reaches this with all four).
+        int count = 0;
+        for (int group = 0; group < 3; ++group)
+            count += (gApp->clr[group] & 0x1ffffff) == 0x1ffffff;
+        return (gApp->clr[count] & 0x1ffffff) == 0x1ffffff;
+    }
     void nextPuzzle() {
         if (basics && cur % 25 == 2) { if (gApp) gApp->setTutorialCleared(); back = true; return; }   // PuzzleLoop 0x1854c: the tutorial ends on stage index 2 (setTutorialCleared)
+        // 0x8c02c318..c326: a completed replay group ends in mode 17 on
+        // A/Start at index 24; negative pending values have no unlock text.
+        if (cur % 25 == 24 && dcCompletedReplayGroup()) { rollPlain = true; rollNext = true; return; }
         if ((cur + 1) % 25 == 0 || cur + 1 >= (int)stages.list.size()) { back = true; return; }
         ++cur; reset(); if (basics) { tut.reset(-1); tutTicks = 0; tutPrevState = 0; }   // next lesson = step (lesson << 8); the lesson source on stage change is inferred, see roadmap
     }
@@ -3742,7 +3755,7 @@ struct PuzzleMode : Screen {
     ccr::PuzzlePauseState pauseState;
     void restartRun() { std::vector<Arrow> keep; for (auto& ar : sim.arrows) if (ar.live) keep.push_back(ar); reset(); for (auto& ar : keep) sim.placeArrow(ar.x, ar.y, ar.dir); }
     void reset() {
-        cursorTrail = {};
+        cursorTrail = {}; staffRoll = rollNext = rollPlain = false;
         launchLids = {}; clearSaved = false; launchSoundStarted = false;
         sim.load(stages.list[cur].st); prev.clear(); dash = false; failureFrames = 0; clearFrames = 0; if (gApp) gApp->angs.clear(); running = false; state = 0; totalMice = 0;
         paused = false; pconf = false; pauseQuit = false; domePulse = 1.0f; pauseState.resume(); mousePose = 0;
@@ -3984,8 +3997,8 @@ struct PuzzleMode : Screen {
             if (a.headless && getenv("CCR_PUZZLE_CLEAR_TRACE")) printf("puzzle clear stage %d tick %d saved %d\n", cur, cticks, sim.saved);
         }
     }
-    bool staffRoll = false, rollNext = false;   // Dreamcast: a clear that completed its group queues the staff roll
-    const char* next() override { if (rollNext) { rollNext = false; if (gApp) gApp->nextStage = cur; return "DC_STAFFROLL"; } if (back) { back = false; if (basics) return "MENU"; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
+    bool staffRoll = false, rollNext = false, rollPlain = false;   // Dreamcast: a clear that completed its group queues the staff roll
+    const char* next() override { if (rollNext) { rollNext = false; if (gApp) gApp->nextStage = cur; return rollPlain ? "DC_STAFFROLL_PLAIN" : "DC_STAFFROLL"; } if (back) { back = false; if (basics) return "MENU"; if (gApp) gApp->nextStage = cur; return "STAGES"; } return nullptr; }
     void drawClearResult(App& a) const {
         // 0x8c02bf00 advances phase 4 to 5; 0x8c02bf60 first draws on
         // the following task pass (live phase-5 counter 2, not 1).
