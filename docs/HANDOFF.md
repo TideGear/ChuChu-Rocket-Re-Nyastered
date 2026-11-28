@@ -2,12 +2,14 @@
 
 ## Current state
 
-- Branch `main`; latest work: Puzzle completed-group replay credits gate (follows pushed `633eb5b` Challenge repeat-clear routes).
+- Branch `main`; latest work: Puzzle clear/save pending precedence (follows pushed `dd4ba66` replay credits gate).
 - Keep user-owned untracked `.vscode/` untouched. Do not stage caches, disc data, captures, or generated files.
 - Goal and working rules: `docs/goal.md`. Audit owns coverage (`docs/audit.md`); evidence/log in `docs/roadmap.md`; setup results in `docs/verification.md`.
 - Clean image-only setup rechecked 2026-11-27 from a new folder containing only the selected USA Dreamcast ZIP (no BIOS, mobile, DLC, or GBA files). `tools/setup-wizard.ps1` completed extraction and pinned Zig build. Manifest: one error-free ZIP/CUE input, Dreamcast graphics, Puzzle/Battle/Stage Challenge, no DLC stage pack. Direct headless captures for DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, PUZZLE, CHALLENGE, BATTLE, TEAM_BATTLE, DC_DEMO were all nonblack (90 ticks; smoke/reachability only). Scratch: `local/fresh-dc-only-20261127/`. Final-code game suite: 30/30 on the fresh Dreamcast-only assets; `git diff --check` clean. No parity claim.
 
 ## Recent code
+
+- Puzzle clear/save (partial overall): `recordClear` now honors the Special/Mania sole-uncleared override (pending -1) before queuing the current-group unlock roll (pending 0). Five original-loop arrival/clear/save/B-input fixtures pass, including exact saved masks and mode 7/17 destinations. Tool `tools/oracle/dc_puzzle_clear_pending.py`; resume s00070.state, recipe/evidence in roadmap.md. Pinned Zig ccr/input regression build and all 30 tests pass on fresh Dreamcast-only assets. Other-board natural gameplay, full text parity and VMU failure handling remain open.
 
 - Puzzle replay result (partial overall): predicate `0x8c02c93e` gates stage-25 A/Start -> plain credits when all four retail groups are complete; B returns to selection. Twelve original-loop fixtures pass across Normal-only/all-four progress, pending -2/-1 and A/B/Start. Pinned Zig ccr/input regression build and all 30 game tests pass on fresh Dreamcast-only assets; natural final-stage clear, noncontiguous progress masks and end-of-roll text parity remain open. Tool: `tools/oracle/dc_puzzle_result_routes.py`; recipe in roadmap.md.
 

@@ -546,6 +546,22 @@ int main(int argc, char** argv) {
             const std::array<uint32_t, 4> oldClears = {app.clr[0], app.clr[1], app.clr[2], app.clr[3]};
             const int oldStageSet = app.stageSet;
             app.stageSet = 0;
+            const bool oldTestRun = app.testRun;
+            SDL_Texture* oldStaffRoll = app.dcStaffRoll.tex;
+            app.testRun = true; app.dcStaffRoll.tex = reinterpret_cast<SDL_Texture*>(1);
+            for (bool simultaneous : {false, true}) {
+                app.clr[0] = app.clr[1] = 0x1ffffff;
+                app.clr[2] = 0x1fffffe; app.clr[3] = simultaneous ? 0x1fffffe : 0;
+                puzzle.cur = 50; puzzle.back = false;
+                puzzle.recordClear(app);
+                check(puzzle.staffRoll == !simultaneous && app.clr[2] == 0x1ffffff && puzzle.clearSaved,
+                      "Puzzle clear checks the Special/Mania exception before recording progress");
+                puzzle.state = 2; puzzle.clearFrames = 211;
+                accept.cbutton.button = SDL_CONTROLLER_BUTTON_B; puzzle.event(app, accept);
+                check(std::string(puzzle.next()) == (simultaneous ? "STAGES" : "DC_STAFFROLL"),
+                      "Puzzle B follows the original pending minus-one versus zero clear route");
+            }
+            app.testRun = oldTestRun; app.dcStaffRoll.tex = oldStaffRoll;
             for (bool allGroups : {false, true}) {
                 for (int group = 0; group < 4; ++group) app.clr[group] = allGroups || group == 0 ? 0x1ffffff : 0;
                 puzzle.cur = 24; puzzle.back = false; puzzle.staffRoll = false;

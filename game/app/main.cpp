@@ -3722,6 +3722,22 @@ struct PuzzleMode : Screen {
         return preview.killed == 0 && preview.catsInRocket == 0 &&
                alive == 0 && preview.saved == totalMice;
     }
+    void recordClear(App& a) {
+        if (a.stageSet != 0) return;
+        const int stage = cur % 25;
+        auto lastUncleared = [&](int group) {
+            if (group < 0 || group >= 4 || a.isCleared(group * 25 + stage)) return false;
+            int left = 0;
+            for (int k = 0; k < 25; ++k) left += !a.isCleared(group * 25 + k);
+            return left == 1;
+        };
+        // 0x8c02bd84..bda8 tests BOTH Special and Mania before the
+        // current-group check at 0x8c02bdae..bdd8. That path sets -1,
+        // suppressing the otherwise pending-0 unlock roll on A/B/Start.
+        const bool silent = lastUncleared(3) && lastUncleared(2);
+        staffRoll = dreamcastPuzzleControls(a) && a.dcStaffRoll.tex && !silent && lastUncleared(cur / 25);
+        clearSaved = a.setCleared(cur);
+    }
     bool dcCompletedReplayGroup() const {
         if (!gApp || basics || gApp->stageSet != 0 || !dreamcastPuzzleControls(*gApp)) return false;
         gApp->loadProgress();
@@ -3993,7 +4009,7 @@ struct PuzzleMode : Screen {
         tickPuzzleSimulation();
         if (dash) tickPuzzleSimulation();   // Dash: PuzzleLoop runs SmpColLoopInit/SmpTskExeServer/SmpColAnalyze twice per frame
         int alive = 0; for (auto& e : sim.ents) if (e.mouse && e.alive && !e.done) alive++;
-        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; paused = false; pconf = false; pauseState.resume(); } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; paused = false; pconf = false; pauseState.resume(); clearFrames = 0; a.playSfx(21); a.playSfx(28); if (gApp && gApp->stageSet == 0) { int left = 0; for (int k = 0; k < 25; ++k) left += !gApp->isCleared(cur / 25 * 25 + k); staffRoll = dreamcastPuzzleControls(a) && gApp->dcStaffRoll.tex && left == 1 && !gApp->isCleared(cur); clearSaved = gApp->setCleared(cur); }   /* 0x8c02c97c: the stage was its group's only uncleared one -> 0x8c02bdd8 queues the staff roll (mode 17), shown on leaving the result (0x8c02c18c) */
+        if (sim.killed > 0 || sim.catsInRocket > 0) { state = 3; running = false; paused = false; pconf = false; pauseState.resume(); } else if (alive == 0 && sim.saved == totalMice) { state = 2; running = false; paused = false; pconf = false; pauseState.resume(); clearFrames = 0; a.playSfx(21); a.playSfx(28); recordClear(a);
             if (a.headless && getenv("CCR_PUZZLE_CLEAR_TRACE")) printf("puzzle clear stage %d tick %d saved %d\n", cur, cticks, sim.saved);
         }
     }
