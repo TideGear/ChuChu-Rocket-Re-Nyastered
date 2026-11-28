@@ -530,6 +530,35 @@ int main(int argc, char** argv) {
             SDL_Texture* oldCancel = app.dcPuzzleCancel.tex;
             app.dcLook = true;
             app.dcPuzzleStart.tex = app.dcPuzzleCancel.tex = reinterpret_cast<SDL_Texture*>(1);
+            puzzle.state = 0;
+            for (bool quit : {false, true}) {
+                for (int ignored : {SDL_CONTROLLER_BUTTON_B, SDL_CONTROLLER_BUTTON_Y}) {
+                    puzzle.back = false; puzzle.paused = true; puzzle.pauseQuit = quit;
+                    puzzle.pauseState.pressNow();
+                    accept.cbutton.button = static_cast<Uint8>(ignored);
+                    puzzle.event(app, accept);
+                    const int before = puzzle.sim.now; puzzle.tick(app);
+                    check(!puzzle.back && puzzle.paused && puzzle.pauseQuit == quit && puzzle.sim.now == before,
+                          "Dreamcast Puzzle pause ignores B/Y on either selection and stays frozen");
+                }
+                for (int confirm : {SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_START}) {
+                    puzzle.back = false; puzzle.paused = true; puzzle.pauseQuit = quit;
+                    puzzle.pauseState.pressNow();
+                    accept.cbutton.button = static_cast<Uint8>(confirm); puzzle.event(app, accept);
+                    check(quit ? puzzle.back : (!puzzle.back && !puzzle.paused && !puzzle.pauseState.freeze),
+                          "Dreamcast Puzzle pause A/Start acts on the selected Resume/Quit item");
+                }
+            }
+            for (SDL_Keycode key : {SDLK_b, SDLK_ESCAPE}) {
+                puzzle.back = false; puzzle.paused = true; puzzle.pauseState.pressNow();
+                SDL_Event cancel{}; cancel.type = SDL_KEYDOWN; cancel.key.keysym.sym = key;
+                puzzle.event(app, cancel);
+                check(!puzzle.back && puzzle.paused, "Dreamcast Puzzle keyboard B/back mapping does not bypass pause selection");
+            }
+            app.dcLook = false; puzzle.back = false; puzzle.paused = true;
+            accept.cbutton.button = SDL_CONTROLLER_BUTTON_B; puzzle.event(app, accept);
+            check(puzzle.back, "mobile Puzzle pause retains B-to-leave convenience");
+            app.dcLook = true; puzzle.paused = false; puzzle.pauseQuit = false; puzzle.pauseState.resume();
             puzzle.staffRoll = false; puzzle.back = false; puzzle.cur = 0;
             puzzle.state = 2; puzzle.clearFrames = 211;
             accept.cbutton.button = SDL_CONTROLLER_BUTTON_Y;

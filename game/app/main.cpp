@@ -3814,7 +3814,7 @@ struct PuzzleMode : Screen {
                 if (dreamcastPuzzleControls(a) && (k == SDLK_LEFT || k == SDLK_RIGHT)) { pauseQuit = !pauseQuit; a.playSfx(0); return; }   // 0x8c01a316: Left (+1) and Right (-1) both wrap over the two items and request cue 0 on every press
                 if ((k == SDLK_RETURN || k == SDLK_SPACE) && pauseQuit && dreamcastPuzzleControls(a)) { a.playSfx(2); back = true; return; }   // A / Start: cue 2
                 if (k == SDLK_p || k == SDLK_RETURN || k == SDLK_SPACE) { if (dreamcastPuzzleControls(a)) a.playSfx(2); paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }   // Dreamcast: A / Start on RESUME request cue 2 (0x8c01a36a)
-                else if (k == SDLK_ESCAPE || k == SDLK_b) back = true;
+                else if (!dreamcastPuzzleControls(a) && (k == SDLK_ESCAPE || k == SDLK_b)) back = true; // DC 0x8c01a35e accepts only A/Start
                 return;
             }
             if (!a.headless && arrowKey(k) >= 0) aim.update(a, 0, 0, pf(a));
@@ -3849,7 +3849,7 @@ struct PuzzleMode : Screen {
                 if (dreamcastPuzzleControls(a) && (b == SDL_CONTROLLER_BUTTON_DPAD_LEFT || b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) { pauseQuit = !pauseQuit; a.playSfx(0); return; }   // 0x8c01a316 (see the key path)
                 if ((b == SDL_CONTROLLER_BUTTON_A || b == (gApp ? gApp->padMap.pause : 6)) && pauseQuit && dreamcastPuzzleControls(a)) { a.playSfx(2); back = true; return; }
                 if (b == (gApp ? gApp->padMap.pause : 6) || b == SDL_CONTROLLER_BUTTON_A) { if (dreamcastPuzzleControls(a)) a.playSfx(2); paused = false; pconf = false; pauseQuit = false; pauseState.resume(); }
-                else if (b == SDL_CONTROLLER_BUTTON_B) back = true;
+                else if (b == SDL_CONTROLLER_BUTTON_B && !dreamcastPuzzleControls(a)) back = true; // DC pause ignores B (mask 0x0c at 0x8c01a364)
                 return;
             }
             mouseCursor = false;
