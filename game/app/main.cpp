@@ -4281,6 +4281,11 @@ struct ChallengeMode : Screen {
     void skipIntro() { if (battle) bgame.skipIntro(); else game.skipIntro(); }
     int music() override { return challengeMusicStarted_ ? 8 : -2; }   // ChallengeLoop calls BGM_Play(0xc) after 0x78 (120) loop ticks
     void place(App& a, int dir) { if (paused || phase() != ChallengeGame::Play || !aim.inside) return; lastDir = dir; if ((battle ? bgame.placeArrow(aim.cellX(), aim.cellY(), dir) : game.placeArrow(aim.cellX(), aim.cellY(), dir))) a.playSfx(1); else a.playSfx(0x13); }
+    void confirmResult(App& a) {
+        if (a.dcLook && finalChallengeComplete) rollNext = true;
+        else if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
+        else nextStageRequested = true;
+    }
     void event(App& a, const SDL_Event& e) override {
         if (e.type == SDL_CONTROLLERDEVICEADDED) { openController(e.cdevice.which); return; }
         if (e.type == SDL_CONTROLLERDEVICEREMOVED && controller &&
@@ -4293,9 +4298,7 @@ struct ChallengeMode : Screen {
         if (phase() == ChallengeGame::Result && a.dcChallengeResult.tex) {
             if (e.type == SDL_KEYDOWN) {
                 if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_SPACE) {
-                    if (a.dcLook && finalChallengeComplete) rollNext = true;
-                    else if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
-                    else nextStageRequested = true;
+                    confirmResult(a);
                 } else if (e.key.keysym.sym == SDLK_ESCAPE) {
                     if (chaoRollQueued) rollNext = true;
                     else { a.nextStage = cur; fromStageSelect = true; back = true; }
@@ -4303,9 +4306,7 @@ struct ChallengeMode : Screen {
             } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
                 const int button = e.cbutton.button;
                 if (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_START) {
-                    if (a.dcLook && finalChallengeComplete) rollNext = true;
-                    else if (a.dcLook && cur == 24) { a.nextStage = cur; fromStageSelect = true; back = true; }
-                    else nextStageRequested = true;
+                    confirmResult(a);
                 } else if (button == SDL_CONTROLLER_BUTTON_B) {
                     if (chaoRollQueued) rollNext = true;
                     else { a.nextStage = cur; fromStageSelect = true; back = true; }
@@ -4315,7 +4316,7 @@ struct ChallengeMode : Screen {
                 float x, y;
                 ccrWindowToLogical(a.ren, e.button.x, e.button.y, &x, &y);
                 if (x >= 32 && x < 200 && y >= 382 && y < 446) {
-                    if (y < 414) { if (a.dcLook && finalChallengeComplete) rollNext = true; else nextStageRequested = true; }
+                    if (y < 414) confirmResult(a);
                     else if (chaoRollQueued) rollNext = true;
                     else { a.nextStage = cur; fromStageSelect = true; back = true; }
                 }
@@ -4382,7 +4383,14 @@ struct ChallengeMode : Screen {
         }
     }
     void tick(App& a) override {
-        if (nextStageRequested) { nextStageRequested = false; begin(cur + 1); return; }
+        if (nextStageRequested) {
+            nextStageRequested = false;
+            int stage = cur + 1;
+            // 0x8c02ace0..acf2: stage 25 requires all first 24 clear bits
+            // (predicate 0x8c02b508); otherwise Next wraps to stage 1.
+            if (a.dcLook && stage == 24 && (a.challengeClearedMask() & 0xffffff) != 0xffffff) stage = 0;
+            begin(stage); return;
+        }
         if (!supportedNow()) return;
         static const int pauseAt = getenv("CCR_PAUSE_TICK") ? atoi(getenv("CCR_PAUSE_TICK")) : -1;
         if (pauseAt >= 0 && cticks == pauseAt) paused = true;

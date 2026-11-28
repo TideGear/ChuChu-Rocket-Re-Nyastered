@@ -691,6 +691,33 @@ int main(int argc, char** argv) {
             challenge.event(app, confirmB);
             check(std::string(challenge.next()) == "DC_STAFFROLL_CHAO",
                   "final Challenge B result input also enters the pending-value-1 Chao staff roll");
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            int oldLogicalWidth = 0, oldLogicalHeight = 0;
+            SDL_RenderGetLogicalSize(app.ren, &oldLogicalWidth, &oldLogicalHeight);
+            SDL_Event click{}; click.type = SDL_MOUSEBUTTONDOWN;
+            click.button.button = SDL_BUTTON_LEFT; click.button.x = 100 * GW / 640; click.button.y = 398 * GH / 480;
+            challenge.event(app, click);
+            check(challenge.back && !challenge.nextStageRequested &&
+                  std::string(challenge.next()) == "CHALLENGE_SELECT",
+                  "final Challenge mouse Next returns to select when completion is not queued");
+            challenge.begin(24); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.finalChallengeComplete = true; challenge.chaoRollQueued = true;
+            challenge.event(app, click);
+            check(std::string(challenge.next()) == "DC_STAFFROLL_CHAO",
+                  "final Challenge mouse Next enters the queued Chao staff roll");
+            for (uint32_t mask : {0x007fffffu, 0x00ffffffu}) {
+                app.challengeMask = mask; app.challengeMaskLoaded = true;
+                challenge.begin(23); challenge.bgame.phase = ChallengeGame::Result;
+                confirmA.cbutton.button = SDL_CONTROLLER_BUTTON_A;
+                challenge.event(app, confirmA); challenge.tick(app);
+                check(challenge.cur == (mask == 0x00ffffff ? 24 : 0),
+                      "Dreamcast Next gates stage 25 on all first 24 clears");
+            }
+            app.dcLook = false; app.challengeMask = 0;
+            challenge.begin(23); challenge.bgame.phase = ChallengeGame::Result;
+            challenge.nextStageRequested = true; challenge.tick(app);
+            check(challenge.cur == 24, "mobile Challenge Next retains its progression");
+            SDL_RenderSetLogicalSize(app.ren, oldLogicalWidth, oldLogicalHeight);
             app.dcLook = oldDcLook; app.testRun = oldTestRun; app.saveDir = oldSaveDir;
             app.challengeMask = oldChallengeMask; app.challengeMaskLoaded = oldChallengeLoaded;
             app.dcStaffRoll.tex = oldStaffRoll; app.dcChallengeResult.tex = oldChallengeResult;

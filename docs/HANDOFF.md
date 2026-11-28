@@ -2,23 +2,27 @@
 
 ## Current state
 
-- `main` at `8e78e61` (`Enable PuzzleP DLC stage set`), pushed to `origin/main`.
+- Branch `main`; latest change: source-backed Challenge result progression gate and consistent mouse confirmation (partial; follows `f801647`).
 - Keep user-owned untracked `.vscode/` untouched. Do not stage caches, disc data, captures, or generated files.
 - Goal and working rules: `docs/goal.md`. Audit owns coverage (`docs/audit.md`); evidence/log in `docs/roadmap.md`; setup results in `docs/verification.md`.
-- Clean image-only setup rechecked 2026-11-27 from a new folder containing only the selected USA Dreamcast ZIP (no BIOS, mobile, DLC, or GBA files). `tools/setup-wizard.ps1` completed extraction and pinned Zig build. Manifest: one error-free ZIP/CUE input, Dreamcast graphics, Puzzle/Battle/Stage Challenge, no DLC stage pack. Direct headless captures for DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, PUZZLE, CHALLENGE, BATTLE, TEAM_BATTLE, DC_DEMO were all nonblack (90 ticks; smoke/reachability only). Scratch: `local/fresh-dc-only-20261127/`. Current tests: 30/30 game tests, 14 extractor tests, VMS retail pack check passed. No parity claim.
+- Clean image-only setup rechecked 2026-11-27 from a new folder containing only the selected USA Dreamcast ZIP (no BIOS, mobile, DLC, or GBA files). `tools/setup-wizard.ps1` completed extraction and pinned Zig build. Manifest: one error-free ZIP/CUE input, Dreamcast graphics, Puzzle/Battle/Stage Challenge, no DLC stage pack. Direct headless captures for DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, PUZZLE, CHALLENGE, BATTLE, TEAM_BATTLE, DC_DEMO were all nonblack (90 ticks; smoke/reachability only). Scratch: `local/fresh-dc-only-20261127/`. Final-code game suite: 30/30 on the fresh Dreamcast-only assets; `git diff --check` clean. No parity claim.
 
 ## Recent code
 
+- Challenge result progression (partial): stage 25 now requires first-24 clear mask 0x00ffffff when advancing from stage 24 (`0x8c02ace0..acf2`, predicate `0x8c02b508`); incomplete masks wrap to stage 1. Mouse Next shares final-stage A/Start routing. Source/harness evidence; original-loop inputs and pending-value lifecycle remain open. Built ccr/input regression with pinned Zig; all 30 game tests pass on fresh Dreamcast-only assets (29 in the full run, input suite rerun after isolating renderer state).
+
+- Dreamcast Puzzle Edit (commit `f801647`): Set on an existing rocket toggles it to floor; a new rocket is rejected at 30 with cue 4; Set on a hole toggles it to floor. Source addresses `0x8c032412` / `0x8c032708`, with focused cap/toggle regressions. This is source/harness evidence, not a Flycast parity claim.
 - PuzzleP DLC (commit `8e78e61`): exports 25 boards using first n directions as stock, with zero placeholder cells and `PuzzleP NN` titles. Separate stage set from DEPuzzle and imported packs. Regressions compare each source slot's count and direction bits. Evidence is slot-format-derived; original live stock/gameplay behavior remains open.
 - Puzzle Edit Load includes imported `<data>/imports/*.VMS`; Delete stays local-only. Solution editing, capacity feedback, VMS round-trip and mono SFX mixing have regressions. See `docs/audit.md` / `docs/dlc.md`.
-- Build command: `ninja -C build/game-zig ccr input_regression_test vms_test`; full suite: `C:/Windows/py.exe -3 tools/run_tests.py`.
+- Build command: `ninja -C build/game-zig ccr input_regression_test vms_test`; full suite: `C:/Users/Tideg/AppData/Local/Programs/Python/Python312/python.exe tools/run_tests.py`.
 
 ## Next code priorities
 
-1. Continue Puzzle/Challenge/Battle functional gaps from `docs/audit.md`; prefer a small source-backed gameplay fix with a regression over another documentation-only pass.
-2. The Basics intro skip: iOS/HD decompile `PuzzleStageControll @ 0x3c108` ends after 120 ticks or `Input::getFlag(4)` once age >4; it consumes flag 4 and sets tutorial tap flag 0x20. HD Puzzle touch handler `0x13050` creates flags from hit rectangles. This is not Dreamcast controller evidence; do not map it to a pad button without original Dreamcast input trace.
-3. For PuzzleP, seek original Dreamcast runtime evidence for stock before claiming parity; current regression proves only retail VMS fields map through our format decoder.
-4. Battle phrase graphics/selection and Team Battle result scene remain open; use source/runtime evidence before changing behavior. Do not attribute callbacks or texture matches to draw tasks without proof.
+1. Continue source-backed Puzzle/Challenge/Battle functional gaps from `docs/audit.md`; prefer a gameplay fix with a regression over documentation-only work. Dreamcast Puzzle Edit tile toggles and the 30-rocket rejection are now covered.
+2. Pursue a measured Dreamcast Puzzle/Challenge gap next (the known Puzzle hole-fall crop and mode-specific Challenge result routes remain incomplete); read the relevant decompile and capture route before editing.
+3. The Basics intro skip: iOS/HD decompile `PuzzleStageControll @ 0x3c108` ends after 120 ticks or `Input::getFlag(4)` once age >4; it consumes flag 4 and sets tutorial tap flag 0x20. HD Puzzle touch handler `0x13050` creates flags from hit rectangles. This is not Dreamcast controller evidence; do not map it to a pad button without original Dreamcast input trace.
+4. For PuzzleP, seek original Dreamcast runtime evidence for stock before claiming parity; current regression proves only retail VMS fields map through our format decoder.
+5. Battle phrase graphics/selection and Team Battle result scene remain open; use source/runtime evidence before changing behavior. Do not attribute callbacks or texture matches to draw tasks without proof.
 
 ## Open evidence / cautions
 
@@ -36,4 +40,4 @@
 - Clean setup: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/setup-wizard.ps1 -GameFiles <owned image or folder> -Cache <fresh cache>`; this runs the same wizard and build as `setup.cmd` without interactive pause.
 - Headless route: `CCR_HEADLESS=1 CCR_TICKS=90 CCR_SHOT=local/<route>.bmp build/game/ccr.exe <cache>/assets <MODE> 0`.
 - SH-4 disassembly helper: `C:/Windows/py.exe -3 tools/shdis.py <start> <end>` (Capstone required). Flycast reference: use `local/dc_ref/disc/Chu Chu Rocket! (USA) (En,Ja,Fr,De,Es).cue`, not its ZIP.
-- Use `C:/Windows/py.exe -3 tools/run_tests.py`; test executables have cwd/argument requirements handled there. MSVC build tree lacks `stddef.h`; use `build/game-zig`.
+- Use `C:/Users/Tideg/AppData/Local/Programs/Python/Python312/python.exe tools/run_tests.py`; test executables have cwd/argument requirements handled there. MSVC build tree lacks `stddef.h`; use `build/game-zig`.
