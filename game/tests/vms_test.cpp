@@ -52,6 +52,10 @@ int main(int argc, char** argv) {
     auto malformed = v;
     malformed[640 + 476] = 0xc0; // x=12 is outside the 12-column board
     CHECK(vms::readPack(malformed, out) == -1 && out.empty());
+    malformed = v; malformed[640 + 491] ^= 1; // populated title changed without updating the VMS CRC
+    CHECK(vms::readPack(malformed, out) == -1 && out.empty());
+    malformed = v; malformed[0x48] = 0xff; malformed[0x49] = 0xff; malformed[0x4a] = 0xff; malformed[0x4b] = 0x7f;
+    CHECK(vms::readPack(malformed, out) == -1 && out.empty());
     std::vector<VmsPuzzle> fullPack(25, p); fullPack.back().title = "Puzzle 25";
     const auto retailSizePack = vms::writePack(fullPack); std::vector<VmsPuzzle> fullOut;
     CHECK(retailSizePack.size() == 38400 && vms::readPack(retailSizePack, fullOut) == 25 && fullOut.back().title == "Puzzle 25");

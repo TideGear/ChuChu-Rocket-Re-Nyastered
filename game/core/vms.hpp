@@ -68,6 +68,8 @@ inline bool encodeSlot(const VmsPuzzle& p, uint8_t* s /* kSlot bytes */) {
 inline int readPack(const std::vector<uint8_t>& data, std::vector<VmsPuzzle>& out) {
     out.clear();
     if (data.size() < kHeader + 512 || std::memcmp(data.data(), "CHU_CHU__D", 10) != 0) return -1;   // puzzle packs are 'CHU_CHU__D01'; character packs are 'CHU_CHU__C00'
+    const size_t payloadSize = (size_t)data[0x48] | (size_t)data[0x49] << 8 | (size_t)data[0x4a] << 16 | (size_t)data[0x4b] << 24;
+    if (payloadSize < 512 || payloadSize > data.size() - kHeader || (data[0x46] | (uint16_t)data[0x47] << 8) != fileCrc(data)) return -1;
     for (size_t k = 0; kHeader + k * kSlot + 512 <= data.size() && k < 25; k++) {
         const size_t offset = kHeader + k * kSlot;
         VmsPuzzle p;
