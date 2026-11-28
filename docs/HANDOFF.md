@@ -5,7 +5,7 @@
 - Branch `main`; latest change: Puzzle preview dome orientation plus complete TA capture tooling (follows pushed `ec40139` projection-centre fix).
 - Follow `docs/goal.md`; `docs/audit.md` owns coverage, `docs/roadmap.md` owns detailed evidence/recipes, `docs/verification.md` owns setup/test results. Preserve untracked `.vscode/` and `local-empty-structure-before-junction/`. Do not stage generated assets, images, states, binaries or caches.
 - Clean image-only setup last checked 2026-11-27 under `local/fresh-dc-only-20261127/`: one USA Dreamcast ZIP, no BIOS/mobile/DLC/GBA; extraction and pinned Zig build completed without input errors. Eleven direct modes were nonblack (90-tick reachability only). Current ccr/input regression build and all 30 game tests pass on these assets. No full-game parity claim.
-- Current Puzzle comparison: all 18 full frames <=3 RGB mean (0.9530..1.9630). This does not imply element completeness. No-BIOS hint/label fallback, some label/model/edge sampling, natural final-stage clears and save failures remain open.
+- Current Puzzle comparison: all 18 full frames <=3 RGB mean (0.9530..1.9630). This does not imply element completeness. ASCII hints use the generated no-BIOS Roboto Mono atlas; the Puzzle selector now falls back to its ASCII stage title when localized Shift-JIS glyphs are unavailable. BIOS-exact text parity, label/model/edge sampling and natural final-stage clears remain open.
 
 ## Renderer evidence and next work
 

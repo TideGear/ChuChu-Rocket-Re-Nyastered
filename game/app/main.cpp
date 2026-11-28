@@ -457,6 +457,21 @@ struct App {
         for (const char* code : {langDir(lang), "en"}) if (FILE* f = fopen((root + "/dreamcast_titles_" + code + ".bin").c_str(), "rb")) {
             char rec[32]; while (fread(rec, 1, 32, f) == 32) dcTitles.emplace_back(rec, strnlen(rec, 32)); fclose(f); if (dcTitles.size() != 100) dcTitles.clear(); else break; }
     }
+    bool dcTitleGlyphsAvailable(const std::string& text) const {
+        for (size_t i = 0; i < text.size(); ++i) {
+            const unsigned char c = text[i];
+            if ((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xef)) {
+                if (i + 1 >= text.size() || !dcBiosSjis.tex || dcSjisCodes.empty()) return false;
+                const uint16_t code = (uint16_t)(c << 8 | (unsigned char)text[++i]);
+                const auto it = std::lower_bound(dcSjisCodes.begin(), dcSjisCodes.end(), code);
+                if (it == dcSjisCodes.end() || *it != code || (size_t)(it - dcSjisCodes.begin()) >= dcBiosSjis.fr.size()) return false;
+            } else if (c >= 0x80) return false;
+        }
+        return true;
+    }
+    std::string dcTitleForUi(const std::string& localized, const std::string& asciiFallback) const {
+        return dcTitleGlyphsAvailable(localized) ? localized : asciiFallback;
+    }
     void loadDcSheets(const std::string& dir) {
         if (dcRoot.empty()) dcRoot = dir;
         loadDcTitles();
@@ -4235,7 +4250,7 @@ struct PuzzleMode : Screen {
         else a.drawFrame5(720, 650, 440);   // name frames (renderPuzzleHudiPad: drawFrame(5, 90, 410, 180) for the level name, drawFrame(5, 720, 650, 440) for the stage name); the text itself (printString, original font) is not drawn yet
         if (!(gApp && gApp->stageSet != 0) && cur < 100) {   // printString(level name, 90, 410, black, scale 0.8, centred, v-centred) and printString(stage comment, 720, 650, scale 1.0); the y offset +10 applies only when AppData+0x664 == 5 (UTF-16 language branch). Texts T[0x1ab + (stage/25 <= 3 ? stage/25 : 0)] (getPuzzleType) and T[0x1e8 + stage] (FI_GetCommentStrP)
             const std::string* lv = a.hdString(0x1ab + (cur / 25 <= 3 ? cur / 25 : 0)); if (lv && labelRow < 0) a.printString(*lv, 90.0f, 410.0f, 0, 0, 0, 255, 0.8f, 0, true);
-            std::string hint; if (discNames) { hint = a.dcTitles.size() == 100 && dcBubble ? a.dcTitles[cur] : stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == '\0')) hint.pop_back(); } else if (const std::string* hs = a.hdString(0x1e8 + cur)) hint = *hs;
+            std::string hint; if (discNames) { hint = a.dcTitles.size() == 100 && dcBubble ? a.dcTitles[cur] : stages.list[cur].title; while (!hint.empty() && (hint.back() == ' ' || hint.back() == '\0')) hint.pop_back(); if (dcBubble) { std::string ascii = stages.list[cur].title; while (!ascii.empty() && (ascii.back() == ' ' || ascii.back() == '\0')) ascii.pop_back(); hint = a.dcTitleForUi(hint, ascii); } } else if (const std::string* hs = a.hdString(0x1e8 + cur)) hint = *hs;
             const bool biosHint = dcBubble && a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95 && !hint.empty();
             if (biosHint) {   // the game draws the hint with the BIOS ANSI font, left-aligned in a 1:1 texture glyphs at (336, 370) of 640 x 480 (texture at y 368, text row 2), 12 px per character, colour (32, 32, 64); the port's layout is 1.6 times that
                 SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 32, 32, 64);

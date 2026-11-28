@@ -45,6 +45,11 @@ int main(int argc, char** argv) {
     app.win = SDL_CreateWindow("test", 0, 0, GW, GH, SDL_WINDOW_HIDDEN);
     app.ren = SDL_CreateRenderer(app.win, -1, SDL_RENDERER_SOFTWARE);
     check(app.ren != nullptr, "software renderer creation");
+    check(app.dcTitleForUi("Normal 01", "NORMAL 01") == "Normal 01",
+          "Dreamcast hint keeps ASCII text with the generated no-BIOS font");
+    if (!app.dcBiosSjis.tex)
+        check(app.dcTitleForUi(std::string("Puzzle \x82\xa0", 9), "English stage") == "English stage",
+              "Dreamcast hint falls back when the selected language has unavailable Shift-JIS glyphs");
     if (std::filesystem::exists(app.root + "/ret_all/dc_editor.tex.bin")) {
         Sheet oldEditor = std::move(app.dcEditor), oldBios = std::move(app.dcBiosAnsi);
         app.dcEditor = Sheet{}; app.dcBiosAnsi = Sheet{};
