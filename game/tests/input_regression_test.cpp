@@ -146,6 +146,19 @@ int main(int argc, char** argv) {
         editor.startPlay();
         check(editor.playing, "Dreamcast Puzzle Edit starts Play when a mouse exists");
         check(editor.music() == 11, "Puzzle Edit Play retains the editor's original CD track");
+        DcEditMode failedPlay; failedPlay.tool = 1; failedPlay.st.tiles[0] = T_MouseS + 3; failedPlay.st.tiles[1] = T_Hole;
+        failedPlay.startPlay();
+        for (int i = 0; i < 20 && failedPlay.failureAge < 0; ++i) failedPlay.tickPass(app);
+        check(failedPlay.playing && failedPlay.failureAge == 0 && failedPlay.sim.killed == 1,
+              "Puzzle Edit hole failure enters its result phase on the killing simulation pass");
+        const int failureTick = failedPlay.sim.now;
+        for (int i = 0; i < 119; ++i) failedPlay.tickPass(app);
+        check(failedPlay.playing && failedPlay.failureAge == 119 && failedPlay.sim.now == failureTick,
+              "Puzzle Edit failure result holds for 120 frames without advancing the simulation");
+        failedPlay.tickPass(app);
+        check(!failedPlay.playing && failedPlay.failureAge == -1 && failedPlay.sim.killed == 0 &&
+              failedPlay.st.tiles[0] == T_MouseS + 3 && failedPlay.st.tiles[1] == T_Hole,
+              "Puzzle Edit failure returns to the edited board after the original 120-frame phase");
     }
     {
         check(DcEditMode::editCue(5, false) == 1 && DcEditMode::editCue(5, true) == 4 &&

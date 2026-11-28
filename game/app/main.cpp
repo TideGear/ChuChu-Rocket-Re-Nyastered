@@ -1838,7 +1838,7 @@ struct TitleMode : Screen {
 // (EDITOR1_pzedit02, windows u 0.0664..0.4414 above y 247.2 and 0.5664..0.9414 below, v 0..1 over 226 px); bottom strips (EDITOR1_pzedit01a) x 113.2..372.5 and
 // 372.5..631.9, y 401.5..466.5. Cursor, tools, Play and local file dialogs are implemented; VMU/title parity remains partial. Wall plane scale: 218/215.
 struct DcEditMode : Screen {
-    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, fileScreen = 0, fileIndex = 0, emptyFileAction = 1; std::array<DcRocketLid, kCols * kRows> lids{};
+    Stage st{}; Sim sim; std::vector<std::array<int, 3>> arrows; std::vector<VmsPuzzle> savedPuzzles; std::vector<std::string> puzzlePaths; std::vector<int> puzzleSlots; std::vector<std::pair<float, float>> prev; bool leave = false, scripted = false, scripting = false, playing = false, dialog = false, saved = false, ff = false, paused = false, pauseQuit = false, fileConfirm = false; int ticks = 0, playTicks = 0, endAge = -1, failureAge = -1, fileScreen = 0, fileIndex = 0, emptyFileAction = 1; std::array<DcRocketLid, kCols * kRows> lids{};
     int cx = 0, cy = 0, titleKey = 0; std::string titleInput; bool titleEntry = false, titleConfirmed = false;   // ASCII controller grid follows the original 16 x 6 key bed; VMS titles are capped at 20 bytes
     int tool = getenv("CCR_EDIT_TOOL") ? atoi(getenv("CCR_EDIT_TOOL")) & 7 : 0;   // 0 File, 1 Play, 2 Walls, 3 Mice, 4 Cats, 5 Solution, 6 Rockets, 7 Holes (the order of the list; R steps it, Flycast local/modecap/pr)
     static constexpr FieldLayout field{120.5f * 1.6f, 25.2f * 1.6f, (498.8f / 12) * 1.6f, 218.0f / 215.0f};
@@ -1917,17 +1917,20 @@ struct DcEditMode : Screen {
         else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) tool = (tool + 7) & 7, stepCue(); }
     void tick(App& a) override { runScript(); ++ticks; if (getenv("CCR_EDIT_PAUSE")) { paused = true; pauseQuit = atoi(getenv("CCR_EDIT_PAUSE")) == 2; } if (paused) return; if (const char* f = getenv("CCR_EDIT_FF")) ff = ticks >= atoi(f);   // headless: F.F. held from this tick
         for (int pass = 0; pass < (ff && playing ? 2 : 1); ++pass) tickPass(a); }
-    void tickPass(App& a) { if (playing && endAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
+    void tickPass(App& a) { if (playing && endAge < 0 && failureAge < 0) { ++playTicks; sim.events.clear(); sim.tick(); a.stepAngles(sim);
             int alive = 0, mice = 0; for (auto& e : sim.ents) if (e.mouse) { ++mice; if (e.alive && !e.done) ++alive; }
             if (mice && alive == 0 && sim.saved == mice && sim.killed == 0) { endAge = 0; saved = true; a.playSfx(21); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit clear at play tick %d\n", playTicks); }   // all mice home: the Puzzle launch runs (0x8c01b8a0 / 0x8c01b9a0), then the editor restarts
-        } else if (endAge >= 0) { ++endAge; a.stepAngles(sim, true); for (int c = 0; c < kCols * kRows; ++c) if (st.tiles[c] == T_Rocket) lids[c].tick(a.globalTime, c); if (endAge >= kEndAge()) stopPlay(); } }
+            else if (sim.killed > 0 || sim.catsInRocket > 0) { failureAge = 0; a.playSfx(27); if (a.headless && getenv("CCR_EDIT_TRACE")) printf("edit failure at play tick %d\n", playTicks); }   // mode-8 failure branch 0x8c02de98: mouse/cat failure creates focus ring (0x8c02c600), cue 27
+        } else if (failureAge >= 0) { if (++failureAge >= kFailureEndAge()) stopPlay(); }
+        else if (endAge >= 0) { ++endAge; a.stepAngles(sim, true); for (int c = 0; c < kCols * kRows; ++c) if (st.tiles[c] == T_Rocket) lids[c].tick(a.globalTime, c); if (endAge >= kEndAge()) stopPlay(); } }
+    static int kFailureEndAge() { static const int v = getenv("CCR_EDIT_FAILURE_END") ? atoi(getenv("CCR_EDIT_FAILURE_END")) : 120; return v; }
     // restart age after the clear: between Flycast frames 3203 and 3207 (local/modecap/play2), i.e. 123-126; the code that ends it is unread
     static int kEndAge() { static const int v = getenv("CCR_EDIT_END") ? atoi(getenv("CCR_EDIT_END")) : 125; return v; }
     // Buttons 0..3 = Dreamcast A, B, X, Y. Rockets (tool 6) and Holes (7): A sets the tile on the cursor cell, B deletes it (Flycast local/modecap/ed3). Walls (2): the four
     // Facing buttons toggle the south, east, west and north wall edge of the cursor cell (local/modecap/wl: RAM lattice words flip 0 <-> 1, a repeat A clears the south wall).
     // Mice (3) and Cats (4): Facing places a start tile in that direction; Solution (5) places an arrow. Repeating the same facing removes it. Original object caps are enforced (FUN_8c031f0a; error strings 0x8c0bff52..ffc9).
     void startPlay() { if (!editorHasMouse(st.tiles)) { fileScreen = 6; if (gApp) gApp->playSfx(4); if (gApp && gApp->headless && getenv("CCR_EDIT_TRACE")) puts("edit play rejected: no mouse"); return; } sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); playing = true; playTicks = 0; }   // tool 1, Dreamcast A: original Puzzle Edit rejects Play with no mouse (text 0x8c0bff0c; edit handler FUN_8c031f0a)
-    void stopPlay() { playing = false; endAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B
+    void stopPlay() { playing = false; endAge = failureAge = -1; lids = {}; sim.load(st); for (auto& ar : arrows) sim.placeArrow(ar[0], ar[1], ar[2]); prev.clear(); }   // Dreamcast B; clear and failure phases also restore the editor
     void refreshPuzzleFiles(bool includeImports = false) {
         savedPuzzles.clear(); puzzlePaths.clear(); puzzleSlots.clear(); if (!gApp) return;
         const std::string dir = gApp->saveDir + "/puzzle_edit"; std::error_code ec; if (!gApp->testRun) std::filesystem::create_directories(dir, ec);
@@ -2181,6 +2184,17 @@ struct DcEditMode : Screen {
         { static const float cp = getenv("CCR_EDIT_CATPHASE") ? (float)atof(getenv("CCR_EDIT_CATPHASE")) : -1.0f; if (cp >= 0.0f) { a.cphase.assign(sim.ents.size(), cp); } else if (!playing && endAge < 0) { a.cphase.assign(sim.ents.size(), 0.0f); } }   // the editor's cats stand still
         for (auto& ar : sim.arrows) if (ar.live) a.arrow(ar.x, ar.y, ar.dir, 0, ar.hits, -1, field);   // solution arrows (Puzzle draws them before the objects)
         a.drawFieldObjects(sim, prev, 1.0f, nullptr, field, true, 0, endAge >= 0 ? &lids : nullptr, endAge >= 0 ? endAge : -1, nullptr, 1.0f);   // rocket domes from the edited stage; the launch after a clear
+        if (failureAge >= 0 && failureAge < kFailureEndAge()) {
+            const int target = sim.lastKilledMouse >= 0 ? sim.lastKilledMouse : sim.lastCatInRocket;
+            if (target >= 0 && target < (int)sim.ents.size()) {
+                const Entity& entity = sim.ents[target];
+                if (a.dcLook && a.useModels3d()) if (const Model3D* ring = a.models3d.find("focus_ring")) {
+                    const float scale = failureAge < 30 ? 16.0f - 0.5f * (float)failureAge : 1.0f;
+                    static const float colour[3] = {0.8f, 0.24f, 0.24f}, noLight[3] = {0.0f, 0.0f, 0.0f};
+                    a.models3d.drawDcCharacter(a.ren, *ring, {field.x(entity.x / kCell), field.y(entity.z / kCell)}, {GW / 2.0f, GH / 2.0f}, field.cell / 15.0f, 0.0f, 0.0f, noLight, -1, 0.0f, 0, 0u, nullptr, 1.0f, 8.0f, scale, colour, 0.0f);
+                }
+            }
+        }
         if (!playing && !dialog && a.dcCursorBracket.tex) a.dcCursorAt(a.dcCursorBracket, (137.3f + cx * 42.4f) * 1.6f, (42.0f + cy * 42.4f) * 1.6f, 0, 42.4f * 1.6f);   // pitch 42.4 px per step, measured (the floor cells are 41.57 px)   // grid cursor over the frame: centre (137.3, 42.0) and size 42.4 measured from the white pixels of Flycast frame 2290 (best of a scale scan, bbox exact; its cursor task is unread, the pulse phase is open)
         SDL_RenderSetLogicalSize(a.ren, 640, 480);
         const Sheet& sh = a.dcEditor; if (!sh.tex || sh.fr.size() < 5) { if (fileScreen) drawFileOverlay(a); drawTitleEntry(a); return; }
