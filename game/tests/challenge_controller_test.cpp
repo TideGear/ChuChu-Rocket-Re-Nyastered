@@ -101,6 +101,22 @@ int main(int argc, char** argv) {
         added.cdevice.which = device;
         challenge.event(app, added);
         check(challenge.controller != nullptr, "reconnect opens controller");
+
+        cues.clear();
+        challenge.begin(24);
+        check(challenge.battle && challenge.bgame.type == 5, "final Challenge loads its Dreamcast Battle engine");
+        challenge.bgame.phase = ChallengeGame::Play;
+        for (int seconds = 5; seconds >= 0; --seconds) {
+            challenge.bgame.game.clock = challenge.bgame.game.roundFrames - seconds * 60 - 1;
+            challenge.tick(app);
+        }
+        check(cues == (std::vector<int>{14, 15, 16, 17, 18, 19}) &&
+              challenge.phase() == ChallengeGame::Play,
+              "final Challenge routes Battle's 5-to-0-second countdown cues through its sound hook");
+        challenge.tick(app);
+        check(cues == (std::vector<int>{14, 15, 16, 17, 18, 19, 27}) &&
+              challenge.phase() == ChallengeGame::Failure,
+              "final Challenge dispatches its failure cue after the timed-out battle");
     }
     SDL_JoystickDetachVirtual(device);
     SDL_Quit();

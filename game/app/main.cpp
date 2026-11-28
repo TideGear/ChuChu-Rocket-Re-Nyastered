@@ -4588,10 +4588,10 @@ struct ChallengeMode : Screen {
         if (before == ChallengeGame::Intro && phase() == ChallengeGame::Countdown) playCue(a, 16);
         if (phase() == ChallengeGame::Result && !saved_) { saved_ = true; saveResult(a); }
         if (phase() != before) {
-            if (phase() == ChallengeGame::Success) { a.playSfx(21); a.playSfx(28); }
-            else if (phase() == ChallengeGame::Result) { a.playSfx(27); a.playSfx(28); }
+            if (phase() == ChallengeGame::Success) { playCue(a, 21); playCue(a, 28); }
+            else if (phase() == ChallengeGame::Result) { playCue(a, 27); playCue(a, 28); }
             else if (phase() == ChallengeGame::Failure) {
-                a.playSfx(27);
+                playCue(a, 27);
                 char lb[200]; snprintf(lb, sizeof lb, "challenge stage %d: failed (%s)", cur + 1, (battle ? bgame.failReason : game.failReason) ? (battle ? bgame.failReason : game.failReason) : ""); a.log.write(1, lb);
             }
         }
