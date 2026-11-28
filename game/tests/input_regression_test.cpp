@@ -50,6 +50,15 @@ int main(int argc, char** argv) {
     if (!app.dcBiosSjis.tex)
         check(app.dcTitleForUi(std::string("Puzzle \x82\xa0", 9), "English stage") == "English stage",
               "Dreamcast hint falls back when the selected language has unavailable Shift-JIS glyphs");
+    {
+        app.dcBiosSjis.tex = reinterpret_cast<SDL_Texture*>(uintptr_t{1});
+        app.dcSjisCodes = {0x82a0}; app.dcBiosSjis.fr = {{0, 0, 24, 24}};
+        check(app.dcTitleGlyphsAvailable(std::string("PUZZLE \x82\xa0", 9)) &&
+              !app.dcTitleGlyphsAvailable(std::string("PUZZLE \x82\xa2", 9)) &&
+              !app.dcTitleGlyphsAvailable(std::string("BAD\x01TITLE", 9)),
+              "Dreamcast BIOS title rendering accepts mapped Shift-JIS and rejects missing glyphs or control bytes");
+        app.dcBiosSjis.tex = nullptr; app.dcBiosSjis.fr.clear(); app.dcSjisCodes.clear();
+    }
     if (std::filesystem::exists(app.root + "/ret_all/dc_editor.tex.bin")) {
         Sheet oldEditor = std::move(app.dcEditor), oldBios = std::move(app.dcBiosAnsi);
         app.dcEditor = Sheet{}; app.dcBiosAnsi = Sheet{};

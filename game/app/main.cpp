@@ -465,7 +465,7 @@ struct App {
                 const uint16_t code = (uint16_t)(c << 8 | (unsigned char)text[++i]);
                 const auto it = std::lower_bound(dcSjisCodes.begin(), dcSjisCodes.end(), code);
                 if (it == dcSjisCodes.end() || *it != code || (size_t)(it - dcSjisCodes.begin()) >= dcBiosSjis.fr.size()) return false;
-            } else if (c >= 0x80) return false;
+            } else if (c < 0x20 || c >= 0x80) return false;
         }
         return true;
     }
@@ -1932,6 +1932,41 @@ struct DcEditMode : Screen {
         else { const std::vector<uint8_t> replacement = vms::writePack(pack, bytes.data()); if (!writeFileAtomic(path, replacement)) { fileScreen = 5; return; } }
         fileScreen = 0; fileConfirm = false; refreshPuzzleFiles(); if (gApp) gApp->playSfx(3);
     }
+    void drawPuzzleTitle(App& a, const std::string& source, int index, int y, int shade) const {
+        const bool hasAnsi = a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95;
+        const std::string title = hasAnsi && !source.empty() && a.dcTitleGlyphsAvailable(source)
+            ? source : puzzleTitleForAsciiUi(source, index);
+        const std::string label = std::to_string(index + 1) + ".  " + title;
+        if (!hasAnsi) {
+            a.text(label, (640 - a.textWidth(label, 20)) / 2, y, 20, shade);
+            return;
+        }
+        int width = 0;
+        for (size_t i = 0; i < label.size(); ++i) {
+            const unsigned char c = (unsigned char)label[i];
+            if (((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xef)) && i + 1 < label.size()) { ++i; width += 24; }
+            else width += 12;
+        }
+        int x = (640 - width) / 2;
+        SDL_SetTextureColorMod(a.dcBiosAnsi.tex, (Uint8)shade, (Uint8)shade, (Uint8)shade);
+        if (a.dcBiosSjis.tex) SDL_SetTextureColorMod(a.dcBiosSjis.tex, (Uint8)shade, (Uint8)shade, (Uint8)shade);
+        for (size_t i = 0; i < label.size(); ++i) {
+            const unsigned char c = (unsigned char)label[i];
+            if (((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xef)) && i + 1 < label.size()) {
+                const uint16_t code = (uint16_t)(c << 8 | (unsigned char)label[++i]);
+                const auto it = std::lower_bound(a.dcSjisCodes.begin(), a.dcSjisCodes.end(), code);
+                if (a.dcBiosSjis.tex && it != a.dcSjisCodes.end() && *it == code && (size_t)(it - a.dcSjisCodes.begin()) < a.dcBiosSjis.fr.size()) {
+                    const SDL_Rect dst{x, y, 24, 24}; SDL_RenderCopy(a.ren, a.dcBiosSjis.tex, &a.dcBiosSjis.fr[it - a.dcSjisCodes.begin()], &dst);
+                }
+                x += 24;
+            } else {
+                if (c > 0x20 && c <= 0x7e) { const SDL_Rect dst{x, y, 12, 24}; SDL_RenderCopy(a.ren, a.dcBiosAnsi.tex, &a.dcBiosAnsi.fr[c - 0x20], &dst); }
+                x += 12;
+            }
+        }
+        SDL_SetTextureColorMod(a.dcBiosAnsi.tex, 255, 255, 255);
+        if (a.dcBiosSjis.tex) SDL_SetTextureColorMod(a.dcBiosSjis.tex, 255, 255, 255);
+    }
     bool puzzleCanSave() const {
         int mice = 0; for (int t : st.tiles) if (t >= T_MouseS && t < T_MouseS + 4) ++mice;
         Sim check; check.load(st); for (const auto& ar : arrows) check.placeArrow(ar[0], ar[1], ar[2]);
@@ -2068,7 +2103,7 @@ struct DcEditMode : Screen {
         if (fileScreen == 1 || fileScreen == 2) {
             centered(fileScreen == 1 ? "LOAD PUZZLE - PORT STORAGE" : "DELETE PUZZLE - PORT STORAGE", 76, 24, 255);
             const int first = std::max(0, std::min(fileIndex - 7, (int)savedPuzzles.size() - 8));
-            for (int rowIndex = 0; rowIndex < 8 && first + rowIndex < (int)savedPuzzles.size(); ++rowIndex) { const int i = first + rowIndex, y = 130 + rowIndex * 30; if (i == fileIndex) { SDL_SetRenderDrawColor(a.ren, 70, 86, 120, 255); SDL_Rect row{124, y - 3, 392, 27}; SDL_RenderFillRect(a.ren, &row); } centered(std::to_string(i + 1) + ".  " + puzzleTitleForAsciiUi(savedPuzzles[i].title, i), y, 20, i == fileIndex ? 255 : 205); }
+            for (int rowIndex = 0; rowIndex < 8 && first + rowIndex < (int)savedPuzzles.size(); ++rowIndex) { const int i = first + rowIndex, y = 130 + rowIndex * 30; if (i == fileIndex) { SDL_SetRenderDrawColor(a.ren, 70, 86, 120, 255); SDL_Rect row{124, y - 3, 392, 27}; SDL_RenderFillRect(a.ren, &row); } drawPuzzleTitle(a, savedPuzzles[i].title, i, y, i == fileIndex ? 255 : 205); }
             if (fileConfirm) { SDL_SetRenderDrawColor(a.ren, 18, 20, 29, 245); SDL_Rect confirm{150, 190, 340, 92}; SDL_RenderFillRect(a.ren, &confirm); centered("DELETE THIS PUZZLE?", 204, 22, 255); centered("A / ENTER YES     B / ESC NO", 242, 16, 210); }
             else centered("UP/DOWN SELECT     ENTER CONFIRM", 370, 16, 190);
         } else if (fileScreen == 3) {
