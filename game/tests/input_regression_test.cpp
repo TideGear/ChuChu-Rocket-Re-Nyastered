@@ -276,8 +276,10 @@ int main(int argc, char** argv) {
         std::vector<VmsPuzzle> userPuzzles;
         check(vms::readPack(userBytes, userPuzzles) == 3 && userPuzzles[0].title == "FIRST" &&
               userPuzzles[1].title == "Puzzle 02" && userPuzzles[2].title == "Puzzle 03" &&
-              !memcmp(userBytes.data(), existingHeader.data(), existingHeader.size()),
-              "Dreamcast Puzzle Edit appends slots and preserves an existing VMS header");
+              !memcmp(userBytes.data(), existingHeader.data(), 0x46) &&
+              !memcmp(userBytes.data() + 0x4c, existingHeader.data() + 0x4c, vms::kHeader - 0x4c) &&
+              (uint16_t)(userBytes[0x46] | (uint16_t)userBytes[0x47] << 8) == vms::fileCrc(userBytes),
+              "Dreamcast Puzzle Edit appends slots, preserves VMS metadata, and refreshes its CRC");
         fs::remove(dir / "puzzle_edit" / "user-puzzles.VMI", ec);
         fs::create_directory(dir / "puzzle_edit" / "user-puzzles.VMI", ec);
         saver.savePuzzle();

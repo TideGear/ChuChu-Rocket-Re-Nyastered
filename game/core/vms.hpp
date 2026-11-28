@@ -18,6 +18,18 @@ struct VmsPuzzle {
 };
 namespace vms {
 constexpr size_t kHeader = 640, kSlot = 1536, kVmiSize = 108, kFinalSlot = 896, kPackSize = kHeader + kSlot * 24 + kFinalSlot;
+// Dreamcast VMS CRC-16/CCITT over the header plus declared data (header offset 0x46).
+inline uint16_t fileCrc(const std::vector<uint8_t>& data) {
+    uint16_t crc = 0;
+    const size_t payloadSize = data.size() >= 0x4c ? (size_t)data[0x48] | (size_t)data[0x49] << 8 | (size_t)data[0x4a] << 16 | (size_t)data[0x4b] << 24 : 0;
+    const size_t crcSize = std::min(data.size(), kHeader + payloadSize);  // VMS may have trailing pad bytes outside its declared payload.
+    for (size_t i = 0; i < crcSize; ++i) {
+        const uint8_t byte = i == 0x46 || i == 0x47 ? 0 : data[i];
+        crc ^= (uint16_t)byte << 8;
+        for (int bit = 0; bit < 8; ++bit) crc = (uint16_t)((crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1);
+    }
+    return crc;
+}
 inline int latticeToTile(uint8_t v) { switch (v) { case 0x09: return 0; case 0x0a: return 1; case 0x07: return 0x11; case 0x3d: return 9; case 0x3e: return 10; case 0x3f: return 11; case 0x40: return 12; case 0x47: return 13; case 0x48: return 14; case 0x49: return 15; case 0x4a: return 16; default: return -1; } }
 inline int tileToLattice(uint8_t t) { switch (t) { case 0: return 0x09; case 1: return 0x0a; case 0x11: return 0x07; case 9: return 0x3d; case 10: return 0x3e; case 11: return 0x3f; case 12: return 0x40; case 13: return 0x47; case 14: return 0x48; case 15: return 0x49; case 16: return 0x4a; default: return -1; } }
 // Reads one slot (at least 512 bytes). Returns false when a tile code is unknown or the arrow count is above 12.
@@ -78,6 +90,9 @@ inline std::vector<uint8_t> writePack(const std::vector<VmsPuzzle>& puzzles, con
         const size_t offset = kHeader + k * kSlot;
         std::memcpy(v.data() + offset, slot.data(), std::min(kSlot, v.size() - offset));
     }
+    const uint32_t payloadSize = (uint32_t)(kFinalSlot - 4);  // Retail puzzle packs declare 892 bytes here, not the whole appended slot table.
+    v[0x48] = (uint8_t)payloadSize; v[0x49] = (uint8_t)(payloadSize >> 8); v[0x4a] = (uint8_t)(payloadSize >> 16); v[0x4b] = (uint8_t)(payloadSize >> 24);
+    const uint16_t crc = fileCrc(v); v[0x46] = (uint8_t)crc; v[0x47] = (uint8_t)(crc >> 8);
     return v;
 }
 inline std::vector<uint8_t> writeVmi(size_t vmsSize, const std::string& resource = "CCRPUZ", const std::string& vmsName = "CHU_CHU__D00") {

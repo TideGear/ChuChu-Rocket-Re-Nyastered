@@ -11,6 +11,7 @@ import struct, time
 TILE_TO_LATTICE = {0: 0x09, 1: 0x0a, 0x11: 0x07, 9: 0x3d, 10: 0x3e, 11: 0x3f, 12: 0x40, 13: 0x47, 14: 0x48, 15: 0x49, 16: 0x4a}
 SLOT = 1536
 HEADER = 640
+FINAL_SLOT = 896
 
 def encode_slot(tiles, walls, arrows, title=b'', filler=0):
     """tiles[108] and walls[237] in the mobile layout (walls: 10 rows of 12 horizontal edges at 25*i + c, 9 rows of 13 vertical edges at 25*i + 12 + c);
@@ -84,10 +85,22 @@ def build_header(description=b'CHU_CHU__D01', long_description=b'CCR Re-Nyastere
     # icon palette (0x60) and bitmap (0x80) stay zero: a blank icon
     return bytes(h)
 
+def file_crc(data):
+    """VMS CRC-16/CCITT over the declared file payload with header CRC bytes zeroed."""
+    crc = 0
+    declared = int.from_bytes(data[0x48:0x4c], 'little') if len(data) >= 0x4c else 0
+    for i, value in enumerate(data[:min(len(data), HEADER + declared)]):
+        crc ^= ((0 if i in (0x46, 0x47) else value) << 8)
+        for _ in range(8): crc = ((crc << 1) ^ (0x1021 if crc & 0x8000 else 0)) & 0xffff
+    return crc
+
 def pack_puzzles(boards, resource='CCRPUZ', title_prefix=b''):
     """boards: list of up to 25 dicts {tiles, walls, arrows, title}; returns (vms, vmi)."""
     if not 1 <= len(boards) <= 25: raise ValueError('a pack holds 1-25 puzzles')
     body = b''.join(encode_slot(b['tiles'], b['walls'], b.get('arrows', []), b.get('title', b'')) for b in boards)
     body += b'\0' * (SLOT * (25 - len(boards)))
-    vms = build_header() + body[:24 * SLOT + 896]  # retail packs omit 640 bytes of final-slot padding
+    vms = bytearray(build_header() + body[:24 * SLOT + FINAL_SLOT])  # retail packs omit 640 bytes of final-slot padding
+    struct.pack_into('<I', vms, 0x48, FINAL_SLOT - 4)  # retail packs declare 892 bytes despite carrying the full appended slot table.
+    struct.pack_into('<H', vms, 0x46, file_crc(vms))
+    vms = bytes(vms)
     return vms, build_vmi(resource, b'CHU_CHU__D00', len(vms))

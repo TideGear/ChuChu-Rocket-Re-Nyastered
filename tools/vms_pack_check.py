@@ -14,6 +14,10 @@ for name in ('DEPuzzle', 'PuzzleP'):
 print('slots checked', n, 'differing', bad)
 for name in ('DEPuzzle', 'PuzzleP'):
     real = open(os.path.join(R.DLC_DIR, name + '.VMI'), 'rb').read(); vms = open(os.path.join(R.DLC_DIR, name + '.VMS'), 'rb').read()
+    declared = int.from_bytes(vms[0x48:0x4c], 'little'); stored_crc = int.from_bytes(vms[0x46:0x48], 'little')
+    valid = declared == V.FINAL_SLOT - 4 and stored_crc == V.file_crc(vms)
+    print(name, 'VMS payload size and CRC valid' if valid else 'VMS header INVALID (size %d, CRC %04x)' % (declared, stored_crc))
+    bad += not valid
     import struct
     when = struct.unpack_from('<HBBBBBB', real, 0x44)
     class T: pass
@@ -25,4 +29,9 @@ for name in ('DEPuzzle', 'PuzzleP'):
 b = R.dlc_slots('DEPuzzle')[0]; t, w, a, title = V.decode_slot(b)
 vms, vmi = V.pack_puzzles([{'tiles': t, 'walls': w, 'arrows': a, 'title': title}])
 print('new pack', len(vms), len(vmi), 'multiple of 512' if len(vms) % 512 == 0 else 'NOT a multiple of 512', 'first slot round trip', V.decode_slot(vms[640:640 + 1536])[:3] == (t, w, a))
+declared_size = int.from_bytes(vms[0x48:0x4c], 'little')
+stored_crc = int.from_bytes(vms[0x46:0x48], 'little')
+header_ok = declared_size == V.FINAL_SLOT - 4 and stored_crc == V.file_crc(vms)
+print('new pack VMS header', 'payload size and CRC valid' if header_ok else 'INVALID (size %d, CRC %04x)' % (declared_size, stored_crc))
+bad += not header_ok
 sys.exit(1 if bad else 0)

@@ -2067,6 +2067,7 @@ struct DcEditMode : Screen {
         if (files.tex && files.fr.size() >= 2) {
             SDL_RenderCopy(a.ren, files.tex, &files.fr[0], nullptr);
             auto text = [&](const char* value, int x, int y) {
+                // No BIOS does not mean no text: dc_bios_ansi normally holds the generated Roboto Mono fallback, then font57mixed covers a missing atlas.
                 const bool hasFont = a.dcBiosAnsi.tex && a.dcBiosAnsi.fr.size() == 95 &&
                     ((a.dcBiosAnsi.w == 1140 && a.dcBiosAnsi.h == 24) || (a.dcBiosAnsi.w == 2280 && a.dcBiosAnsi.h == 48));
                 if (hasFont) {

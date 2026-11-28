@@ -11,7 +11,8 @@ int main(int argc, char** argv) {
         std::vector<uint8_t> d; char path[512]; snprintf(path, sizeof path, "%s/%s.VMS", dir, name);
         if (!load(path, d)) { printf("%s: not found, skipped\n", path); continue; }
         std::vector<VmsPuzzle> ps; const int n = vms::readPack(d, ps); CHECK(n >= 24);
-        const auto preserved = vms::writePack(ps, d.data()); CHECK(preserved.size() == vms::kPackSize && !memcmp(preserved.data(), d.data(), vms::kHeader));
+        const auto preserved = vms::writePack(ps, d.data()); CHECK(preserved.size() == vms::kPackSize && !memcmp(preserved.data(), d.data(), 0x46) && !memcmp(preserved.data() + 0x4c, d.data() + 0x4c, vms::kHeader - 0x4c));
+        CHECK((uint32_t)preserved[0x48] + ((uint32_t)preserved[0x49] << 8) + ((uint32_t)preserved[0x4a] << 16) + ((uint32_t)preserved[0x4b] << 24) == vms::kFinalSlot - 4);
         int bad = 0;
         for (int k = 0; k < n; k++) {
             uint8_t e[vms::kSlot]; CHECK(vms::encodeSlot(ps[k], e));
@@ -34,8 +35,11 @@ int main(int argc, char** argv) {
     p.arrows = {{1, 2, 0}, {3, 4, 1}, {5, 6, 2}, {11, 8, 3}}; p.title = "Test Puzzle";
     std::vector<VmsPuzzle> in{p, p}; auto v = vms::writePack(in); CHECK(v.size() == 38400 && v.size() == vms::kPackSize);
     std::vector<VmsPuzzle> out; vms::readPack(v, out); CHECK(out.size() == 2);
+    CHECK((uint32_t)v[0x48] + ((uint32_t)v[0x49] << 8) + ((uint32_t)v[0x4a] << 16) + ((uint32_t)v[0x4b] << 24) == vms::kFinalSlot - 4);
+    CHECK((uint16_t)(v[0x46] | (uint16_t)v[0x47] << 8) == vms::fileCrc(v));
     std::array<uint8_t, vms::kHeader> originalHeader{}; for (size_t i = 0; i < originalHeader.size(); ++i) originalHeader[i] = (uint8_t)(i * 37 + 11);
-    const auto preservedHeaderPack = vms::writePack(in, originalHeader.data()); CHECK(preservedHeaderPack.size() == vms::kPackSize && !memcmp(preservedHeaderPack.data(), originalHeader.data(), originalHeader.size()));
+    const auto preservedHeaderPack = vms::writePack(in, originalHeader.data()); CHECK(preservedHeaderPack.size() == vms::kPackSize && !memcmp(preservedHeaderPack.data(), originalHeader.data(), 0x46) && !memcmp(preservedHeaderPack.data() + 0x4c, originalHeader.data() + 0x4c, originalHeader.size() - 0x4c));
+    CHECK((uint16_t)(preservedHeaderPack[0x46] | (uint16_t)preservedHeaderPack[0x47] << 8) == vms::fileCrc(preservedHeaderPack));
     auto vmi = vms::writeVmi(v.size(), "CCRPUZ", "CHU_CHU__D00"); CHECK(vmi.size() == vms::kVmiSize);
     const uint8_t checksum[4] = {0x43, 0x41, 0x42, 0x40}; CHECK(!memcmp(vmi.data(), checksum, sizeof checksum));
     CHECK(!memcmp(vmi.data() + 80, "CCRPUZ", 6) && !memcmp(vmi.data() + 88, "CHU_CHU__D00", 12));
