@@ -339,6 +339,12 @@ struct App {
     void loadProgress() { if (clrLoaded) return; clrLoaded = true; if (FILE* f = fopen((saveDir + "/progress.bin").c_str(), "rb")) { if (fread(clr, 4, 4, f) != 4) memset(clr, 0, sizeof clr); else { uint32_t t = 0; if (fread(&t, 4, 1, f) == 1) tutDone = t; } fclose(f); }   // fifth word: VMU::isTutorialCleared (0x37008, VMU +4); older 16-byte files read as not cleared
         if (getenv("CCR_CLEAR_ALL")) for (int i = 0; i < 4; i++) clr[i] = 0x1ffffff;
         if (const char* g = getenv("CCR_CLEAR_GROUPS")) { const int m = atoi(g); for (int i = 0; i < 4; i++) clr[i] = (m >> i) & 1 ? 0x1ffffff : 0; } }   // headless: bit i clears Puzzle group i
+    bool saveProgress() {
+        if (testRun) return true;
+        std::vector<uint8_t> data(sizeof clr + sizeof tutDone);
+        memcpy(data.data(), clr, sizeof clr); memcpy(data.data() + sizeof clr, &tutDone, sizeof tutDone);
+        return writeFileAtomic(saveDir + "/progress.bin", data);
+    }
     bool isCleared(int s) { loadProgress(); return s >= 0 && s < 100 && ((clr[s / 25] >> (s % 25)) & 1); }
     uint32_t challengeClearedMask() {
         if (!challengeMaskLoaded) { challengeMaskLoaded = true; challengeMask = 0; if (FILE* f = fopen((saveDir + "/challenge.bin").c_str(), "rb")) { (void)fread(&challengeMask, sizeof challengeMask, 1, f); fclose(f); } }
@@ -359,20 +365,12 @@ struct App {
     bool setCleared(int s) {
         loadProgress(); if (s < 0 || s >= 100) return false;
         clr[s / 25] |= 1u << (s % 25);
-        if (testRun) return true;
-        FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb");
-        if (!f) return false;
-        const bool wrote = fwrite(clr, 4, 4, f) == 4 && fwrite(&tutDone, 4, 1, f) == 1;
-        const bool closed = fclose(f) == 0;
-        return wrote && closed;
+        return saveProgress();
     }
     bool isTutorialCleared() { loadProgress(); return tutDone != 0 || settings.unlockAll || getenv("CCR_CLEAR_ALL"); }   // The gate on Puzzle / Challenge / Battle (MenuScreen::handleInput 0xf584); Options > unlock-all bypasses it
     bool setTutorialCleared() {   // VMU::setTutorialCleared 0x3701c
         loadProgress(); tutDone = 1;
-        if (testRun) return true;
-        FILE* f = fopen((saveDir + "/progress.bin").c_str(), "wb"); if (!f) return false;
-        const bool wrote = fwrite(clr, 4, 4, f) == 4 && fwrite(&tutDone, 4, 1, f) == 1;
-        return fclose(f) == 0 && wrote; }
+        return saveProgress(); }
     int nextStage = -1;   // stage chosen on the stage-select screen (consumed when the puzzle starts)
     Sheet atlas, cat, mouse, gold, digits, crowns, timefont, font;
     BattlePreviewAtlas battlePreviewAtlas;
