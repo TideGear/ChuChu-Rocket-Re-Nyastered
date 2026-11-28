@@ -1595,9 +1595,18 @@ struct App {
             int ang = (i < angs.size() ? angs[i] : en.heading << 14);
             if (headless && getenv("CCR_ENT_TRACE")) printf("ent %zu %s type %d world %.2f %.2f ang %04x frame %d phase %.3f\n", i, en.mouse ? "mouse" : "cat", en.type, object.x / kCell * 15.0f, object.z / kCell * 15.0f, ang & 0xffff, mouseFrame, i < cphase.size() ? cphase[i] : -1.0f);
             if (fallPose.size() < sim.ents.size()) fallPose.resize(sim.ents.size(), -1);
-            if (!en.drawsHoleFall()) fallPose[i] = -1; else if (fallPose[i] < 0) { fallPose[i] = ((mouseFrame - (sim.now - en.catHoleFallTick) - 1) % 8 + 8) & 7;   /* the hole branch skips the pose store 0x8c019b0c, so the pose is the previous pass's clock & 7 (RAM: +52 = (clock - 2) & 7 = 6 at frame 2420) */   /* the hole branch (0x8c019990) swaps to 0x8c01952e before the pose store 0x8c019b14, and the fall state never writes +52: the pose freezes (Flycast RAM local/hole-ram 2420/2440: +52 = 6 throughout) */ if (headless && getenv("CCR_FALL_TRACE")) printf("fall ent %zu passes %d live %d pose %d scale %.4f ang %x\n", i, sim.now - en.catHoleFallTick, mouseFrame, fallPose[i], en.rocketCounter, ang); }
-            if (useModels3d() && en.mouse && en.drawsHoleFall() && draw3dCharacter(en, i, ang, x, z, fallPose[i], field.cell, en.rocketCounter)) continue;   // Puzzle hole fall (Flycast Normal 08 frames 2420-2464, local/hole: the mouse spins in the hole)
-            if (useModels3d() && !en.drawsHoleFall() && !en.rocketIn && en.catWalkScale < 0.0f && draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell)) continue;
+            const bool holeFall = en.drawsHoleFall();
+            const bool rocketEntry = en.drawsRocketEntry();
+            if (!holeFall && !rocketEntry) fallPose[i] = -1;
+            else if (fallPose[i] < 0) {
+                fallPose[i] = holeFall ? ((mouseFrame - (sim.now - en.catHoleFallTick) - 1) % 8 + 8) & 7 : ((mouseFrame + 7) & 7);
+                if (holeFall && headless && getenv("CCR_FALL_TRACE"))
+                    printf("fall ent %zu passes %d live %d pose %d scale %.4f ang %x\n", i, sim.now - en.catHoleFallTick, mouseFrame, fallPose[i], en.rocketCounter, ang);
+            }
+            if (useModels3d() && (holeFall || rocketEntry) &&
+                draw3dCharacter(en, i, ang, x, z, fallPose[i], field.cell, en.rocketCounter)) continue;   // Entry draw 0x8c01946c passes held task +52 pose and +44 shrink scale to 0x8c0193e0; hole fall shares this model transform.
+            if (useModels3d() && !holeFall && !en.rocketIn && en.catWalkScale < 0.0f &&
+                draw3dCharacter(en, i, ang, x, z, mouseFrame, field.cell)) continue;
             if (en.drawsHoleFall()) {
                 drawImage(0x2b, (ang & 0xffff) >> 11, x, z, 0, en.rocketCounter * field.scale(), 255);
                 if (headless && getenv("CCR_CAT_HOLE_TRACE"))

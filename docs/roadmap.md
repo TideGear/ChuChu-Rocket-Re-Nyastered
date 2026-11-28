@@ -4,6 +4,10 @@ Dated evidence for work in progress: the frame, address and measured error behin
 
 The full log from 2026-11-12 to 2026-11-25, which holds every capture recipe, address trace and measurement, is in [archive/roadmap_2026-11-12_to_11-25.md](archive/roadmap_2026-11-12_to_11-25.md). Search it before re-deriving anything.
 
+## 2026-11-28
+
+- Dreamcast mouse rocket-entry rendering: the source entry task/draw (`0x8c0195d4` / `0x8c01946c`) passes held pose `+52` and shrink scale `+44` through model dispatcher `0x8c0193e0`. Ported the model path and retains the entry pose across frames, using the same frozen-pose storage already required by hole fall. Pinned Windows Zig build and full Dreamcast-only game suite pass (30/30). The available headless capture did not trigger entry, so this is source-derived partial implementation only; dedicated Flycast pose/scale/timing comparison remains open. See HANDOFF.
+
 ## 2026-11-27
 
 - Puzzle Edit VMS validation: the reader accepted packed arrow coordinates x=12..15 or y=9..15; editor load then omitted those moves, so a subsequent save could silently discard malformed solution data. Reject out-of-board coordinates at read time. Added synthetic regression; pinned Windows Zig vms_test passes. Clean Dreamcast-only assets contain no DLC packs, so this run validates the synthetic fixture only; retail pack re-encoding remains covered when DLC assets are available.
