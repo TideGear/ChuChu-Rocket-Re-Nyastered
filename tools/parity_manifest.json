@@ -2105,6 +2105,42 @@
           624,
           460
         ],
+        "rocket_0": [
+          387,
+          246,
+          412,
+          271
+        ],
+        "rocket_1": [
+          428,
+          246,
+          453,
+          271
+        ],
+        "rocket_2": [
+          468,
+          246,
+          494,
+          271
+        ],
+        "rocket_3": [
+          509,
+          246,
+          535,
+          271
+        ],
+        "rocket_4": [
+          550,
+          246,
+          576,
+          271
+        ],
+        "rocket_5": [
+          590,
+          246,
+          617,
+          271
+        ],
         "header": [
           0,
           0,
@@ -2112,7 +2148,7 @@
           90
         ]
       },
-      "note": "flyhost Puzzle Stage Select (Normal 01 selected), shot 2050; local/sweep. Visible-gap sweep case"
+      "note": "flyhost Puzzle Stage Select (Normal 01 selected), shot 2050; local/sweep. Rocket crops: complete original TA strip bounds (dc_preview_lids.py) plus 1 px padding. Visible-gap sweep case"
     },
     {
       "name": "puzzle_hard05_fail_2780",

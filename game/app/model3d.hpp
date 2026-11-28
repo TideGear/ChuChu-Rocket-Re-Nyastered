@@ -95,6 +95,15 @@ private:
 public:
     struct SoftTri { SDL_FPoint p[3]; float iw[3], u[3], v[3], light[3]; int tex; bool translucent; bool wrap = false; bool mip = false; bool additive = false; bool rgb = false; bool depthWrite = false; float lightRGB[3][3] = {}; };   // rgb: per-channel vertex light (material colours)   // wrap: repeat the texture (the floor quad's UVs run past 1)
 
+    void drawDcPuzzlePreviewDome(SDL_Renderer* ren, const Model3D& lid,
+                                 SDL_FPoint position, SDL_FPoint camera,
+                                 float pixelsPerUnit, float distance) const {
+        // 0x8c015fac..15fd6: Puzzle preview draws at yaw 0 and 0x8000.
+        // Battle/Challenge preview takes 0x8c015f60 (0x4000 / 0xc000).
+        drawDcRocketDome(ren, lid, position, camera, pixelsPerUnit, 1.0f, distance,
+                         nullptr, 0.0f, nullptr, -1, nullptr, nullptr, nullptr, 1.0f, true);
+    }
+
     // The Battle draw task builds a dome from two copies of the lid,
     // at yaw 90 and 270 degrees (0x8c01b4e0, Flycast frame 3100).
     void drawDcRocketDome(SDL_Renderer* ren, const Model3D& lid, SDL_FPoint floorPosition,
@@ -102,7 +111,7 @@ public:
                           float cameraDistance = 218.0f, const Model3D* oppositeLid = nullptr,
                           float opening = 0.0f, const Model3D* launchedBody = nullptr, int launchAge = -1,
                           const Model3D* launchBase = nullptr, const Model3D* flame = nullptr,
-                          const std::vector<int>* smokeBirths = nullptr, float launchScale = 1.0f) const {
+                          const std::vector<int>* smokeBirths = nullptr, float launchScale = 1.0f, bool puzzlePreview = false) const {
         const float scale = pixelsPerUnit * pulse * launchScale;
         // Original 0x8c01b628: TranslateZ(+/-opening), RotateY(+/-90),
         // RotateZ(-int(opening * 12743.111328125)). Keep one shared depth
@@ -123,10 +132,10 @@ public:
                     const float nx = v.nx * ca - v.ny * sa, ny = v.nx * sa + v.ny * ca;
                     const float depth = cameraDistance - vy * pulse * launchScale;
                     const float perspective = cameraDistance / depth;
-                    const float dx = floorPosition.x - cameraCenter.x + side * v.z * scale;
-                    const float dy = floorPosition.y - cameraCenter.y - side * vx * scale + side * opening * pixelsPerUnit;
+                    const float dx = floorPosition.x - cameraCenter.x + side * (puzzlePreview ? vx : v.z) * scale;
+                    const float dy = floorPosition.y - cameraCenter.y + (puzzlePreview ? side * v.z * scale : -side * vx * scale) + side * opening * pixelsPerUnit;
                     // The live age -1 TA vertices confirm that the Dreamcast's uniform rocket scale also scales its diffuse normal term.
-                    const float intensity = std::clamp(0.3f + std::max(0.0f, (0.5f * ny + 0.25f * side * nx) * launchScale), 0.0f, 1.0f);
+                    const float intensity = std::clamp(0.3f + std::max(0.0f, (0.5f * ny + (puzzlePreview ? -0.25f * side * v.nz : 0.25f * side * nx)) * launchScale), 0.0f, 1.0f);
                     const auto intensityByte = (unsigned)(intensity * 255.0f);
                     const float light = (float)(255u * intensityByte / 256u) / 255.0f;
                     out.p[i] = {cameraCenter.x + dx * perspective, cameraCenter.y + dy * perspective};

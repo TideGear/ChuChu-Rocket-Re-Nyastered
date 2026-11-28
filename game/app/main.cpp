@@ -4966,7 +4966,7 @@ struct StageSelectMode : Screen {
         if (const Model3D* lid = a.models3d.find("lid1"))
             for (int r = 0; r < kRows; ++r) for (int c = 0; c < kCols; ++c)
                 if (stage.tiles[r * kCols + c] == T_Rocket)
-                    a.models3d.drawDcRocketDome(a.ren, *lid, {field.x(c + 0.5f), field.y(r + 0.5f)}, field.camera, field.cell / 15.0f, 1.0f, field.cameraDistance);
+                    a.models3d.drawDcPuzzlePreviewDome(a.ren, *lid, {field.x(c + 0.5f), field.y(r + 0.5f)}, field.camera, field.cell / 15.0f, field.cameraDistance);
     }
     int music() override { return dc() ? 5 : orig() ? (phase == 0x20 ? -1 : 5) : 0; }
     std::string rootDir; bool load(const std::string& root, int start) { rootDir = root; if (!loadStageSet(root, gApp ? gApp->stageSet : 0, stages)) return false; cur = start % (int)stages.list.size(); page = cur / PER; selPage = cur / 25; sel = cur % 25; lastItem = sel; return true; }
