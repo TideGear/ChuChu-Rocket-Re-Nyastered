@@ -4597,10 +4597,12 @@ struct ChallengeSelectMode : Screen {
     static constexpr int kFinal = 24;
     static constexpr uint32_t kRegularClearMask = (1u << kFinal) - 1u;
     static constexpr float kPreviewCell = (612.695923f - 369.345978f) / 12.0f;
-    // Floor packet at 0x253e10 in Challenge Select frame 2100. The world
-    // origin lies 72 units right and 85.5 units below the floor's corner.
+    // Floor packet 0x253e10 in Challenge Select frame 2100 and Puzzle
+    // Select frame 2050. Raised wall packet 0x253eb0 retains the global
+    // projection centre (320,240); deriving a centre from the translated
+    // floor corner misprojects heights by up to 1.081233 pixels.
     static constexpr FieldLayout preview{369.345978f, 248.111664f, kPreviewCell, 1.0f,
-        {369.345978f + 72.0f * kPreviewCell / 15.0f, 248.111664f + 85.5f * kPreviewCell / 15.0f}, 410.0f};
+        {320.0f, 240.0f}, 410.0f};
     Stages stages;
     ChallengeMode::Save progress;
     int selected = 0;

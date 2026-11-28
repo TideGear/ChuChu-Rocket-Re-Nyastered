@@ -2,12 +2,14 @@
 
 ## Current state
 
-- Branch `main`; latest work: Dreamcast Puzzle pause B mapping (follows pushed `a49cb1f` clear/save precedence).
+- Branch `main`; latest work: selector preview projection centre (follows pushed `43cabc6` Puzzle pause mapping).
 - Keep user-owned untracked `.vscode/` untouched. Do not stage caches, disc data, captures, or generated files.
 - Goal and working rules: `docs/goal.md`. Audit owns coverage (`docs/audit.md`); evidence/log in `docs/roadmap.md`; setup results in `docs/verification.md`.
 - Clean image-only setup rechecked 2026-11-27 from a new folder containing only the selected USA Dreamcast ZIP (no BIOS, mobile, DLC, or GBA files). `tools/setup-wizard.ps1` completed extraction and pinned Zig build. Manifest: one error-free ZIP/CUE input, Dreamcast graphics, Puzzle/Battle/Stage Challenge, no DLC stage pack. Direct headless captures for DC_TITLE, MENU, HELP, OPTIONS, STAGES, CHALLENGE_SELECT, PUZZLE, CHALLENGE, BATTLE, TEAM_BATTLE, DC_DEMO were all nonblack (90 ticks; smoke/reachability only). Scratch: `local/fresh-dc-only-20261127/`. Final-code game suite: 30/30 on the fresh Dreamcast-only assets; `git diff --check` clean. No parity claim.
 
 ## Recent code
+
+- Selector preview (partial): global projection centre (320,240) replaces the incorrectly floor-derived centre. Original Puzzle/Challenge wall vertices now match within 0.00002009 px (old 1.081233 px). Puzzle preview crop 4.8114 -> 2.7205, off-edge >8 pixels 184 -> 10; full 1.9605 -> 1.5472. All 18 Puzzle full frames <=3; other 17 captures pixel-identical. Dome/texture residue, Battle selector reference and full element parity remain open. Pinned Zig build and all 30 game tests pass on fresh Dreamcast-only assets. Tool `tools/oracle/dc_preview_projection.py`; artifacts/recipe in roadmap.md.
 
 - Puzzle pause B (partial overall): original mask 0x0c accepts A/Start only. Dreamcast B and keyboard B/Escape now stay paused instead of bypassing Resume/Quit; mobile B-to-leave remains. Eight original-loop cases pass without RAM pokes (both selections x A/Start/B/Y), with frozen counter and mode destinations checked. Tool `tools/oracle/dc_puzzle_pause_inputs.py`; recipe in roadmap.md. Pinned Zig build and all 30 tests pass on fresh Dreamcast-only assets. Entry/exit overlay parity and other devices remain open.
 
