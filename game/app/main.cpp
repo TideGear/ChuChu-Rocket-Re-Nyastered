@@ -3266,14 +3266,10 @@ struct DcOptionsMode : Screen {
         else openRow(a);
     }
     bool deleteChallengeRecords(App& a) {
-        const uint32_t empty[26] = {}; // challenge.bin: cleared-stage mask and 25 best times
+        const std::vector<uint8_t> empty(sizeof(uint32_t) * 26, 0); // challenge.bin: cleared-stage mask and 25 best times
         if (a.testRun) { a.challengeMask = 0; a.challengeMaskLoaded = true; return true; }
-        FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb");
-        if (!f) return false;
-        const bool wrote = fwrite(empty, sizeof empty, 1, f) == 1;
-        const bool closed = fclose(f) == 0;
-        if (wrote && closed) { a.challengeMask = 0; a.challengeMaskLoaded = true; }
-        return wrote && closed;
+        if (!writeFileAtomic(a.saveDir + "/challenge.bin", empty)) return false;
+        a.challengeMask = 0; a.challengeMaskLoaded = true; return true;
     }
     // Records page task 0x8c05455c, state 1 (0x8c054600). Delete: while pad A's held word (PDS_PERIPHERAL +8 at 0x8c1aee88) has TR 0x10000, TL 0x20000 and Start 8
     // (or, on the Arcade Stick, Z 0x100, C 1 and Start 8) it clears the Stage Challenge mask and 25 times (0x8c02b620), redraws zeros (0x8c0546f6, 0x8c0547f0), and if
@@ -4326,7 +4322,11 @@ struct ChallengeMode : Screen {
         finalChallengeComplete = cur == 24 && (s.mask & 0x1ffffff) == 0x1ffffff;
         chaoRollQueued = a.dcLook && a.dcStaffRoll.tex && cur == 24 && !wasComplete; // 0x8c02aa7a..aa8c tests the pre-save mask: 1 for first clear, -1 for repeat
         if (a.testRun) { a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
-        else if (FILE* f = fopen((a.saveDir + "/challenge.bin").c_str(), "wb")) { fwrite(&s, sizeof s, 1, f); fclose(f); a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
+        else {
+            std::vector<uint8_t> data(sizeof s); memcpy(data.data(), &s, sizeof s);
+            if (writeFileAtomic(a.saveDir + "/challenge.bin", data)) { a.challengeMask = s.mask; a.challengeMaskLoaded = true; }
+            else a.log.write(1, "could not save Stage Challenge records");
+        }
     }
     static bool available(const std::string& root) { return challengeBoardsAvailable(root); }
     bool load(const std::string& root, int stage) { if (!loadStages((root + "/battle_stages.bin").c_str(), stages, 3) || stages.list.empty()) return false;
